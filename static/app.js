@@ -559,22 +559,31 @@ async function uebernehmen(i) {
 
 // ------------------------------------------------------------ Tooltip
 const tip = $("#tooltip");
+let tipEl = null, tipBild = 0;
 function tipZeigen(el, x, y) {
-  tip.textContent = el.dataset.tip;
-  tip.hidden = false;
-  const r = tip.getBoundingClientRect();
-  tip.style.left = `${Math.min(window.innerWidth - r.width - 8, Math.max(8, x - r.width / 2))}px`;
-  tip.style.top = `${Math.max(8, y - r.height - 12)}px`;
+  // Text nur beim Wechsel des Elements setzen, Position höchstens einmal je Frame messen
+  if (el !== tipEl || tip.hidden) { tipEl = el; tip.textContent = el.dataset.tip; tip.hidden = false; }
+  cancelAnimationFrame(tipBild);
+  tipBild = requestAnimationFrame(() => {
+    const r = tip.getBoundingClientRect();
+    tip.style.left = `${Math.min(window.innerWidth - r.width - 8, Math.max(8, x - r.width / 2))}px`;
+    tip.style.top = `${Math.max(8, y - r.height - 12)}px`;
+  });
+}
+function tipVerbergen() {
+  cancelAnimationFrame(tipBild);
+  tipEl = null;
+  tip.hidden = true;
 }
 document.addEventListener("mousemove", (e) => {
   const el = e.target.closest?.("[data-tip]");
-  if (el) tipZeigen(el, e.clientX, e.clientY); else tip.hidden = true;
+  if (el) tipZeigen(el, e.clientX, e.clientY); else if (tipEl) tipVerbergen();
 });
 document.addEventListener("focusin", (e) => {
   const el = e.target.closest?.("[data-tip]");
   if (el) { const r = el.getBoundingClientRect(); tipZeigen(el, r.left + r.width / 2, r.top); }
 });
-document.addEventListener("focusout", () => { tip.hidden = true; });
+document.addEventListener("focusout", tipVerbergen);
 
 // ------------------------------------------------------------ Ereignisse
 window.addEventListener("hashchange", () => { z.offen.clear(); ansichtZeigen(); });

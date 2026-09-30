@@ -13,6 +13,7 @@ import base64, copy, datetime as dt, io, logging, os, re, secrets, tempfile, thr
 from typing import List, Optional
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -32,6 +33,8 @@ SITZUNG_TTL = 60 * 60
 MAX_DAUER_H = 24
 
 app = FastAPI(title="Einsatzberichte – FF Rheinbrohl")
+# JSON der Einsatzliste schrumpft komprimiert auf ca. 1/16
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 _sitzungen = {}
