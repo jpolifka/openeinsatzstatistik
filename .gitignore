@@ -1,0 +1,20 @@
+# Einsatzdaten – enthalten Namen und Anwesenheiten, gehören nicht ins Repository
+/Einsatzberichte/
+/daten/
+*.db
+*.db-*
+*.pdf
+*.xlsx
+
+# Lokale Konfiguration
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# Editor / System
+.DS_Store
+.vscode/
+.idea/

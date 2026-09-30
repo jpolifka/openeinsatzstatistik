@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Einsatzstatistik · FF Rheinbrohl</title>
+  <link rel="icon" href="/static/img/logo.svg">
+  <link rel="stylesheet" href="/static/fonts/sansation.css">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="kopf">
+    <div class="kopf-innen">
+      <img class="kopf-logo" src="/static/img/logo-weiss.png" alt="Feuerwehr Rheinbrohl">
+      <div class="kopf-titel">
+        <span class="kopf-ueber">Einsatzstatistik</span>
+        <h1 id="kopf-jahr">Einsätze</h1>
+      </div>
+      <div class="kopf-aktionen">
+        <label class="jahr-wahl">
+          <span>Jahr</span>
+          <select id="jahr" aria-label="Jahr wählen"></select>
+        </label>
+        <button type="button" class="knopf knopf-weiss" id="knopf-pdf">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0-4.5 4.5M12 4l4.5 4.5M5 20h14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>PDF einlesen</span>
+        </button>
+        <button type="button" class="knopf-hilfe-kopf" id="knopf-hilfe" data-hilfe="" aria-label="Hilfe öffnen" title="Hilfe">?</button>
+      </div>
+    </div>
+    <nav class="reiter" id="reiter">
+      <div class="reiter-innen">
+        <a href="#auswertung" data-ansicht="auswertung">Auswertung</a>
+        <a href="#einsaetze" data-ansicht="einsaetze">Einsätze</a>
+        <a href="#kameraden" data-ansicht="kameraden">Kameraden</a>
+      </div>
+    </nav>
+  </header>
+
+  <main class="seite">
+    <section id="ansicht-auswertung" class="ansicht" hidden></section>
+
+    <section id="ansicht-einsaetze" class="ansicht" hidden>
+      <div class="karte liste-karte">
+        <div class="werkzeuge">
+          <div class="segmente" id="filter-art"></div>
+          <div class="werkzeuge-rechts">
+            <input type="search" id="suche" class="suche" placeholder="Suchen: Nr., Ort, Stichwort, Name …">
+            <button type="button" class="knopf knopf-hell" id="knopf-export">Excel-Export</button>
+          </div>
+        </div>
+        <div class="tabelle-rahmen">
+          <table class="tabelle" id="tabelle-einsaetze">
+            <thead>
+              <tr>
+                <th class="sp-nr">Nr.</th>
+                <th>Datum</th>
+                <th>Stichwort</th>
+                <th>Einsatz</th>
+                <th>EHF<button type="button" class="hilfe-knopf" data-hilfe="ehf" aria-label="Hilfe: EHF">?</button></th>
+                <th>Fahrzeuge</th>
+                <th class="rechts">Ezeit<button type="button" class="hilfe-knopf" data-hilfe="ezeit" aria-label="Hilfe: Ezeit">?</button></th>
+                <th class="rechts">Stärke<button type="button" class="hilfe-knopf" data-hilfe="staerke_gesamt" aria-label="Hilfe: Gesamtstärke">?</button></th>
+                <th class="sp-auf"></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+          <p class="leer" id="leer-einsaetze" hidden>Keine Einsätze gefunden.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="ansicht-kameraden" class="ansicht" hidden></section>
+  </main>
+
+  <!-- PDF einlesen -->
+  <dialog id="pdf-dialog" class="dialog">
+    <div class="dialog-kopf">
+      <div>
+        <h2>Einsatzbericht einlesen</h2>
+        <p class="gedaempft">PDF aus dem BKS-Portal – Daten prüfen, bei Bedarf korrigieren und übernehmen.</p>
+      </div>
+      <button type="button" class="knopf-schliessen" id="dialog-zu" aria-label="Schließen">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="dialog-inhalt">
+      <label class="ablage" id="ablage" tabindex="0">
+        <input type="file" id="eingabe-pdf" multiple accept=".pdf,application/pdf" hidden>
+        <svg class="ablage-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M24 32V10m0 0-8 8m8-8 8 8" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 30v6a4 4 0 0 0 4 4h24a4 4 0 0 0 4-4v-6" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>
+        <strong>Einsatzbericht-PDF hierher ziehen</strong>
+        <span class="gedaempft">oder klicken, um die Datei auszuwählen</span>
+      </label>
+      <div class="fortschritt" id="fortschritt" hidden>
+        <div class="fortschritt-balken"><span></span></div>
+        <span>Bericht wird gelesen …</span>
+      </div>
+      <div class="meldung meldung-fehler" id="pdf-fehler" hidden></div>
+      <div id="vorschau"></div>
+    </div>
+  </dialog>
+
+  <!-- Online-Hilfe -->
+  <dialog id="hilfe-dialog" class="dialog dialog-hilfe" aria-labelledby="hilfe-titel">
+    <div class="dialog-kopf">
+      <div>
+        <h2 id="hilfe-titel">Hilfe</h2>
+        <p class="gedaempft">Bedeutung der Felder und Kennzahlen. Das <span class="hilfe-knopf hilfe-beispiel" aria-hidden="true">?</span> neben einem Feld springt direkt zur passenden Erklärung.</p>
+      </div>
+      <button type="button" class="knopf-schliessen" id="hilfe-zu" aria-label="Schließen">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="dialog-inhalt" id="hilfe-inhalt"></div>
+  </dialog>
+
+  <div class="tooltip" id="tooltip" role="tooltip" hidden></div>
+  <div class="toast" id="toast" role="status" hidden></div>
+
+  <footer class="fuss">
+    <img src="/static/img/logo-schwarz.png" alt="" class="fuss-logo">
+    <span>Freiwillige Feuerwehr Rheinbrohl · Einsatzstatistik</span>
+  </footer>
+
+  <script src="/static/hilfe.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
