@@ -33,7 +33,7 @@ log = logging.getLogger("pdf2einsatz")
 EMAILS = {e.strip().lower() for e in os.environ.get("AUTH_EMAILS", "").replace(";", ",").split(",") if e.strip()}
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 MAIL_FROM = os.environ.get("MAIL_FROM", "")
-BASE_URL = os.environ.get("BASE_URL", "http://localhost:8112").rstrip("/")
+BASE_URL = os.environ.get("BASE_URL", "").rstrip("/")
 SECRET_KEY = os.environ.get("SECRET_KEY", "")
 
 COOKIE = "session"
@@ -55,6 +55,8 @@ def enabled():
 
 def check_config():
     """Bricht den Start ab, wenn die Anmeldung so nicht funktionieren kann."""
+    if EMAILS and not BASE_URL:
+        raise RuntimeError("AUTH_EMAILS ist gesetzt, BASE_URL fehlt (siehe README)")
     if RESEND_API_KEY and not MAIL_FROM:
         raise RuntimeError("RESEND_API_KEY ist gesetzt, MAIL_FROM fehlt (siehe README)")
 

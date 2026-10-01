@@ -49,16 +49,21 @@ Danach <http://localhost:8112> öffnen. Zustand prüfen: <http://localhost:8112/
 
 ## Konfiguration
 
-Einstellungen stehen in `.env` (Vorlage: [`.env.example`](.env.example)).
+Einstellungen stehen ausschließlich in `.env` (Vorlage: [`.env.example`](.env.example)).
+Code und `docker-compose.yml` enthalten keine Standardwerte. Ohne `.env` startet der Container nicht.
 
-| Variable       | Standard    | Bedeutung                                                    |
+| Variable       | Pflicht     | Bedeutung                                                    |
 |----------------|-------------|--------------------------------------------------------------|
-| `APP_PORT`     | `8112`      | Port auf dem Host                                            |
-| `AUTH_EMAILS`  | *(leer)*    | Berechtigte E-Mail-Adressen, durch Komma getrennt. Leer = kein Schutz. **Setzen, sobald die App im Netz läuft.** |
-| `BASE_URL`     | `http://localhost:8112` | Adresse der App, daraus entsteht der Link in der Mail |
-| `RESEND_API_KEY` | *(leer)*  | API-Schlüssel von [Resend](https://resend.com). Leer = Link steht nur im Log (`docker compose logs`) |
-| `MAIL_FROM`    | *(leer)*    | Absender, z. B. `Einsatzstatistik <statistik@example.org>` (Domain in Resend verifiziert). Pflicht, wenn `RESEND_API_KEY` gesetzt ist |
-| `SECRET_KEY`   | *(leer)*    | Schlüssel für Links und Sitzungen. Leer = wird als `daten/session.key` erzeugt |
+| `APP_PORT`     | ja          | Port auf dem Host, z. B. `8112`. Hinter einem Reverse Proxy auf demselben Host `127.0.0.1:8112`, damit die App nur über den Proxy erreichbar ist |
+| `AUTH_EMAILS`  | nein        | Berechtigte E-Mail-Adressen, durch Komma getrennt. Leer = kein Schutz. **Setzen, sobald die App im Netz läuft.** |
+| `BASE_URL`     | mit `AUTH_EMAILS` | Öffentliche Adresse der App, z. B. `https://einsatz.example.org`. Daraus entsteht der Link in der Mail. Mit `https://` wird das Sitzungs-Cookie nur über HTTPS gesendet |
+| `RESEND_API_KEY` | nein      | API-Schlüssel von [Resend](https://resend.com). Leer = Link steht nur im Log (`docker compose logs`) |
+| `MAIL_FROM`    | mit `RESEND_API_KEY` | Absender, z. B. `Einsatzstatistik <statistik@example.org>` (Domain in Resend verifiziert) |
+| `SECRET_KEY`   | nein        | Schlüssel für Links und Sitzungen. Leer = wird als `daten/session.key` erzeugt |
+
+**Reverse Proxy:** Die App muss an der Wurzel der Domain laufen (nicht unter einem Unterpfad).
+Weiterleitungen sind relative Pfade, `X-Forwarded-*`-Header werden nicht benötigt. Bei nginx
+`client_max_body_size` so setzen, dass die PDFs durchpassen (Standard 1 MB).
 
 **Anmeldung:** Ist `AUTH_EMAILS` gesetzt, fragt die App nach der E-Mail-Adresse und schickt
 einen Anmeldelink (15 Minuten gültig, nur einmal benutzbar). Die Sitzung hält 30 Tage.
@@ -66,8 +71,8 @@ Eine Adresse aus `AUTH_EMAILS` zu entfernen (und neu zu starten) sperrt sie sofo
 Wird `daten/session.key` gelöscht, sind alle abgemeldet. Die frühere Variable `APP_PASSWORD`
 wird nicht mehr unterstützt; ist sie ohne `AUTH_EMAILS` gesetzt, startet die App nicht.
 
-Im Container fest eingestellt (siehe [`docker-compose.yml`](docker-compose.yml)):
-`DB_PATH=/daten/einsaetze.db`, `IMPORT_DIR=/import`.
+Im Container fest eingestellt, weil sie zu den Volumes gehören (siehe [`docker-compose.yml`](docker-compose.yml)):
+`DB_PATH=/daten/einsaetze.db` (Pflicht), `IMPORT_DIR=/import` (Erstimport).
 
 ## Daten
 
