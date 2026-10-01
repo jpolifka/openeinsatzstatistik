@@ -22,6 +22,14 @@ def _create(client, number, started_at="2025-03-12T10:00:00"):
                                            "place": "Rheinbrohl"}, source="pdf")
 
 
+def test_frontend_is_revalidated(client):
+    assert client.get("/").headers["cache-control"] == "no-cache"
+    response = client.get("/static/app.js")
+    assert response.headers["cache-control"] == "no-cache"
+    assert client.get("/static/app.js", headers={"if-none-match": response.headers["etag"]}).status_code == 304
+    assert "cache-control" not in client.get("/health").headers
+
+
 def test_config_comes_from_domain(client):
     assert client.get("/api/config").json()["vehicles"] == list(domain.VEHICLES)
 
