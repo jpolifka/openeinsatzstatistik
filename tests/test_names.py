@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
-from app.names import NameMatcher, normalize, short_name, split_name
+import pytest
+
+from app.names import NameMatcher, leader_spelling, matches_leader, normalize, short_name, split_name
 
 
 def test_normalize():
@@ -24,3 +26,24 @@ def test_matcher():
     assert matcher.match("Anna", "Beispiel") == 3        # vertauscht
     assert matcher.match("Mustre", "Max") == 1           # Tippfehler
     assert matcher.match("Unbekannt", "Otto") is None
+
+
+@pytest.mark.parametrize("text", ["M. Muster", "Ma. Muster", "Muster, M.", "Max Muster", "Muster Max", "Muster",
+                                  "MUSTER, MAX"])
+def test_leader_matches_different_conventions(text):
+    assert matches_leader(text, "Muster", "Max")
+    assert matches_leader(text, "Muster-Beispiel", "Max")   # Doppelname: ein Namensteil reicht
+    assert matches_leader("Ch. Beispiel", "Beispiel", "Christian")
+
+
+@pytest.mark.parametrize("text", ["E. Muster", "Erika Muster", "M. Mustermann", "", "Beispiel"])
+def test_leader_does_not_match_others(text):
+    assert not matches_leader(text, "Muster", "Max")
+
+
+def test_leader_spelling_prefers_known_spelling():
+    spellings = {"Muster, M.": 3, "M. Muster": 1, "Ch. Beispiel": 2}
+    assert leader_spelling(spellings, "Muster", "Max") == "Muster, M."
+    assert leader_spelling(spellings, "Muster", "Erika") == "E. Muster"
+    assert leader_spelling({}, "Beispiel", "Christa") == "Ch. Beispiel"
+    assert leader_spelling({}, "Beispiel", "") == "Beispiel"

@@ -181,8 +181,8 @@ def preview(con, report):
     for p in report["people"]:
         member_id = members.find(p["last_name"], p["first_name"])
         name = members.names[member_id] if member_id else f"{p['last_name']}, {p['first_name']}"
-        people.append({"id": member_id, "name": name, "role": p["role"], "vehicle": p["vehicle"],
-                       "new": member_id is None})
+        people.append({"id": member_id, "name": name, "last_name": p["last_name"], "first_name": p["first_name"],
+                       "role": p["role"], "vehicle": p["vehicle"], "new": member_id is None})
     incident = to_incident(report, to_fields(report), people)
     existing_id = store.find_incident(con, incident["year"], incident["number"])
     return incident, (store.load_incident(con, existing_id) if existing_id else None)

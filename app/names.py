@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Personennamen vergleichen: Schreibweisen aus BKS-Bericht und Einsatzübersicht zusammenführen."""
 import difflib
+import re
 import unicodedata
 
 
@@ -33,6 +34,34 @@ def name_readings(text):
 def split_name(text):
     """'Nachname, Vorname' oder 'Vorname Nachname' -> (nachname, vorname)."""
     return name_readings(text)[-1]
+
+
+def matches_leader(text, last_name, first_name):
+    """Passt eine EHF-Angabe zur Person? Erkannt werden u. a. 'M. Muster', 'Ch. Muster', 'Muster, M.',
+    'Max Muster', 'Muster Max' und nur 'Muster'; bei Doppelnamen reicht ein Namensteil."""
+    words = [w for w in (normalize(t) for t in re.split(r"[\s,]+", text or "")) if w]
+    first = normalize(first_name)
+    last_names = {normalize(last_name)} | {normalize(part) for part in re.split(r"[-\s]+", last_name or "")
+                                           if len(normalize(part)) >= 3}
+    last_names.discard("")
+    for i in range(len(words)):
+        for j in range(i + 1, len(words) + 1):
+            if "".join(words[i:j]) in last_names:
+                rest = "".join(words[:i] + words[j:])  # Vorname oder Initiale, falls angegeben
+                if not rest or not first or first.startswith(rest):
+                    return True
+    return False
+
+
+def leader_spelling(spellings, last_name, first_name):
+    """EHF-Schreibweise einer Person: die bisher am häufigsten für sie verwendete, sonst 'V. Nachname'.
+
+    spellings: {schreibweise: anzahl} aus den vorhandenen Einsätzen.
+    """
+    used = [(count, text) for text, count in spellings.items() if matches_leader(text, last_name, first_name)]
+    if used:
+        return max(used)[1]
+    return short_name(first_name, last_name) if first_name else last_name
 
 
 def _similarity(a, b):

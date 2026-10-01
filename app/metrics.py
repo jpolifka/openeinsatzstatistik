@@ -163,6 +163,34 @@ def statistics(evaluated, year, previous=None, today=None):
     }
 
 
+HISTORY_WINDOW = 12  # Monate für den gleitenden Durchschnitt im Verlauf
+
+
+def monthly_history(counts, today=None):
+    """Verlauf über alle Jahre: {"JJJJ-MM": anzahl} -> lückenlose Monatsliste mit gleitendem Durchschnitt.
+
+    Reicht bis zum Vormonat (den laufenden Monat nur, wenn er schon Einsätze hat), höchstens bis zum
+    Ende des letzten Jahres mit Einsätzen.
+    """
+    if not counts:
+        return []
+    today = today or dt.date.today()
+    first, last = min(counts), max(counts)
+    year, month = int(first[:4]), int(first[5:7])
+    running = f"{today.year:04d}-{today.month:02d}"
+    previous_month = f"{today.year - 1:04d}-12" if today.month == 1 else f"{today.year:04d}-{today.month - 1:02d}"
+    end = max(last, min(previous_month, f"{last[:4]}-12"))
+    history, window = [], []
+    while f"{year:04d}-{month:02d}" <= end:
+        count = counts.get(f"{year:04d}-{month:02d}", 0)
+        window = (window + [count])[-HISTORY_WINDOW:]
+        history.append({"year": year, "month": month, "name": MONTHS[month - 1], "count": count,
+                        "running": f"{year:04d}-{month:02d}" == running,
+                        "average": round(sum(window) / HISTORY_WINDOW, 2) if len(window) == HISTORY_WINDOW else None})
+        year, month = (year + 1, 1) if month == 12 else (year, month + 1)
+    return history
+
+
 # ---------------------------------------------------------------- Blatt Auswertung (Bedarfsplan)
 def _summarize(evaluated):
     on_time = sum(1 for _, m in evaluated if m["on_time"])

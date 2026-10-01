@@ -34,6 +34,14 @@ def test_config_comes_from_domain(client):
     assert client.get("/api/config").json()["vehicles"] == list(domain.VEHICLES)
 
 
+def test_evaluation_contains_history(client):
+    _create(client, 1, "2024-05-02T10:00:00")
+    _create(client, 1, "2025-03-12T10:00:00")
+    history = client.get("/api/evaluation?year=2025").json()["history"]
+    assert (history[0]["year"], history[0]["month"]) == (2024, 5)
+    assert sum(h["count"] for h in history) == 2
+
+
 def test_evaluation_rejects_unknown_limit(client):
     assert client.get("/api/evaluation?limit=9").status_code == 400
     assert client.get("/api/evaluation?limit=10").json()["response_plan"]["limit"] == 10

@@ -41,6 +41,22 @@ def test_create_normalizes_and_derives(con):
     assert incident["warnings"] == ["Hinweis"]
 
 
+@pytest.mark.parametrize("keyword, subcode, expected", [("s1.00", "", ("S1", "00")), ("B2.07", "99", ("B2", "07")),
+                                                        ("h1.", "03", ("H1", "03")), ("w1", "01", ("W1", "01"))])
+def test_full_keyword_is_split(con, keyword, subcode, expected):
+    incident_id = store.create_incident(con, {**FIELDS, "keyword": keyword, "subcode": subcode}, source="pdf")
+    incident = store.load_incident(con, incident_id)
+    assert (incident["keyword"], incident["subcode"]) == expected
+
+
+def test_leader_names_use_known_spelling(con):
+    store.create_incident(con, {**FIELDS, "unit_leader": "Muster, M."}, source="pdf")
+    leaders = store.LeaderNames(con)
+    person = {"name": "Max Muster"}                     # ohne Namensspalten, Konvention "Vorname Nachname"
+    assert leaders.spelling(person) == "Muster, M."
+    assert leaders.is_leader("M. Muster", person) and not leaders.is_leader("E. Muster", person)
+
+
 def test_duplicates_are_rejected(con):
     store.create_incident(con, FIELDS, source="pdf")
     with pytest.raises(store.DuplicateIncident):

@@ -3,7 +3,7 @@
 import json
 
 from app.holidays import is_weekend_or_holiday
-from app.names import NameMatcher, normalize
+from app.names import NameMatcher, leader_spelling, matches_leader, normalize, split_name
 from app.timeutil import normalize_iso, parse_iso, year_of
 
 # Bearbeitbare Felder eines Einsatzes – Grundlage für Formular, Speichern und Abgleich
@@ -34,6 +34,11 @@ def normalize_fields(fields, weekend_or_holiday=None):
     f["started_at"], f["ended_at"] = normalize_iso(f["started_at"]), normalize_iso(f["ended_at"])
     for name in TEXT_FIELDS:
         f[name] = (f[name] or "").strip()
+    # Ganzes Stichwort im Feld Stichwort (z. B. "s1.00") in Stichwort und Stufe aufteilen
+    if "." in f["keyword"]:
+        f["keyword"], subcode = (t.strip() for t in f["keyword"].split(".", 1))
+        f["subcode"] = subcode or f["subcode"]
+    f["keyword"] = f["keyword"].upper()
     start = parse_iso(f["started_at"])
     f["year"] = year_of(start)
     if weekend_or_holiday is None:
@@ -43,6 +48,33 @@ def normalize_fields(fields, weekend_or_holiday=None):
 
 
 # ---------------------------------------------------------------- Kameraden
+def person_names(person):
+    """(nachname, vorname) eines Anwesenden – aus den Namensspalten oder aus dem Anzeigenamen."""
+    if person.get("last_name") and person.get("first_name"):
+        return person["last_name"], person["first_name"]
+    return split_name(person["name"])
+
+
+class LeaderNames:
+    """EHF-Schreibweisen der vorhandenen Einsätze, damit ein Anwesender per Klick als EHF eingetragen
+    und der eingetragene EHF in der Anwesenheit erkannt wird – unabhängig von der Namenskonvention."""
+
+    def __init__(self, con):
+        self.spellings = {r[0]: r[1] for r in con.execute(
+            "SELECT unit_leader, COUNT(*) FROM incident WHERE unit_leader != '' GROUP BY unit_leader")}
+        self._cache = {}
+
+    def spelling(self, person):
+        key = person_names(person)
+        if key not in self._cache:
+            self._cache[key] = leader_spelling(self.spellings, *key)
+        return self._cache[key]
+
+    @staticmethod
+    def is_leader(unit_leader, person):
+        return matches_leader(unit_leader, *person_names(person))
+
+
 class MemberDirectory:
     """Namensabgleich gegen alle bekannten Kameraden; legt Unbekannte bei Bedarf an."""
 
@@ -127,6 +159,12 @@ def load_incident(con, incident_id):
 def years(con):
     return [dict(r) for r in con.execute(
         "SELECT year, COUNT(*) AS count, MAX(number) AS last_number FROM incident GROUP BY year ORDER BY year")]
+
+
+def incident_months(con):
+    """Anzahl Einsätze je Monat über alle Jahre -> {"JJJJ-MM": anzahl}."""
+    return {r[0]: r[1] for r in con.execute(
+        "SELECT substr(started_at, 1, 7), COUNT(*) FROM incident WHERE started_at IS NOT NULL GROUP BY 1")}
 
 
 def latest_year(con):

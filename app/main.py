@@ -131,8 +131,8 @@ def _resolve_year(con, year):
     return year or store.latest_year(con) or dt.date.today().year
 
 
-def incident_json(incident, limit=domain.DEFAULT_LIMIT):
-    """Einsatz mit Kennzahlen für die Oberfläche."""
+def incident_json(incident, leaders, limit=domain.DEFAULT_LIMIT):
+    """Einsatz mit Kennzahlen für die Oberfläche. leaders: store.LeaderNames für die EHF-Auswahl."""
     m = metrics.incident_metrics(incident, limit)
     vehicles = []
     for call_sign in domain.VEHICLES:
@@ -149,7 +149,8 @@ def incident_json(incident, limit=domain.DEFAULT_LIMIT):
                                                  "crew_total")},
         "vehicles": vehicles,
         "people": [{"id": p["id"], "name": p["name"], "role": p.get("role"), "vehicle": p.get("vehicle"),
-                    "new": p.get("new", False)} for p in incident["people"]],
+                    "new": p.get("new", False), "leader_name": leaders.spelling(p),
+                    "leader": leaders.is_leader(incident.get("unit_leader"), p)} for p in incident["people"]],
     }
 
 
@@ -185,7 +186,9 @@ def api_evaluation(year: Optional[int] = None, limit: int = domain.DEFAULT_LIMIT
         year = _resolve_year(con, year)
         current = metrics.evaluate(store.load_incidents(con, year=year), limit)
         previous = store.load_incidents(con, year=year - 1) or None
+        history = metrics.monthly_history(store.incident_months(con))
     return {"year": year,
+            "history": history,
             "statistics": metrics.statistics(current, year, previous),
             "response_plan": metrics.response_plan(current, limit),
             "response_plan_previous": metrics.response_plan(metrics.evaluate(previous, limit), limit)
@@ -203,7 +206,8 @@ IncidentFields = create_model(
 def api_incidents(year: Optional[int] = None):
     with db.connection() as con:
         year = _resolve_year(con, year)
-        return {"year": year, "incidents": [incident_json(i) for i in store.load_incidents(con, year=year)]}
+        leaders = store.LeaderNames(con)
+        return {"year": year, "incidents": [incident_json(i, leaders) for i in store.load_incidents(con, year=year)]}
 
 
 @app.put("/api/incidents/{incident_id}")
@@ -215,7 +219,7 @@ def api_update_incident(incident_id: int, fields: IncidentFields):
             raise HTTPException(404, "Einsatz nicht gefunden.")
         except store.DuplicateIncident as e:
             raise HTTPException(409, str(e))
-        return incident_json(store.load_incident(con, incident_id))
+        return incident_json(store.load_incident(con, incident_id), store.LeaderNames(con))
 
 
 @app.delete("/api/incidents/{incident_id}")
@@ -292,9 +296,9 @@ def _read_uploads(uploads):
     return reports, errors
 
 
-def _preview_json(con, r):
+def _preview_json(con, r, leaders):
     incident, existing = report.preview(con, r)
-    result = incident_json(incident)
+    result = incident_json(incident, leaders)
     result["reported_as"] = r["reported_as"]
     result["incident_commander"] = r["incident_commander"]
     result["existing"] = {"id": existing["id"], "source": existing["source"],
@@ -309,7 +313,8 @@ def api_read_reports(pdfs: List[UploadFile] = File(...)):
         raise HTTPException(400, "Bitte eine PDF- oder ZIP-Datei (Einsatzberichte aus dem BKS-Portal) auswählen.")
     reports, errors = _read_uploads(pdfs)
     with db.connection() as con:
-        previews_json = [_preview_json(con, r) for r in reports]
+        leaders = store.LeaderNames(con)
+        previews_json = [_preview_json(con, r, leaders) for r in reports]
     return {"token": previews.add(reports), "reports": previews_json, "errors": errors}
 
 
@@ -333,7 +338,7 @@ def api_accept_report(a: Acceptance):
             incident_id = report.save(con, r, fields, replace_id)
         except store.DuplicateIncident as e:
             raise HTTPException(409, str(e))
-        return incident_json(store.load_incident(con, incident_id))
+        return incident_json(store.load_incident(con, incident_id), store.LeaderNames(con))
 
 
 # ---------------------------------------------------------------- Export
