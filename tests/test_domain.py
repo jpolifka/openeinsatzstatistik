@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import datetime as dt
+import re
 
 from app import domain
 from app.holidays import easter_sunday, is_weekend_or_holiday
@@ -46,3 +47,11 @@ def test_substitute_label():
     assert domain.substitute_label("FL NR#.BHÖ 01/23-01", "02/45") == "01/23-01"
     assert domain.substitute_label("FL NR#.BHÖ 02/45-01", "02/45") is None
     assert domain.substitute_label(None, "02/45") is None
+
+
+def test_keyword_catalog_codes_are_valid():
+    codes = [code for code, _ in domain.KEYWORD_CATALOG]
+    assert len(codes) == len(set(codes))
+    assert all(re.fullmatch(r"[BHGWSU][1-4](\.\d\d)?", code) for code in codes)
+    assert dict(domain.KEYWORD_CATALOG)["H2.03"] == "Verkehrsunfall"
+    assert ".".join(domain.FIRE_ALARM_SYSTEM) in codes and ".".join(domain.FIRE_WATCH) in codes
