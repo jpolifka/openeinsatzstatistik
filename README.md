@@ -54,8 +54,17 @@ Einstellungen stehen in `.env` (Vorlage: [`.env.example`](.env.example)).
 | Variable       | Standard    | Bedeutung                                                    |
 |----------------|-------------|--------------------------------------------------------------|
 | `APP_PORT`     | `8112`      | Port auf dem Host                                            |
-| `APP_USER`     | `feuerwehr` | Benutzername für den Passwortschutz                          |
-| `APP_PASSWORD` | *(leer)*    | Leer = kein Schutz. **Setzen, sobald die App im Netz läuft.** |
+| `AUTH_EMAILS`  | *(leer)*    | Berechtigte E-Mail-Adressen, durch Komma getrennt. Leer = kein Schutz. **Setzen, sobald die App im Netz läuft.** |
+| `BASE_URL`     | `http://localhost:8112` | Adresse der App, daraus entsteht der Link in der Mail |
+| `RESEND_API_KEY` | *(leer)*  | API-Schlüssel von [Resend](https://resend.com). Leer = Link steht nur im Log (`docker compose logs`) |
+| `MAIL_FROM`    | *(leer)*    | Absender, z. B. `Einsatzstatistik <statistik@example.org>` (Domain in Resend verifiziert). Pflicht, wenn `RESEND_API_KEY` gesetzt ist |
+| `SECRET_KEY`   | *(leer)*    | Schlüssel für Links und Sitzungen. Leer = wird als `daten/session.key` erzeugt |
+
+**Anmeldung:** Ist `AUTH_EMAILS` gesetzt, fragt die App nach der E-Mail-Adresse und schickt
+einen Anmeldelink (15 Minuten gültig, nur einmal benutzbar). Die Sitzung hält 30 Tage.
+Eine Adresse aus `AUTH_EMAILS` zu entfernen (und neu zu starten) sperrt sie sofort.
+Wird `daten/session.key` gelöscht, sind alle abgemeldet. Die frühere Variable `APP_PASSWORD`
+wird nicht mehr unterstützt; ist sie ohne `AUTH_EMAILS` gesetzt, startet die App nicht.
 
 Im Container fest eingestellt (siehe [`docker-compose.yml`](docker-compose.yml)):
 `DB_PATH=/daten/einsaetze.db`, `IMPORT_DIR=/import`.

@@ -366,6 +366,10 @@ h2 .help-btn, h3 .help-btn { color: var(--red); }
   background: rgba(255,255,255,.14); color: var(--white); font-weight: 700; font-size: 1.05rem; cursor: pointer; flex: none;
 }
 .btn-help-header:hover { background: rgba(255,255,255,.26); }
+.btn-help-header svg { width: 18px; height: 18px; display: block; margin: auto; }
+.login-card { max-width: 440px; margin: 40px auto 0; }
+.login-form { display: grid; gap: 16px; margin-top: 4px; }
+.login-card p + .login-form { margin-top: 16px; }
 .dialog-help { width: min(760px, calc(100vw - 32px)); }
 .help-section + .help-section { margin-top: 26px; }
 .help-section > p { margin-bottom: 10px; font-size: .9rem; }
