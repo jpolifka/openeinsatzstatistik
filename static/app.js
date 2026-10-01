@@ -562,9 +562,9 @@ function showUploadError(html) {
 }
 
 async function readPdfs(files) {
-  files = [...files].filter((f) => f.name.toLowerCase().endsWith(".pdf"));
+  files = [...files].filter((f) => /\.(pdf|zip)$/i.test(f.name));
   $("#pdf-error").hidden = true;
-  if (!files.length) { showUploadError("Bitte eine PDF-Datei wählen."); return; }
+  if (!files.length) { showUploadError("Bitte eine PDF- oder ZIP-Datei wählen."); return; }
   $("#progress").hidden = false;
   const form = new FormData();
   for (const f of files) form.append("pdfs", f, f.name.normalize("NFC"));

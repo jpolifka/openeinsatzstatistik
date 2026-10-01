@@ -79,20 +79,20 @@
     <div class="dialog-header">
       <div>
         <h2>Einsatzbericht einlesen</h2>
-        <p class="muted">PDF aus dem BKS-Portal – Daten prüfen, bei Bedarf korrigieren und übernehmen.</p>
+        <p class="muted">PDFs aus dem BKS-Portal, einzeln oder als ZIP – Daten prüfen, bei Bedarf korrigieren und übernehmen.</p>
       </div>
       <button type="button" class="btn-close" data-close="pdf-dialog" aria-label="Schließen"></button>
     </div>
     <div class="dialog-body">
       <label class="dropzone" id="dropzone" tabindex="0">
-        <input type="file" id="pdf-input" multiple accept=".pdf,application/pdf" hidden>
+        <input type="file" id="pdf-input" multiple accept=".pdf,application/pdf,.zip,application/zip" hidden>
         <svg class="dropzone-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M24 32V10m0 0-8 8m8-8 8 8" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 30v6a4 4 0 0 0 4 4h24a4 4 0 0 0 4-4v-6" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>
-        <strong>Einsatzbericht-PDF hierher ziehen</strong>
-        <span class="muted">oder klicken, um die Datei auszuwählen</span>
+        <strong>Einsatzbericht-PDFs oder ZIP-Datei hierher ziehen</strong>
+        <span class="muted">oder klicken, um Dateien auszuwählen</span>
       </label>
       <div class="progress" id="progress" hidden>
         <div class="progress-bar"><span></span></div>
-        <span>Bericht wird gelesen …</span>
+        <span>Berichte werden gelesen …</span>
       </div>
       <div class="message message-error" id="pdf-error" hidden></div>
       <div id="previews"></div>
