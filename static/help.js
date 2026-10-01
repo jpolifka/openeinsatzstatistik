@@ -29,8 +29,8 @@ const HELP_SECTIONS = [
       },
       keyword: {
         title: "Stichwort",
-        short: "Einsatzart + Alarmstufe, z. B. H2 oder B3.",
-        text: "Einsatzstichwort aus Buchstabe und Ziffer. Der Buchstabe ist die Einsatzart: <b>H</b> Hilfeleistung, <b>B</b> Brand, <b>W</b> Wasser, <b>G</b> Gefahrstoff, <b>S</b> Sonderlage. Die Ziffer ist die Alarmstufe (1–4). Aus <i>H2.03</i> wird Stichwort H2, Stufe 03; eine Brandsicherheitswache wird als S1 / 00 geführt. Wer das ganze Stichwort ins Feld schreibt – mit oder ohne Punkt, also <i>B2.07</i> oder <i>B207</i> –, bekommt es automatisch in Stichwort und Stufe aufgeteilt.",
+        short: "Einsatzart + Alarmstufe, z. B. H2 – oder Suchbegriff wie „Verkehrsunfall“ eingeben.",
+        text: "Einsatzstichwort aus Buchstabe und Ziffer. Der Buchstabe ist die Einsatzart: <b>H</b> Hilfeleistung, <b>B</b> Brand, <b>W</b> Wasser, <b>G</b> Gefahrstoff, <b>S</b> Sonderlage. Die Ziffer ist die Alarmstufe (1–4). Aus <i>H2.03</i> wird Stichwort H2, Stufe 03; eine Brandsicherheitswache wird als S1 / 00 geführt. Ins Feld kann auch ein Suchbegriff geschrieben werden (z. B. <i>Verkehrsunfall</i>): Die Liste zeigt passende Stichworte aus der Alarm- und Ausrückeordnung (H2.03, H3.01, H3.04, H3.05), ein Klick oder Enter übernimmt Stichwort und Stufe. Wer das ganze Stichwort ins Feld schreibt – mit oder ohne Punkt, also <i>B2.07</i> oder <i>B207</i> –, bekommt es automatisch in Stichwort und Stufe aufgeteilt.",
       },
       subcode: {
         title: "Stufe",

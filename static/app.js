@@ -379,7 +379,7 @@ function matchesFilter(e) {
   if (state.category !== "all" && categoryOf(e.keyword) !== state.category) return false;
   const query = state.query.trim().toLowerCase();
   if (!query) return true;
-  const text = [e.number, e.keyword, `${e.keyword}.${e.subcode}`, e.description, e.place, e.unit_leader,
+  const text = [e.number, e.keyword, `${e.keyword}.${e.subcode}`, keywordName(e), e.description, e.place, e.unit_leader,
     formatDate(e.started_at), e.filename, ...e.people.map((p) => p.name)].join(" ").toLowerCase();
   return query.split(/\s+/).every((t) => text.includes(t));
 }
@@ -411,7 +411,7 @@ function renderIncidents() {
     return `<tr class="row ${open ? "open" : ""}" data-id="${e.id}">
       <td><span class="number">${orDash(e.number)}</span></td>
       <td><div>${formatDate(e.started_at)}</div><div class="time">${weekdayShort(e.started_at)} ${formatTime(e.started_at)}${e.weekend_or_holiday ? " · WE/FT" : ""}</div></td>
-      <td><span class="keyword ${categoryOf(e.keyword).toLowerCase()}">${esc(e.keyword)}${e.subcode ? "." + esc(e.subcode) : ""}</span></td>
+      <td><span class="keyword ${categoryOf(e.keyword).toLowerCase()}" ${keywordName(e) ? `data-tip="${esc(keywordName(e))}"` : ""}>${esc(e.keyword)}${e.subcode ? "." + esc(e.subcode) : ""}</span></td>
       <td><div class="incident-title">${esc(e.description)}</div><div class="incident-place">${esc(e.place)}</div></td>
       <td>${e.unit_leader ? esc(e.unit_leader) : `<span class="muted">–</span>`}</td>
       <td>${vehicleChips(e)}</td>
@@ -516,7 +516,7 @@ const FORM_FIELDS = [
   ["started_at", "Beginn", "datetime-local", "span-2", 'step="1"'],
   ["ended_at", "Ende", "datetime-local", "span-2", 'step="1"'],
   ["station_staff", "Gerätehaus", "number", "", 'min="0"'],
-  ["keyword", "Stichwort", "text", "", 'maxlength="6" placeholder="z. B. B2"'],
+  ["keyword", "Stichwort", "text", "", 'placeholder="Suche" autocomplete="off" role="combobox" aria-autocomplete="list"'],
   ["subcode", "Stufe", "text", "", 'maxlength="2"'],
   ["description", "Einsatz", "text", "span-4", ""],
   ["place", "Ort", "text", "span-3", 'list="place-options"'],
@@ -837,24 +837,110 @@ $("#view-members").addEventListener("click", (e) => {
   renderMembers();
 });
 
-// EHF von Hand geändert → Hervorhebung der Namen anpassen;
-// ganzes Stichwort (B207, B2.07) gleich in Stichwort und Stufe trennen – der Server trennt beim Speichern ebenso
+// EHF von Hand geändert → Hervorhebung der Namen anpassen.
+// Stichwort: Suche im Katalog, ganzes Stichwort (B207, B2.07) gleich trennen – der Server trennt beim Speichern ebenso.
+const formOf = (el) => el.closest("[data-form], .preview-card");
 for (const container of [$("#incident-table tbody"), $("#previews")]) {
   container.addEventListener("input", (e) => {
-    if (e.target.name === "unit_leader") highlightLeader(e.target.closest("[data-form], .preview-card"));
+    if (e.target.name === "unit_leader") highlightLeader(formOf(e.target));
+    if (e.target.name === "keyword") showKeywordSuggestions(e.target);
   });
   container.addEventListener("change", (e) => {
-    if (e.target.name === "keyword") splitKeyword(e.target.closest("[data-form], .preview-card"));
+    if (e.target.name === "keyword") splitKeyword(formOf(e.target));
+  });
+  container.addEventListener("keydown", (e) => {
+    if (e.target.name === "keyword") navigateKeywordSuggestions(e);
+  });
+  container.addEventListener("focusout", (e) => {
+    if (e.target.name === "keyword") closeKeywordSuggestions();
   });
 }
 
 function splitKeyword(form) {
   const keyword = $('input[name="keyword"]', form), subcode = $('input[name="subcode"]', form);
   const m = keyword.value.trim().match(/^([a-z]\d)\s*[.\s]?\s*(\d{0,2})$/i);
+  // Freier Text ohne Auswahl aus der Liste ist kein Stichwort
+  keyword.classList.toggle("missing", !m && !!keyword.value.trim());
   if (!m) return;
   keyword.value = m[1].toUpperCase();
   if (m[2]) subcode.value = m[2].padStart(2, "0");
 }
+
+// ------------------------------------------------------------ Stichwortsuche
+const fold = (s) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/ß/g, "ss");
+const keywordName = (e) => config.keyword_catalog.find((k) => k.code === (e.subcode ? `${e.keyword}.${e.subcode}` : e.keyword))?.name;
+
+/** Katalogeinträge, in denen alle eingegebenen Wörter vorkommen – in Stichwort (mit/ohne Punkt) oder Bezeichnung. */
+function searchKeywords(query) {
+  const words = fold(query).split(/\s+/).filter(Boolean);
+  if (!words.length) return [];
+  return config.keyword_catalog.filter((k) => {
+    const text = fold(`${k.code} ${k.code.replace(".", "")} ${k.name}`);
+    return words.every((w) => text.includes(w));
+  }).slice(0, 15);
+}
+
+let keywordList = null, keywordInput = null;
+function showKeywordSuggestions(input) {
+  const matches = searchKeywords(input.value);
+  if (!matches.length) { closeKeywordSuggestions(); return; }
+  if (!keywordList) {
+    keywordList = document.createElement("ul");
+    keywordList.id = "keyword-suggestions";
+    keywordList.className = "suggestions";
+    keywordList.setAttribute("role", "listbox");
+    // mousedown statt click: das Eingabefeld behält den Fokus
+    keywordList.addEventListener("mousedown", (e) => {
+      const item = e.target.closest("[data-code]");
+      e.preventDefault();
+      if (item) chooseKeyword(item.dataset.code);
+    });
+    document.body.append(keywordList);
+  }
+  keywordInput = input;
+  input.setAttribute("aria-controls", keywordList.id);
+  input.setAttribute("aria-expanded", "true");
+  keywordList.innerHTML = matches.map((k, i) => `<li role="option" data-code="${esc(k.code)}" class="${i ? "" : "active"}">
+    <b>${esc(k.code)}</b><span>${esc(k.name)}</span></li>`).join("");
+  const r = input.getBoundingClientRect();
+  Object.assign(keywordList.style, { left: `${Math.min(r.left, window.innerWidth - 340)}px`, top: `${r.bottom + 4}px` });
+  keywordList.hidden = false;
+}
+
+function closeKeywordSuggestions() {
+  if (keywordList) keywordList.hidden = true;
+  keywordInput?.setAttribute("aria-expanded", "false");
+  keywordInput = null;
+}
+
+function chooseKeyword(code) {
+  const form = formOf(keywordInput), [keyword, subcode = ""] = code.split(".");
+  keywordInput.value = keyword;
+  keywordInput.classList.remove("missing");
+  $('input[name="subcode"]', form).value = subcode;
+  closeKeywordSuggestions();
+}
+
+function navigateKeywordSuggestions(e) {
+  if (!keywordList || keywordList.hidden) return;
+  const items = [...$$("li", keywordList)], current = items.findIndex((li) => li.classList.contains("active"));
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    const next = (current + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+    items.forEach((li, i) => li.classList.toggle("active", i === next));
+    items[next].scrollIntoView({ block: "nearest" });
+  } else if (e.key === "Enter") {
+    e.preventDefault();
+    chooseKeyword(items[Math.max(current, 0)].dataset.code);
+  } else if (e.key === "Escape") {
+    e.stopPropagation();   // Dialog nicht schließen
+    e.preventDefault();
+    closeKeywordSuggestions();
+  }
+}
+// Fest positionierte Liste beim Scrollen schließen statt hinterherzuschieben
+window.addEventListener("scroll", (e) => { if (e.target !== keywordList) closeKeywordSuggestions(); }, true);
+window.addEventListener("resize", closeKeywordSuggestions);
 
 // Dialoge
 for (const button of $$("[data-close]")) {

@@ -268,6 +268,11 @@ button.person:hover:not(.leader) { background: var(--light-red); color: var(--da
 .field input { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--white); min-width: 0; width: 100%; }
 .field input:focus { border-color: var(--accent-red); outline: none; box-shadow: 0 0 0 3px var(--light-red); }
 .field input.missing { border-color: var(--accent-red); background: var(--pale-red); }
+.suggestions { position: fixed; z-index: 50; width: 330px; max-width: calc(100vw - 16px); max-height: 300px; overflow-y: auto;
+  margin: 0; padding: 4px; list-style: none; background: var(--white); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); }
+.suggestions li { display: flex; gap: 10px; padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: .88rem; }
+.suggestions li b { min-width: 44px; color: var(--dark-red); font-variant-numeric: tabular-nums; }
+.suggestions li.active, .suggestions li:hover { background: var(--light-red); }
 .field.span-2 { grid-column: span 2; } .field.span-3 { grid-column: span 3; } .field.span-4 { grid-column: span 4; }
 
 /* ------------------------------------------------------------ Dialog */
