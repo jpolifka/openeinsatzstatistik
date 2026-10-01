@@ -2,17 +2,19 @@ name: pdf2einsatz
 
 services:
   einsatzberichte:
-    build: .
+    build:
+      context: .
+      target: app
     image: pdf2einsatz-web
     container_name: einsatzberichte
     ports:
       - "${APP_PORT:-8112}:8112"
     environment:
       # Passwortschutz: in .env setzen, sobald die App im Netz erreichbar ist (siehe .env.example)
-      APP_BENUTZER: ${APP_BENUTZER:-feuerwehr}
-      APP_PASSWORT: ${APP_PASSWORT:-}
-      DB_PFAD: /daten/einsaetze.db
-      IMPORT_ORDNER: /import
+      APP_USER: ${APP_USER:-feuerwehr}
+      APP_PASSWORD: ${APP_PASSWORD:-}
+      DB_PATH: /daten/einsaetze.db
+      IMPORT_DIR: /import
     volumes:
       - ./daten:/daten
       # Nur für den Erstimport: vorhandene Einsatzübersicht_JJJJ.xlsx
