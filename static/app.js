@@ -1,709 +1,782 @@
 "use strict";
 
-// Fahrzeug-Blöcke in derselben Reihenfolge wie in der Einsatzübersicht
-const BLOECKE = ["02/45", "02/24", "02/71", "02/19", "01/10"];
-const ARTEN = [["H", "Hilfeleistung"], ["B", "Brand"], ["W", "Wasser"], ["G", "Gefahrstoff"], ["S", "Sonderlage"]];
-const ANSICHTEN = ["auswertung", "einsaetze", "kameraden"];
+// Fachkonstanten (Fahrzeuge, Orte, Zeitgrenzen, …) kommen von /api/config – hier keine eigenen Kopien.
+let config = null;
 
-const z = {
-  jahre: [], jahr: null, ansicht: "auswertung", grenze: 8,
-  auswertung: null, einsaetze: null,
-  filterArt: "alle", suche: "", offen: new Set(), bearbeiten: null,
-  tabellen: new Set(),                       // Diagramme, die gerade als Tabelle angezeigt werden
-  kamSort: { feld: "einsaetze", ab: true },
-  pdf: { token: null, berichte: [], fehler: [] }, geaendert: false,
+const state = {
+  years: [], year: null, view: "evaluation", limit: null,
+  evaluation: null, incidents: null,
+  category: "all", query: "", expanded: new Set(), editing: null,
+  tableCards: new Set(),                      // Diagramme, die gerade als Tabelle angezeigt werden
+  memberSort: { field: "incidents", descending: true },
+  upload: { token: null, reports: [], errors: [] }, dataChanged: false,
 };
 
 // ------------------------------------------------------------ Hilfsfunktionen
 const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => el.querySelectorAll(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const zahl = (n, stellen = 1) => n == null ? "–" : Number(n).toLocaleString("de-DE", { maximumFractionDigits: stellen });
-const prozent = (q) => q == null ? "–" : `${Math.round(q * 100)} %`;
-const mehrzahl = (n, eins, viele) => `${n} ${n === 1 ? eins : viele}`;
-const datum = (iso) => iso ? `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}` : "–";
-const uhr = (iso) => !iso ? "–" : iso.length > 8 ? iso.slice(11, 16) : iso.slice(0, 5);
-const wochentag = (iso) => iso ? new Date(iso).toLocaleDateString("de-DE", { weekday: "short" }) : "";
-function dauer(min) {
+const num = (n, digits = 1) => n == null ? "–" : Number(n).toLocaleString("de-DE", { maximumFractionDigits: digits });
+const percent = (q) => q == null ? "–" : `${Math.round(q * 100)} %`;
+const minutes = (m) => m == null ? "–" : `${num(m)} min`;
+const orDash = (v) => v ?? "–";
+const pad2 = (n) => String(n).padStart(2, "0");
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+const formatDate = (iso) => iso ? `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}` : "–";
+const formatTime = (iso) => !iso ? "–" : iso.length > 8 ? iso.slice(11, 16) : iso.slice(0, 5);
+const weekdayShort = (iso) => iso ? new Date(iso).toLocaleDateString("de-DE", { weekday: "short" }) : "";
+const categoryOf = (keyword) => (keyword || "").charAt(0);
+const errorBox = (message) => `<div class="message message-error">${esc(message)}</div>`;
+
+function formatDuration(min) {
   if (min == null) return "–";
   const h = Math.floor(min / 60), m = Math.round(min % 60);
-  return h ? `${h}:${String(m).padStart(2, "0")} h` : `${m} min`;
+  return h ? `${h}:${pad2(m)} h` : `${m} min`;
 }
-function stunden(min) { return min == null ? "–" : `${zahl(min / 60, 0)} h`; }
+const formatHours = (min) => min == null ? "–" : `${num(min / 60, 0)} h`;
 
-const SVG_AUF = `<svg class="aufklapp" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const ICON_CHEVRON = `<svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const ICON_CLOSE = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>`;
 
-async function api(url, optionen = {}) {
-  const antwort = await fetch(url, optionen);
-  const daten = await antwort.json().catch(() => ({}));
-  if (!antwort.ok) throw new Error(daten.detail || `Fehler ${antwort.status}`);
-  return daten;
+async function api(url, options = {}) {
+  const response = await fetch(url, options);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.detail || `Fehler ${response.status}`);
+  return data;
 }
+const apiJson = (url, method, body) =>
+  api(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
 let toastTimer;
 function toast(text) {
-  const t = $("#toast");
-  t.textContent = text;
-  t.hidden = false;
+  const el = $("#toast");
+  el.textContent = text;
+  el.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.hidden = true; }, 3500);
+  toastTimer = setTimeout(() => { el.hidden = true; }, 3500);
 }
 
-function merken(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* privat/gesperrt */ } }
-function erinnern(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function remember(key, value) { try { localStorage.setItem(key, value); } catch (e) { /* privat/gesperrt */ } }
+function recall(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
 
 // ------------------------------------------------------------ Diagramm-Bausteine
-function schoeneSkala(max) {
-  if (max <= 0) return { max: 1, schritt: 1 };
-  const roh = max / 4, p = 10 ** Math.floor(Math.log10(roh));
-  const schritt = [1, 2, 5, 10].map((f) => f * p).find((s) => s >= roh);
-  return { max: Math.ceil(max / schritt) * schritt, schritt };
+function niceScale(max) {
+  if (max <= 0) return { max: 1, step: 1 };
+  const raw = max / 4, p = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 5, 10].map((f) => f * p).find((s) => s >= raw);
+  return { max: Math.ceil(max / step) * step, step };
 }
 
-/** Waagerechte Balken, eine Serie. items: [{name, klein, wert, tip}] */
-function balken(items) {
-  const max = Math.max(1, ...items.map((i) => i.wert));
-  return `<div class="balken-liste">${items.map((i) => `
-    <div class="balken-zeile" data-tip="${esc(i.tip || `${i.name}: ${i.wert}`)}" tabindex="0">
-      <span class="balken-name">${esc(i.name)}${i.klein ? `<small>${esc(i.klein)}</small>` : ""}</span>
-      <span class="balken-spur">${i.wert ? `<span class="balken" style="width:${(i.wert / max) * 100}%;display:block"></span>` : ""}</span>
-      <span class="balken-wert">${i.wert}</span>
+/** Waagerechte Balken, eine Serie. items: [{label, hint, value, tip}] */
+function barChart(items) {
+  const max = Math.max(1, ...items.map((i) => i.value));
+  return `<div class="bar-list">${items.map((i) => `
+    <div class="bar-row" data-tip="${esc(i.tip || `${i.label}: ${i.value}`)}" tabindex="0">
+      <span class="bar-label">${esc(i.label)}${i.hint ? `<small>${esc(i.hint)}</small>` : ""}</span>
+      <span class="bar-track">${i.value ? `<span class="bar" style="width:${(i.value / max) * 100}%"></span>` : ""}</span>
+      <span class="bar-value">${i.value}</span>
     </div>`).join("")}</div>`;
 }
 
-/** Säulen. gruppen: [{achse, tip, werte: [{wert, farbe, beschriften}]}] */
-function saeulen(gruppen, { dicht = false } = {}) {
-  const max = Math.max(0, ...gruppen.flatMap((g) => g.werte.map((w) => w.wert || 0)));
-  const s = schoeneSkala(max);
-  const gitter = [];
-  for (let v = 0; v <= s.max; v += s.schritt) {
-    gitter.push(`<div class="saeulen-gitter" style="bottom:${(v / s.max) * 100}%"><span>${v}</span></div>`);
+/** Säulen. groups: [{axis, tip, values: [{value, tone, labelled}]}]; tone = series | previous | day | night */
+function columnChart(groups, { dense = false } = {}) {
+  const max = Math.max(0, ...groups.flatMap((g) => g.values.map((v) => v.value || 0)));
+  const scale = niceScale(max);
+  const gridlines = [];
+  for (let v = 0; v <= scale.max; v += scale.step) {
+    gridlines.push(`<div class="columns-grid" style="bottom:${(v / scale.max) * 100}%"><span>${v}</span></div>`);
   }
-  return `<div class="saeulen">
-    <div class="saeulen-flaeche">${gitter.join("")}
-      <div class="saeulen-reihe">${gruppen.map((g) => `
-        <div class="saeulen-gruppe" data-tip="${esc(g.tip)}" tabindex="0">${g.werte.map((w) => `
-          <div class="saeule" style="height:${((w.wert || 0) / s.max) * 100}%;background:${w.farbe || "var(--serie)"}">
-            ${w.beschriften && w.wert ? `<span class="saeule-wert">${w.wert}</span>` : ""}
+  return `<div class="columns">
+    <div class="columns-plot">${gridlines.join("")}
+      <div class="columns-row">${groups.map((g) => `
+        <div class="columns-group" data-tip="${esc(g.tip)}" tabindex="0">${g.values.map((v) => `
+          <div class="column tone-${v.tone || "series"}" style="height:${((v.value || 0) / scale.max) * 100}%">
+            ${v.labelled && v.value ? `<span class="column-value">${v.value}</span>` : ""}
           </div>`).join("")}
         </div>`).join("")}
       </div>
     </div>
-    <div class="saeulen-achse ${dicht ? "dicht" : ""}">${gruppen.map((g) => `<span>${esc(g.achse)}</span>`).join("")}</div>
+    <div class="columns-axis ${dense ? "dense" : ""}">${groups.map((g) => `<span>${esc(g.axis)}</span>`).join("")}</div>
   </div>`;
 }
 
-function datenTabelle(kopf, zeilen, fuss) {
-  return `<div class="tabelle-rahmen"><table class="daten-tabelle">
-    <thead><tr>${kopf.map((k, i) => `<th class="${i ? "rechts" : ""}">${esc(k)}</th>`).join("")}</tr></thead>
-    <tbody>${zeilen.map((r) => `<tr>${r.map((c, i) => `<td class="${i ? "rechts" : ""}">${c}</td>`).join("")}</tr>`).join("")}</tbody>
-    ${fuss ? `<tfoot><tr>${fuss.map((c, i) => `<td class="${i ? "rechts" : ""}">${c}</td>`).join("")}</tr></tfoot>` : ""}
+function legend(entries) {
+  return `<div class="legend">${entries.map(([tone, label]) => `<span><i class="tone-${tone}"></i>${esc(label)}</span>`).join("")}</div>`;
+}
+
+function keyFigures(entries) {
+  return `<div class="key-figures">${entries.map(([value, label]) => `<span><b>${value}</b>${esc(label)}</span>`).join("")}</div>`;
+}
+
+function dataTable(head, rows, foot) {
+  const cells = (row, tag) => row.map((c, i) => `<${tag} class="${i ? "right" : ""}">${c}</${tag}>`).join("");
+  return `<div class="table-wrap"><table class="data-table">
+    <thead><tr>${cells(head.map(esc), "th")}</tr></thead>
+    <tbody>${rows.map((r) => `<tr>${cells(r, "td")}</tr>`).join("")}</tbody>
+    ${foot ? `<tfoot><tr>${cells(foot, "td")}</tr></tfoot>` : ""}
   </table></div>`;
 }
 
 /** Karte mit Umschalter Diagramm / Tabelle (die Tabelle ist die barrierefreie Ansicht). */
-function karte(id, titel, unter, diagramm, tabelle, zusatz = "") {
-  const alsTabelle = z.tabellen.has(id);
-  return `<div class="karte">
-    <div class="karte-kopf">
-      <div><h3>${titel}</h3>${unter ? `<p class="gedaempft">${unter}</p>` : ""}</div>
-      <button type="button" class="knopf knopf-rand knopf-klein" data-wechsel="${id}">${alsTabelle ? "Diagramm" : "Tabelle"}</button>
+function chartCard({ id, title, subtitle = "", chart, table, extra = "", heading = "h3", className = "", controls = "", chartLabel = "Diagramm" }) {
+  const asTable = state.tableCards.has(id);
+  return `<div class="card ${className}">
+    <div class="card-header">
+      <div><${heading}>${title}</${heading}>${subtitle ? `<p class="muted">${subtitle}</p>` : ""}</div>
+      <div class="actions">${controls}<button type="button" class="btn btn-outline btn-small" data-toggle-table="${id}">${asTable ? chartLabel : "Tabelle"}</button></div>
     </div>
-    ${alsTabelle ? tabelle : diagramm}
-    ${zusatz}
+    ${asTable ? table : chart}
+    ${extra}
   </div>`;
 }
 
-// ------------------------------------------------------------ Laden & Navigation
-async function jahreLaden() {
-  const d = await api("/api/jahre");
-  z.jahre = d.jahre.map((j) => j.jahr).sort((a, b) => b - a);
-  const gemerkt = Number(erinnern("jahr"));
-  if (!z.jahr || !z.jahre.includes(z.jahr)) z.jahr = z.jahre.includes(gemerkt) ? gemerkt : z.jahre[0] ?? new Date().getFullYear();
-  $("#jahr").innerHTML = z.jahre.map((j) => `<option ${j === z.jahr ? "selected" : ""}>${j}</option>`).join("");
+// ------------------------------------------------------------ Ansichten & Laden
+const VIEWS = {
+  evaluation: { label: "Auswertung", load: loadEvaluation, render: renderEvaluation },
+  incidents: { label: "Einsätze", load: loadIncidents, render: renderIncidents },
+  members: { label: "Kameraden", load: loadEvaluation, render: renderMembers },
+};
+
+function renderTabs() {
+  $("#tabs").innerHTML = Object.entries(VIEWS).map(([key, v]) => `<a href="#${key}" data-view="${key}">${v.label}</a>`).join("");
 }
 
-async function ansichtZeigen() {
-  const h = location.hash.slice(1);
-  z.ansicht = ANSICHTEN.includes(h) ? h : "auswertung";
-  for (const a of document.querySelectorAll("#reiter a")) a.classList.toggle("aktiv", a.dataset.ansicht === z.ansicht);
-  for (const a of ANSICHTEN) $(`#ansicht-${a}`).hidden = a !== z.ansicht;
-  $("#kopf-jahr").textContent = { auswertung: `Auswertung ${z.jahr}`, einsaetze: `Einsätze ${z.jahr}`, kameraden: `Kameraden ${z.jahr}` }[z.ansicht];
-  const bereich = $(`#ansicht-${z.ansicht}`);
-  bereich.classList.add("laedt");
-  try {
-    if (z.ansicht === "einsaetze") {
-      if (!z.einsaetze || z.einsaetze.jahr !== z.jahr) z.einsaetze = await api(`/api/einsaetze?jahr=${z.jahr}`);
-      einsaetzeZeigen();
-    } else {
-      if (!z.auswertung || z.auswertung.jahr !== z.jahr || z.auswertung.grenze !== z.grenze) {
-        z.auswertung = await api(`/api/auswertung?jahr=${z.jahr}&grenze=${z.grenze}`);
-        z.auswertung.grenze = z.grenze;
-      }
-      z.ansicht === "auswertung" ? auswertungZeigen() : kameradenZeigen();
-    }
-  } catch (e) {
-    bereich.innerHTML = `<div class="meldung meldung-fehler">${esc(e.message)}</div>`;
-  } finally {
-    bereich.classList.remove("laedt");
+async function loadYears() {
+  const data = await api("/api/years");
+  state.years = data.years.map((y) => y.year).sort((a, b) => b - a);
+  const remembered = Number(recall("year"));
+  if (!state.year || !state.years.includes(state.year)) {
+    state.year = state.years.includes(remembered) ? remembered : state.years[0] ?? new Date().getFullYear();
   }
+  $("#year").innerHTML = state.years.map((y) => `<option ${y === state.year ? "selected" : ""}>${y}</option>`).join("");
+}
+
+async function loadEvaluation() {
+  const e = state.evaluation;
+  if (!e || e.year !== state.year || e.response_plan.limit !== state.limit) {
+    state.evaluation = await api(`/api/evaluation?year=${state.year}&limit=${state.limit}`);
+  }
+}
+
+async function loadIncidents() {
+  if (!state.incidents || state.incidents.year !== state.year) {
+    state.incidents = await api(`/api/incidents?year=${state.year}`);
+  }
+}
+
+async function showView() {
+  const key = location.hash.slice(1);
+  state.view = key in VIEWS ? key : "evaluation";
+  const view = VIEWS[state.view];
+  for (const a of $$("#tabs a")) a.classList.toggle("active", a.dataset.view === state.view);
+  for (const k of Object.keys(VIEWS)) $(`#view-${k}`).hidden = k !== state.view;
+  $("#page-title").textContent = `${view.label} ${state.year}`;
+  const section = $(`#view-${state.view}`);
+  section.classList.add("loading");
+  try {
+    await view.load();
+    view.render();
+  } catch (e) {
+    section.innerHTML = errorBox(e.message);
+  } finally {
+    section.classList.remove("loading");
+  }
+}
+
+async function reloadData() {
+  state.evaluation = null;
+  state.incidents = null;
+  await loadYears();
+  await showView();
 }
 
 // ------------------------------------------------------------ Auswertung
-function auswertungZeigen() {
-  const { statistik: s, bedarfsplan: bp, bedarfsplan_vorjahr: bpv } = z.auswertung;
-  const laufend = z.jahr === new Date().getFullYear();
+function renderEvaluation() {
+  const { statistics: s, response_plan: plan, response_plan_previous: previousPlan } = state.evaluation;
+  const currentYear = state.year === new Date().getFullYear();
 
-  let vergleich = "";
-  if (laufend && s.vorjahr_bis_heute != null) {
-    const d = s.anzahl - s.vorjahr_bis_heute;
-    vergleich = `${d > 0 ? "+" : ""}${d} gegenüber ${z.jahr - 1} zum selben Datum (${s.vorjahr_bis_heute})`;
-  } else if (s.vorjahr_gesamt != null) {
-    vergleich = `${z.jahr - 1}: ${s.vorjahr_gesamt} Einsätze`;
+  let comparison = "";
+  if (currentYear && s.previous_to_date != null) {
+    const d = s.count - s.previous_to_date;
+    comparison = `${d > 0 ? "+" : ""}${d} gegenüber ${state.year - 1} zum selben Datum (${s.previous_to_date})`;
+  } else if (s.previous_total != null) {
+    comparison = `${state.year - 1}: ${s.previous_total} Einsätze`;
   }
+  const kpi = (title, value, sub, hero = false) =>
+    `<div class="kpi ${hero ? "hero" : ""}"><span class="kpi-title">${title}</span><span class="kpi-value">${value}</span><span class="kpi-sub">${sub}</span></div>`;
   const kpis = `<div class="kpis">
-    <div class="kpi held"><span class="kpi-titel">Einsätze ${z.jahr}</span><span class="kpi-wert">${s.anzahl}</span><span class="kpi-unter">${esc(vergleich)}</span></div>
-    <div class="kpi"><span class="kpi-titel">Einsätze / Woche${hilfe("pro_woche")}</span><span class="kpi-wert">${zahl(s.pro_woche, 2)}</span><span class="kpi-unter">${laufend ? "bis zur aktuellen KW" : "im ganzen Jahr"}</span></div>
-    <div class="kpi"><span class="kpi-titel">Ø Einsatzdauer${hilfe("dauer")}</span><span class="kpi-wert">${dauer(s.dauer_mittel_min)}</span><span class="kpi-unter">Alarm bis Einsatzende</span></div>
-    <div class="kpi"><span class="kpi-titel">Einsatzstunden${hilfe("einsatzstunden")}</span><span class="kpi-wert">${stunden(s.dauer_gesamt_min)}</span><span class="kpi-unter">Summe aller Einsätze</span></div>
-    <div class="kpi"><span class="kpi-titel">Personalstunden${hilfe("personalstunden")}</span><span class="kpi-wert">${zahl(s.personal_std, 0)}<small>h</small></span><span class="kpi-unter">Ø ${zahl(s.anwesend_mittel, 1)} Kameraden je Einsatz</span></div>
-    <div class="kpi"><span class="kpi-titel">Eintreffen ≤ ${bp.grenze} Min.${hilfe("erreicht")}</span><span class="kpi-wert">${prozent(bp.gesamt.quote)}</span><span class="kpi-unter">${bp.gesamt.erreicht} von ${bp.gesamt.anzahl} (Bedarfsplan)</span></div>
+    ${kpi(`Einsätze ${state.year}`, s.count, esc(comparison), true)}
+    ${kpi(`Einsätze / Woche${helpButton("per_week")}`, num(s.per_week, 2), currentYear ? "bis zur aktuellen KW" : "im ganzen Jahr")}
+    ${kpi(`Ø Einsatzdauer${helpButton("duration")}`, formatDuration(s.duration_avg_min), "Alarm bis Einsatzende")}
+    ${kpi(`Einsatzstunden${helpButton("operation_hours")}`, formatHours(s.duration_total_min), "Summe aller Einsätze")}
+    ${kpi(`Personalstunden${helpButton("staff_hours")}`, `${num(s.staff_hours, 0)}<small>h</small>`, `Ø ${num(s.attendees_avg, 1)} Kameraden je Einsatz`)}
+    ${kpi(`Eintreffen ≤ ${plan.limit} Min.${helpButton("on_time")}`, percent(plan.total.rate), `${plan.total.on_time} von ${plan.total.count} (Bedarfsplan)`)}
   </div>`;
 
-  $("#ansicht-auswertung").innerHTML = kpis + bedarfsplanKarte(bp, bpv) + `
-    <div class="raster raster-3">${artenKarte(s)}${stufenKarte(s)}${gebietKarte(s)}</div>
-    <div class="raster">${monatKarte(s)}</div>
-    <div class="raster raster-2">${stundenKarte(s)}${wochentagKarte(s)}</div>`;
+  $("#view-evaluation").innerHTML = kpis + responsePlanCard(plan, previousPlan) + `
+    <div class="grid grid-3">${categoriesCard(s)}${levelsCard(s)}${areasCard(s)}</div>
+    <div class="grid">${monthsCard(s)}</div>
+    <div class="grid grid-2">${hoursCard(s)}${weekdaysCard(s)}</div>`;
 }
 
-function bedarfsplanKarte(bp, bpv) {
-  const g = bp.grenze;
-  const fensterHtml = (f, gesamt) => {
-    const leer = !f.anzahl;
-    return `<div class="fenster ${gesamt ? "gesamt" : ""} ${leer ? "ohne" : ""}">
-      <div class="fenster-titel">${gesamt ? "Gesamt" : esc(f.tagart)}<span>${gesamt ? "alle Zeitfenster" : esc(f.zeit)}</span></div>
-      <div class="quote">${prozent(f.quote)}<small>${f.erreicht} / ${f.anzahl}</small></div>
-      <div class="meter" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round((f.quote || 0) * 100)}"
-           aria-label="Erreichungsgrad"><span style="width:${(f.quote || 0) * 100}%"></span></div>
-      <dl class="fenster-werte">
-        <dt>Ø Ausrückezeit</dt><dd>${f.azeit == null ? "–" : zahl(f.azeit) + " min"}</dd>
-        <dt>Ø Eintreffzeit</dt><dd>${f.ezeit == null ? "–" : zahl(f.ezeit) + " min"}</dd>
-        <dt>Stärke bei Eintreffen</dt><dd>${zahl(f.staerke_eintreffen)}</dd>
-        <dt>Stärke nach ${g} Min.</dt><dd>${zahl(f.staerke_grenze)}</dd>
-        <dt>Stärke nach 15 Min.</dt><dd>${zahl(f.staerke_15)}</dd>
-        <dt>Gesamtstärke</dt><dd>${zahl(f.staerke_gesamt)}</dd>
+function responsePlanCard(plan, previousPlan) {
+  const limit = plan.limit, second = config.second_limit;
+  const windowTile = (w, isTotal) => `<div class="window ${isTotal ? "total" : ""} ${w.count ? "" : "empty"}">
+      <div class="window-title">${isTotal ? "Gesamt" : esc(w.day_type)}<span>${isTotal ? "alle Zeitfenster" : esc(w.hours)}</span></div>
+      <div class="rate">${percent(w.rate)}<small>${w.on_time} / ${w.count}</small></div>
+      <div class="meter" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round((w.rate || 0) * 100)}"
+           aria-label="Erreichungsgrad"><span style="width:${(w.rate || 0) * 100}%"></span></div>
+      <dl class="window-values">
+        <dt>Ø Ausrückezeit</dt><dd>${minutes(w.turnout_min)}</dd>
+        <dt>Ø Eintreffzeit</dt><dd>${minutes(w.arrival_min)}</dd>
+        <dt>Stärke bei Eintreffen</dt><dd>${num(w.crew_on_arrival)}</dd>
+        <dt>Stärke nach ${limit} Min.</dt><dd>${num(w.crew_within_limit)}</dd>
+        <dt>Stärke nach ${second} Min.</dt><dd>${num(w.crew_within_second)}</dd>
+        <dt>Gesamtstärke</dt><dd>${num(w.crew_total)}</dd>
       </dl>
-      ${gesamt && bpv?.gesamt?.anzahl ? `<div class="klein" style="opacity:.8">${z.jahr - 1}: ${prozent(bpv.gesamt.quote)} (${bpv.gesamt.erreicht} / ${bpv.gesamt.anzahl})</div>` : ""}
+      ${isTotal && previousPlan?.total?.count ? `<div class="small faint">${state.year - 1}: ${percent(previousPlan.total.rate)} (${previousPlan.total.on_time} / ${previousPlan.total.count})</div>` : ""}
     </div>`;
-  };
-  const alsTabelle = z.tabellen.has("bedarf");
-  const zeilen = [...bp.fenster, { ...bp.gesamt, tagart: "Gesamt", zeit: "" }].map((f) => [
-    `${esc(f.tagart)} ${esc(f.zeit)}`, f.anzahl, zahl(f.azeit), zahl(f.ezeit), f.erreicht, f.nicht_erreicht,
-    prozent(f.quote), zahl(f.staerke_eintreffen), zahl(f.staerke_grenze), zahl(f.staerke_15), zahl(f.staerke_gesamt)]);
-  const tabelle = datenTabelle(["Zeitfenster", "Einsätze", "Ø Azeit (min)", "Ø Ezeit (min)", `≤ ${g} Min.`, `> ${g} Min.`,
-    "Erreichungsgrad", "Stärke Eintreffen", `Stärke nach ${g} Min.`, "Stärke nach 15 Min.", "Gesamtstärke"], zeilen);
-  return `<div class="karte bedarf raster">
-    <div class="karte-kopf">
-      <div>
-        <h2>Feuerwehrbedarfsplan · Pos. 8.4${hilfe("bedarfsplan")}</h2>
-        <p class="gedaempft">Einsätze ab Alarmstufe 2 in ${bp.orte.join(", ")} – Eintreffen des ersten Fahrzeugs innerhalb von ${g} Minuten nach Alarmierung.</p>
-      </div>
-      <div class="aktionen">
-        <div class="segmente" id="grenze" role="group" aria-label="Zeitgrenze">
-          ${[8, 10].map((m) => `<button type="button" data-grenze="${m}" class="${m === g ? "aktiv" : ""}">${m} Min.</button>`).join("")}
-        </div>
-        <button type="button" class="knopf knopf-rand knopf-klein" data-wechsel="bedarf">${alsTabelle ? "Kacheln" : "Tabelle"}</button>
-      </div>
-    </div>
-    ${alsTabelle ? tabelle : `<div class="bedarf-fenster">${bp.fenster.map((f) => fensterHtml(f, false)).join("")}${fensterHtml(bp.gesamt, true)}</div>`}
-    <p class="bedarf-fuss">Zeiten ab Einsatzbeginn (früheste Alarmierung). Gesamtstärke ohne 01/10, wie in der Einsatzübersicht.
-      ${bp.ohne_zeiten ? `${mehrzahl(bp.ohne_zeiten, "Einsatz", "Einsätze")} ohne Eintreffzeit nicht berücksichtigt (Excel zählte sie mit 0 min als erreicht).` : ""}</p>
+  const rows = [...plan.windows, { ...plan.total, day_type: "Gesamt", hours: "" }].map((w) => [
+    `${esc(w.day_type)} ${esc(w.hours)}`, w.count, num(w.turnout_min), num(w.arrival_min), w.on_time, w.late,
+    percent(w.rate), num(w.crew_on_arrival), num(w.crew_within_limit), num(w.crew_within_second), num(w.crew_total)]);
+  const table = dataTable(["Zeitfenster", "Einsätze", "Ø Azeit (min)", "Ø Ezeit (min)", `≤ ${limit} Min.`, `> ${limit} Min.`,
+    "Erreichungsgrad", "Stärke Eintreffen", `Stärke nach ${limit} Min.`, `Stärke nach ${second} Min.`, "Gesamtstärke"], rows);
+  const limitSwitch = `<div class="segments" role="group" aria-label="Zeitgrenze">
+    ${config.limits.map((m) => `<button type="button" data-limit="${m}" class="${m === limit ? "active" : ""}">${m} Min.</button>`).join("")}
   </div>`;
+  const footer = `<p class="plan-footer">Zeiten ab Einsatzbeginn (früheste Alarmierung). Gesamtstärke ohne ${config.plan_excluded_vehicles.join(", ")}, wie in der Einsatzübersicht.
+    ${plan.without_times ? `${plural(plan.without_times, "Einsatz", "Einsätze")} ohne Eintreffzeit nicht berücksichtigt (Excel zählte sie mit 0 min als erreicht).` : ""}</p>`;
+  return chartCard({
+    id: "plan", heading: "h2", className: "plan grid", chartLabel: "Kacheln", controls: limitSwitch, extra: footer,
+    title: `Feuerwehrbedarfsplan · Pos. 8.4${helpButton("response_plan")}`,
+    subtitle: `Einsätze ab Alarmstufe ${config.plan_min_level} in ${plan.places.join(", ")} – Eintreffen des ersten Fahrzeugs innerhalb von ${limit} Minuten nach Alarmierung.`,
+    chart: `<div class="plan-windows">${plan.windows.map((w) => windowTile(w, false)).join("")}${windowTile(plan.total, true)}</div>`,
+    table,
+  });
 }
 
-function artenKarte(s) {
-  const items = s.kategorien.map((k) => ({
-    name: k.name, klein: k.kuerzel, wert: k.anzahl,
-    tip: `${k.name}: ${k.anzahl}\n` + Object.entries(k.stichworte).map(([sw, n]) => `${sw}: ${n}`).join(" · "),
+const shareOf = (count, total) => percent(total ? count / total : null);
+
+function categoriesCard(s) {
+  const items = s.categories.map((c) => ({
+    label: c.name, hint: c.code, value: c.count,
+    tip: `${c.name}: ${c.count}\n` + Object.entries(c.keywords).map(([k, n]) => `${k}: ${n}`).join(" · "),
   }));
-  const tabelle = datenTabelle(["Art", "1", "2", "3", "4", "Summe"],
-    s.kategorien.map((k) => [`${esc(k.name)} (${k.kuerzel})`, ...Object.values(k.stichworte), `<b>${k.anzahl}</b>`]),
-    ["Gesamt", ...[1, 2, 3, 4].map((i) => s.stufen[i - 1].anzahl), s.anzahl]);
-  const mini = `<div class="stat-mini">
-    <div data-tip="Stichwort B2.07"><b>${s.bma}</b><span>Brandmeldeanlage</span></div>
-    <div data-tip="Stichwort S1.00"><b>${s.bsw}</b><span>Brandsicherheitswache</span></div>
+  const table = dataTable(["Art", ...s.levels.map((l) => String(l.level)), "Summe"],
+    s.categories.map((c) => [`${esc(c.name)} (${c.code})`, ...Object.values(c.keywords), `<b>${c.count}</b>`]),
+    ["Gesamt", ...s.levels.map((l) => l.count), s.count]);
+  const extra = `<div class="stat-mini">
+    <div data-tip="Stichwort ${config.fire_alarm_system}"><b>${s.fire_alarm_systems}</b><span>Brandmeldeanlage</span></div>
+    <div data-tip="Stichwort ${config.fire_watch}"><b>${s.fire_watches}</b><span>Brandsicherheitswache</span></div>
   </div>`;
-  return karte("arten", "Einsatzarten", "nach Einsatzstichwort", balken(items), tabelle, mini);
+  return chartCard({ id: "categories", title: "Einsatzarten", subtitle: "nach Einsatzstichwort", chart: barChart(items), table, extra });
 }
 
-function stufenKarte(s) {
-  const items = s.stufen.map((x) => ({ name: `Stufe ${x.stufe}`, wert: x.anzahl, tip: `Alarmstufe ${x.stufe}: ${x.anzahl} Einsätze` }));
-  const tabelle = datenTabelle(["Stufe", "Einsätze", "Anteil"],
-    s.stufen.map((x) => [`Stufe ${x.stufe}`, x.anzahl, prozent(s.anzahl ? x.anzahl / s.anzahl : null)]));
-  return karte("stufen", `Alarmstufen${hilfe("alarmstufe")}`, "zweite Ziffer des Stichworts (z. B. H<b>2</b>)", balken(items), tabelle);
+function levelsCard(s) {
+  const items = s.levels.map((l) => ({ label: `Stufe ${l.level}`, value: l.count, tip: `Alarmstufe ${l.level}: ${l.count} Einsätze` }));
+  const table = dataTable(["Stufe", "Einsätze", "Anteil"], s.levels.map((l) => [`Stufe ${l.level}`, l.count, shareOf(l.count, s.count)]));
+  return chartCard({ id: "levels", title: `Alarmstufen${helpButton("alarm_level")}`, subtitle: "zweite Ziffer des Stichworts (z. B. H<b>2</b>)", chart: barChart(items), table });
 }
 
-function gebietKarte(s) {
-  const items = s.gebiete.map((x) => ({ name: x.name, wert: x.anzahl }));
-  const eigen = s.gebiete.filter((x) => ["Rheinbrohl", "Arienheller", "Hammerstein"].includes(x.name)).reduce((a, x) => a + x.anzahl, 0);
-  const tabelle = datenTabelle(["Ort", "Einsätze", "Anteil"],
-    s.gebiete.map((x) => [esc(x.name), x.anzahl, prozent(s.anzahl ? x.anzahl / s.anzahl : null)]));
-  const zusatz = `<div class="kennzeile"><span><b>${eigen}</b>Rheinbrohl, Arienheller, Hammerstein</span><span><b>${s.anzahl - eigen}</b>außerhalb</span></div>`;
-  return karte("gebiet", `Einsatzgebiet${hilfe("gebiet")}`, "", balken(items), tabelle, zusatz);
+function areasCard(s) {
+  const items = s.areas.map((a) => ({ label: a.name, value: a.count }));
+  const own = s.areas.filter((a) => config.plan_places.includes(a.name)).reduce((sum, a) => sum + a.count, 0);
+  const table = dataTable(["Ort", "Einsätze", "Anteil"], s.areas.map((a) => [esc(a.name), a.count, shareOf(a.count, s.count)]));
+  const extra = keyFigures([[own, config.plan_places.join(", ")], [s.count - own, "außerhalb"]]);
+  return chartCard({ id: "areas", title: `Einsatzgebiet${helpButton("area")}`, chart: barChart(items), table, extra });
 }
 
-function monatKarte(s) {
-  const mitVj = s.monate.some((m) => m.vorjahr != null);
-  const gruppen = s.monate.map((m) => ({
-    achse: m.name,
-    tip: `${m.name} ${z.jahr}: ${m.anzahl}` + (mitVj ? `\n${m.name} ${z.jahr - 1}: ${m.vorjahr}` : ""),
-    werte: mitVj ? [{ wert: m.vorjahr, farbe: "var(--vorjahr)" }, { wert: m.anzahl, beschriften: true }] : [{ wert: m.anzahl, beschriften: true }],
+function monthsCard(s) {
+  const withPrevious = s.months.some((m) => m.previous != null);
+  const previousYear = state.year - 1;
+  const groups = s.months.map((m) => ({
+    axis: m.name,
+    tip: `${m.name} ${state.year}: ${m.count}` + (withPrevious ? `\n${m.name} ${previousYear}: ${m.previous}` : ""),
+    values: [...(withPrevious ? [{ value: m.previous, tone: "previous" }] : []), { value: m.count, labelled: true }],
   }));
-  const legende = mitVj ? `<div class="legende"><span><i style="background:var(--serie)"></i>${z.jahr}</span><span><i style="background:var(--vorjahr)"></i>${z.jahr - 1}</span></div>` : "";
-  const tabelle = datenTabelle(["Monat", String(z.jahr), ...(mitVj ? [String(z.jahr - 1)] : [])],
-    s.monate.map((m) => [m.name, m.anzahl, ...(mitVj ? [m.vorjahr] : [])]),
-    ["Summe", s.anzahl, ...(mitVj ? [s.vorjahr_gesamt] : [])]);
-  return karte("monate", "Einsätze je Monat", mitVj ? `im Vergleich zu ${z.jahr - 1}` : "", saeulen(gruppen) + legende, tabelle);
+  const chartLegend = withPrevious ? legend([["series", String(state.year)], ["previous", String(previousYear)]]) : "";
+  const table = dataTable(["Monat", String(state.year), ...(withPrevious ? [String(previousYear)] : [])],
+    s.months.map((m) => [m.name, m.count, ...(withPrevious ? [m.previous] : [])]),
+    ["Summe", s.count, ...(withPrevious ? [s.previous_total] : [])]);
+  return chartCard({ id: "months", title: "Einsätze je Monat", subtitle: withPrevious ? `im Vergleich zu ${previousYear}` : "",
+    chart: columnChart(groups) + chartLegend, table });
 }
 
-function stundenKarte(s) {
-  const gruppen = s.stunden.map((x) => ({
-    achse: x.stunde % 3 === 0 ? String(x.stunde) : "",
-    tip: `${String(x.stunde).padStart(2, "0")}:00 – ${String(x.stunde).padStart(2, "0")}:59 Uhr: ${x.anzahl}`,
-    werte: [{ wert: x.anzahl, farbe: x.tag ? "var(--tag)" : "var(--nacht)" }],
+function hoursCard(s) {
+  const [dayStart, dayEnd] = config.day_hours.map(pad2);
+  const groups = s.hours.map((h) => ({
+    axis: h.hour % 3 === 0 ? String(h.hour) : "",
+    tip: `${pad2(h.hour)}:00 – ${pad2(h.hour)}:59 Uhr: ${h.count}`,
+    values: [{ value: h.count, tone: h.daytime ? "day" : "night" }],
   }));
-  const spitze = s.stunden.reduce((a, x) => (x.anzahl > a.anzahl ? x : a), s.stunden[0]);
-  const zusatz = `<div class="legende"><span><i style="background:var(--tag)"></i>Tag 06–18 Uhr</span><span><i style="background:var(--nacht)"></i>Nacht 18–06 Uhr</span></div>
-    <div class="kennzeile"><span><b>${prozent(s.anteil_tag)}</b>tagsüber</span><span><b>${s.anteil_tag == null ? "–" : `${100 - Math.round(s.anteil_tag * 100)} %`}</b>nachts</span>
-    <span><b>${spitze.stunde}–${spitze.stunde + 1} Uhr</b>häufigste Stunde</span></div>`;
-  const tabelle = datenTabelle(["Uhrzeit", "Einsätze"], s.stunden.map((x) => [`${String(x.stunde).padStart(2, "0")}:00 Uhr`, x.anzahl]));
-  return karte("stunden", "Alarmierungszeiten", "Einsatzbeginn nach Uhrzeit", saeulen(gruppen), tabelle, zusatz);
+  const peak = s.hours.reduce((a, h) => (h.count > a.count ? h : a), s.hours[0]);
+  const extra = legend([["day", `Tag ${dayStart}–${dayEnd} Uhr`], ["night", `Nacht ${dayEnd}–${dayStart} Uhr`]]) + keyFigures([
+    [percent(s.daytime_share), "tagsüber"],
+    [s.daytime_share == null ? "–" : `${100 - Math.round(s.daytime_share * 100)} %`, "nachts"],
+    [`${peak.hour}–${peak.hour + 1} Uhr`, "häufigste Stunde"],
+  ]);
+  const table = dataTable(["Uhrzeit", "Einsätze"], s.hours.map((h) => [`${pad2(h.hour)}:00 Uhr`, h.count]));
+  return chartCard({ id: "hours", title: "Alarmierungszeiten", subtitle: "Einsatzbeginn nach Uhrzeit", chart: columnChart(groups), table, extra });
 }
 
-function wochentagKarte(s) {
-  const gruppen = s.wochentage.map((x) => ({ achse: x.name.slice(0, 2), tip: `${x.name}: ${x.anzahl}`, werte: [{ wert: x.anzahl, beschriften: true }] }));
-  const werktage = s.wochentage.slice(0, 5).reduce((a, x) => a + x.anzahl, 0);
-  const zusatz = `<div class="kennzeile"><span><b>${werktage}</b>Mo–Fr</span><span><b>${s.anzahl - werktage}</b>Sa/So</span></div>`;
-  const tabelle = datenTabelle(["Wochentag", "Einsätze"], s.wochentage.map((x) => [x.name, x.anzahl]));
-  return karte("wochentage", "Wochentage", "", saeulen(gruppen), tabelle, zusatz);
+function weekdaysCard(s) {
+  const groups = s.weekdays.map((d) => ({ axis: d.name.slice(0, 2), tip: `${d.name}: ${d.count}`, values: [{ value: d.count, labelled: true }] }));
+  const workdays = s.weekdays.slice(0, 5).reduce((sum, d) => sum + d.count, 0);
+  const extra = keyFigures([[workdays, "Mo–Fr"], [s.count - workdays, "Sa/So"]]);
+  const table = dataTable(["Wochentag", "Einsätze"], s.weekdays.map((d) => [d.name, d.count]));
+  return chartCard({ id: "weekdays", title: "Wochentage", chart: columnChart(groups), table, extra });
 }
 
 // ------------------------------------------------------------ Einsätze
-function passt(e) {
-  if (z.filterArt !== "alle" && !(e.stichwort || "").startsWith(z.filterArt)) return false;
-  const q = z.suche.trim().toLowerCase();
-  if (!q) return true;
-  const text = [e.nr, e.stichwort, `${e.stichwort}.${e.stufe}`, e.einsatz, e.ort, e.ehf, datum(e.beginn), e.datei,
-    ...e.personen.map((p) => p.name)].join(" ").toLowerCase();
-  return q.split(/\s+/).every((t) => text.includes(t));
+function matchesFilter(e) {
+  if (state.category !== "all" && categoryOf(e.keyword) !== state.category) return false;
+  const query = state.query.trim().toLowerCase();
+  if (!query) return true;
+  const text = [e.number, e.keyword, `${e.keyword}.${e.subcode}`, e.description, e.place, e.unit_leader,
+    formatDate(e.started_at), e.filename, ...e.people.map((p) => p.name)].join(" ").toLowerCase();
+  return query.split(/\s+/).every((t) => text.includes(t));
 }
 
-function fahrzeugChips(e) {
-  return `<div class="fzg">${e.fahrzeuge.map((f) => {
-    const kurz = f.block.slice(3);
-    if (f.staerke == null && !f.aus && !f.ein) return `<span data-tip="${f.block}: nicht im Einsatz">${kurz}</span>`;
-    return `<span class="an" data-tip="${esc(f.name || f.block)} · Stärke ${f.staerke ?? "–"}\nEintreffen ${f.ezeit == null ? "–" : zahl(f.ezeit) + " min"}">${kurz}<b>${f.staerke ?? "–"}</b></span>`;
+const isIdle = (v) => v.crew == null && !v.departed && !v.arrived;
+
+function vehicleChips(e) {
+  return `<div class="vehicle-chips">${e.vehicles.map((v) => {
+    const short = v.call_sign.slice(3);
+    if (isIdle(v)) return `<span data-tip="${v.call_sign}: nicht im Einsatz">${short}</span>`;
+    const tip = `${esc(v.substitute || v.call_sign)} · Stärke ${orDash(v.crew)}\nEintreffen ${minutes(v.arrival_min)}`;
+    return `<span class="on" data-tip="${tip}">${short}<b>${orDash(v.crew)}</b></span>`;
   }).join("")}</div>`;
 }
 
-function einsaetzeZeigen() {
-  const liste = z.einsaetze.einsaetze;
-  const anzahl = { alle: liste.length };
-  for (const [k] of ARTEN) anzahl[k] = liste.filter((e) => (e.stichwort || "").startsWith(k)).length;
-  $("#filter-art").innerHTML = [["alle", "Alle"], ...ARTEN].map(([k, n]) =>
-    `<button type="button" data-art="${k}" class="${z.filterArt === k ? "aktiv" : ""}" ${k !== "alle" ? `data-tip="${n}"` : ""}>${k === "alle" ? n : k}<span class="anzahl">${anzahl[k]}</span></button>`).join("");
+function renderIncidents() {
+  const list = state.incidents.incidents;
+  const filters = [{ code: "all", name: "Alle" }, ...config.categories];
+  const count = (code) => code === "all" ? list.length : list.filter((e) => categoryOf(e.keyword) === code).length;
+  $("#category-filter").innerHTML = filters.map((c) =>
+    `<button type="button" data-category="${c.code}" class="${state.category === c.code ? "active" : ""}" ${c.code !== "all" ? `data-tip="${c.name}"` : ""}>${c.code === "all" ? c.name : c.code}<span class="count">${count(c.code)}</span></button>`).join("");
 
-  const sichtbar = liste.filter(passt).reverse();   // neueste zuerst
-  $("#tabelle-einsaetze tbody").innerHTML = sichtbar.map((e) => {
-    const offen = z.offen.has(e.id);
-    const sw = (e.stichwort || "").charAt(0).toLowerCase();
-    const ez = e.ezeit == null ? `<span class="gedaempft">–</span>`
-      : `<span class="ezeit ${e.erreicht ? "" : "spaet"}" data-tip="${e.erreicht ? "innerhalb" : "nicht innerhalb"} von 8 Minuten">${zahl(e.ezeit)} min</span>`;
-    return `<tr class="zeile ${offen ? "offen" : ""}" data-id="${e.id}">
-      <td><span class="nr">${e.nr ?? "–"}</span></td>
-      <td><div>${datum(e.beginn)}</div><div class="zeit">${wochentag(e.beginn)} ${uhr(e.beginn)}${e.wochenende ? " · WE/FT" : ""}</div></td>
-      <td><span class="stichwort ${sw}">${esc(e.stichwort)}${e.stufe ? "." + esc(e.stufe) : ""}</span></td>
-      <td><div class="einsatz-titel">${esc(e.einsatz)}</div><div class="einsatz-ort">${esc(e.ort)}</div></td>
-      <td>${e.ehf ? esc(e.ehf) : `<span class="gedaempft">–</span>`}</td>
-      <td>${fahrzeugChips(e)}</td>
-      <td class="rechts">${ez}</td>
-      <td class="rechts">${e.staerke_gesamt}</td>
-      <td>${SVG_AUF}</td>
-    </tr>${offen ? `<tr class="detail"><td colspan="9">${z.bearbeiten === e.id ? formularDetail(e) : einsatzDetail(e)}</td></tr>` : ""}`;
+  const visible = list.filter(matchesFilter).reverse();   // neueste zuerst
+  const limit = config.default_limit;
+  $("#incident-table tbody").innerHTML = visible.map((e) => {
+    const open = state.expanded.has(e.id);
+    const arrival = e.arrival_min == null ? `<span class="muted">–</span>`
+      : `<span class="arrival ${e.on_time ? "" : "late"}" data-tip="${e.on_time ? "innerhalb" : "nicht innerhalb"} von ${limit} Minuten">${minutes(e.arrival_min)}</span>`;
+    return `<tr class="row ${open ? "open" : ""}" data-id="${e.id}">
+      <td><span class="number">${orDash(e.number)}</span></td>
+      <td><div>${formatDate(e.started_at)}</div><div class="time">${weekdayShort(e.started_at)} ${formatTime(e.started_at)}${e.weekend_or_holiday ? " · WE/FT" : ""}</div></td>
+      <td><span class="keyword ${categoryOf(e.keyword).toLowerCase()}">${esc(e.keyword)}${e.subcode ? "." + esc(e.subcode) : ""}</span></td>
+      <td><div class="incident-title">${esc(e.description)}</div><div class="incident-place">${esc(e.place)}</div></td>
+      <td>${e.unit_leader ? esc(e.unit_leader) : `<span class="muted">–</span>`}</td>
+      <td>${vehicleChips(e)}</td>
+      <td class="right">${arrival}</td>
+      <td class="right">${e.crew_total}</td>
+      <td>${ICON_CHEVRON}</td>
+    </tr>${open ? `<tr class="detail"><td colspan="9">${state.editing === e.id ? editForm(e) : incidentDetail(e)}</td></tr>` : ""}`;
   }).join("");
-  $("#leer-einsaetze").hidden = sichtbar.length > 0;
+  $("#incidents-empty").hidden = visible.length > 0;
 }
 
-function fahrzeugTabelle(e) {
-  return `<div class="tabelle-rahmen"><table class="mini"><thead><tr>
-    <th>Fzg.</th><th class="rechts">Stärke</th><th>Ausr.</th><th class="rechts">Azeit</th><th>Eintr.</th><th class="rechts">Ezeit</th></tr></thead>
-    <tbody>${e.fahrzeuge.map((f) => f.staerke == null && !f.aus && !f.ein
-      ? `<tr class="leer-fzg"><td>${f.block}</td><td colspan="5">nicht im Einsatz</td></tr>`
-      : `<tr><td><strong>${f.block}</strong>${f.name && !f.name.includes(f.block) ? `<br><span class="klein gedaempft">${esc(f.name.replace("FL NR#.BHÖ ", ""))}</span>` : ""}</td>
-        <td class="rechts">${f.staerke ?? "–"}</td><td>${uhr(f.aus)}</td><td class="rechts minuten">${zahl(f.azeit)}</td>
-        <td>${uhr(f.ein)}</td><td class="rechts minuten ${f.ezeit != null && f.ezeit > 8 ? "spaet" : ""}">${zahl(f.ezeit)}</td></tr>`).join("")}
+function vehicleTable(e) {
+  const limit = config.default_limit;
+  return `<div class="table-wrap"><table class="mini-table"><thead><tr>
+    <th>Fzg.</th><th class="right">Stärke</th><th>Ausr.</th><th class="right">Azeit</th><th>Eintr.</th><th class="right">Ezeit</th></tr></thead>
+    <tbody>${e.vehicles.map((v) => isIdle(v)
+      ? `<tr class="vehicle-idle"><td>${v.call_sign}</td><td colspan="5">nicht im Einsatz</td></tr>`
+      : `<tr><td><strong>${v.call_sign}</strong>${v.substitute ? `<br><span class="small muted">${esc(v.substitute)}</span>` : ""}</td>
+        <td class="right">${orDash(v.crew)}</td><td>${formatTime(v.departed)}</td><td class="right minutes">${num(v.turnout_min)}</td>
+        <td>${formatTime(v.arrived)}</td><td class="right minutes ${v.arrival_min != null && v.arrival_min > limit ? "late" : ""}">${num(v.arrival_min)}</td></tr>`).join("")}
     </tbody></table></div>`;
 }
 
-function personenChips(e, markiereNeu) {
-  const ehfName = (e.ehf || "").split(". ").pop();
-  return e.personen.map((p) => {
-    const istEhf = /Einheitsführer/.test(p.funktion || "") || (!!ehfName && p.name.startsWith(ehfName));
-    const klasse = markiereNeu && p.neu ? "neu" : istEhf ? "ehf" : "";
-    const tip = [p.funktion, p.fahrzeug, markiereNeu && p.neu && "wird als neuer Kamerad angelegt"].filter(Boolean).join(" · ");
-    return `<span class="person ${klasse}" ${tip ? `data-tip="${esc(tip)}"` : ""}>${esc(p.name)}${p.fahrzeug ? `<small>${esc(p.fahrzeug)}</small>` : ""}</span>`;
-  }).join("") || `<span class="gedaempft">Keine Anwesenheit erfasst</span>`;
+function peopleChips(e, markNew) {
+  const leaderName = (e.unit_leader || "").split(". ").pop();
+  return e.people.map((p) => {
+    const isLeader = /Einheitsführer/.test(p.role || "") || (!!leaderName && p.name.startsWith(leaderName));
+    const cls = markNew && p.new ? "new" : isLeader ? "leader" : "";
+    const tip = [p.role, p.vehicle, markNew && p.new && "wird als neuer Kamerad angelegt"].filter(Boolean).join(" · ");
+    return `<span class="person ${cls}" ${tip ? `data-tip="${esc(tip)}"` : ""}>${esc(p.name)}${p.vehicle ? `<small>${esc(p.vehicle)}</small>` : ""}</span>`;
+  }).join("") || `<span class="muted">Keine Anwesenheit erfasst</span>`;
 }
 
-function einsatzDetail(e) {
-  return `<div class="detail-innen">
-    <div class="block"><h4>Einsatz</h4><dl class="daten">
-      <dt>Beginn</dt><dd>${datum(e.beginn)} ${uhr(e.beginn)}</dd>
-      <dt>Ende</dt><dd>${datum(e.ende)} ${uhr(e.ende)}</dd>
-      <dt>Dauer${hilfe("dauer")}</dt><dd>${dauer(e.dauer_min)}</dd>
-      <dt>Zeitfenster${hilfe("zeitfenster")}</dt><dd>${e.wochenende ? "Sa/So/Feiertag" : "Werktag"}, ${e.tag ? "Tag" : "Nacht"}</dd>
-      <dt>Ort</dt><dd>${esc(e.ort || "–")}</dd>
-      <dt>EHF${hilfe("ehf")}</dt><dd>${esc(e.ehf || "–")}</dd>
-      <dt>Gerätehaus${hilfe("personen_gh")}</dt><dd>${e.personen_gh}</dd>
-      <dt>Quelle</dt><dd class="klein">${e.quelle === "pdf" ? `PDF · ${esc(e.datei)}` : "Einsatzübersicht (Excel)"}</dd>
+function warningsList(warnings, emptyText = "") {
+  if (!warnings.length && !emptyText) return "";
+  const items = warnings.length ? warnings.map((w) => `<li>${esc(w)}</li>`).join("") : `<li class="ok">${emptyText}</li>`;
+  return `<ul class="warnings">${items}</ul>`;
+}
+
+function attendancePanel(e, markNew) {
+  const newCount = markNew ? e.people.filter((p) => p.new).length : 0;
+  return `<h4>Anwesenheit · ${e.people.length} Personen${newCount ? ` · ${newCount} neu` : ""}${helpButton("attendance")}</h4>
+    <div class="people">${peopleChips(e, markNew)}</div>`;
+}
+
+function incidentDetail(e) {
+  const limit = config.default_limit;
+  return `<div class="detail-grid">
+    <div class="panel"><h4>Einsatz</h4><dl class="facts">
+      <dt>Beginn</dt><dd>${formatDate(e.started_at)} ${formatTime(e.started_at)}</dd>
+      <dt>Ende</dt><dd>${formatDate(e.ended_at)} ${formatTime(e.ended_at)}</dd>
+      <dt>Dauer${helpButton("duration")}</dt><dd>${formatDuration(e.duration_min)}</dd>
+      <dt>Zeitfenster${helpButton("time_window")}</dt><dd>${e.weekend_or_holiday ? "Sa/So/Feiertag" : "Werktag"}, ${e.daytime ? "Tag" : "Nacht"}</dd>
+      <dt>Ort</dt><dd>${esc(e.place || "–")}</dd>
+      <dt>EHF${helpButton("unit_leader")}</dt><dd>${esc(e.unit_leader || "–")}</dd>
+      <dt>Gerätehaus${helpButton("station_staff")}</dt><dd>${e.station_staff}</dd>
+      <dt>Quelle</dt><dd class="small">${e.source === "pdf" ? `PDF · ${esc(e.filename)}` : "Einsatzübersicht (Excel)"}</dd>
     </dl></div>
-    <div class="block"><h4>Fahrzeuge${hilfe("fahrzeuge")}</h4>${fahrzeugTabelle(e)}</div>
-    <div class="block"><h4>Kennzahlen</h4><dl class="daten">
-      <dt>Azeit${hilfe("azeit")}</dt><dd>${e.azeit == null ? "–" : zahl(e.azeit) + " min"}</dd>
-      <dt>Ezeit${hilfe("ezeit")}</dt><dd>${e.ezeit == null ? "–" : zahl(e.ezeit) + " min"}</dd>
-      <dt>8 Min. erreicht${hilfe("erreicht")}</dt><dd>${e.erreicht == null ? "–" : e.erreicht ? "ja" : "nein"}</dd>
-      <dt>Stärke Eintreffen${hilfe("staerke_eintreffen")}</dt><dd>${e.staerke_eintreffen ?? "–"}</dd>
-      <dt>nach 8 Min.${hilfe("staerke_grenze")}</dt><dd>${e.staerke_grenze ?? "–"}</dd>
-      <dt>nach 15 Min.${hilfe("staerke_15")}</dt><dd>${e.staerke_15 ?? "–"}</dd>
-      <dt>Gesamtstärke${hilfe("staerke_gesamt")}</dt><dd>${e.staerke_gesamt}</dd>
+    <div class="panel"><h4>Fahrzeuge${helpButton("vehicles")}</h4>${vehicleTable(e)}</div>
+    <div class="panel"><h4>Kennzahlen</h4><dl class="facts">
+      <dt>Azeit${helpButton("turnout_min")}</dt><dd>${minutes(e.turnout_min)}</dd>
+      <dt>Ezeit${helpButton("arrival_min")}</dt><dd>${minutes(e.arrival_min)}</dd>
+      <dt>${limit} Min. erreicht${helpButton("on_time")}</dt><dd>${e.on_time == null ? "–" : e.on_time ? "ja" : "nein"}</dd>
+      <dt>Stärke Eintreffen${helpButton("crew_on_arrival")}</dt><dd>${orDash(e.crew_on_arrival)}</dd>
+      <dt>nach ${limit} Min.${helpButton("crew_within_limit")}</dt><dd>${orDash(e.crew_within_limit)}</dd>
+      <dt>nach ${config.second_limit} Min.${helpButton("crew_within_second")}</dt><dd>${orDash(e.crew_within_second)}</dd>
+      <dt>Gesamtstärke${helpButton("crew_total")}</dt><dd>${e.crew_total}</dd>
     </dl>
-    ${e.hinweise.length ? `<h4 style="margin-top:14px">Prüfhinweise${hilfe("hinweise")}</h4><ul class="hinweise">${e.hinweise.map((h) => `<li>${esc(h)}</li>`).join("")}</ul>` : ""}
+    ${e.warnings.length ? `<h4 class="section-gap">Prüfhinweise${helpButton("warnings")}</h4>${warningsList(e.warnings)}` : ""}
     </div>
-    <div class="block voll"><h4>Anwesenheit · ${e.personen.length} Personen${hilfe("anwesenheit")}</h4><div class="personen">${personenChips(e, false)}</div></div>
-    <div class="aktionen block voll" style="background:none;box-shadow:none;padding:0">
-      <button type="button" class="knopf knopf-rand knopf-klein" data-aktion="loeschen" data-id="${e.id}">Löschen</button>
-      <button type="button" class="knopf knopf-hell knopf-klein" data-aktion="bearbeiten" data-id="${e.id}">Bearbeiten</button>
+    <div class="panel full">${attendancePanel(e, false)}</div>
+    <div class="actions panel full bare">
+      <button type="button" class="btn btn-outline btn-small" data-action="delete" data-id="${e.id}">Löschen</button>
+      <button type="button" class="btn btn-light btn-small" data-action="edit" data-id="${e.id}">Bearbeiten</button>
     </div>
   </div>`;
 }
 
-function formFelder(e) {
-  const f = (name, titel, wert, typ = "text", breite = "", extra = "") =>
-    `<label class="feld ${breite}"><span>${titel}${hilfe(name)}</span><input name="${name}" type="${typ}" value="${esc(wert ?? "")}" ${extra}
-      class="${name === "ehf" && !wert ? "fehlt" : ""}"></label>`;
-  return `<div class="formular">
-    ${f("nr", "Nr.", e.nr, "number", "", 'min="1"')}
-    ${f("beginn", "Beginn", (e.beginn || "").slice(0, 19), "datetime-local", "b2", 'step="1"')}
-    ${f("ende", "Ende", (e.ende || "").slice(0, 19), "datetime-local", "b2", 'step="1"')}
-    ${f("personen_gh", "Gerätehaus", e.personen_gh, "number", "", 'min="0"')}
-    ${f("stichwort", "Stichwort", e.stichwort, "text", "", 'maxlength="4"')}
-    ${f("stufe", "Stufe", e.stufe, "text", "", 'maxlength="2"')}
-    ${f("einsatz", "Einsatz", e.einsatz, "text", "b4")}
-    ${f("ort", "Ort", e.ort, "text", "b3", 'list="orte"')}
-    ${f("ehf", "EHF", e.ehf, "text", "b3", 'list="ehf-liste" placeholder="z. B. M. Mustermann"')}
-  </div>`;
+// Formularfelder: [name, Titel, Eingabetyp, Breite, weitere Attribute]. Die Namen sind die Felder der API.
+const FORM_FIELDS = [
+  ["number", "Nr.", "number", "", 'min="1"'],
+  ["started_at", "Beginn", "datetime-local", "span-2", 'step="1"'],
+  ["ended_at", "Ende", "datetime-local", "span-2", 'step="1"'],
+  ["station_staff", "Gerätehaus", "number", "", 'min="0"'],
+  ["keyword", "Stichwort", "text", "", 'maxlength="4"'],
+  ["subcode", "Stufe", "text", "", 'maxlength="2"'],
+  ["description", "Einsatz", "text", "span-4", ""],
+  ["place", "Ort", "text", "span-3", 'list="place-options"'],
+  ["unit_leader", "EHF", "text", "span-3", 'list="leader-options" placeholder="z. B. M. Mustermann"'],
+];
+
+function formFields(e) {
+  return `<div class="form-grid">${FORM_FIELDS.map(([name, title, type, span, attributes]) => {
+    const value = type === "datetime-local" ? (e[name] || "").slice(0, 19) : e[name];
+    const missing = name === "unit_leader" && !value;
+    return `<label class="field ${span}"><span>${title}${helpButton(name)}</span><input name="${name}" type="${type}" value="${esc(value ?? "")}" ${attributes}
+      class="${missing ? "missing" : ""}"></label>`;
+  }).join("")}</div>`;
 }
 
-function formWerte(el) {
-  const w = {};
-  for (const i of el.querySelectorAll("input[name]")) {
-    if (i.name === "nr" || i.name === "personen_gh") w[i.name] = i.value === "" ? null : Number(i.value);
-    else w[i.name] = i.value;
+function readForm(el) {
+  const values = {};
+  for (const input of $$("input[name]", el)) {
+    values[input.name] = input.type === "number" ? (input.value === "" ? null : Number(input.value)) : input.value;
   }
-  return w;
+  return values;
 }
 
-function formularDetail(e) {
-  return `<div class="detail-innen" data-form="${e.id}">
-    <div class="block voll"><h4>Einsatz ${e.nr ?? ""} bearbeiten</h4>${formFelder(e)}</div>
-    <div class="aktionen block voll" style="background:none;box-shadow:none;padding:0">
-      <button type="button" class="knopf knopf-rand knopf-klein" data-aktion="abbrechen">Abbrechen</button>
-      <button type="button" class="knopf knopf-haupt knopf-klein" data-aktion="speichern" data-id="${e.id}">Speichern</button>
+function editForm(e) {
+  return `<div class="detail-grid" data-form="${e.id}">
+    <div class="panel full"><h4>Einsatz ${e.number ?? ""} bearbeiten</h4>${formFields(e)}</div>
+    <div class="actions panel full bare">
+      <button type="button" class="btn btn-outline btn-small" data-action="cancel">Abbrechen</button>
+      <button type="button" class="btn btn-primary btn-small" data-action="save" data-id="${e.id}">Speichern</button>
     </div>
   </div>`;
 }
 
-function auswahllisten() {
-  // Vorschläge für Ort und EHF aus den vorhandenen Einsätzen
-  const alle = z.einsaetze?.einsaetze || [];
-  const orte = [...new Set(["Rheinbrohl", "Arienheller", "Hammerstein", "Ariendorf", "Bad Hönningen", "Leutesdorf", ...alle.map((e) => e.ort)])].filter(Boolean);
-  const ehf = [...new Set(alle.map((e) => e.ehf).filter(Boolean))].sort();
-  let dl = $("#datalisten");
-  if (!dl) { dl = document.createElement("div"); dl.id = "datalisten"; document.body.append(dl); }
-  dl.innerHTML = `<datalist id="orte">${orte.map((o) => `<option value="${esc(o)}">`).join("")}</datalist>
-    <datalist id="ehf-liste">${ehf.map((o) => `<option value="${esc(o)}">`).join("")}</datalist>`;
+function updateDatalists() {
+  // Vorschläge für Ort und EHF aus den bekannten Orten und vorhandenen Einsätzen
+  const incidents = state.incidents?.incidents || [];
+  const places = [...new Set([...config.places, ...incidents.map((e) => e.place)])].filter(Boolean);
+  const leaders = [...new Set(incidents.map((e) => e.unit_leader).filter(Boolean))].sort();
+  let container = $("#datalists");
+  if (!container) { container = document.createElement("div"); container.id = "datalists"; document.body.append(container); }
+  const options = (values) => values.map((v) => `<option value="${esc(v)}">`).join("");
+  container.innerHTML = `<datalist id="place-options">${options(places)}</datalist><datalist id="leader-options">${options(leaders)}</datalist>`;
 }
 
-async function datenNeu() {
-  z.auswertung = null;
-  z.einsaetze = null;
-  await jahreLaden();
-  await ansichtZeigen();
+async function handleIncidentAction(action, id) {
+  if (action === "edit") { state.editing = id; updateDatalists(); renderIncidents(); return; }
+  if (action === "cancel") { state.editing = null; renderIncidents(); return; }
+  try {
+    if (action === "delete") {
+      const incident = state.incidents.incidents.find((x) => x.id === id);
+      if (!confirm(`Einsatz ${incident.number ?? ""} vom ${formatDate(incident.started_at)} wirklich löschen?`)) return;
+      await api(`/api/incidents/${id}`, { method: "DELETE" });
+      state.expanded.delete(id);
+      toast("Einsatz gelöscht");
+    }
+    if (action === "save") {
+      await apiJson(`/api/incidents/${id}`, "PUT", readForm($(`[data-form="${id}"]`)));
+      state.editing = null;
+      toast("Gespeichert");
+    }
+    await reloadData();
+  } catch (err) {
+    alert(err.message);
+  }
 }
 
 // ------------------------------------------------------------ Kameraden
-function kameradenZeigen() {
-  const a = z.auswertung.anwesenheit;
-  const { feld, ab } = z.kamSort;
-  const liste = [...a.kameraden].sort((x, y) => {
-    const v = feld === "name" ? x.name.localeCompare(y.name, "de") : (x[feld] ?? "") > (y[feld] ?? "") ? 1 : (x[feld] ?? "") < (y[feld] ?? "") ? -1 : 0;
-    return ab ? -v : v;
-  });
-  const max = Math.max(1, ...liste.map((k) => k.einsaetze));
-  const kopf = [["name", "Name", ""], ["einsaetze", "Einsätze", ""], ["quote", "Beteiligung", "rechts", "beteiligung"], ["stunden", "Stunden", "rechts", "stunden"],
-    ["nacht", "nachts", "rechts sp-mobil-aus", "nachts_we"], ["wochenende", "Sa/So/FT", "rechts sp-mobil-aus", "nachts_we"], ["zuletzt", "Zuletzt", "rechts sp-mobil-aus"]];
-  $("#ansicht-kameraden").innerHTML = `<div class="karte liste-karte kameraden-tabelle">
-    <div class="werkzeuge"><div><h3>Anwesenheit ${z.jahr}</h3>
-      <p class="gedaempft klein">${mehrzahl(liste.length, "Kamerad", "Kameraden")} · ${mehrzahl(a.anzahl_einsaetze, "Einsatz", "Einsätze")} · Stunden = Einsatzdauer je Teilnahme</p></div></div>
-    <div class="tabelle-rahmen"><table class="tabelle">
-      <thead><tr><th class="sp-nr">#</th>${kopf.map(([f, t, k, h]) => `<th class="sortierbar ${k}" data-sort="${f}">${t}${feld === f ? (ab ? " ▾" : " ▴") : ""}${h ? hilfe(h) : ""}</th>`).join("")}</tr></thead>
-      <tbody>${liste.map((k, i) => `<tr>
-        <td class="gedaempft">${i + 1}</td>
-        <td><strong>${esc(k.name)}</strong></td>
-        <td><div class="inline-balken"><span class="spur"><span style="width:${(k.einsaetze / max) * 100}%"></span></span><b>${k.einsaetze}</b></div></td>
-        <td class="rechts">${prozent(k.quote)}</td>
-        <td class="rechts">${zahl(k.stunden)}</td>
-        <td class="rechts sp-mobil-aus">${k.nacht}</td>
-        <td class="rechts sp-mobil-aus">${k.wochenende}</td>
-        <td class="rechts sp-mobil-aus">${datum(k.zuletzt)}</td>
+const MEMBER_COLUMNS = [      // [Feld, Titel, CSS-Klassen, Hilfe-Schlüssel]
+  ["name", "Name", ""], ["incidents", "Einsätze", ""], ["rate", "Beteiligung", "right", "participation"],
+  ["hours", "Stunden", "right", "hours"], ["nights", "nachts", "right hide-mobile", "nights_weekends"],
+  ["weekends", "Sa/So/FT", "right hide-mobile", "nights_weekends"], ["last", "Zuletzt", "right hide-mobile"],
+];
+
+function renderMembers() {
+  const a = state.evaluation.attendance;
+  const { field, descending } = state.memberSort;
+  const compare = (x, y) => field === "name" ? x.name.localeCompare(y.name, "de")
+    : (x[field] ?? "") > (y[field] ?? "") ? 1 : (x[field] ?? "") < (y[field] ?? "") ? -1 : 0;
+  const list = [...a.members].sort((x, y) => descending ? -compare(x, y) : compare(x, y));
+  const max = Math.max(1, ...list.map((m) => m.incidents));
+  $("#view-members").innerHTML = `<div class="card list-card members-table">
+    <div class="toolbar"><div><h3>Anwesenheit ${state.year}</h3>
+      <p class="muted small">${plural(list.length, "Kamerad", "Kameraden")} · ${plural(a.incident_count, "Einsatz", "Einsätze")} · Stunden = Einsatzdauer je Teilnahme</p></div></div>
+    <div class="table-wrap"><table class="table">
+      <thead><tr><th class="col-number">#</th>${MEMBER_COLUMNS.map(([f, title, cls, help]) =>
+        `<th class="sortable ${cls}" data-sort="${f}">${title}${field === f ? (descending ? " ▾" : " ▴") : ""}${help ? helpButton(help) : ""}</th>`).join("")}</tr></thead>
+      <tbody>${list.map((m, i) => `<tr>
+        <td class="muted">${i + 1}</td>
+        <td><strong>${esc(m.name)}</strong></td>
+        <td><div class="inline-bar"><span class="track"><span style="width:${(m.incidents / max) * 100}%"></span></span><b>${m.incidents}</b></div></td>
+        <td class="right">${percent(m.rate)}</td>
+        <td class="right">${num(m.hours)}</td>
+        <td class="right hide-mobile">${m.nights}</td>
+        <td class="right hide-mobile">${m.weekends}</td>
+        <td class="right hide-mobile">${formatDate(m.last)}</td>
       </tr>`).join("")}</tbody>
     </table></div>
-    ${liste.length ? "" : `<p class="leer">Für ${z.jahr} ist keine Anwesenheit erfasst.</p>`}
+    ${list.length ? "" : `<p class="empty-note">Für ${state.year} ist keine Anwesenheit erfasst.</p>`}
   </div>`;
 }
 
 // ------------------------------------------------------------ PDF einlesen
-async function pdfEinlesen(dateien) {
-  dateien = [...dateien].filter((f) => f.name.toLowerCase().endsWith(".pdf"));
-  const fehler = $("#pdf-fehler");
-  fehler.hidden = true;
-  if (!dateien.length) { fehler.textContent = "Bitte eine PDF-Datei wählen."; fehler.hidden = false; return; }
-  $("#fortschritt").hidden = false;
-  const fd = new FormData();
-  for (const f of dateien) fd.append("pdfs", f, f.name.normalize("NFC"));
+function showUploadError(html) {
+  const el = $("#pdf-error");
+  el.innerHTML = html;
+  el.hidden = false;
+}
+
+async function readPdfs(files) {
+  files = [...files].filter((f) => f.name.toLowerCase().endsWith(".pdf"));
+  $("#pdf-error").hidden = true;
+  if (!files.length) { showUploadError("Bitte eine PDF-Datei wählen."); return; }
+  $("#progress").hidden = false;
+  const form = new FormData();
+  for (const f of files) form.append("pdfs", f, f.name.normalize("NFC"));
   try {
-    const d = await api("/api/pdf", { method: "POST", body: fd });
-    z.pdf = { token: d.token, berichte: d.berichte.map((b) => ({ ...b, ersetzen: false, gespeichert: null })), fehler: d.fehler };
-    if (d.fehler.length) {
-      fehler.innerHTML = d.fehler.map((f) => `${esc(f.datei)}: ${esc(f.meldung)}`).join("<br>");
-      fehler.hidden = false;
-    }
-    vorschauZeigen();
+    const data = await api("/api/reports", { method: "POST", body: form });
+    state.upload = { token: data.token, reports: data.reports.map((r) => ({ ...r, replace: false, saved: null })), errors: data.errors };
+    if (data.errors.length) showUploadError(data.errors.map((e) => `${esc(e.file)}: ${esc(e.message)}`).join("<br>"));
+    renderPreviews();
   } catch (e) {
-    fehler.textContent = e.message;
-    fehler.hidden = false;
+    showUploadError(esc(e.message));
   } finally {
-    $("#fortschritt").hidden = true;
+    $("#progress").hidden = true;
   }
 }
 
-function vorschauZeigen() {
-  const berichte = z.pdf.berichte;
-  $("#ablage").classList.toggle("kompakt", berichte.length > 0);
-  $("#vorschau").innerHTML = berichte.map((b, i) => {
-    const v = b.vorhanden;
-    let status;
-    if (b.gespeichert) {
-      status = `<div class="vorschau-status fertig"><span class="nr">✓</span><div><strong>Einsatz ${b.gespeichert.nr ?? ""}/${b.gespeichert.jahr} ist in der Statistik</strong><span>${esc(b.datei)}</span></div></div>`;
-    } else if (v) {
-      status = `<div class="vorschau-status vorhanden"><span class="nr">${b.nr ?? "?"}</span><div><strong>Einsatz ${b.nr}/${b.jahr} ist bereits erfasst</strong>
-        <span>${v.quelle === "pdf" ? "aus einer PDF" : "aus der Einsatzübersicht (Excel)"} · ${v.abweichungen.length ? mehrzahl(v.abweichungen.length, "Abweichung", "Abweichungen") : "keine Abweichungen"}</span></div></div>`;
-    } else {
-      status = `<div class="vorschau-status"><span class="nr">${b.nr ?? "?"}</span><div><strong>Neuer Einsatz ${b.nr ?? ""}${b.nr ? "/" + b.jahr : ""}</strong><span>${esc(b.datei)}</span></div></div>`;
-    }
-    const hinweise = b.hinweise.length ? b.hinweise.map((h) => `<li>${esc(h)}</li>`).join("") : `<li class="ok">Keine Prüfhinweise</li>`;
-    const abw = v && v.abweichungen.length ? `<h4 style="margin-top:14px">Abweichungen zur Statistik</h4>
-      <table class="mini abw-tab"><thead><tr><th>Feld</th><th>erfasst</th><th>PDF</th></tr></thead><tbody>
-      ${v.abweichungen.map((a) => `<tr><td>${esc(a.feld)}</td><td>${esc(a.liste)}</td><td>${esc(a.pdf)}</td></tr>`).join("")}</tbody></table>` : "";
-    const neuePersonen = b.personen.filter((p) => p.neu).length;
-    return `<div class="vorschau-karte" data-index="${i}">
-      ${status}
-      ${b.gespeichert ? "" : `<div class="vorschau-inhalt">
-        ${formFelder(b)}
-        <div class="vorschau-raster">
-          <div class="block" style="box-shadow:none;border:1px solid var(--linie)"><h4>Fahrzeuge${hilfe("fahrzeuge")}</h4>${fahrzeugTabelle(b)}
-            <p class="klein gedaempft" style="margin-top:8px">Ezeit erstes Fahrzeug: <b>${b.ezeit == null ? "–" : zahl(b.ezeit) + " min"}</b> · Gesamtstärke ${b.staerke_gesamt}</p></div>
-          <div class="block" style="box-shadow:none;border:1px solid var(--linie)"><h4>Prüfhinweise${hilfe("hinweise")}</h4><ul class="hinweise">${hinweise}</ul>${abw}</div>
+function previewStatus(r) {
+  const existing = r.existing;
+  const status = (cls, number, title, sub) =>
+    `<div class="preview-status ${cls}"><span class="number">${number}</span><div><strong>${title}</strong><span>${sub}</span></div></div>`;
+  if (r.saved) return status("done", "✓", `Einsatz ${r.saved.number ?? ""}/${r.saved.year} ist in der Statistik`, esc(r.filename));
+  if (existing) {
+    const origin = existing.source === "pdf" ? "aus einer PDF" : "aus der Einsatzübersicht (Excel)";
+    const diffs = existing.differences.length ? plural(existing.differences.length, "Abweichung", "Abweichungen") : "keine Abweichungen";
+    return status("existing", r.number ?? "?", `Einsatz ${r.number}/${r.year} ist bereits erfasst`, `${origin} · ${diffs}`);
+  }
+  return status("", r.number ?? "?", `Neuer Einsatz ${r.number ?? ""}${r.number ? "/" + r.year : ""}`, esc(r.filename));
+}
+
+function differencesTable(existing) {
+  if (!existing?.differences.length) return "";
+  return `<h4 class="section-gap">Abweichungen zur Statistik</h4>
+    <table class="mini-table diff-table"><thead><tr><th>Feld</th><th>erfasst</th><th>PDF</th></tr></thead><tbody>
+    ${existing.differences.map((d) => `<tr><td>${esc(d.field)}</td><td>${esc(d.stored)}</td><td>${esc(d.report)}</td></tr>`).join("")}</tbody></table>`;
+}
+
+function renderPreviews() {
+  const reports = state.upload.reports;
+  $("#dropzone").classList.toggle("compact", reports.length > 0);
+  $("#previews").innerHTML = reports.map((r, i) => {
+    const existing = r.existing;
+    return `<div class="preview-card" data-index="${i}">
+      ${previewStatus(r)}
+      ${r.saved ? "" : `<div class="preview-body">
+        ${formFields(r)}
+        <div class="preview-grid">
+          <div class="panel outlined"><h4>Fahrzeuge${helpButton("vehicles")}</h4>${vehicleTable(r)}
+            <p class="small muted section-gap">Ezeit erstes Fahrzeug: <b>${minutes(r.arrival_min)}</b> · Gesamtstärke ${r.crew_total}</p></div>
+          <div class="panel outlined"><h4>Prüfhinweise${helpButton("warnings")}</h4>${warningsList(r.warnings, "Keine Prüfhinweise")}${differencesTable(existing)}</div>
         </div>
-        <div class="block" style="box-shadow:none;border:1px solid var(--linie)"><h4>Anwesenheit · ${b.personen.length} Personen${neuePersonen ? ` · ${neuePersonen} neu` : ""}${hilfe("anwesenheit")}</h4>
-          <div class="personen">${personenChips(b, true)}</div></div>
-        <div class="vorschau-fuss">
-          ${v ? `<label class="schalter"><input type="checkbox" data-ersetzen="${i}" ${b.ersetzen ? "checked" : ""}> erfassten Einsatz durch diese PDF ersetzen</label>` : ""}
-          <button type="button" class="knopf knopf-haupt" data-uebernehmen="${i}" ${v && !b.ersetzen ? "disabled" : ""}>
-            ${v ? "Ersetzen" : "In Statistik übernehmen"}</button>
+        <div class="panel outlined">${attendancePanel(r, true)}</div>
+        <div class="preview-footer">
+          ${existing ? `<label class="toggle"><input type="checkbox" data-replace="${i}" ${r.replace ? "checked" : ""}> erfassten Einsatz durch diese PDF ersetzen</label>` : ""}
+          <button type="button" class="btn btn-primary" data-accept="${i}" ${existing && !r.replace ? "disabled" : ""}>
+            ${existing ? "Ersetzen" : "In Statistik übernehmen"}</button>
         </div>
       </div>`}
     </div>`;
   }).join("");
 }
 
-async function uebernehmen(i) {
-  const b = z.pdf.berichte[i];
-  const karteEl = document.querySelector(`.vorschau-karte[data-index="${i}"]`);
-  const knopf = karteEl.querySelector("[data-uebernehmen]");
-  knopf.disabled = true;
+async function acceptReport(i) {
+  const r = state.upload.reports[i];
+  const card = $(`.preview-card[data-index="${i}"]`);
+  const button = $("[data-accept]", card);
+  button.disabled = true;
   try {
-    const e = await api("/api/pdf/uebernehmen", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token: z.pdf.token, datei: b.datei, felder: formWerte(karteEl), ersetzen: b.ersetzen }),
-    });
-    b.gespeichert = e;
-    z.geaendert = true;
-    toast(`Einsatz ${e.nr ?? ""}/${e.jahr} übernommen`);
-    vorschauZeigen();
+    const saved = await apiJson("/api/reports/accept", "POST",
+      { token: state.upload.token, filename: r.filename, fields: readForm(card), replace: r.replace });
+    r.saved = saved;
+    state.dataChanged = true;
+    toast(`Einsatz ${saved.number ?? ""}/${saved.year} übernommen`);
+    renderPreviews();
   } catch (err) {
-    knopf.disabled = false;
+    button.disabled = false;
     alert(err.message);
   }
 }
 
 // ------------------------------------------------------------ Tooltip
-const tip = $("#tooltip");
-let tipEl = null, tipBild = 0;
-function tipZeigen(el, x, y) {
+const tooltip = $("#tooltip");
+let tooltipTarget = null, tooltipFrame = 0;
+function showTooltip(el, x, y) {
   // Text nur beim Wechsel des Elements setzen, Position höchstens einmal je Frame messen
-  if (el !== tipEl || tip.hidden) { tipEl = el; tip.textContent = el.dataset.tip; tip.hidden = false; }
-  cancelAnimationFrame(tipBild);
-  tipBild = requestAnimationFrame(() => {
-    const r = tip.getBoundingClientRect();
-    tip.style.left = `${Math.min(window.innerWidth - r.width - 8, Math.max(8, x - r.width / 2))}px`;
-    tip.style.top = `${Math.max(8, y - r.height - 12)}px`;
+  if (el !== tooltipTarget || tooltip.hidden) { tooltipTarget = el; tooltip.textContent = el.dataset.tip; tooltip.hidden = false; }
+  cancelAnimationFrame(tooltipFrame);
+  tooltipFrame = requestAnimationFrame(() => {
+    const r = tooltip.getBoundingClientRect();
+    tooltip.style.left = `${Math.min(window.innerWidth - r.width - 8, Math.max(8, x - r.width / 2))}px`;
+    tooltip.style.top = `${Math.max(8, y - r.height - 12)}px`;
   });
 }
-function tipVerbergen() {
-  cancelAnimationFrame(tipBild);
-  tipEl = null;
-  tip.hidden = true;
+function hideTooltip() {
+  cancelAnimationFrame(tooltipFrame);
+  tooltipTarget = null;
+  tooltip.hidden = true;
 }
 document.addEventListener("mousemove", (e) => {
   const el = e.target.closest?.("[data-tip]");
-  if (el) tipZeigen(el, e.clientX, e.clientY); else if (tipEl) tipVerbergen();
+  if (el) showTooltip(el, e.clientX, e.clientY); else if (tooltipTarget) hideTooltip();
 });
 document.addEventListener("focusin", (e) => {
   const el = e.target.closest?.("[data-tip]");
-  if (el) { const r = el.getBoundingClientRect(); tipZeigen(el, r.left + r.width / 2, r.top); }
+  if (el) { const r = el.getBoundingClientRect(); showTooltip(el, r.left + r.width / 2, r.top); }
 });
-document.addEventListener("focusout", tipVerbergen);
+document.addEventListener("focusout", hideTooltip);
 
 // ------------------------------------------------------------ Ereignisse
-window.addEventListener("hashchange", () => { z.offen.clear(); ansichtZeigen(); });
-$("#jahr").addEventListener("change", (e) => {
-  z.jahr = Number(e.target.value);
-  merken("jahr", z.jahr);
-  z.offen.clear();
-  z.bearbeiten = null;
-  ansichtZeigen();
+window.addEventListener("hashchange", () => { state.expanded.clear(); showView(); });
+$("#year").addEventListener("change", (e) => {
+  state.year = Number(e.target.value);
+  remember("year", state.year);
+  state.expanded.clear();
+  state.editing = null;
+  showView();
 });
 
-$("#ansicht-auswertung").addEventListener("click", (e) => {
-  const w = e.target.closest("[data-wechsel]");
-  if (w) {
-    const id = w.dataset.wechsel;
-    z.tabellen.has(id) ? z.tabellen.delete(id) : z.tabellen.add(id);
-    auswertungZeigen();
+$("#view-evaluation").addEventListener("click", (e) => {
+  const toggle = e.target.closest("[data-toggle-table]");
+  if (toggle) {
+    const id = toggle.dataset.toggleTable;
+    state.tableCards.has(id) ? state.tableCards.delete(id) : state.tableCards.add(id);
+    renderEvaluation();
     return;
   }
-  const g = e.target.closest("[data-grenze]");
-  if (g && Number(g.dataset.grenze) !== z.grenze) {
-    z.grenze = Number(g.dataset.grenze);
-    ansichtZeigen();
+  const limitButton = e.target.closest("[data-limit]");
+  if (limitButton && Number(limitButton.dataset.limit) !== state.limit) {
+    state.limit = Number(limitButton.dataset.limit);
+    showView();
   }
 });
 
-$("#filter-art").addEventListener("click", (e) => {
-  const k = e.target.closest("button");
-  if (!k) return;
-  z.filterArt = k.dataset.art;
-  einsaetzeZeigen();
+$("#category-filter").addEventListener("click", (e) => {
+  const button = e.target.closest("button");
+  if (!button) return;
+  state.category = button.dataset.category;
+  renderIncidents();
 });
-$("#suche").addEventListener("input", (e) => { z.suche = e.target.value; einsaetzeZeigen(); });
-$("#knopf-export").addEventListener("click", () => { location.href = `/api/export?jahr=${z.jahr}`; });
+$("#search").addEventListener("input", (e) => { state.query = e.target.value; renderIncidents(); });
+$("#btn-export").addEventListener("click", () => { location.href = `/api/export?year=${state.year}`; });
 
-$("#tabelle-einsaetze tbody").addEventListener("click", async (e) => {
-  const aktion = e.target.closest("[data-aktion]");
-  if (aktion) {
-    const id = Number(aktion.dataset.id);
-    if (aktion.dataset.aktion === "bearbeiten") { z.bearbeiten = id; auswahllisten(); einsaetzeZeigen(); }
-    if (aktion.dataset.aktion === "abbrechen") { z.bearbeiten = null; einsaetzeZeigen(); }
-    if (aktion.dataset.aktion === "loeschen") {
-      const ein = z.einsaetze.einsaetze.find((x) => x.id === id);
-      if (!confirm(`Einsatz ${ein.nr ?? ""} vom ${datum(ein.beginn)} wirklich löschen?`)) return;
-      await api(`/api/einsatz/${id}`, { method: "DELETE" });
-      toast("Einsatz gelöscht");
-      z.offen.delete(id);
-      await datenNeu();
-    }
-    if (aktion.dataset.aktion === "speichern") {
-      try {
-        await api(`/api/einsatz/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(formWerte(document.querySelector(`[data-form="${id}"]`))) });
-        z.bearbeiten = null;
-        toast("Gespeichert");
-        await datenNeu();
-      } catch (err) { alert(err.message); }
-    }
-    return;
-  }
+$("#incident-table tbody").addEventListener("click", (e) => {
+  const action = e.target.closest("[data-action]");
+  if (action) { handleIncidentAction(action.dataset.action, Number(action.dataset.id)); return; }
   if (e.target.closest("tr.detail")) return;
-  const zeile = e.target.closest("tr.zeile");
-  if (!zeile) return;
-  const id = Number(zeile.dataset.id);
-  if (z.offen.has(id)) { z.offen.delete(id); if (z.bearbeiten === id) z.bearbeiten = null; } else z.offen.add(id);
-  einsaetzeZeigen();
+  const row = e.target.closest("tr.row");
+  if (!row) return;
+  const id = Number(row.dataset.id);
+  if (state.expanded.has(id)) {
+    state.expanded.delete(id);
+    if (state.editing === id) state.editing = null;
+  } else {
+    state.expanded.add(id);
+  }
+  renderIncidents();
 });
 
-$("#ansicht-kameraden").addEventListener("click", (e) => {
+$("#view-members").addEventListener("click", (e) => {
   const th = e.target.closest("[data-sort]");
   if (!th) return;
-  const f = th.dataset.sort;
-  z.kamSort = { feld: f, ab: z.kamSort.feld === f ? !z.kamSort.ab : f !== "name" };
-  kameradenZeigen();
+  const field = th.dataset.sort;
+  state.memberSort = { field, descending: state.memberSort.field === field ? !state.memberSort.descending : field !== "name" };
+  renderMembers();
 });
 
-// PDF-Dialog
-const dialog = $("#pdf-dialog");
-$("#knopf-pdf").addEventListener("click", async () => {
-  if (!z.einsaetze) { try { z.einsaetze = await api(`/api/einsaetze?jahr=${z.jahr}`); } catch (e) { /* nur für Vorschläge */ } }
-  auswahllisten();
-  if (z.pdf.berichte.every((b) => b.gespeichert)) {
-    z.pdf = { token: null, berichte: [], fehler: [] };
-    $("#pdf-fehler").hidden = true;
-    vorschauZeigen();
+// Dialoge
+for (const button of $$("[data-close]")) {
+  button.innerHTML = ICON_CLOSE;
+  button.addEventListener("click", () => $(`#${button.dataset.close}`).close());
+}
+const pdfDialog = $("#pdf-dialog");
+$("#btn-pdf").addEventListener("click", async () => {
+  if (!state.incidents) { try { await loadIncidents(); } catch (e) { /* nur für Vorschläge */ } }
+  updateDatalists();
+  if (state.upload.reports.every((r) => r.saved)) {
+    state.upload = { token: null, reports: [], errors: [] };
+    $("#pdf-error").hidden = true;
+    renderPreviews();
   }
-  dialog.showModal();
+  pdfDialog.showModal();
 });
-$("#dialog-zu").addEventListener("click", () => dialog.close());
-$("#hilfe-zu").addEventListener("click", () => $("#hilfe-dialog").close());
-dialog.addEventListener("close", async () => {
-  if (z.geaendert) { z.geaendert = false; await datenNeu(); }
+pdfDialog.addEventListener("close", async () => {
+  if (state.dataChanged) { state.dataChanged = false; await reloadData(); }
 });
-const ablage = $("#ablage");
-["dragenter", "dragover"].forEach((t) => ablage.addEventListener(t, (e) => { e.preventDefault(); ablage.classList.add("ziehen"); }));
-["dragleave", "drop"].forEach((t) => ablage.addEventListener(t, () => ablage.classList.remove("ziehen")));
-ablage.addEventListener("drop", (e) => { e.preventDefault(); pdfEinlesen(e.dataTransfer.files); });
-ablage.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("#eingabe-pdf").click(); } });
-$("#eingabe-pdf").addEventListener("change", (e) => { pdfEinlesen(e.target.files); e.target.value = ""; });
+const dropzone = $("#dropzone");
+["dragenter", "dragover"].forEach((t) => dropzone.addEventListener(t, (e) => { e.preventDefault(); dropzone.classList.add("dragging"); }));
+["dragleave", "drop"].forEach((t) => dropzone.addEventListener(t, () => dropzone.classList.remove("dragging")));
+dropzone.addEventListener("drop", (e) => { e.preventDefault(); readPdfs(e.dataTransfer.files); });
+dropzone.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("#pdf-input").click(); } });
+$("#pdf-input").addEventListener("change", (e) => { readPdfs(e.target.files); e.target.value = ""; });
 window.addEventListener("dragover", (e) => e.preventDefault());
 window.addEventListener("drop", (e) => e.preventDefault());
-$("#vorschau").addEventListener("change", (e) => {
-  const i = e.target.dataset.ersetzen;
+$("#previews").addEventListener("change", (e) => {
+  const i = e.target.dataset.replace;
   if (i === undefined) return;
   // Eingaben behalten: Formularwerte vor dem Neuzeichnen übernehmen
-  const karteEl = e.target.closest(".vorschau-karte");
-  Object.assign(z.pdf.berichte[i], formWerte(karteEl), { ersetzen: e.target.checked });
-  vorschauZeigen();
+  Object.assign(state.upload.reports[i], readForm(e.target.closest(".preview-card")), { replace: e.target.checked });
+  renderPreviews();
 });
-$("#vorschau").addEventListener("click", (e) => {
-  const k = e.target.closest("[data-uebernehmen]");
-  if (k) uebernehmen(Number(k.dataset.uebernehmen));
+$("#previews").addEventListener("click", (e) => {
+  const button = e.target.closest("[data-accept]");
+  if (button) acceptReport(Number(button.dataset.accept));
 });
 
 // Start
 (async () => {
+  renderTabs();
+  addHelpButtons();
   try {
-    await jahreLaden();
+    [config] = await Promise.all([api("/api/config"), loadYears()]);
   } catch (e) {
-    $("#ansicht-auswertung").innerHTML = `<div class="meldung meldung-fehler">${esc(e.message)}</div>`;
+    $("#view-evaluation").hidden = false;
+    $("#view-evaluation").innerHTML = errorBox(e.message);
+    return;
   }
-  await ansichtZeigen();
+  state.limit = config.default_limit;
+  await showView();
 })();

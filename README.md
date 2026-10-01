@@ -54,11 +54,11 @@ Einstellungen stehen in `.env` (Vorlage: [`.env.example`](.env.example)).
 | Variable       | Standard    | Bedeutung                                                    |
 |----------------|-------------|--------------------------------------------------------------|
 | `APP_PORT`     | `8112`      | Port auf dem Host                                            |
-| `APP_BENUTZER` | `feuerwehr` | Benutzername für den Passwortschutz                          |
-| `APP_PASSWORT` | *(leer)*    | Leer = kein Schutz. **Setzen, sobald die App im Netz läuft.** |
+| `APP_USER`     | `feuerwehr` | Benutzername für den Passwortschutz                          |
+| `APP_PASSWORD` | *(leer)*    | Leer = kein Schutz. **Setzen, sobald die App im Netz läuft.** |
 
 Im Container fest eingestellt (siehe [`docker-compose.yml`](docker-compose.yml)):
-`DB_PFAD=/daten/einsaetze.db`, `IMPORT_ORDNER=/import`.
+`DB_PATH=/daten/einsaetze.db`, `IMPORT_DIR=/import`.
 
 ## Daten
 
@@ -70,6 +70,9 @@ Im Container fest eingestellt (siehe [`docker-compose.yml`](docker-compose.yml))
 **Erstimport:** Ist die Datenbank beim Start leer, übernimmt die App alle
 `Einsatzübersicht_JJJJ.xlsx` aus `Einsatzberichte/` (Einsätze, Fahrzeuge, Anwesenheit).
 Danach ist die Datenbank maßgeblich; die Excel-Dateien werden nicht mehr gebraucht.
+
+**Schema-Updates:** Beim Start bringt die App eine bestehende Datenbank automatisch auf den
+aktuellen Stand (Migrationen in `app/db.py`). Vor einem Update `daten/einsaetze.db` sichern.
 
 **Neu importieren:**
 
@@ -94,39 +97,46 @@ Was die einzelnen Felder und Kennzahlen bedeuten, erklärt die Online-Hilfe in d
 
 ## Entwicklung
 
+Code ist englisch, Kommentare und Oberfläche sind deutsch.
+
+Tests (pytest) laufen im Docker-Container:
+
+```bash
+docker build --target test -t pdf2einsatz-test . && docker run --rm pdf2einsatz-test
+```
+
 Lokal ohne Docker (Python 3.12):
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-DB_PFAD=daten/einsaetze.db IMPORT_ORDNER=Einsatzberichte uvicorn app.main:app --reload --port 8112
-```
-
-Die PDF-Auswertung in `app/core.py` ist zugleich das eigenständige Kommandozeilen-Script
-(früher `einsatzberichte_import.py`), das eine Import-Datei für die Excel-Einsatzübersicht
-erzeugt:
-
-```bash
-python app/core.py --pdf-ordner Einsatzberichte/2026
+pip install -r requirements-dev.txt
+pytest
+DB_PATH=daten/einsaetze.db IMPORT_DIR=Einsatzberichte uvicorn app.main:app --reload --port 8112
 ```
 
 ## Projektstruktur
 
 ```text
 app/
-  main.py         FastAPI: Schnittstellen, Passwortschutz, Erstimport beim Start
-  core.py         PDF lesen, Felder ableiten, Excel schreiben (auch als CLI nutzbar)
-  bestand.py      Datenbankzugriff, Namensabgleich Kameraden, Erstimport aus Excel
-  berechnung.py   Formeln der Einsatzübersicht (Kennzahlen, Statistik, Bedarfsplan, Anwesenheit)
-  db.py           SQLite-Schema und Verbindung
-  feiertage.py    Feiertage RLP (berechnet, ohne Internet)
+  main.py          FastAPI: Schnittstellen, Passwortschutz, Erstimport beim Start
+  domain.py        Fachkonstanten (Fahrzeuge, Orte, Zeitgrenzen) – auch für die Oberfläche
+  pdf_report.py    Einsatzbericht-PDF lesen
+  report.py        Felder ableiten, Prüfhinweise, Bericht -> Einsatz
+  metrics.py       Formeln der Einsatzübersicht (Kennzahlen, Statistik, Bedarfsplan, Anwesenheit)
+  store.py         Datenbankzugriff, Namensabgleich Kameraden
+  db.py            SQLite-Verbindung und Migrationen
+  excel_layout.py  Spaltenaufbau der Einsatzübersicht
+  excel_import.py  Erstimport aus Einsatzübersicht_JJJJ.xlsx
+  excel_export.py  Excel-Export im Format der Einsatzübersicht
+  names.py, timeutil.py, holidays.py   Namensvergleich, Zeiten, Feiertage RLP
 static/
-  index.html      Oberfläche
-  app.js          Ansichten und Bedienung
-  hilfe.js        Texte und Logik der Online-Hilfe
-  app.css         Gestaltung
-  fonts/, img/    Schrift Sansation (SIL OFL), Logos
-Dockerfile, docker-compose.yml, requirements.txt
+  index.html       Oberfläche
+  app.js           Ansichten und Bedienung
+  help.js          Texte und Logik der Online-Hilfe
+  app.css          Gestaltung
+  fonts/, img/     Schrift Sansation (SIL OFL), Logos
+tests/             pytest (nur erfundene Daten)
+Dockerfile, docker-compose.yml, requirements.txt, requirements-dev.txt
 ```
 
 ## Abweichungen zur Excel-Einsatzübersicht
@@ -139,6 +149,8 @@ Bewusste Unterschiede zu den Formeln der Excel-Datei:
   im Bedarfsplan nicht berücksichtigt (die Anzahl wird angezeigt).
 - Der Gesamtwert im Bedarfsplan ist über alle Einsätze gemittelt (Excel: Mittel der
   vier Zeitfenster).
+- Tag/Nacht folgt überall der Excel-Regel (Spalte D): Ein Einsatzbeginn um genau 06:00:00
+  oder 18:00:00 zählt zur Nacht, auch beim Anteil „tagsüber“.
 
 ## Lizenz
 

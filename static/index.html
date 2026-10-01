@@ -9,121 +9,112 @@
   <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
-  <header class="kopf">
-    <div class="kopf-innen">
-      <img class="kopf-logo" src="/static/img/logo-weiss.png" alt="Feuerwehr Rheinbrohl">
-      <div class="kopf-titel">
-        <span class="kopf-ueber">Einsatzstatistik</span>
-        <h1 id="kopf-jahr">Einsätze</h1>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <img class="topbar-logo" src="/static/img/logo-weiss.png" alt="Feuerwehr Rheinbrohl">
+      <div class="topbar-title">
+        <span class="topbar-kicker">Einsatzstatistik</span>
+        <h1 id="page-title">Einsätze</h1>
       </div>
-      <div class="kopf-aktionen">
-        <label class="jahr-wahl">
+      <div class="topbar-actions">
+        <label class="year-select">
           <span>Jahr</span>
-          <select id="jahr" aria-label="Jahr wählen"></select>
+          <select id="year" aria-label="Jahr wählen"></select>
         </label>
-        <button type="button" class="knopf knopf-weiss" id="knopf-pdf">
+        <button type="button" class="btn btn-white" id="btn-pdf">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0-4.5 4.5M12 4l4.5 4.5M5 20h14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <span>PDF einlesen</span>
         </button>
-        <button type="button" class="knopf-hilfe-kopf" id="knopf-hilfe" data-hilfe="" aria-label="Hilfe öffnen" title="Hilfe">?</button>
+        <button type="button" class="btn-help-header" id="btn-help" data-help="" aria-label="Hilfe öffnen" title="Hilfe">?</button>
       </div>
     </div>
-    <nav class="reiter" id="reiter">
-      <div class="reiter-innen">
-        <a href="#auswertung" data-ansicht="auswertung">Auswertung</a>
-        <a href="#einsaetze" data-ansicht="einsaetze">Einsätze</a>
-        <a href="#kameraden" data-ansicht="kameraden">Kameraden</a>
-      </div>
-    </nav>
+    <!-- Reiter entstehen aus VIEWS in app.js -->
+    <nav class="tabs"><div class="tabs-inner" id="tabs"></div></nav>
   </header>
 
-  <main class="seite">
-    <section id="ansicht-auswertung" class="ansicht" hidden></section>
+  <main class="page">
+    <section id="view-evaluation" class="view" hidden></section>
 
-    <section id="ansicht-einsaetze" class="ansicht" hidden>
-      <div class="karte liste-karte">
-        <div class="werkzeuge">
-          <div class="segmente" id="filter-art"></div>
-          <div class="werkzeuge-rechts">
-            <input type="search" id="suche" class="suche" placeholder="Suchen: Nr., Ort, Stichwort, Name …">
-            <button type="button" class="knopf knopf-hell" id="knopf-export">Excel-Export</button>
+    <section id="view-incidents" class="view" hidden>
+      <div class="card list-card">
+        <div class="toolbar">
+          <div class="segments" id="category-filter"></div>
+          <div class="toolbar-right">
+            <input type="search" id="search" class="search" placeholder="Suchen: Nr., Ort, Stichwort, Name …">
+            <button type="button" class="btn btn-light" id="btn-export">Excel-Export</button>
           </div>
         </div>
-        <div class="tabelle-rahmen">
-          <table class="tabelle" id="tabelle-einsaetze">
+        <div class="table-wrap">
+          <table class="table" id="incident-table">
             <thead>
               <tr>
-                <th class="sp-nr">Nr.</th>
+                <th class="col-number">Nr.</th>
                 <th>Datum</th>
                 <th>Stichwort</th>
                 <th>Einsatz</th>
-                <th>EHF<button type="button" class="hilfe-knopf" data-hilfe="ehf" aria-label="Hilfe: EHF">?</button></th>
+                <th data-help-key="unit_leader">EHF</th>
                 <th>Fahrzeuge</th>
-                <th class="rechts">Ezeit<button type="button" class="hilfe-knopf" data-hilfe="ezeit" aria-label="Hilfe: Ezeit">?</button></th>
-                <th class="rechts">Stärke<button type="button" class="hilfe-knopf" data-hilfe="staerke_gesamt" aria-label="Hilfe: Gesamtstärke">?</button></th>
-                <th class="sp-auf"></th>
+                <th class="right" data-help-key="arrival_min">Ezeit</th>
+                <th class="right" data-help-key="crew_total">Stärke</th>
+                <th class="col-toggle"></th>
               </tr>
             </thead>
             <tbody></tbody>
           </table>
-          <p class="leer" id="leer-einsaetze" hidden>Keine Einsätze gefunden.</p>
+          <p class="empty-note" id="incidents-empty" hidden>Keine Einsätze gefunden.</p>
         </div>
       </div>
     </section>
 
-    <section id="ansicht-kameraden" class="ansicht" hidden></section>
+    <section id="view-members" class="view" hidden></section>
   </main>
 
   <!-- PDF einlesen -->
   <dialog id="pdf-dialog" class="dialog">
-    <div class="dialog-kopf">
+    <div class="dialog-header">
       <div>
         <h2>Einsatzbericht einlesen</h2>
-        <p class="gedaempft">PDF aus dem BKS-Portal – Daten prüfen, bei Bedarf korrigieren und übernehmen.</p>
+        <p class="muted">PDF aus dem BKS-Portal – Daten prüfen, bei Bedarf korrigieren und übernehmen.</p>
       </div>
-      <button type="button" class="knopf-schliessen" id="dialog-zu" aria-label="Schließen">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
-      </button>
+      <button type="button" class="btn-close" data-close="pdf-dialog" aria-label="Schließen"></button>
     </div>
-    <div class="dialog-inhalt">
-      <label class="ablage" id="ablage" tabindex="0">
-        <input type="file" id="eingabe-pdf" multiple accept=".pdf,application/pdf" hidden>
-        <svg class="ablage-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M24 32V10m0 0-8 8m8-8 8 8" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 30v6a4 4 0 0 0 4 4h24a4 4 0 0 0 4-4v-6" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>
+    <div class="dialog-body">
+      <label class="dropzone" id="dropzone" tabindex="0">
+        <input type="file" id="pdf-input" multiple accept=".pdf,application/pdf" hidden>
+        <svg class="dropzone-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M24 32V10m0 0-8 8m8-8 8 8" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 30v6a4 4 0 0 0 4 4h24a4 4 0 0 0 4-4v-6" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>
         <strong>Einsatzbericht-PDF hierher ziehen</strong>
-        <span class="gedaempft">oder klicken, um die Datei auszuwählen</span>
+        <span class="muted">oder klicken, um die Datei auszuwählen</span>
       </label>
-      <div class="fortschritt" id="fortschritt" hidden>
-        <div class="fortschritt-balken"><span></span></div>
+      <div class="progress" id="progress" hidden>
+        <div class="progress-bar"><span></span></div>
         <span>Bericht wird gelesen …</span>
       </div>
-      <div class="meldung meldung-fehler" id="pdf-fehler" hidden></div>
-      <div id="vorschau"></div>
+      <div class="message message-error" id="pdf-error" hidden></div>
+      <div id="previews"></div>
     </div>
   </dialog>
 
   <!-- Online-Hilfe -->
-  <dialog id="hilfe-dialog" class="dialog dialog-hilfe" aria-labelledby="hilfe-titel">
-    <div class="dialog-kopf">
+  <dialog id="help-dialog" class="dialog dialog-help" aria-labelledby="help-title">
+    <div class="dialog-header">
       <div>
-        <h2 id="hilfe-titel">Hilfe</h2>
-        <p class="gedaempft">Bedeutung der Felder und Kennzahlen. Das <span class="hilfe-knopf hilfe-beispiel" aria-hidden="true">?</span> neben einem Feld springt direkt zur passenden Erklärung.</p>
+        <h2 id="help-title">Hilfe</h2>
+        <p class="muted">Bedeutung der Felder und Kennzahlen. Das <span class="help-btn help-sample" aria-hidden="true">?</span> neben einem Feld springt direkt zur passenden Erklärung.</p>
       </div>
-      <button type="button" class="knopf-schliessen" id="hilfe-zu" aria-label="Schließen">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
-      </button>
+      <button type="button" class="btn-close" data-close="help-dialog" aria-label="Schließen"></button>
     </div>
-    <div class="dialog-inhalt" id="hilfe-inhalt"></div>
+    <div class="dialog-body" id="help-body"></div>
   </dialog>
 
   <div class="tooltip" id="tooltip" role="tooltip" hidden></div>
   <div class="toast" id="toast" role="status" hidden></div>
 
-  <footer class="fuss">
-    <img src="/static/img/logo-schwarz.png" alt="" class="fuss-logo">
+  <footer class="footer">
+    <img src="/static/img/logo-schwarz.png" alt="" class="footer-logo">
     <span>Freiwillige Feuerwehr Rheinbrohl · Einsatzstatistik</span>
   </footer>
 
-  <script src="/static/hilfe.js"></script>
+  <script src="/static/help.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>
