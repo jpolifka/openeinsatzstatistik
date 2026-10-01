@@ -41,8 +41,9 @@ def test_create_normalizes_and_derives(con):
     assert incident["warnings"] == ["Hinweis"]
 
 
-@pytest.mark.parametrize("keyword, subcode, expected", [("s1.00", "", ("S1", "00")), ("B2.07", "99", ("B2", "07")),
-                                                        ("h1.", "03", ("H1", "03")), ("w1", "01", ("W1", "01"))])
+@pytest.mark.parametrize("keyword, subcode, expected", [
+    ("s1.00", "", ("S1", "00")), ("B2.07", "99", ("B2", "07")), ("B207", "", ("B2", "07")), ("b2 07", "", ("B2", "07")),
+    ("H1.3", "", ("H1", "03")), ("h1.", "03", ("H1", "03")), ("w1", "01", ("W1", "01")), ("BMA", "", ("BMA", ""))])
 def test_full_keyword_is_split(con, keyword, subcode, expected):
     incident_id = store.create_incident(con, {**FIELDS, "keyword": keyword, "subcode": subcode}, source="pdf")
     incident = store.load_incident(con, incident_id)

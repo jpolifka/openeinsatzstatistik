@@ -1,10 +1,14 @@
 # -*- coding: utf-8 -*-
 """Einsätze, Fahrzeuge, Kameraden und Anwesenheit in der Datenbank lesen und schreiben."""
 import json
+import re
 
 from app.holidays import is_weekend_or_holiday
 from app.names import NameMatcher, leader_spelling, matches_leader, normalize, split_name
 from app.timeutil import normalize_iso, parse_iso, year_of
+
+# Ganzes Stichwort mit oder ohne Punkt: B2.07, B207, b2 07, S1.00, B2.
+FULL_KEYWORD = re.compile(r"([A-Za-z]\d)\s*[.\s]?\s*(\d{0,2})")
 
 # Bearbeitbare Felder eines Einsatzes – Grundlage für Formular, Speichern und Abgleich
 FIELDS = ("number", "started_at", "ended_at", "keyword", "subcode", "description", "place",
@@ -26,6 +30,14 @@ def to_int(value):
     return None
 
 
+def split_keyword(keyword, subcode=""):
+    """Ganzes Stichwort im Feld Stichwort in Stichwort und Stufe aufteilen: B207 und B2.07 -> (B2, 07)."""
+    m = FULL_KEYWORD.fullmatch(keyword or "")
+    if not m:
+        return (keyword or "").upper(), subcode
+    return m.group(1).upper(), m.group(2).zfill(2) if m.group(2) else subcode
+
+
 def normalize_fields(fields, weekend_or_holiday=None):
     """Eingaben bereinigen und Jahr sowie Wochenende/Feiertag aus dem Beginn ableiten."""
     f = {name: fields.get(name) for name in FIELDS}
@@ -34,11 +46,7 @@ def normalize_fields(fields, weekend_or_holiday=None):
     f["started_at"], f["ended_at"] = normalize_iso(f["started_at"]), normalize_iso(f["ended_at"])
     for name in TEXT_FIELDS:
         f[name] = (f[name] or "").strip()
-    # Ganzes Stichwort im Feld Stichwort (z. B. "s1.00") in Stichwort und Stufe aufteilen
-    if "." in f["keyword"]:
-        f["keyword"], subcode = (t.strip() for t in f["keyword"].split(".", 1))
-        f["subcode"] = subcode or f["subcode"]
-    f["keyword"] = f["keyword"].upper()
+    f["keyword"], f["subcode"] = split_keyword(f["keyword"], f["subcode"])
     start = parse_iso(f["started_at"])
     f["year"] = year_of(start)
     if weekend_or_holiday is None:
