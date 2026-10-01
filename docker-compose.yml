@@ -8,16 +8,11 @@ services:
     image: pdf2einsatz-web
     container_name: einsatzberichte
     ports:
-      - "${APP_PORT:-8112}:8112"
+      - "${APP_PORT:?APP_PORT fehlt in .env (Vorlage: .env.example)}:8112"
+    # Alle Einstellungen kommen aus .env (Vorlage: .env.example), hier stehen keine Standardwerte
+    env_file: .env
     environment:
-      # Anmeldung per Magic Link: in .env setzen, sobald die App im Netz erreichbar ist (siehe .env.example)
-      AUTH_EMAILS: ${AUTH_EMAILS:-}
-      BASE_URL: ${BASE_URL:-http://localhost:8112}
-      RESEND_API_KEY: ${RESEND_API_KEY:-}
-      MAIL_FROM: ${MAIL_FROM:-}
-      SECRET_KEY: ${SECRET_KEY:-}
-      # Bleibt nur gesetzt, damit die App nach dem Umstieg nicht ungeschützt startet (siehe auth.py)
-      APP_PASSWORD: ${APP_PASSWORD:-}
+      # Pfade im Container, gehören zu den Volumes unten
       DB_PATH: /daten/einsaetze.db
       IMPORT_DIR: /import
     volumes:

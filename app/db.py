@@ -4,7 +4,7 @@ import contextlib
 import os
 import sqlite3
 
-PATH = os.environ.get("DB_PATH", "/daten/einsaetze.db")
+PATH = os.environ.get("DB_PATH", "")
 
 # Ursprüngliches Schema (deutsche Bezeichner). Bleibt unverändert, damit bestehende
 # Datenbanken und neue denselben Migrationsweg gehen.

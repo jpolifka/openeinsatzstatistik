@@ -32,7 +32,7 @@ log = logging.getLogger("pdf2einsatz")
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
-IMPORT_DIR = os.environ.get("IMPORT_DIR", "/import")
+IMPORT_DIR = os.environ.get("IMPORT_DIR", "")
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
@@ -41,9 +41,11 @@ async def lifespan(_app):
     if os.environ.get("APP_PASSWORD") and not auth.enabled():
         # Nicht still ungeschützt starten, wenn noch die alte Passwort-Konfiguration gesetzt ist
         raise RuntimeError("APP_PASSWORD wird nicht mehr unterstützt – AUTH_EMAILS setzen (siehe README)")
+    if not db.PATH:
+        raise RuntimeError("DB_PATH fehlt (siehe README)")
     auth.check_config()
     db.setup()
-    if os.path.isdir(IMPORT_DIR):
+    if IMPORT_DIR and os.path.isdir(IMPORT_DIR):
         with db.connection() as con:
             for result in excel_import.initial_import(con, IMPORT_DIR):
                 log.info("Erstimport: %s", result)

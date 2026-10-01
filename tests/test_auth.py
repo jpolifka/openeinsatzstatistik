@@ -12,6 +12,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "PATH", str(tmp_path / "test.db"))
     monkeypatch.setattr(main, "IMPORT_DIR", str(tmp_path / "kein-import"))
     monkeypatch.setattr(auth, "EMAILS", {"m.muster@example.org"})
+    monkeypatch.setattr(auth, "BASE_URL", "http://testserver")
     monkeypatch.setattr(auth, "RESEND_API_KEY", "")
     monkeypatch.setattr(auth, "_key", None)
     monkeypatch.setattr(auth, "_used_links", {})
@@ -101,5 +102,12 @@ def test_failed_mail_allows_immediate_retry(client, monkeypatch):
 def test_resend_key_without_sender_stops_start(monkeypatch):
     monkeypatch.setattr(auth, "RESEND_API_KEY", "test")
     monkeypatch.setattr(auth, "MAIL_FROM", "")
+    with pytest.raises(RuntimeError):
+        auth.check_config()
+
+
+def test_login_without_base_url_stops_start(monkeypatch):
+    monkeypatch.setattr(auth, "EMAILS", {"m.muster@example.org"})
+    monkeypatch.setattr(auth, "BASE_URL", "")
     with pytest.raises(RuntimeError):
         auth.check_config()
