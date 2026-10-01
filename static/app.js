@@ -837,11 +837,23 @@ $("#view-members").addEventListener("click", (e) => {
   renderMembers();
 });
 
-// EHF von Hand geändert → Hervorhebung der Namen anpassen
+// EHF von Hand geändert → Hervorhebung der Namen anpassen;
+// ganzes Stichwort (B207, B2.07) gleich in Stichwort und Stufe trennen – der Server trennt beim Speichern ebenso
 for (const container of [$("#incident-table tbody"), $("#previews")]) {
   container.addEventListener("input", (e) => {
     if (e.target.name === "unit_leader") highlightLeader(e.target.closest("[data-form], .preview-card"));
   });
+  container.addEventListener("change", (e) => {
+    if (e.target.name === "keyword") splitKeyword(e.target.closest("[data-form], .preview-card"));
+  });
+}
+
+function splitKeyword(form) {
+  const keyword = $('input[name="keyword"]', form), subcode = $('input[name="subcode"]', form);
+  const m = keyword.value.trim().match(/^([a-z]\d)\s*[.\s]?\s*(\d{0,2})$/i);
+  if (!m) return;
+  keyword.value = m[1].toUpperCase();
+  if (m[2]) subcode.value = m[2].padStart(2, "0");
 }
 
 // Dialoge
