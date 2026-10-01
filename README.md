@@ -102,7 +102,9 @@ docker compose up -d
 ## Bedienung
 
 1. **PDF einlesen** (oben rechts): Bericht hineinziehen, mehrere PDFs auch als ZIP-Datei. Die Vorschau zeigt erkannte
-   Felder, Fahrzeuge, Anwesenheit und Prüfhinweise.
+   Felder, Fahrzeuge, Anwesenheit und Prüfhinweise. Berichte ohne Anmerkungen (keine
+   Prüfhinweise, keine neuen Personen, keine Abweichungen) werden direkt übernommen, angezeigt
+   werden nur die übrigen.
 2. Felder wie EHF oder Zeiten bei Bedarf korrigieren, dann **In Statistik übernehmen**.
 3. Ist die Einsatznummer schon erfasst, werden die Abweichungen angezeigt; mit
    „erfassten Einsatz durch diese PDF ersetzen“ lässt sich der Einsatz aktualisieren.
