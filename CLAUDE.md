@@ -39,7 +39,8 @@ Lokal ohne Docker: `DB_PATH=daten/einsaetze.db IMPORT_DIR=Einsatzberichte uvicor
 - `db.py`: Verbindung und **Migrationen** (`MIGRATIONS`, gezählt über `PRAGMA user_version`). Schemaänderungen nur als neuen Schritt hinten anfügen. Schritt 1 ist das ursprüngliche deutsche Schema, Schritt 2 benennt es ins Englische um. Eindeutigkeit gilt über `(year, number)`.
 - `excel_layout.py`: Spaltenaufbau der Einsatzübersicht (A:AV), aus `domain.VEHICLES` erzeugt. Gemeinsam genutzt von `excel_import.py` (Erstimport aller `Einsatzübersicht_JJJJ.xlsx` aus `IMPORT_DIR`, wenn die DB leer ist) und `excel_export.py` (Export mit Formeln wie im Original).
 - `names.py`, `timeutil.py`, `holidays.py`: Namensvergleich, Zeitumwandlungen, Feiertage RLP.
-- `main.py`: nur HTTP: Endpunkte, optionales HTTP-Basic-Auth (aktiv, wenn `APP_PASSWORD` gesetzt ist), JSON-Aufbereitung (`incident_json`).
+- `auth.py`: Anmeldung per Magic Link (aktiv, wenn `AUTH_EMAILS` gesetzt ist): Versand über die Resend-API, HMAC-signierte Links (15 Min., einmalig) und Sitzungs-Cookies (30 Tage), Anmeldeseiten als `APIRouter`. Schlüssel aus `SECRET_KEY` oder `session.key` neben der DB.
+- `main.py`: nur HTTP: Endpunkte, Anmeldeprüfung als Middleware (`PUBLIC_PATHS` ohne Anmeldung), JSON-Aufbereitung (`incident_json`).
 
 **Frontend** (`static/`): `app.js` erzeugt alle Ansichten als Template-Strings mit `esc()` für Nutzerdaten. Der Zustand liegt im globalen Objekt `state`, die Fachkonstanten in `config` (von `/api/config`). Ansichten sind in `VIEWS` registriert (Reiter, Laden, Zeichnen). Routing über den URL-Hash (`#evaluation`, `#incidents`, `#members`). Tooltips kommen generisch über `data-tip`. `help.js` ist die **einzige Quelle für die Online-Hilfe**: `HELP_SECTIONS` liefert Tooltip-Kurztexte und das Hilfefenster, Schlüssel sind die Feld- bzw. Kennzahlnamen der API. `helpButton(key)` erzeugt das `?`-Symbol, statische Elemente bekommen es über `data-help-key`. Neue Felder oder Kennzahlen bekommen dort einen Eintrag. `help.js` wird vor `app.js` geladen und nutzt dessen `$` und `esc` erst zur Laufzeit.
 
@@ -47,6 +48,6 @@ Lokal ohne Docker: `DB_PATH=daten/einsaetze.db IMPORT_DIR=Einsatzberichte uvicor
 
 ## Daten und Datenschutz
 
-`Einsatzberichte/` (PDFs, Excel) und `daten/` (SQLite) enthalten Namen und Anwesenheiten. Sie sind per `.gitignore` ausgeschlossen und dürfen nicht eingecheckt werden. Auch im Code und in Tests keine echten Namen verwenden (Beispiele: „M. Muster“, „Beispiel, Erika“). Konfiguration: `.env` (Vorlage `.env.example`: `APP_PORT`, `APP_USER`, `APP_PASSWORD`).
+`Einsatzberichte/` (PDFs, Excel) und `daten/` (SQLite) enthalten Namen und Anwesenheiten. Sie sind per `.gitignore` ausgeschlossen und dürfen nicht eingecheckt werden. Auch im Code und in Tests keine echten Namen verwenden (Beispiele: „M. Muster“, „Beispiel, Erika“). Konfiguration: `.env` (Vorlage `.env.example`: `APP_PORT`, `AUTH_EMAILS`, `BASE_URL`, `RESEND_API_KEY`, `MAIL_FROM`).
 
 Bewusste Abweichungen zur Excel-Datei sind im README dokumentiert. Einsätze ohne Eintreffzeit fließen zum Beispiel nicht in den Bedarfsplan ein.

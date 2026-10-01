@@ -41,6 +41,8 @@ const ICON_CLOSE = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12
 
 async function api(url, options = {}) {
   const response = await fetch(url, options);
+  // Sitzung abgelaufen → zur Anmeldung
+  if (response.status === 401) { location.href = "/login"; throw new Error("Anmeldung erforderlich"); }
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.detail || `Fehler ${response.status}`);
   return data;
@@ -778,5 +780,9 @@ $("#previews").addEventListener("click", (e) => {
     return;
   }
   state.limit = config.default_limit;
+  if (config.user) {
+    $("#logout").hidden = false;
+    $("#logout button").dataset.tip = `Abmelden (${config.user})`;
+  }
   await showView();
 })();

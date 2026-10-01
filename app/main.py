@@ -5,14 +5,12 @@ Einsatzstatistik – HTTP-Schnittstelle, Passwortschutz und Auslieferung der Obe
 Fachlogik liegt in report.py (PDF -> Einsatz), metrics.py (Auswertungen), store.py
 (Datenbank) sowie excel_import.py / excel_export.py.
 """
-import base64
 import contextlib
 import datetime as dt
 import io
 import logging
 import os
 import re
-import secrets
 import tempfile
 import threading
 import time
@@ -22,11 +20,11 @@ from typing import List, Optional
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, create_model
 
-from app import db, domain, excel_export, excel_import, metrics, report, store
+from app import auth, db, domain, excel_export, excel_import, metrics, report, store
 from app.timeutil import year_of
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -35,13 +33,15 @@ log = logging.getLogger("pdf2einsatz")
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 IMPORT_DIR = os.environ.get("IMPORT_DIR", "/import")
-USER = os.environ.get("APP_USER", "feuerwehr")
-PASSWORD = os.environ.get("APP_PASSWORD", "")
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
 @contextlib.asynccontextmanager
 async def lifespan(_app):
+    if os.environ.get("APP_PASSWORD") and not auth.enabled():
+        # Nicht still ungeschützt starten, wenn noch die alte Passwort-Konfiguration gesetzt ist
+        raise RuntimeError("APP_PASSWORD wird nicht mehr unterstützt – AUTH_EMAILS setzen (siehe README)")
+    auth.check_config()
     db.setup()
     if os.path.isdir(IMPORT_DIR):
         with db.connection() as con:
@@ -56,23 +56,22 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
+app.include_router(auth.router)
+
+# Ohne Anmeldung erreichbar: Health-Check, Anmeldeseiten und Logos/CSS/JS (keine Einsatzdaten)
+PUBLIC_PATHS = ("/health", "/login", "/logout", "/auth/", "/static/")
+
+
 @app.middleware("http")
 async def require_login(request: Request, call_next):
-    """Einfacher Passwortschutz (HTTP Basic), wenn APP_PASSWORD gesetzt ist."""
-    if PASSWORD and request.url.path != "/health" and not _valid_login(request.headers.get("authorization", "")):
-        return Response("Anmeldung erforderlich", status_code=401,
-                        headers={"WWW-Authenticate": 'Basic realm="Einsatzstatistik", charset="UTF-8"'})
+    """Anmeldung per Magic Link, wenn AUTH_EMAILS gesetzt ist (siehe auth.py)."""
+    path = request.url.path
+    if auth.enabled() and not path.startswith(PUBLIC_PATHS) and not auth.current_user(request):
+        # Direkt im Browser geöffnete API-Adressen (z. B. Export) auch zur Anmeldeseite
+        if path.startswith("/api/") and "text/html" not in request.headers.get("accept", ""):
+            return JSONResponse({"detail": "Anmeldung erforderlich"}, status_code=401)
+        return RedirectResponse("/login", 303)
     return await call_next(request)
-
-
-def _valid_login(header):
-    if not header.lower().startswith("basic "):
-        return False
-    try:
-        user, _, password = base64.b64decode(header[6:]).decode("utf-8").partition(":")
-    except ValueError:
-        return False
-    return secrets.compare_digest(user, USER) and secrets.compare_digest(password, PASSWORD)
 
 
 # ---------------------------------------------------------------- PDF-Vorschau im Speicher
@@ -153,8 +152,8 @@ def health():
 
 
 @app.get("/api/config")
-def api_config():
-    return domain.client_config()
+def api_config(request: Request):
+    return {**domain.client_config(), "user": auth.current_user(request)}
 
 
 # ---------------------------------------------------------------- Auswertung
