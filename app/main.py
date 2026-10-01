@@ -77,6 +77,16 @@ async def require_login(request: Request, call_next):
     return await call_next(request)
 
 
+@app.middleware("http")
+async def revalidate_frontend(request: Request, call_next):
+    """Oberfläche bei jedem Laden beim Server prüfen lassen (ETag), damit nach einem Update
+    kein altes app.js aus dem Browser-Cache läuft."""
+    response = await call_next(request)
+    if request.url.path == "/" or request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 # ---------------------------------------------------------------- PDF-Vorschau im Speicher
 class PreviewSessions:
     """Gelesene Berichte bis zur Übernahme. Liegt im Prozess – daher nur ein uvicorn-Worker."""
