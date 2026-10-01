@@ -23,7 +23,7 @@ Feuerwehrbedarfsplan, Anwesenheit) rechnet die App direkt im Browser nach.
 
 ## Funktionen
 
-- **PDF einlesen** – Einsatzbericht per Drag & Drop, Vorschau mit Prüfhinweisen,
+- **PDF einlesen** – Einsatzberichte per Drag & Drop (einzeln, mehrere oder als ZIP), Vorschau mit Prüfhinweisen,
   Korrektur einzelner Felder vor dem Übernehmen, Abgleich mit bereits erfassten Einsätzen.
 - **Auswertung** – Kennzahlen, Feuerwehrbedarfsplan Pos. 8.4 (8 oder 10 Minuten),
   Einsatzarten, Alarmstufen, Einsatzgebiet, Monate im Vorjahresvergleich, Uhrzeiten,
@@ -63,7 +63,7 @@ Code und `docker-compose.yml` enthalten keine Standardwerte. Ohne `.env` startet
 
 **Reverse Proxy:** Die App muss an der Wurzel der Domain laufen (nicht unter einem Unterpfad).
 Weiterleitungen sind relative Pfade, `X-Forwarded-*`-Header werden nicht benötigt. Bei nginx
-`client_max_body_size` so setzen, dass die PDFs durchpassen (Standard 1 MB).
+`client_max_body_size` so setzen, dass die PDFs bzw. ZIP-Dateien durchpassen (Standard 1 MB).
 
 **Anmeldung:** Ist `AUTH_EMAILS` gesetzt, fragt die App nach der E-Mail-Adresse und schickt
 einen Anmeldelink (15 Minuten gültig, nur einmal benutzbar). Die Sitzung hält 30 Tage.
@@ -101,7 +101,7 @@ docker compose up -d
 
 ## Bedienung
 
-1. **PDF einlesen** (oben rechts): Bericht hineinziehen. Die Vorschau zeigt erkannte
+1. **PDF einlesen** (oben rechts): Bericht hineinziehen, mehrere PDFs auch als ZIP-Datei. Die Vorschau zeigt erkannte
    Felder, Fahrzeuge, Anwesenheit und Prüfhinweise.
 2. Felder wie EHF oder Zeiten bei Bedarf korrigieren, dann **In Statistik übernehmen**.
 3. Ist die Einsatznummer schon erfasst, werden die Abweichungen angezeigt; mit

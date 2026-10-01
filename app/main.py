@@ -16,6 +16,7 @@ import threading
 import time
 import unicodedata
 import uuid
+import zipfile
 from typing import List, Optional
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
@@ -215,19 +216,68 @@ def api_delete_incident(incident_id: int):
 
 
 # ---------------------------------------------------------------- PDF einlesen
+ZIP_MAX_PDFS = 500
+ZIP_MAX_BYTES = 50 * 1024 * 1024  # je entpackter PDF
+
+
+def _is_upload(filename):
+    return (filename or "").lower().endswith((".pdf", ".zip"))
+
+
+def _unique_filename(filename, taken):
+    """Gleichnamige PDFs (z. B. aus Unterordnern einer ZIP) durchnummerieren."""
+    stem, ext = os.path.splitext(filename)
+    candidate, n = filename, 2
+    while candidate in taken:
+        candidate, n = f"{stem} ({n}){ext}", n + 1
+    taken.add(candidate)
+    return candidate
+
+
+def _unpack_zip(data, zip_name, errors):
+    """PDFs aus einer ZIP-Datei holen -> [(dateiname, inhalt)]. Andere Dateien werden übergangen."""
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(data))
+    except zipfile.BadZipFile:
+        errors.append({"file": zip_name, "message": "Keine gültige ZIP-Datei."})
+        return []
+    entries = [i for i in archive.infolist() if not i.is_dir() and i.filename.lower().endswith(".pdf")
+               and not i.filename.startswith("__MACOSX/") and not os.path.basename(i.filename).startswith("._")]
+    if not entries:
+        errors.append({"file": zip_name, "message": "Die ZIP-Datei enthält keine PDF."})
+    if len(entries) > ZIP_MAX_PDFS:
+        errors.append({"file": zip_name, "message": f"Mehr als {ZIP_MAX_PDFS} PDFs, nur die ersten werden gelesen."})
+        entries = entries[:ZIP_MAX_PDFS]
+    files = []
+    for info in entries:
+        name = _safe_filename(info.filename)
+        if info.file_size > ZIP_MAX_BYTES:
+            errors.append({"file": name, "message": "PDF in der ZIP-Datei ist zu groß."})
+            continue
+        try:
+            files.append((name, archive.read(info)))
+        except Exception as e:  # verschlüsselt oder beschädigt
+            errors.append({"file": name, "message": f"Nicht entpackbar ({e or type(e).__name__})."})
+    return files
+
+
 def _read_uploads(uploads):
-    """Hochgeladene PDFs lesen -> (berichte, fehler)."""
-    reports, errors = [], []
+    """Hochgeladene PDFs und ZIP-Dateien lesen -> (berichte, fehler)."""
+    reports, errors, files = [], [], []
+    for upload in uploads:
+        filename, data = _safe_filename(upload.filename), upload.file.read()
+        files += _unpack_zip(data, filename, errors) if filename.lower().endswith(".zip") else [(filename, data)]
+    taken = set()
     with tempfile.TemporaryDirectory() as tmp:
-        for upload in uploads:
-            filename = _safe_filename(upload.filename)
+        for filename, data in files:
+            filename = _unique_filename(filename, taken)
             path = os.path.join(tmp, filename)
             with open(path, "wb") as fh:
-                fh.write(upload.file.read())
+                fh.write(data)
             try:
                 reports.append(report.read_pdf(path, filename))
             except Exception as e:  # defekte oder fremde PDF: melden, Rest weiter lesen
-                log.exception("PDF %s", upload.filename)
+                log.exception("PDF %s", filename)
                 errors.append({"file": filename, "message": str(e) or type(e).__name__})
     return reports, errors
 
@@ -244,9 +294,9 @@ def _preview_json(con, r):
 
 @app.post("/api/reports")
 def api_read_reports(pdfs: List[UploadFile] = File(...)):
-    pdfs = [p for p in pdfs if p.filename.lower().endswith(".pdf")]
+    pdfs = [p for p in pdfs if _is_upload(p.filename)]
     if not pdfs:
-        raise HTTPException(400, "Bitte eine PDF-Datei (Einsatzbericht aus dem BKS-Portal) auswählen.")
+        raise HTTPException(400, "Bitte eine PDF- oder ZIP-Datei (Einsatzberichte aus dem BKS-Portal) auswählen.")
     reports, errors = _read_uploads(pdfs)
     with db.connection() as con:
         previews_json = [_preview_json(con, r) for r in reports]
