@@ -77,3 +77,17 @@ def test_previous_year_cutoff_on_leap_day(today, expected):
     previous = [make_incident(started_at=f"{expected.isoformat()}T10:00:00")]
     s = metrics.statistics([], 2024, previous, today=today)
     assert s["previous_to_date"] == 1
+
+
+def test_monthly_history_fills_gaps_and_averages():
+    counts = {"2024-11": 2, "2025-02": 1, "2025-11": 4}
+    history = metrics.monthly_history(counts, today=dt.date(2026, 3, 5))
+    assert (history[0]["year"], history[0]["month"]) == (2024, 11)
+    assert (history[-1]["year"], history[-1]["month"]) == (2025, 12)  # höchstens bis Ende des letzten Jahres
+    assert [h["count"] for h in history[:4]] == [2, 0, 0, 1]
+    assert history[10]["average"] is None and history[11]["average"] == round(3 / 12, 2)
+    current = metrics.monthly_history({"2026-01": 1}, today=dt.date(2026, 3, 5))
+    assert len(current) == 2                                            # bis zum Vormonat …
+    current = metrics.monthly_history({"2026-01": 1, "2026-03": 1}, today=dt.date(2026, 3, 5))
+    assert len(current) == 3 and current[-1]["running"]                 # … außer der laufende hat schon Einsätze
+    assert metrics.monthly_history({}) == []

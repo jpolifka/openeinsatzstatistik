@@ -26,6 +26,7 @@ const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const formatDate = (iso) => iso ? `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}` : "–";
 const formatTime = (iso) => !iso ? "–" : iso.length > 8 ? iso.slice(11, 16) : iso.slice(0, 5);
 const weekdayShort = (iso) => iso ? new Date(iso).toLocaleDateString("de-DE", { weekday: "short" }) : "";
+const MONTH_NAMES = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
 const categoryOf = (keyword) => (keyword || "").charAt(0);
 const errorBox = (message) => `<div class="message message-error">${esc(message)}</div>`;
 
@@ -219,6 +220,7 @@ function renderEvaluation() {
   $("#view-evaluation").innerHTML = kpis + responsePlanCard(plan, previousPlan) + `
     <div class="grid grid-3">${categoriesCard(s)}${levelsCard(s)}${areasCard(s)}</div>
     <div class="grid">${monthsCard(s)}</div>
+    <div class="grid">${historyCard(state.evaluation.history)}</div>
     <div class="grid grid-2">${hoursCard(s)}${weekdaysCard(s)}</div>`;
 }
 
@@ -303,6 +305,48 @@ function monthsCard(s) {
     ["Summe", s.count, ...(withPrevious ? [s.previous_total] : [])]);
   return chartCard({ id: "months", title: "Einsätze je Monat", subtitle: withPrevious ? `im Vergleich zu ${previousYear}` : "",
     chart: columnChart(groups) + chartLegend, table });
+}
+
+/** Verlauf über alle Jahre: Einsätze je Monat und gleitender 12-Monats-Durchschnitt, gewähltes Jahr hinterlegt. */
+function historyCard(history) {
+  const n = history.length;
+  if (!n) return "";
+  const scale = niceScale(Math.max(...history.map((h) => h.count)));
+  const y = (v) => 100 - (v / scale.max) * 100;
+  const path = (key) => history.map((h, i) => h[key] == null ? null : [i + 0.5, y(h[key])])
+    .map((p, i, all) => p ? `${all[i - 1] ? "L" : "M"}${p[0]},${p[1].toFixed(2)}` : "").join("");
+  const gridlines = [];
+  for (let v = 0; v <= scale.max; v += scale.step) {
+    gridlines.push(`<div class="columns-grid" style="bottom:${(v / scale.max) * 100}%"><span>${v}</span></div>`);
+  }
+  const first = history.findIndex((h) => h.year === state.year);
+  const months = history.filter((h) => h.year === state.year).length;
+  const band = first < 0 ? "" : `<div class="history-band" style="left:${(first / n) * 100}%;width:${(months / n) * 100}%"></div>`;
+  const hits = history.map((h) => {
+    const tip = `${h.name} ${h.year}${h.running ? " (laufend)" : ""}: ${plural(h.count, "Einsatz", "Einsätze")}` +
+      (h.average == null ? "" : `\nØ letzte 12 Monate: ${num(h.average)}`);
+    const dot = (v, cls) => v == null ? "" : `<i class="${cls}" style="bottom:${(v / scale.max) * 100}%"></i>`;
+    return `<span class="history-hit" data-tip="${esc(tip)}">${dot(h.count, "dot-count")}${dot(h.average, "dot-average")}</span>`;
+  }).join("");
+  const years = [...new Set(history.map((h) => h.year))];
+  const every = Math.ceil(years.length / 10);
+  const axis = history.map((h, i) => h.month === 1 || i === 0 ? [h.year, i] : null).filter(Boolean)
+    .filter(([year]) => (year - years[0]) % every === 0)
+    .map(([year, i]) => `<span style="left:${(i / n) * 100}%">${year}</span>`).join("");
+  const chart = `<div class="columns history">
+      <div class="columns-plot">${gridlines.join("")}${band}
+        <svg class="history-lines" viewBox="0 0 ${n} 100" preserveAspectRatio="none" aria-hidden="true">
+          <path class="line-count" d="${path("count")}"/><path class="line-average" d="${path("average")}"/>
+        </svg>
+        <div class="history-hits">${hits}</div>
+      </div>
+      <div class="history-axis">${axis}</div>
+    </div>` + legend([["series", "Einsätze im Monat"], ["average", "Ø letzte 12 Monate"], ["band", String(state.year)]]);
+  const table = dataTable(["Jahr", ...MONTH_NAMES, "Summe"], years.map((year) => {
+    const row = MONTH_NAMES.map((_, m) => history.find((h) => h.year === year && h.month === m + 1)?.count ?? "–");
+    return [String(year), ...row, `<b>${row.reduce((sum, c) => sum + (Number(c) || 0), 0)}</b>`];
+  }));
+  return chartCard({ id: "history", title: `Verlauf${helpButton("history")}`, subtitle: `Einsätze je Monat seit ${years[0]}`, chart, table });
 }
 
 function hoursCard(s) {
@@ -391,14 +435,33 @@ function vehicleTable(e) {
     </tbody></table></div>`;
 }
 
-function peopleChips(e, markNew) {
-  const leaderName = (e.unit_leader || "").split(". ").pop();
+// pickLeader: Namen sind Knöpfe, ein Klick trägt die Person als EHF ins Formular ein
+function peopleChips(e, { markNew = false, pickLeader = false } = {}) {
   return e.people.map((p) => {
-    const isLeader = /Einheitsführer/.test(p.role || "") || (!!leaderName && p.name.startsWith(leaderName));
-    const cls = markNew && p.new ? "new" : isLeader ? "leader" : "";
-    const tip = [p.role, p.vehicle, markNew && p.new && "wird als neuer Kamerad angelegt"].filter(Boolean).join(" · ");
-    return `<span class="person ${cls}" ${tip ? `data-tip="${esc(tip)}"` : ""}>${esc(p.name)}${p.vehicle ? `<small>${esc(p.vehicle)}</small>` : ""}</span>`;
+    const isLeader = e.unit_leader ? p.leader : /Einheitsführer/.test(p.role || "");
+    const cls = [markNew && p.new && "new", isLeader && "leader"].filter(Boolean).join(" ");
+    const tip = [p.role, p.vehicle, markNew && p.new && "wird als neuer Kamerad angelegt",
+      pickLeader && `Klicken: als EHF eintragen (${p.leader_name})`].filter(Boolean).join(" · ");
+    const content = `${esc(p.name)}${p.vehicle ? `<small>${esc(p.vehicle)}</small>` : ""}`;
+    const attributes = `class="person ${cls}" ${tip ? `data-tip="${esc(tip)}"` : ""}`;
+    return pickLeader
+      ? `<button type="button" ${attributes} data-leader="${esc(p.leader_name)}">${content}</button>`
+      : `<span ${attributes}>${content}</span>`;
   }).join("") || `<span class="muted">Keine Anwesenheit erfasst</span>`;
+}
+
+/** EHF aus einem angeklickten Namen übernehmen und die Hervorhebung nachziehen. */
+function pickLeader(chip) {
+  const form = chip.closest("[data-form], .preview-card");
+  const input = $('input[name="unit_leader"]', form);
+  input.value = chip.dataset.leader;
+  input.classList.remove("missing");
+  highlightLeader(form);
+}
+
+function highlightLeader(form) {
+  const leader = $('input[name="unit_leader"]', form).value.trim();
+  for (const chip of $$("[data-leader]", form)) chip.classList.toggle("leader", !!leader && chip.dataset.leader === leader);
 }
 
 function warningsList(warnings, emptyText = "") {
@@ -407,10 +470,11 @@ function warningsList(warnings, emptyText = "") {
   return `<ul class="warnings">${items}</ul>`;
 }
 
-function attendancePanel(e, markNew) {
-  const newCount = markNew ? e.people.filter((p) => p.new).length : 0;
+function attendancePanel(e, options = {}) {
+  const newCount = options.markNew ? e.people.filter((p) => p.new).length : 0;
+  const hint = options.pickLeader && e.people.length ? `<p class="small muted">Einen Namen anklicken, um die Person als EHF einzutragen.</p>` : "";
   return `<h4>Anwesenheit · ${e.people.length} Personen${newCount ? ` · ${newCount} neu` : ""}${helpButton("attendance")}</h4>
-    <div class="people">${peopleChips(e, markNew)}</div>`;
+    ${hint}<div class="people">${peopleChips(e, options)}</div>`;
 }
 
 function incidentDetail(e) {
@@ -438,7 +502,7 @@ function incidentDetail(e) {
     </dl>
     ${e.warnings.length ? `<h4 class="section-gap">Prüfhinweise${helpButton("warnings")}</h4>${warningsList(e.warnings)}` : ""}
     </div>
-    <div class="panel full">${attendancePanel(e, false)}</div>
+    <div class="panel full">${attendancePanel(e)}</div>
     <div class="actions panel full bare">
       <button type="button" class="btn btn-outline btn-small" data-action="delete" data-id="${e.id}">Löschen</button>
       <button type="button" class="btn btn-light btn-small" data-action="edit" data-id="${e.id}">Bearbeiten</button>
@@ -452,7 +516,7 @@ const FORM_FIELDS = [
   ["started_at", "Beginn", "datetime-local", "span-2", 'step="1"'],
   ["ended_at", "Ende", "datetime-local", "span-2", 'step="1"'],
   ["station_staff", "Gerätehaus", "number", "", 'min="0"'],
-  ["keyword", "Stichwort", "text", "", 'maxlength="4"'],
+  ["keyword", "Stichwort", "text", "", 'maxlength="6" placeholder="z. B. B2"'],
   ["subcode", "Stufe", "text", "", 'maxlength="2"'],
   ["description", "Einsatz", "text", "span-4", ""],
   ["place", "Ort", "text", "span-3", 'list="place-options"'],
@@ -479,6 +543,7 @@ function readForm(el) {
 function editForm(e) {
   return `<div class="detail-grid" data-form="${e.id}">
     <div class="panel full"><h4>Einsatz ${e.number ?? ""} bearbeiten</h4>${formFields(e)}</div>
+    <div class="panel full">${attendancePanel(e, { pickLeader: true })}</div>
     <div class="actions panel full bare">
       <button type="button" class="btn btn-outline btn-small" data-action="cancel">Abbrechen</button>
       <button type="button" class="btn btn-primary btn-small" data-action="save" data-id="${e.id}">Speichern</button>
@@ -655,7 +720,7 @@ function renderPreviews() {
             <p class="small muted section-gap">Ezeit erstes Fahrzeug: <b>${minutes(r.arrival_min)}</b> · Gesamtstärke ${r.crew_total}</p></div>
           <div class="panel outlined"><h4>Prüfhinweise${helpButton("warnings")}</h4>${warningsList(r.warnings, "Keine Prüfhinweise")}${differencesTable(existing)}</div>
         </div>
-        <div class="panel outlined">${attendancePanel(r, true)}</div>
+        <div class="panel outlined">${attendancePanel(r, { markNew: true, pickLeader: true })}</div>
         <div class="preview-footer">
           ${existing ? `<label class="toggle"><input type="checkbox" data-replace="${i}" ${r.replace ? "checked" : ""}> erfassten Einsatz durch diese PDF ersetzen</label>` : ""}
           <button type="button" class="btn btn-primary" data-accept="${i}" ${existing && !r.replace ? "disabled" : ""}>
@@ -747,6 +812,8 @@ $("#search").addEventListener("input", (e) => { state.query = e.target.value; re
 $("#btn-export").addEventListener("click", () => { location.href = `/api/export?year=${state.year}`; });
 
 $("#incident-table tbody").addEventListener("click", (e) => {
+  const chip = e.target.closest("[data-leader]");
+  if (chip) { pickLeader(chip); return; }
   const action = e.target.closest("[data-action]");
   if (action) { handleIncidentAction(action.dataset.action, Number(action.dataset.id)); return; }
   if (e.target.closest("tr.detail")) return;
@@ -769,6 +836,13 @@ $("#view-members").addEventListener("click", (e) => {
   state.memberSort = { field, descending: state.memberSort.field === field ? !state.memberSort.descending : field !== "name" };
   renderMembers();
 });
+
+// EHF von Hand geändert → Hervorhebung der Namen anpassen
+for (const container of [$("#incident-table tbody"), $("#previews")]) {
+  container.addEventListener("input", (e) => {
+    if (e.target.name === "unit_leader") highlightLeader(e.target.closest("[data-form], .preview-card"));
+  });
+}
 
 // Dialoge
 for (const button of $$("[data-close]")) {
@@ -805,6 +879,8 @@ $("#previews").addEventListener("change", (e) => {
   renderPreviews();
 });
 $("#previews").addEventListener("click", (e) => {
+  const chip = e.target.closest("[data-leader]");
+  if (chip) { pickLeader(chip); return; }
   const button = e.target.closest("[data-accept]");
   if (button) acceptReport(Number(button.dataset.accept));
 });

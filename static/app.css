@@ -134,6 +134,24 @@ button, input, select { font: inherit; color: inherit; }
 .tone-previous { background: var(--previous); }
 .tone-day { background: var(--day); }
 .tone-night { background: var(--night); }
+.tone-average { background: var(--text); }
+.tone-band { background: var(--light-red); }
+
+/* Verlauf: Linien als SVG, Raster/Achse/Hover als HTML wie bei den Säulen */
+.history-band { position: absolute; top: 0; bottom: 0; background: var(--pale-red); border-radius: 4px; }
+.history-lines { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.history-lines path { fill: none; vector-effect: non-scaling-stroke; stroke-linejoin: round; stroke-linecap: round; }
+.line-count { stroke: var(--series); stroke-width: 1.5; }
+.line-average { stroke: var(--text); stroke-width: 2.5; }
+.history-hits { position: absolute; inset: 0; display: flex; }
+.history-hit { flex: 1; position: relative; }
+.history-hit:hover { background: linear-gradient(var(--gray), var(--gray)) center / 1px 100% no-repeat; }
+.history-hit i { display: none; position: absolute; left: 50%; width: 8px; height: 8px; margin: 0 0 -4px -4px; border-radius: 50%; border: 2px solid var(--white); }
+.history-hit:hover i { display: block; }
+.history-hit .dot-count { background: var(--series); }
+.history-hit .dot-average { background: var(--text); }
+.history-axis { position: relative; height: 22px; }
+.history-axis span { position: absolute; top: 6px; font-size: .74rem; color: var(--gray); border-left: 1px solid #CFCFCF; padding-left: 4px; line-height: 1; }
 .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: .8rem; color: var(--gray); margin-top: 12px; }
 .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
 .key-figures { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--light-gray); font-size: .86rem; color: var(--gray); }
@@ -237,6 +255,9 @@ tr.open .chevron { transform: rotate(180deg); color: var(--red); }
 .person { padding: 4px 10px; border-radius: 999px; background: var(--light-gray); font-size: .84rem; }
 .person.leader { background: var(--dark-red); color: var(--white); }
 .person.new { background: var(--white); border: 1.5px dashed var(--red); color: var(--red); }
+.person.new.leader { background: var(--dark-red); border-color: var(--white); color: var(--white); }
+button.person { font: inherit; font-size: .84rem; line-height: inherit; color: var(--text); border: 0; cursor: pointer; }
+button.person:hover:not(.leader) { background: var(--light-red); color: var(--dark-red); }
 .person small { opacity: .75; margin-left: 4px; }
 .actions { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
 

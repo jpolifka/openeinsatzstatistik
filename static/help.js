@@ -30,7 +30,7 @@ const HELP_SECTIONS = [
       keyword: {
         title: "Stichwort",
         short: "Einsatzart + Alarmstufe, z. B. H2 oder B3.",
-        text: "Einsatzstichwort aus Buchstabe und Ziffer. Der Buchstabe ist die Einsatzart: <b>H</b> Hilfeleistung, <b>B</b> Brand, <b>W</b> Wasser, <b>G</b> Gefahrstoff, <b>S</b> Sonderlage. Die Ziffer ist die Alarmstufe (1–4). Aus <i>H2.03</i> wird Stichwort H2, Stufe 03; eine Brandsicherheitswache wird als S1 / 00 geführt.",
+        text: "Einsatzstichwort aus Buchstabe und Ziffer. Der Buchstabe ist die Einsatzart: <b>H</b> Hilfeleistung, <b>B</b> Brand, <b>W</b> Wasser, <b>G</b> Gefahrstoff, <b>S</b> Sonderlage. Die Ziffer ist die Alarmstufe (1–4). Aus <i>H2.03</i> wird Stichwort H2, Stufe 03; eine Brandsicherheitswache wird als S1 / 00 geführt. Wer das ganze Stichwort (<i>S1.00</i>) ins Feld schreibt, bekommt es beim Speichern automatisch in Stichwort und Stufe aufgeteilt.",
       },
       subcode: {
         title: "Stufe",
@@ -50,7 +50,7 @@ const HELP_SECTIONS = [
       unit_leader: {
         title: "EHF",
         short: "Einheitsführer, Schreibweise „V. Nachname“.",
-        text: "Einheitsführer des Einsatzes in der Schreibweise <i>V. Nachname</i>. Übernommen wird die Person mit der Funktion „Einheitsführer“. Fehlt sie im Bericht, wird der Einsatzleiter eingetragen und ein Prüfhinweis erzeugt – ist auch der nicht in der Anwesenheit, bleibt das Feld leer und ist rot markiert.",
+        text: "Einheitsführer des Einsatzes in der Schreibweise <i>V. Nachname</i>. Übernommen wird die Person mit der Funktion „Einheitsführer“. Fehlt sie im Bericht, wird der Einsatzleiter eingetragen und ein Prüfhinweis erzeugt – ist auch der nicht in der Anwesenheit, bleibt das Feld leer und ist rot markiert. Ein Klick auf einen Namen in der Anwesenheit trägt diese Person als EHF ein.",
       },
     },
   },
@@ -116,7 +116,7 @@ const HELP_SECTIONS = [
       attendance: {
         title: "Anwesenheit",
         short: "Alle Personen laut Anwesenheitsliste des Berichts.",
-        text: "Personen aus der Anwesenheitsliste des Berichts, mit Fahrzeug und Funktion. Namen werden mit den bekannten Kameraden abgeglichen; unbekannte Namen sind markiert und werden beim Übernehmen als neue Kameraden angelegt.",
+        text: "Personen aus der Anwesenheitsliste des Berichts, mit Fahrzeug und Funktion. Namen werden mit den bekannten Kameraden abgeglichen; unbekannte Namen sind markiert und werden beim Übernehmen als neue Kameraden angelegt. Beim Bearbeiten und in der PDF-Vorschau trägt ein Klick auf einen Namen die Person als EHF ein; der EHF ist dunkelrot hervorgehoben.",
       },
     },
   },
@@ -124,6 +124,11 @@ const HELP_SECTIONS = [
     title: "Auswertung",
     intro: "Alle Werte beziehen sich auf das oben rechts gewählte Jahr. Jedes Diagramm lässt sich über „Tabelle“ als Zahlentabelle anzeigen.",
     entries: {
+      history: {
+        title: "Verlauf",
+        short: "Einsätze je Monat über alle erfassten Jahre.",
+        text: "Einsätze je Monat über alle erfassten Jahre, das gewählte Jahr ist hinterlegt. Die dunkle Linie ist der gleitende Durchschnitt der letzten 12 Monate (Einsätze je Monat) – sie glättet Ausreißer und zeigt, ob die Einsatzzahlen langfristig steigen oder fallen. Sie beginnt erst, wenn 12 Monate vorliegen.",
+      },
       per_week: {
         title: "Einsätze / Woche",
         short: "Einsätze geteilt durch die Kalenderwochen des Jahres.",
