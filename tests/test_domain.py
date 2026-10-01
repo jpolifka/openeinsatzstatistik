@@ -50,8 +50,9 @@ def test_substitute_label():
 
 
 def test_keyword_catalog_codes_are_valid():
-    codes = [code for code, _ in domain.KEYWORD_CATALOG]
+    codes = [code for code, _, _ in domain.KEYWORD_CATALOG]
     assert len(codes) == len(set(codes))
     assert all(re.fullmatch(r"[BHGWSU][1-4](\.\d\d)?", code) for code in codes)
-    assert dict(domain.KEYWORD_CATALOG)["H2.03"] == "Verkehrsunfall"
+    names = {code: name for code, name, _ in domain.KEYWORD_CATALOG}
+    assert names["H2.03"] == "Verkehrsunfall"
     assert ".".join(domain.FIRE_ALARM_SYSTEM) in codes and ".".join(domain.FIRE_WATCH) in codes

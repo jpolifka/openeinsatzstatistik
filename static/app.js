@@ -870,14 +870,19 @@ function splitKeyword(form) {
 const fold = (s) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/ß/g, "ss");
 const keywordName = (e) => config.keyword_catalog.find((k) => k.code === (e.subcode ? `${e.keyword}.${e.subcode}` : e.keyword))?.name;
 
-/** Katalogeinträge, in denen alle eingegebenen Wörter vorkommen – in Stichwort (mit/ohne Punkt) oder Bezeichnung. */
+/** Katalogeinträge, in denen alle eingegebenen Wörter vorkommen – in Stichwort (mit/ohne Punkt), Bezeichnung
+ *  oder einem Meldebild. Treffer in Stichwort/Bezeichnung zuerst; bei Treffern im Meldebild steht es in hint. */
 function searchKeywords(query) {
   const words = fold(query).split(/\s+/).filter(Boolean);
   if (!words.length) return [];
-  return config.keyword_catalog.filter((k) => {
-    const text = fold(`${k.code} ${k.code.replace(".", "")} ${k.name}`);
-    return words.every((w) => text.includes(w));
-  }).slice(0, 15);
+  const matches = (text) => words.every((w) => fold(text).includes(w));
+  const direct = [], viaTerm = [];
+  for (const k of config.keyword_catalog) {
+    if (matches(`${k.code} ${k.code.replace(".", "")} ${k.name}`)) { direct.push(k); continue; }
+    const term = k.terms.split(", ").find(matches) || (matches(k.terms) && k.terms);
+    if (term) viaTerm.push({ ...k, hint: term });
+  }
+  return [...direct, ...viaTerm].slice(0, 15);
 }
 
 let keywordList = null, keywordInput = null;
@@ -901,7 +906,7 @@ function showKeywordSuggestions(input) {
   input.setAttribute("aria-controls", keywordList.id);
   input.setAttribute("aria-expanded", "true");
   keywordList.innerHTML = matches.map((k, i) => `<li role="option" data-code="${esc(k.code)}" class="${i ? "" : "active"}">
-    <b>${esc(k.code)}</b><span>${esc(k.name)}</span></li>`).join("");
+    <b>${esc(k.code)}</b><span>${esc(k.name)}${k.hint ? `<small>${esc(k.hint)}</small>` : ""}</span></li>`).join("");
   const r = input.getBoundingClientRect();
   Object.assign(keywordList.style, { left: `${Math.min(r.left, window.innerWidth - 340)}px`, top: `${r.bottom + 4}px` });
   keywordList.hidden = false;
