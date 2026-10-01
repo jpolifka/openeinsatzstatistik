@@ -41,6 +41,11 @@ def _field(text, label):
     return m.group(1).strip() if m else ""
 
 
+def _page_one_field(left, right, label):
+    """Feld der Einsatzstelle: neuere Berichte führen es links, ältere (2025) rechts."""
+    return _field(left, label) or _field(right, label)
+
+
 def _timestamp(text):
     return dt.datetime.strptime(text, "%d.%m.%y %H:%M:%S") if text not in ("-", "Ja", "Nein") else None
 
@@ -101,11 +106,11 @@ def parse_report(full, left, right, filename):
 
     keyword_text = _field(left, "Einsatzstichwort") or _field(full, "Einsatzstichwort")
     report["keyword"], report["subcode"] = _parse_keyword(keyword_text, report)
-    report["reported_as"] = _field(left, "Meldebild")
-    report["town"] = _field(left, "Einsatzstelle - Ort")
-    report["district"] = re.sub(r"\s*\(.*\)\s*$", "", _field(left, "Einsatzstelle - Ortsteil"))
-    report["street"] = _field(left, "Einsatzstelle - Straße")
-    report["building"] = _field(left, "Einsatzstelle - Objekt") or _field(right, "Einsatzstelle - Objekt")
+    report["reported_as"] = _page_one_field(left, right, "Meldebild")
+    report["town"] = _page_one_field(left, right, "Einsatzstelle - Ort")
+    report["district"] = re.sub(r"\s*\(.*\)\s*$", "", _page_one_field(left, right, "Einsatzstelle - Ortsteil"))
+    report["street"] = _page_one_field(left, right, "Einsatzstelle - Straße")
+    report["building"] = _page_one_field(left, right, "Einsatzstelle - Objekt")
     report["incident_commander"] = _field(full, "Einsatzleiter")
     m = re.search(r"Zeitpunkt der Alarmierung der ersten Einheit:\s*(\d\d\.\d\d\.\d{4} \d\d:\d\d)", full)
     report["first_alarm"] = dt.datetime.strptime(m.group(1), "%d.%m.%Y %H:%M") if m else None

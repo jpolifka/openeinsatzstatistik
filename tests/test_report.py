@@ -102,3 +102,13 @@ def test_save_and_differences(con):
 
     changed = {**incident, "unit_leader": "E. Beispiel"}
     assert report.differences(existing, changed) == [{"field": "EHF", "stored": "M. Muster", "report": "E. Beispiel"}]
+
+
+def test_older_layout_with_incident_site_in_right_column():
+    """Berichte von 2025: Meldebild und Einsatzstelle stehen in der rechten Spalte von Seite 1."""
+    site = LEFT.split("Meldebild")[1]
+    left = LEFT.split("Meldebild")[0]
+    r = read(left=left, right="Meldebild" + site)
+    assert r["reported_as"] == "Zimmerbrand"
+    assert r["place"] == "Rheinbrohl"
+    assert r["description"] == "Zimmerbrand / Musterhaus"
