@@ -111,7 +111,7 @@ const HELP_SECTIONS = [
       warnings: {
         title: "Prüfhinweise",
         short: "Auffälligkeiten beim Einlesen – bitte kontrollieren.",
-        text: "Automatisch erzeugte Hinweise, z. B. fehlender Einheitsführer, nicht ermittelbarer Beginn/Ende oder Fahrzeuge, die keinem Block der Einsatzübersicht zugeordnet sind. Hinweise verhindern das Übernehmen nicht.",
+        text: "Automatisch erzeugte Hinweise, z. B. fehlender Einheitsführer, nicht ermittelbarer Beginn/Ende oder Fahrzeuge, die keinem Block der Einsatzübersicht zugeordnet sind. Berichte ohne Prüfhinweise, ohne neue Personen und ohne Abweichungen werden beim Einlesen direkt übernommen; nur die übrigen erscheinen zur Kontrolle. Hinweise verhindern das Übernehmen nicht.",
       },
       attendance: {
         title: "Anwesenheit",

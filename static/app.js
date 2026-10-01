@@ -572,12 +572,51 @@ async function readPdfs(files) {
     const data = await api("/api/reports", { method: "POST", body: form });
     state.upload = { token: data.token, reports: data.reports.map((r) => ({ ...r, replace: false, saved: null })), errors: data.errors };
     if (data.errors.length) showUploadError(data.errors.map((e) => `${esc(e.file)}: ${esc(e.message)}`).join("<br>"));
+    await acceptCleanReports();
     renderPreviews();
   } catch (e) {
     showUploadError(esc(e.message));
   } finally {
     $("#progress").hidden = true;
   }
+}
+
+// Zu prüfen sind Berichte mit Prüfhinweisen, neuen Personen oder Abweichungen zu einem erfassten Einsatz
+function reviewReasons(r) {
+  const reasons = [];
+  if (r.warnings.length) reasons.push(plural(r.warnings.length, "Prüfhinweis", "Prüfhinweise"));
+  const newPeople = r.people.filter((p) => p.new).length;
+  if (newPeople) reasons.push(plural(newPeople, "neue Person", "neue Personen"));
+  if (r.existing?.differences.length) reasons.push(plural(r.existing.differences.length, "Abweichung", "Abweichungen"));
+  if (r.error) reasons.push(r.error);
+  return reasons;
+}
+
+// Unveränderter, schon erfasster Einsatz: nichts zu tun
+const isUnchanged = (r) => r.existing && !r.existing.differences.length && !reviewReasons(r).length;
+
+async function acceptCleanReports() {
+  // Nacheinander, damit doppelte Einsatznummern in einem Upload als Fehler beim zweiten Bericht auffallen
+  for (const r of state.upload.reports) {
+    if (r.existing || reviewReasons(r).length) continue;
+    try {
+      r.saved = await apiJson("/api/reports/accept", "POST", { token: state.upload.token, filename: r.filename, fields: {} });
+      r.auto = true;
+      state.dataChanged = true;
+    } catch (err) {
+      r.error = err.message;
+    }
+  }
+}
+
+function uploadSummary(reports) {
+  const auto = reports.filter((r) => r.auto).length, unchanged = reports.filter(isUnchanged).length;
+  const open = reports.filter((r) => !r.saved && !isUnchanged(r)).length;
+  const parts = [];
+  if (auto) parts.push(`${plural(auto, "Einsatz", "Einsätze")} ohne Anmerkungen übernommen`);
+  if (unchanged) parts.push(`${plural(unchanged, "Einsatz", "Einsätze")} bereits unverändert erfasst`);
+  if (open) parts.push(`${plural(open, "Bericht", "Berichte")} zu prüfen`);
+  return parts.length ? `<div class="message message-info">${parts.join(" · ")}</div>` : "";
 }
 
 function previewStatus(r) {
@@ -590,7 +629,8 @@ function previewStatus(r) {
     const diffs = existing.differences.length ? plural(existing.differences.length, "Abweichung", "Abweichungen") : "keine Abweichungen";
     return status("existing", r.number ?? "?", `Einsatz ${r.number}/${r.year} ist bereits erfasst`, `${origin} · ${diffs}`);
   }
-  return status("", r.number ?? "?", `Neuer Einsatz ${r.number ?? ""}${r.number ? "/" + r.year : ""}`, esc(r.filename));
+  return status("", r.number ?? "?", `Neuer Einsatz ${r.number ?? ""}${r.number ? "/" + r.year : ""}`,
+    [esc(r.filename), ...reviewReasons(r).map(esc)].join(" · "));
 }
 
 function differencesTable(existing) {
@@ -603,7 +643,8 @@ function differencesTable(existing) {
 function renderPreviews() {
   const reports = state.upload.reports;
   $("#dropzone").classList.toggle("compact", reports.length > 0);
-  $("#previews").innerHTML = reports.map((r, i) => {
+  $("#previews").innerHTML = uploadSummary(reports) + reports.map((r, i) => {
+    if (r.auto || isUnchanged(r)) return "";
     const existing = r.existing;
     return `<div class="preview-card" data-index="${i}">
       ${previewStatus(r)}
@@ -738,7 +779,7 @@ const pdfDialog = $("#pdf-dialog");
 $("#btn-pdf").addEventListener("click", async () => {
   if (!state.incidents) { try { await loadIncidents(); } catch (e) { /* nur für Vorschläge */ } }
   updateDatalists();
-  if (state.upload.reports.every((r) => r.saved)) {
+  if (state.upload.reports.every((r) => r.saved || isUnchanged(r))) {
     state.upload = { token: null, reports: [], errors: [] };
     $("#pdf-error").hidden = true;
     renderPreviews();
