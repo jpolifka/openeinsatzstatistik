@@ -121,15 +121,16 @@ Excel-Export sind für sie gesperrt. Geprüft wird im Backend, die Oberfläche b
 
 **Gesamtansicht einer VG** (Wehrleiter, Statistik VG, Superadmin; oben „Alle Wehren · …“):
 - Auswertung über alle Wehren der VG, auf einzelne Wehren filterbar. Ein Einsatz mehrerer Wehren
-  zählt bei jeder Wehr (Beteiligungen); die große Zahl zählt ihn über die Einsatznummer der
-  Leitstelle nur einmal. Der Bedarfsplan wertet jede Wehr mit ihren eigenen Orten aus.
+  zählt bei jeder Wehr (Beteiligungen); die große Zahl zählt ihn über den Stammdatensatz im
+  BKS-Portal bzw. die Einsatznummer der Leitstelle nur einmal. Der Bedarfsplan wertet jede Wehr
+  mit ihren eigenen Orten aus.
 - Einsatzliste aller Wehren mit Markierung der Wehr; Kameraden gibt es nur je Wehr.
 - Excel-Export als eine Mappe mit Übersicht und je Wehr Einsatzübersicht und Anwesenheit.
   „Kennzahlen (Excel)“ enthält nur die Zahlen je Wehr, ohne Namen.
 - „Drucken / PDF“ öffnet die Druckansicht der Auswertung (im Druckdialog als PDF sichern).
-- PDF einlesen verteilt die Berichte auf die passende Wehr (über die berichtende Einheit,
-  ersatzweise die eigenen Fahrzeuge im Bericht). Haben andere Wehren denselben Einsatz schon
-  erfasst, zeigt die Vorschau „gemeinsamer Einsatz mit …“.
+- PDF einlesen verteilt die Berichte auf die passende Wehr (über die berichtende Einheit; die
+  eigenen Fahrzeuge im Bericht nur bei Wehren ohne BKS-Kennung). Haben andere Wehren denselben
+  Einsatz schon erfasst, zeigt die Vorschau „gemeinsamer Einsatz mit …“.
 
 **Verwaltung** (Reiter „Verwaltung“ für Wehrführer, Wehrleiter und Superadmin):
 - *Wehr*: Name, Farben (Farbwähler, Hex oder RGB, mit Vorschau und Kontrastprüfung), Logos.
@@ -210,8 +211,16 @@ Die Vorlage ist ein Muster und keine Rechtsberatung.
    Prüfhinweise, keine neuen Personen, keine Abweichungen) werden direkt übernommen, angezeigt
    werden nur die übrigen.
 2. Felder wie EHF oder Zeiten bei Bedarf korrigieren, dann **In Statistik übernehmen**.
-3. Ist die Einsatznummer schon erfasst, werden die Abweichungen angezeigt; mit
-   „erfassten Einsatz durch diese PDF ersetzen“ lässt sich der Einsatz aktualisieren.
+3. Ist der Bericht schon erfasst (gleiche Berichtsnummer im BKS-Portal, bei älteren Einsätzen
+   gleiche Nr. und Jahr), werden die Abweichungen angezeigt; **Aktualisieren** übernimmt den
+   neuen Stand. Der Einsatz behält seine ID, manuell ergänzte Fahrzeuge und Personen bleiben.
+
+**Mehrfachberichte:** Ein Einsatz hat im BKS-Portal einen *Stammdatensatz* (Verbandsgemeinde, alle
+Fahrzeuge mit den Zeiten der Leitstelle, keine Personen) und je beteiligter Einheit einen Haupt-
+bzw. Nebenbericht, der auf ihn verweist. Beim Einlesen wird der Stammdatensatz zentral bei der VG
+gespeichert, jeder Bericht kommt zu seiner Wehr. Berichte von Einheiten ohne Wehr in der Auswahl
+(z. B. die FEZ) werden mit Hinweis übersprungen. Haupt- und Nebenberichte haben einen Link ins
+BKS-Portal.
 
 Was die einzelnen Felder und Kennzahlen bedeuten, erklärt die Online-Hilfe in der App.
 
@@ -247,6 +256,7 @@ app/
   legacy.py        Übernahme der bisherigen Einzel-Installation (FF Rheinbrohl)
   pdf_report.py    Einsatzbericht-PDF lesen
   report.py        Felder ableiten, Prüfhinweise, Bericht -> Einsatz
+  records.py       Stammdatensätze des BKS-Portals und Verzeichnis der Berichte je VG
   metrics.py       Formeln der Einsatzübersicht (Kennzahlen, Statistik, Bedarfsplan, Anwesenheit)
   store.py         Datenbankzugriff, Namensabgleich Kameraden
   db.py            SQLite-Verbindungen und Migrationen (zentral und je Wehr)
@@ -280,6 +290,8 @@ Bewusste Unterschiede zu den Formeln der Excel-Datei:
   vier Zeitfenster).
 - Tag/Nacht folgt überall der Excel-Regel (Spalte D): Ein Einsatzbeginn um genau 06:00:00
   oder 18:00:00 zählt zur Nacht, auch beim Anteil „tagsüber“.
+- Die Zeitgrenze des Bedarfsplans ist 10 Minuten; die frühere Auswahl 8 Minuten entfällt
+  (Spalten „10 Min. erreicht“ und „Stärke nach 10 Min.“ im Export).
 
 ## Lizenz
 

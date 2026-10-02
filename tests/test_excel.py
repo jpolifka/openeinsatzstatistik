@@ -17,7 +17,7 @@ def test_layout_matches_einsatzuebersicht():
     assert (column["station_staff"], column["crew_total"], column["turnout"]) == ("AL", "AM", "AO")
     assert (column["crew_plan_total"], column["weekend_or_holiday"]) == ("AU", "AV")
     assert len(layout.headers) == 48
-    assert "8 Min. erreicht" in layout.headers
+    assert "10 Min. erreicht" in layout.headers
 
 
 def test_layout_grows_with_fleet():
@@ -31,7 +31,7 @@ def test_formulas_reference_layout():
     assert f["crew_total"] == "=SUM(M4,R4,W4,AB4,AG4,AL4)"
     assert f["crew_plan_total"] == "=M4+R4+W4+AB4"
     assert f["02/45.arrival"] == '=IFERROR((MOD((P4-E4),1))*24*60,"")'
-    assert f["on_time"] == "=IF(AP4<=8.0001,1,0)"
+    assert f["on_time"] == "=IF(AP4<=10.0001,1,0)"
 
 
 def test_export_writes_overview_and_attendance(con, tmp_path):

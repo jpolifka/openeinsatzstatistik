@@ -94,6 +94,21 @@ def _add_tenant_tables(con):
     con.execute("CREATE INDEX incident_dispatch_number ON incident(dispatch_number) WHERE dispatch_number IS NOT NULL")
 
 
+def _add_bks_ids(con):
+    """Datensätze des BKS-Portals (eigener Bericht und Stammdatensatz des Einsatzes), Alarmierung und
+    Einsatzende je Fahrzeug, manuell ergänzte Fahrzeuge/Personen; Zeitgrenze 8 Min. entfällt."""
+    con.execute("ALTER TABLE incident ADD COLUMN bks_report_id TEXT")
+    con.execute("ALTER TABLE incident ADD COLUMN bks_record_id TEXT")
+    con.execute("CREATE UNIQUE INDEX incident_bks_report ON incident(bks_report_id) WHERE bks_report_id IS NOT NULL")
+    con.execute("CREATE INDEX incident_bks_record ON incident(bks_record_id) WHERE bks_record_id IS NOT NULL")
+    con.execute("ALTER TABLE vehicle ADD COLUMN alerted TEXT")
+    con.execute("ALTER TABLE vehicle ADD COLUMN finished TEXT")
+    con.execute("ALTER TABLE vehicle ADD COLUMN manual INTEGER NOT NULL DEFAULT 0")
+    con.execute("ALTER TABLE attendance ADD COLUMN manual INTEGER NOT NULL DEFAULT 0")
+    con.execute("UPDATE setting SET value = '[10]' WHERE key = 'response_limits'")
+    con.execute("UPDATE setting SET value = '10' WHERE key = 'default_limit'")
+
+
 def _create_central_schema(con):
     con.execute("CREATE TABLE vg (id INTEGER PRIMARY KEY, slug TEXT NOT NULL UNIQUE, name TEXT NOT NULL, "
                 "created TEXT NOT NULL DEFAULT (datetime('now', 'localtime')))")
@@ -127,9 +142,22 @@ def _add_dpa(con):
                     (vg_id, "Status: nicht erforderlich (Eigenbetrieb)", "Bestand der früheren Einzel-Installation"))
 
 
+def _add_records(con):
+    """Stammdatensätze des BKS-Portals je VG und Verzeichnis der eingelesenen Berichte – ohne Personen."""
+    con.execute("CREATE TABLE master_record (bks_record_id TEXT PRIMARY KEY, "
+                "vg_id INTEGER NOT NULL REFERENCES vg(id) ON DELETE CASCADE, dispatch_number TEXT, first_alarm TEXT, "
+                "keyword TEXT, subcode TEXT, reported_as TEXT, town TEXT, district TEXT, street TEXT, "
+                "vehicles TEXT NOT NULL DEFAULT '[]', filename TEXT, imported_by TEXT, "
+                "imported TEXT NOT NULL DEFAULT (datetime('now', 'localtime')))")
+    con.execute("CREATE TABLE record_report (bks_report_id TEXT PRIMARY KEY, bks_record_id TEXT, "
+                "tenant_id INTEGER NOT NULL REFERENCES tenant(id) ON DELETE CASCADE, unit TEXT, kind TEXT, "
+                "number_text TEXT, imported_by TEXT, imported TEXT NOT NULL DEFAULT (datetime('now', 'localtime')))")
+    con.execute("CREATE INDEX record_report_record ON record_report(bks_record_id)")
+
+
 # Neue Schemaänderungen nur hinten anfügen; PRAGMA user_version zählt die erledigten Schritte.
-TENANT_MIGRATIONS = [_create_legacy_schema, _rename_to_english, _add_tenant_tables]
-CENTRAL_MIGRATIONS = [_create_central_schema, _add_dpa]
+TENANT_MIGRATIONS = [_create_legacy_schema, _rename_to_english, _add_tenant_tables, _add_bks_ids]
+CENTRAL_MIGRATIONS = [_create_central_schema, _add_dpa, _add_records]
 
 
 def migrate(con, steps=TENANT_MIGRATIONS):

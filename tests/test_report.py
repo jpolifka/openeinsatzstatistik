@@ -80,6 +80,8 @@ def test_number_from_other_spelling_or_filename():
     assert any("aus Dateiname" in w for w in r["warnings"])
     r = read(filename="18-25_B2_Test.pdf")
     assert any("weicht vom Dateinamen" in w for w in r["warnings"])
+    r = read(FULL.replace("17/25", "B17/2025"), LEFT.replace("17/25", "B17/2025"))
+    assert r["number"] == 17 and r["warnings"] == []
 
 
 def test_substitute_vehicle_takes_block():

@@ -9,6 +9,9 @@ TenantConfig (tenant_config.py). Die Oberfläche bekommt beides über /api/confi
 # Feuerwehreinsatzzentrale (FEZ) im BKS-Bericht – Standard für neue Wehren
 CONTROL_CENTER = "FL NR#.LIN"
 
+# Bericht im BKS-Portal RLP; {} = Nummer des Haupt- bzw. Nebenberichts (bks_report_id)
+BKS_REPORT_URL = "https://bks-portal.rlp.de/bkslist/continue/einsatzbericht/{}"
+
 # Einsatzarten: erster Buchstabe des Stichworts
 CATEGORIES = (("H", "Hilfeleistung"), ("B", "Brand"), ("W", "Wasser"), ("G", "Gefahrstoff"), ("S", "Sonderlage"))
 ALARM_LEVELS = (1, 2, 3, 4)               # Ziffer im Stichwort
@@ -196,8 +199,8 @@ OTHER_AREA = "sonstige"
 
 # Standardwerte für neue Wehren
 PLAN_MIN_LEVEL = 2                        # Bedarfsplan ab Alarmstufe 2
-RESPONSE_LIMITS = (8, 10)                 # Zeitgrenzen des Bedarfsplans in Minuten
-DEFAULT_LIMIT = 8
+RESPONSE_LIMITS = (10,)                   # Zeitgrenzen des Bedarfsplans in Minuten
+DEFAULT_LIMIT = 10
 SECOND_LIMIT = 15                         # Stärke nach 15 Minuten
 DAY_START_HOUR, DAY_END_HOUR = 6, 18      # Tag = Einsatzbeginn zwischen 06:00 und 18:00 Uhr (Excel-Spalte D)
 

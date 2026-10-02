@@ -91,3 +91,12 @@ def test_monthly_history_fills_gaps_and_averages():
     current = metrics.monthly_history({"2026-01": 1, "2026-03": 1}, today=dt.date(2026, 3, 5))
     assert len(current) == 3 and current[-1]["running"]                 # … außer der laufende hat schon Einsätze
     assert metrics.monthly_history({}) == []
+
+
+def test_unique_incidents_over_record_and_dispatch_number():
+    incidents = [make_incident(bks_record_id="1", dispatch_number="A"),
+                 make_incident(bks_record_id="1"),                       # selbst angelegt: ohne Leitstellen-Nr.
+                 make_incident(dispatch_number="A"),                     # Altdaten: nur Leitstellen-Nr.
+                 make_incident(bks_record_id="2"),
+                 make_incident(), make_incident()]
+    assert metrics.unique_incidents(incidents) == (4, 2)

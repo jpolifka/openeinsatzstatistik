@@ -96,18 +96,17 @@ def test_reports_are_matched_to_the_reporting_tenant():
     candidates = [("wehr-a1", CFG), ("wehr-a2", OTHER)]
     texts = (FULL, LEFT, "")
     # Ohne Kopfzeile der Einheit: die meisten eigenen Fahrzeuge (zwei 02/.. gegen ein 01/..)
-    assert report.match_tenant(texts, "17-25.pdf", candidates) == "wehr-a1"
+    assert report.match_tenant(texts, "17-25.pdf", candidates) == ("wehr-a1", "vehicles")
     header = "FW NR#.BHÖ 01 Bad Hönningen Alarmierung: 12.03.2025 10:05:00 Einsatznummer: 1\n"
-    assert report.match_tenant((header + FULL, LEFT, ""), "17-25.pdf", candidates) == "wehr-a2"
+    assert report.match_tenant((header + FULL, LEFT, ""), "17-25.pdf", candidates) == ("wehr-a2", "unit")
     foreign = dataclasses.replace(CFG, unit_prefix="FL NR#.XYZ ", own_prefix="05/", unit_marker="FW NR#.XYZ 05")
-    assert report.match_tenant(texts, "17-25.pdf", [("fremd", foreign)]) is None
-
-
-def test_report_of_other_unit_gets_warning():
-    header = "FW NR#.BHÖ 01 Bad Hönningen Alarmierung: 12.03.2025 10:05:00 Einsatznummer: 1\n"
-    r = report.read_text((header + FULL, LEFT, ""), "17-25.pdf", CFG)
-    assert any("Bad Hönningen" in w and "Feuerwehr Rheinbrohl" in w for w in r["warnings"])
-    assert not any("Einheit" in w for w in report.read_text((FULL, LEFT, ""), "17-25.pdf", CFG)["warnings"])
+    assert report.match_tenant(texts, "17-25.pdf", [("fremd", foreign)]) == (None, None)
+    # Bericht der FEZ mit mitalarmierten Fahrzeugen: keine Zuordnung über die Fahrzeuge
+    fez = "Feuerwehrhaus: FW NR#.BHÖ 00 FEZ VG\n"
+    assert report.match_tenant((fez + FULL, LEFT, ""), "17-25.pdf", candidates) == (None, None)
+    # Wehr ohne BKS-Kennung: weiterhin über ihre Fahrzeuge
+    unmarked = dataclasses.replace(CFG, unit_marker="")
+    assert report.match_tenant((fez + FULL, LEFT, ""), "17-25.pdf", [("ohne", unmarked)]) == ("ohne", "vehicles")
 
 
 def test_upload_in_vg_view_distributes_reports(vg, monkeypatch):
@@ -120,7 +119,61 @@ def test_upload_in_vg_view_distributes_reports(vg, monkeypatch):
     assert [(r["filename"], r["tenant"], r["tenant_name"]) for r in data["reports"]] == \
         [("a1.pdf", "wehr-a1", "Wehr wehr-a1"), ("a2.pdf", "wehr-a2", "Wehr wehr-a2")]
     assert [e["file"] for e in data["errors"]] == ["fremd.pdf"]
+    assert any("über die Fahrzeuge im Bericht zugeordnet" in w for w in data["reports"][0]["warnings"])
     # A1 hat den Einsatz der Leitstelle schon; B1 (andere VG) ist für den Wehrleiter nicht sichtbar
     assert data["reports"][1]["shared_with"] == ["Wehr wehr-a1"]
     saved = vg.post("/api/reports/accept", json={"token": data["token"], "filename": "a2.pdf", "fields": {}}).json()
     assert saved["id"].startswith("wehr-a2:") and saved["dispatch_number"] == "1250000001"
+
+
+# Mehrfachbericht im Aufbau des BKS-Portals: Stammdatensatz und je Einheit ein Bericht
+MASTER = "EINSATZBERICHT\nStammdatensatz 9000001\nEinsatznummer Leitstelle: 1250000009\n"
+
+
+def _bks(kind, report_id, unit):
+    return f"EINSATZBERICHT\n{kind} {report_id}\nDatensatz: 9000001\nFeuerwehrhaus: {unit}\n"
+
+
+def test_multi_report_is_distributed_and_updates_on_reimport(vg, monkeypatch):
+    from app import main, records
+    texts = {"stamm.pdf": (MASTER + FULL.split("Anwesenheitsliste")[0], LEFT, ""),
+             "a2.pdf": (_bks("Hauptbericht", "9000002", "FW NR#.BHÖ 01 Musterstadt") + FULL, LEFT, ""),
+             "a1.pdf": (_bks("Nebenbericht", "9000003", "FW NR#.BHÖ 02 Musterdorf") + FULL, LEFT, ""),
+             "fez.pdf": (_bks("Nebenbericht", "9000004", "FW NR#.BHÖ 00 FEZ VG") + FULL, LEFT, "")}
+    monkeypatch.setattr(main.pdf_report, "extract_text", lambda path: texts[path.rsplit("/", 1)[-1]])
+    files = [("pdfs", (name, b"x", "application/pdf")) for name in texts]
+    data = vg.post("/api/reports", files=files).json()
+    assert [(r["filename"], r["tenant"]) for r in data["reports"]] == [("a2.pdf", "wehr-a2"), ("a1.pdf", "wehr-a1")]
+    assert data["errors"] == []
+    assert [n["file"] for n in data["notes"]] == ["stamm.pdf", "fez.pdf"]
+    assert "FEZ VG" in data["notes"][1]["message"]
+    a1 = data["reports"][1]
+    assert (a1["bks_report_id"], a1["bks_record_id"]) == ("9000003", "9000001")
+    assert a1["bks_url"].endswith("/einsatzbericht/9000003")
+    assert not any("Fahrzeuge im Bericht" in w for w in a1["warnings"])
+    with tenancy.central() as con:
+        master = records.load_master(con, "9000001")
+    assert master["dispatch_number"] == "1250000009" and len(master["vehicles"]) == 4
+
+    saved = vg.post("/api/reports/accept", json={"token": data["token"], "filename": "a1.pdf", "fields": {}}).json()
+    with tenancy.central() as con:
+        assert [(r["slug"], r["kind"]) for r in records.reports_of(con, "9000001")] == [("wehr-a1", "secondary")]
+
+    # Erneut eingelesen, mit geänderter Nummer: über den BKS-Bericht gefunden und aktualisiert
+    texts["a1.pdf"] = (texts["a1.pdf"][0].replace("17/25", "18/25"), LEFT.replace("17/25", "18/25"), "")
+    data = vg.post("/api/reports", files=[("pdfs", ("a1.pdf", b"x", "application/pdf"))]).json()
+    assert data["reports"][0]["existing"]["id"] == saved["id"]
+    body = {"token": data["token"], "filename": "a1.pdf", "fields": {}, "replace": True}
+    updated = vg.post("/api/reports/accept", json=body).json()
+    assert updated["id"] == saved["id"] and updated["number"] == 18
+
+
+def test_single_tenant_skips_report_of_other_unit(make_client, monkeypatch):
+    from app import main
+    make_tenant("wehr-a1")
+    client = make_client()
+    texts = {"fez.pdf": (_bks("Nebenbericht", "9000004", "FW NR#.BHÖ 00 FEZ VG") + FULL, LEFT, "")}
+    monkeypatch.setattr(main.pdf_report, "extract_text", lambda path: texts[path.rsplit("/", 1)[-1]])
+    data = client.post("/api/reports", files=[("pdfs", ("fez.pdf", b"x", "application/pdf"))]).json()
+    assert data["reports"] == [] and data["errors"] == []
+    assert "gehört nicht zu Wehr wehr-a1" in data["notes"][0]["message"]

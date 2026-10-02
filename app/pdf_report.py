@@ -18,8 +18,15 @@ VEHICLE_ROW = re.compile(r"^(FL NR#\.\w+(?: \d\d/\d\d-\d\d)?|WW [\d/-]+|KO [\d/-
                          r"(\d+) / (\d+) / (\d+) / (\d+) / (\d+)\s+(.*)$")
 VEHICLE_VALUES = re.compile(TIMESTAMP + r"\d?|(?<!\S)(-)(?!\S)|\b(Ja|Nein)\b")
 DISPATCH_NUMBER = re.compile(r"Einsatznummer Leitstelle:\s*(\d+)")
-# Kopfzeile mit der berichtenden Einheit, z. B. "FW NR#.ABC 02 Musterstadt Alarmierung: …"
+# Kopfzeile mit der berichtenden Einheit, z. B. "FW NR#.ABC 02 Musterstadt Alarmierung: …";
+# neuere Berichte nennen sie außerdem als "Feuerwehrhaus: FW NR#.ABC 02 Musterstadt"
 UNIT = re.compile(r"^(FW NR#\.\S+ \d\d) (.*?) Alarmierung:", re.M)
+STATION = re.compile(r"^Feuerwehrhaus:\s*(FW NR#\.\S+ \d\d)\s*(.*?)(?:\s+Meldebild:.*)?$", re.M)
+# Datensätze im BKS-Portal: der Stammdatensatz eines Einsatzes (VG, ohne Einheit) und je Einheit ein
+# Haupt- bzw. Nebenbericht, der mit "Datensatz: <ID>" auf den Stammdatensatz verweist
+REPORT_KIND = re.compile(r"^(Stammdatensatz|Hauptbericht|Nebenbericht) (\d+)", re.M)
+RECORD = re.compile(r"^Datensatz:\s*(\d+)", re.M)
+KINDS = {"Stammdatensatz": "master", "Hauptbericht": "main", "Nebenbericht": "secondary"}
 PERSON_ROW = re.compile(r"^(\S+) (\S+)(.*?)\s(nein|ja|AGT)\s(\d+)\s*(.*)$")
 PERSON_VEHICLE = re.compile(r"FL NR#\.\w+ (\d\d/\d\d)-\d\d")
 PERSON_NOISE = re.compile(r"FL NR#\.\S+ \S+|\d\d\.\d\d\.\d\d \d\d:\d\d")
@@ -112,13 +119,19 @@ def parse_report(full, left, right, filename, unit_prefix):
     """
     report = {"filename": filename, "warnings": []}
     number_text = _field(full, "Einsatzbericht-Nr.")
-    m = re.match(r"(\d+)\s*/\s*(\d+)", number_text)
+    # "34/26", auch mit Kürzel davor wie "B67/2026" oder "FEZ 36/2026"
+    m = re.match(r"[A-Za-zÄÖÜäöü]*\s*(\d+)\s*/\s*(\d+)", number_text)
     report["number"] = int(m.group(1)) if m else None
     report["number_text"] = number_text
     m = DISPATCH_NUMBER.search(full)
     report["dispatch_number"] = m.group(1) if m else None
-    m = UNIT.search(full)
+    m = UNIT.search(full) or STATION.search(full)
     report["unit"], report["unit_name"] = (m.group(1), m.group(2).strip()) if m else (None, None)
+    m = REPORT_KIND.search(full)
+    report["report_kind"], report["bks_report_id"] = (KINDS[m.group(1)], m.group(2)) if m else (None, None)
+    m = RECORD.search(full)
+    report["bks_record_id"] = m.group(1) if m else \
+        report["bks_report_id"] if report["report_kind"] == "master" else None
 
     keyword_text = _field(left, "Einsatzstichwort") or _field(full, "Einsatzstichwort")
     report["keyword"], report["subcode"] = _parse_keyword(keyword_text, report)

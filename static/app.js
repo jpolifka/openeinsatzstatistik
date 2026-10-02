@@ -9,7 +9,7 @@ const state = {
   category: "all", query: "", expanded: new Set(), editing: null,
   tableCards: new Set(),                      // Diagramme, die gerade als Tabelle angezeigt werden
   memberSort: { field: "incidents", descending: true },
-  upload: { token: null, reports: [], errors: [] }, dataChanged: false,
+  upload: { token: null, reports: [], errors: [], notes: [] }, dataChanged: false,
   tenantFilter: new Set(),                    // Gesamtansicht: ausgewählte Wehren (leer = alle)
 };
 
@@ -242,7 +242,7 @@ function renderEvaluation() {
   const vg = state.evaluation.tenants;
   const kpis = `<div class="kpis">
     ${vg ? kpi(`Einsätze ${state.year}${helpButton("participations")}`, vg.unique,
-      esc(`${vg.participations} Beteiligungen der Wehren${vg.without_dispatch_number ? ` · ${vg.without_dispatch_number} ohne Leitstellen-Nr.` : ""}`), true)
+      esc(`${vg.participations} Beteiligungen der Wehren${vg.without_dispatch_number ? ` · ${vg.without_dispatch_number} ohne BKS-Stammdatensatz und Leitstellen-Nr.` : ""}`), true)
       : kpi(`Einsätze ${state.year}`, s.count, esc(comparison), true)}
     ${kpi(`Einsätze / Woche${helpButton("per_week")}`, num(s.per_week, 2), currentYear ? "bis zur aktuellen KW" : "im ganzen Jahr")}
     ${kpi(`Ø Einsatzdauer${helpButton("duration")}`, formatDuration(s.duration_avg_min), "Alarm bis Einsatzende")}
@@ -307,9 +307,10 @@ function responsePlanCard(plan, previousPlan) {
     percent(w.rate), num(w.crew_on_arrival), num(w.crew_within_limit), num(w.crew_within_second), num(w.crew_total)]);
   const table = dataTable(["Zeitfenster", "Einsätze", "Ø Azeit (min)", "Ø Ezeit (min)", `≤ ${limit} Min.`, `> ${limit} Min.`,
     "Erreichungsgrad", "Stärke Eintreffen", `Stärke nach ${limit} Min.`, `Stärke nach ${second} Min.`, "Gesamtstärke"], rows);
-  const limitSwitch = `<div class="segments" role="group" aria-label="Zeitgrenze">
+  // Umschalter nur, wenn die Wehr mehrere Zeitgrenzen eingestellt hat
+  const limitSwitch = config.limits.length > 1 ? `<div class="segments" role="group" aria-label="Zeitgrenze">
     ${config.limits.map((m) => `<button type="button" data-limit="${m}" class="${m === limit ? "active" : ""}">${m} Min.</button>`).join("")}
-  </div>`;
+  </div>` : "";
   const footer = `<p class="plan-footer">Zeiten ab Einsatzbeginn (früheste Alarmierung). Gesamtstärke ohne ${config.plan_excluded_vehicles.join(", ")}, wie in der Einsatzübersicht.
     ${plan.without_times ? `${plural(plan.without_times, "Einsatz", "Einsätze")} ohne Eintreffzeit nicht berücksichtigt (Excel zählte sie mit 0 min als erreicht).` : ""}</p>`;
   return chartCard({
@@ -551,6 +552,7 @@ function incidentDetail(e) {
       <dt>EHF${helpButton("unit_leader")}</dt><dd>${esc(e.unit_leader || "–")}</dd>
       <dt>Gerätehaus${helpButton("station_staff")}</dt><dd>${e.station_staff}</dd>
       <dt>Quelle</dt><dd class="small">${e.source === "pdf" ? `PDF · ${esc(e.filename)}` : "Einsatzübersicht (Excel)"}</dd>
+      ${e.bks_url ? `<dt>BKS-Portal${helpButton("bks_url")}</dt><dd class="small">${bksLink(e)}</dd>` : ""}
     </dl></div>
     <div class="panel"><h4>Fahrzeuge${helpButton("vehicles")}</h4>${vehicleTable(e)}</div>
     <div class="panel"><h4>Kennzahlen</h4><dl class="facts">
@@ -681,6 +683,12 @@ function renderMembers() {
   </div>`;
 }
 
+// Bericht im BKS-Portal (neues Fenster); Nummer des Berichts, dazu der Stammdatensatz des Einsatzes
+function bksLink(e) {
+  return `<a href="${esc(e.bks_url)}" target="_blank" rel="noopener">Bericht ${esc(e.bks_report_id)} öffnen</a>`
+    + (e.bks_record_id && e.bks_record_id !== e.bks_report_id ? ` · Stammdatensatz ${esc(e.bks_record_id)}` : "");
+}
+
 // ------------------------------------------------------------ PDF einlesen
 function showUploadError(html) {
   const el = $("#pdf-error");
@@ -697,7 +705,9 @@ async function readPdfs(files) {
   for (const f of files) form.append("pdfs", f, f.name.normalize("NFC"));
   try {
     const data = await api("/api/reports", { method: "POST", body: form });
-    state.upload = { token: data.token, reports: data.reports.map((r) => ({ ...r, replace: false, saved: null })), errors: data.errors };
+    // Erfasster Einsatz: Aktualisieren ist vorausgewählt (manuell ergänzte Fahrzeuge und Personen bleiben)
+    state.upload = { token: data.token, reports: data.reports.map((r) => ({ ...r, replace: Boolean(r.existing), saved: null })),
+                     errors: data.errors, notes: data.notes || [] };
     if (data.errors.length) showUploadError(data.errors.map((e) => `${esc(e.file)}: ${esc(e.message)}`).join("<br>"));
     await acceptCleanReports();
     renderPreviews();
@@ -736,6 +746,11 @@ async function acceptCleanReports() {
   }
 }
 
+// Übersprungene Berichte (z. B. FEZ) und gespeicherte Stammdatensätze
+function uploadNotes(notes) {
+  return notes.length ? `<div class="message message-info">${notes.map((n) => `${esc(n.file)}: ${esc(n.message)}`).join("<br>")}</div>` : "";
+}
+
 function uploadSummary(reports) {
   const auto = reports.filter((r) => r.auto).length, unchanged = reports.filter(isUnchanged).length;
   const open = reports.filter((r) => !r.saved && !isUnchanged(r)).length;
@@ -770,7 +785,7 @@ function differencesTable(existing) {
 function renderPreviews() {
   const reports = state.upload.reports;
   $("#dropzone").classList.toggle("compact", reports.length > 0);
-  $("#previews").innerHTML = uploadSummary(reports) + reports.map((r, i) => {
+  $("#previews").innerHTML = uploadNotes(state.upload.notes || []) + uploadSummary(reports) + reports.map((r, i) => {
     if (r.auto || isUnchanged(r)) return "";
     const existing = r.existing;
     return `<div class="preview-card" data-index="${i}">
@@ -781,13 +796,15 @@ function renderPreviews() {
           <div class="panel outlined"><h4>Fahrzeuge${helpButton("vehicles")}</h4>${vehicleTable(r)}
             <p class="small muted section-gap">Ezeit erstes Fahrzeug: <b>${minutes(r.arrival_min)}</b> · Gesamtstärke ${r.crew_total}</p></div>
           <div class="panel outlined"><h4>Prüfhinweise${helpButton("warnings")}</h4>${warningsList(r.warnings, "Keine Prüfhinweise")}${differencesTable(existing)}
-            ${r.shared_with?.length ? `<p class="small muted section-gap">Gemeinsamer Einsatz mit ${esc(r.shared_with.join(", "))} (gleiche Einsatznummer der Leitstelle).</p>` : ""}</div>
+            ${r.shared_with?.length ? `<p class="small muted section-gap">Gemeinsamer Einsatz mit ${esc(r.shared_with.join(", "))} (gleicher Einsatz im BKS-Portal bzw. gleiche Einsatznummer der Leitstelle).</p>` : ""}
+            ${r.bks_url ? `<p class="small muted section-gap">BKS-Portal: ${bksLink(r)}</p>` : ""}</div>
         </div>
         <div class="panel outlined">${attendancePanel(r, { markNew: true, pickLeader: true })}</div>
         <div class="preview-footer">
-          ${existing ? `<label class="toggle"><input type="checkbox" data-replace="${i}" ${r.replace ? "checked" : ""}> erfassten Einsatz durch diese PDF ersetzen</label>` : ""}
+          ${existing ? `<label class="toggle"><input type="checkbox" data-replace="${i}" ${r.replace ? "checked" : ""}> erfassten Einsatz mit dieser PDF aktualisieren
+            <span class="muted">(manuell ergänzte Fahrzeuge und Personen bleiben)</span></label>` : ""}
           <button type="button" class="btn btn-primary" data-accept="${i}" ${existing && !r.replace ? "disabled" : ""}>
-            ${existing ? "Ersetzen" : "In Statistik übernehmen"}</button>
+            ${existing ? "Aktualisieren" : "In Statistik übernehmen"}</button>
         </div>
       </div>`}
     </div>`;
@@ -804,7 +821,7 @@ async function acceptReport(i) {
       { token: state.upload.token, filename: r.filename, fields: readForm(card), replace: r.replace });
     r.saved = saved;
     state.dataChanged = true;
-    toast(`Einsatz ${saved.number ?? ""}/${saved.year} übernommen`);
+    toast(`Einsatz ${saved.number ?? ""}/${saved.year} ${r.existing ? "aktualisiert" : "übernommen"}`);
     renderPreviews();
   } catch (err) {
     button.disabled = false;
@@ -1035,7 +1052,7 @@ $("#btn-pdf").addEventListener("click", async () => {
   if (!state.incidents) { try { await loadIncidents(); } catch (e) { /* nur für Vorschläge */ } }
   updateDatalists();
   if (state.upload.reports.every((r) => r.saved || isUnchanged(r))) {
-    state.upload = { token: null, reports: [], errors: [] };
+    state.upload = { token: null, reports: [], errors: [], notes: [] };
     $("#pdf-error").hidden = true;
     renderPreviews();
   }

@@ -74,10 +74,10 @@ def _zip(entries):
 
 def test_zip_upload_unpacks_pdfs(client, monkeypatch):
     read = []
-    def fake_read_pdf(path, filename, cfg):
-        read.append(filename)
+    def fake_extract_text(path):
+        read.append(path.rsplit("/", 1)[-1])
         raise ValueError("kein Bericht")
-    monkeypatch.setattr(main.report, "read_pdf", fake_read_pdf)
+    monkeypatch.setattr(main.pdf_report, "extract_text", fake_extract_text)
     archive = _zip({"a/01-25.pdf": b"x", "b/01-25.pdf": b"x", "liesmich.txt": b"x",
                     "__MACOSX/a/._01-25.pdf": b"x", "02-25.PDF": b"x"})
     response = client.post("/api/reports", files=[("pdfs", ("berichte.zip", archive, "application/zip")),
