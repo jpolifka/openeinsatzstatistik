@@ -82,6 +82,8 @@ def test_member_directory_keeps_relatives_apart(con):
     max_id = members.find_or_create("Kunz", "Max")
     assert members.find_or_create("Kunz", "Max") == max_id
     assert members.find_or_create("Kunz", "Erika") != max_id       # gleicher Nachname, anderer Vorname
+    moritz = members.find_or_create("Kunz", "Moritz")               # … auch mit gleicher Initiale
+    assert moritz != max_id and members.find_or_create("Kunz", "Moritz") == moritz
     assert members.names[max_id] == "Kunz, Max"
 
 

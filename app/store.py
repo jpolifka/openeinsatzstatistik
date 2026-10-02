@@ -5,7 +5,7 @@ import re
 
 from app import domain
 from app.holidays import is_weekend_or_holiday
-from app.names import NameMatcher, leader_spelling, matches_leader, normalize, split_name
+from app.names import NameMatcher, leader_spelling, matches_leader, split_name
 from app.timeutil import normalize_iso, parse_iso, to_iso, year_of
 
 # Ganzes Stichwort mit oder ohne Punkt: B2.07, B207, b2 07, S1.00, B2.
@@ -97,23 +97,14 @@ class MemberDirectory:
         self._load()
 
     def _load(self):
-        rows = self.con.execute("SELECT id, name, first_name FROM member").fetchall()
+        rows = self.con.execute("SELECT id, name FROM member").fetchall()
         self.names = {r["id"]: r["name"] for r in rows}
-        self.first_names = {r["id"]: r["first_name"] for r in rows}
         self.matcher = NameMatcher([(r["id"], r["name"]) for r in rows]) if rows else None
 
     def find(self, last_name, first_name):
         if not self.matcher:
             return None
-        member_id = self.matcher.match(last_name, first_name)
-        # Der Abgleich ordnet bei eindeutigem Nachnamen ohne Blick auf den Vornamen zu –
-        # ein neues Mitglied mit gleichem Nachnamen darf nicht beim Verwandten landen.
-        known_first = self.first_names.get(member_id)
-        if member_id is not None and first_name and known_first:
-            given, known = normalize(first_name)[:1], normalize(known_first)[:1]
-            if given and known and given != known and normalize(last_name)[:1] != known:
-                return None
-        return member_id
+        return self.matcher.match(last_name, first_name)
 
     def find_or_create(self, last_name, first_name, name=None):
         member_id = self.find(last_name, first_name)

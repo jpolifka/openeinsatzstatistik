@@ -26,6 +26,15 @@ def test_matcher():
     assert matcher.match("Anna", "Beispiel") == 3        # vertauscht
     assert matcher.match("Mustre", "Max") == 1           # Tippfehler
     assert matcher.match("Unbekannt", "Otto") is None
+    assert matcher.match("Muster", "M.") == 1            # Initiale
+
+
+def test_matcher_keeps_relatives_and_swapped_names_apart():
+    matcher = NameMatcher([(1, "Muster, Max"), (2, "Thomas, Tim")])
+    assert matcher.match("Muster", "Moritz") is None     # gleicher Nachname, anderer Vorname
+    assert matcher.match("Muster", "Mia") is None        # auch nicht über die Ähnlichkeit des ganzen Namens
+    assert matcher.match("Werner", "Thomas") is None     # Vorname Thomas ist nicht Nachname Thomas
+    assert matcher.match("Thomas", "Tim") == 2
 
 
 @pytest.mark.parametrize("text", ["M. Muster", "Ma. Muster", "Muster, M.", "Max Muster", "Muster Max", "Muster",

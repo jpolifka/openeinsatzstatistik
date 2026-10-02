@@ -81,17 +81,25 @@ class NameMatcher:
                          for key, text in entries for last, first in name_readings(text)]
 
     def match(self, last_name, first_name):
-        # 1. Nachname exakt (auch vertauscht); bei mehreren Treffern entscheidet der Vorname
+        # 1. Nachname exakt (auch vertauscht); der Vorname muss passen (Initiale, Anfang oder ähnlich),
+        #    sonst ist es ein Verwandter mit gleichem Nachnamen bzw. jemand, dessen Vorname ein Nachname ist
+        exact = set()
         for last, first in ((last_name, first_name), (first_name, last_name)):
             last, first = normalize(last), normalize(first)
             candidates = [r for r in self.readings if r[1] == last]
-            if len({key for key, _, _ in candidates}) == 1:
-                return candidates[0][0]
-            if candidates:
-                best = max(candidates, key=lambda r: (_prefix_match(r[2], first), _similarity(r[2], first)))
-                if _prefix_match(best[2], first) or _similarity(best[2], first) >= 0.7:
-                    return best[0]
-        # 2. Ähnlichkeit des ganzen Namens (Tippfehler)
+            exact |= {key for key, _, _ in candidates}
+            fitting = [r for r in candidates if _first_names_fit(r[2], first)]
+            if fitting:
+                return max(fitting, key=lambda r: (_prefix_match(r[2], first), _similarity(r[2], first)))[0]
+        # 2. Ähnlichkeit des ganzen Namens (Tippfehler) – nicht bei schon verworfenem gleichem Nachnamen
         full = normalize(last_name) + normalize(first_name)
-        best = max(self.readings, key=lambda r: _similarity(r[1] + r[2], full))
+        others = [r for r in self.readings if r[0] not in exact]
+        if not others:
+            return None
+        best = max(others, key=lambda r: _similarity(r[1] + r[2], full))
         return best[0] if _similarity(best[1] + best[2], full) >= 0.85 else None
+
+
+def _first_names_fit(known, given):
+    """Vornamen passen: einer fehlt, einer ist Anfang des anderen (Initiale, Kurzform) oder kleiner Tippfehler."""
+    return not known or not given or _prefix_match(known, given) or _similarity(known, given) >= 0.7
