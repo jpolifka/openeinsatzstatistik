@@ -4,17 +4,22 @@
 // Stichwortkatalog, Benutzer und – für Superadmins – Verbandsgemeinden und Wehren.
 // Wird nach app.js geladen und trägt sich in VIEWS ein. Rechte prüft das Backend (app/admin.py).
 
-const ADMIN_SECTIONS = [      // [Schlüssel, Bezeichnung, braucht die Einstellungen der Wehr, nur Superadmin, nur Wehrleiter]
-  ["unit", "Wehr", true], ["fleet", "Fahrzeuge", true], ["bks", "BKS-Kennung", true],
-  ["places", "Orte & Bedarfsplan", true], ["keywords", "Stichworte"], ["users", "Benutzer"],
-  ["fees", "Gebührenordnung", false, false, true], ["super", "Wehren & VGs", false, true],
+// [Schlüssel, Bezeichnung, braucht die Einstellungen der Wehr, nur Superadmin, Auswahl oben: Wehr, Wehrleitung, beide]
+const ADMIN_SECTIONS = [
+  ["unit", "Wehr", true, false, "tenant"], ["fleet", "Fahrzeuge", true, false, "tenant"],
+  ["bks", "BKS-Kennung", true, false, "tenant"], ["places", "Orte & Bedarfsplan", true, false, "tenant"],
+  ["keywords", "Stichworte", false, false, "tenant"],
+  ["vehicles", "Fahrzeuge", false, false, "vg"], ["fees", "Gebührenordnung", false, false, "vg"],
+  ["users", "Benutzer", false, false, "any"], ["super", "Wehren & VGs", false, true, "any"],
 ];
 const SETTINGS_SECTIONS = ADMIN_SECTIONS.filter((s) => s[2]).map((s) => s[0]);
 
 const admin = {
   overview: null, slug: null, section: null, settings: null, keywords: null, memberships: null, superOverview: null,
   check: null, importFile: null, importPreview: null, keywordQuery: "", keywordEdit: null, parseResult: null, error: "",
-  fees: null, feeVg: null, feeDraft: null,
+  fees: null, feeDraft: null,
+  vg: null,                   // ausgewählte Wehrleitung (Slug der VG) statt einer Wehr
+  vgVehicles: null,           // Fahrzeuge der VG (Wehrleitung)
   savedSettings: null,        // Stand der Einstellungen beim Laden/Speichern – Vergleich für „ungespeichert“
 };
 
@@ -28,6 +33,8 @@ async function loadAdmin() {
     // Gewählte Wehr behalten (z. B. nach dem Speichern), sonst die oben ausgewählte, sonst die erste
     const pick = (slug) => admin.overview.tenants.find((t) => t.slug === slug);
     admin.slug = (pick(admin.slug) || pick(config.tenant?.slug) || admin.overview.tenants[0])?.slug || null;
+    // Oben die Wehrleitung gewählt: in der Verwaltung ebenfalls (falls sie die VG verwalten darf)
+    if (config.vg && admin.overview.vgs.some((v) => v.slug === config.vg.slug)) admin.vg = config.vg.slug;
   }
   const sections = adminSections();
   if (!sections.some(([key]) => key === admin.section)) admin.section = sections[0][0];
@@ -42,20 +49,22 @@ async function loadAdmin() {
   }
   if (s === "users" && !admin.memberships) admin.memberships = (await api("/api/admin/memberships")).memberships;
   if (s === "super" && !admin.superOverview) admin.superOverview = await api("/api/super/overview");
-  if (s === "fees") {
-    admin.feeVg = admin.feeVg || admin.overview.vgs[0].slug;
-    if (admin.fees?.vg !== admin.feeVg) {
-      admin.fees = { vg: admin.feeVg, ...(await api(`/api/admin/vgs/${encodeURIComponent(admin.feeVg)}/fees`)) };
-      admin.feeDraft = null;
-    }
+  if (s === "fees" && admin.fees?.vg !== admin.vg) {
+    admin.fees = { vg: admin.vg, ...(await api(`/api/admin/vgs/${encodeURIComponent(admin.vg)}/fees`)) };
+    admin.feeDraft = null;
   }
+  if (s === "vehicles" && admin.vgVehicles?.vg !== admin.vg) await loadVgVehicles();
+}
+
+async function loadVgVehicles() {
+  admin.vgVehicles = { vg: admin.vg, ...(await api(`/api/admin/vgs/${encodeURIComponent(admin.vg)}/vehicles`)) };
 }
 
 function adminSections() {
   const hasTenant = Boolean(admin.overview.tenants.length);
-  return ADMIN_SECTIONS.filter(([, , needsTenant, superOnly, vgOnly]) =>
-    (!superOnly || admin.overview.superadmin) && (!needsTenant || hasTenant) && (hasTenant || superOnly)
-    && (!vgOnly || admin.overview.vgs.length > 0));
+  const mode = admin.vg ? "vg" : "tenant";
+  return ADMIN_SECTIONS.filter(([, , , superOnly, scope]) =>
+    (!superOnly || admin.overview.superadmin) && (superOnly || hasTenant) && (scope === "any" || scope === mode));
 }
 
 async function adminGo(changes) {
@@ -65,14 +74,18 @@ async function adminGo(changes) {
 
 // ------------------------------------------------------------ Rahmen
 function renderAdmin() {
-  const { tenants } = admin.overview;
-  const tenantSelect = tenants.length > 1 && !["users", "super", "fees"].includes(admin.section)
-    ? `<label class="field admin-tenant"><span>Wehr</span><select data-admin-tenant>${tenants.map((t) =>
-      `<option value="${esc(t.slug)}" ${t.slug === admin.slug ? "selected" : ""}>${esc(t.name)} · ${esc(t.vg)}</option>`).join("")}</select></label>` : "";
+  const { tenants, vgs } = admin.overview;
+  // Auswahl: Wehrleitung einer VG (Fahrzeuge der VG, Gebührenordnung) oder eine Wehr
+  const choices = [...vgs.map((v) => ({ key: `vg:${v.slug}`, label: `Wehrleitung · ${v.name}` })),
+    ...tenants.map((t) => ({ key: t.slug, label: `${t.name} · ${t.vg}` }))];
+  const current = admin.vg ? `vg:${admin.vg}` : admin.slug;
+  const tenantSelect = choices.length > 1 && !["users", "super"].includes(admin.section)
+    ? `<label class="field admin-tenant"><span>${admin.vg ? "Wehrleitung" : "Wehr"}</span><select data-admin-tenant>${choices.map((c) =>
+      `<option value="${esc(c.key)}" ${c.key === current ? "selected" : ""}>${esc(c.label)}</option>`).join("")}</select></label>` : "";
   const sections = `<div class="segments" role="tablist">${adminSections().map(([key, label]) =>
     `<button type="button" data-admin-section="${key}" class="${key === admin.section ? "active" : ""}">${label}</button>`).join("")}</div>`;
   const body = {
-    unit: unitSection, fleet: fleetSection, bks: bksSection, places: placesSection,
+    unit: unitSection, fleet: fleetSection, bks: bksSection, places: placesSection, vehicles: vgVehiclesSection,
     keywords: keywordsSection, users: usersSection, super: superSection, fees: feesSection,
   }[admin.section]();
   $("#view-admin").innerHTML = `<div class="card admin-card">
@@ -307,6 +320,70 @@ function fleetSection() {
     ${saveButton()}`;
 }
 
+// ------------------------------------------------------------ Wehrleitung: Fahrzeuge der VG
+// Auswahl der Wehr für ein Fahrzeug; data-* trägt, was das Backend zum Verschieben braucht
+function vehicleTenantSelect(name, source = "", callSign = "") {
+  const { tenants } = admin.vgVehicles;
+  return `<select data-move-vehicle data-name="${esc(name)}" data-source="${esc(source)}" data-call-sign="${esc(callSign)}" aria-label="Wehr von ${esc(name)}">
+    <option value="">${source ? "keiner Wehr (aus der Liste nehmen)" : "– keiner Wehr –"}</option>
+    ${tenants.map((t) => `<option value="${esc(t.slug)}" ${t.slug === source ? "selected" : ""}>${esc(t.name)}</option>`).join("")}</select>`;
+}
+
+function vgVehiclesSection() {
+  const { tenants, vehicles, unassigned, fee_types } = admin.vgVehicles;
+  const fee = new Set(fee_types.map(typeKey));
+  const typeCell = (label) => label ? `${esc(label)}${fee_types.length && !fee.has(typeKey(label)) ? ' <span class="missing-name">nicht in der Gebührenordnung</span>' : ""}`
+    : '<span class="muted">–</span>';
+  const assigned = tenants.map((t) => {
+    const rows = vehicles.filter((v) => v.tenant === t.slug).map((v) => `<tr>
+      <td><b>${esc(v.name || v.suggested_name || v.call_sign)}</b>${v.name ? "" : ' <span class="missing-name">Funkrufname noch nicht bestätigt</span>'}
+        <div class="small muted">Block ${esc(v.call_sign)}${v.description ? ` · ${esc(v.description)}` : ""}</div></td>
+      <td>${typeCell(v.label)}</td>
+      <td class="right">${v.incidents || ""}</td>
+      <td>${v.name || v.suggested_name ? vehicleTenantSelect(v.name || v.suggested_name, t.slug, v.call_sign)
+        : '<span class="small muted">erst den Funkrufnamen bei der Wehr eintragen</span>'}</td>
+      <td><button type="button" class="btn btn-light btn-small" data-admin-action="edit-fleet" data-tenant="${esc(t.slug)}">Bearbeiten</button></td>
+    </tr>`).join("");
+    return `<tr class="group-row"><th colspan="5">${esc(t.name)}</th></tr>${rows || '<tr><td colspan="5" class="muted">Noch keine Fahrzeuge.</td></tr>'}`;
+  }).join("");
+  const openRow = (v) => `<tr><td><b>${esc(v.name)}</b><div class="small muted">${esc(v.description)}</div></td>
+    <td>${typeCell(v.label)}</td><td></td><td>${vehicleTenantSelect(v.name)}</td><td></td></tr>`;
+  const own = unassigned.filter((v) => v.vg), others = unassigned.filter((v) => !v.vg);
+  return `<p class="small muted">Alle Fahrzeuge der VG auf einen Blick. Über „Wehr“ gehört ein Fahrzeug zu einer Wehr und wird in deren Berichten zugeordnet. Wechselt es die Wehr, bleiben Einsätze mit seinen Daten bei der bisherigen Wehr; dort wird es ab dann nicht mehr zugeordnet. Fahrzeugtyp und Dienstzeitraum pflegt die Wehr unter „Fahrzeuge“.${helpButton("admin_vg_vehicles")}</p>
+    <div class="table-wrap"><table class="mini-table admin-table"><thead><tr><th>Funkrufname</th><th>Fahrzeugtyp</th><th class="right">Einsätze</th><th>Wehr</th><th></th></tr></thead>
+    <tbody>${assigned}
+      <tr class="group-row"><th colspan="5">Noch keiner Wehr zugeordnet</th></tr>
+      ${own.map(openRow).join("") || '<tr><td colspan="5" class="muted">Alle Fahrzeuge der VG aus den Berichten sind zugeordnet.</td></tr>'}
+    </tbody></table></div>
+    ${others.length ? `<details class="section-gap"><summary>Weitere Fahrzeuge aus Berichten (${others.length}, z. B. Rettungsdienst, Fahrzeuge des Landes, Nachbarwehren)</summary>
+      <div class="table-wrap"><table class="mini-table admin-table"><tbody>${others.map(openRow).join("")}</tbody></table></div></details>` : ""}
+    <div class="inline-row section-gap">
+      <input type="text" id="vg-vehicle-name" list="vg-vehicle-names" placeholder="Funkrufname, z. B. FL NR#.ABC 01/10-01" spellcheck="false" class="wide" aria-label="Funkrufname">
+      <datalist id="vg-vehicle-names">${unassigned.map((v) => `<option value="${esc(v.name)}">${esc(v.description)}</option>`).join("")}</datalist>
+      <select id="vg-vehicle-tenant" aria-label="Wehr">${tenants.map((t) => `<option value="${esc(t.slug)}">${esc(t.name)}</option>`).join("")}</select>
+      <button type="button" class="btn btn-light btn-small" data-admin-action="assign-vehicle">Fahrzeug zuordnen</button>
+    </div>`;
+}
+
+// Fahrzeug einer Wehr zuordnen bzw. verschieben (Auswahl in der Übersicht der Wehrleitung)
+async function moveVehicle(select) {
+  const { name, source, callSign } = select.dataset;
+  const tenants = admin.vgVehicles.tenants, target = select.value;
+  const vehicle = admin.vgVehicles.vehicles.find((v) => v.tenant === source && v.call_sign === callSign);
+  const from = tenants.find((t) => t.slug === source)?.name, to = tenants.find((t) => t.slug === target)?.name;
+  if (vehicle?.incidents && !confirm(`${name} hat Daten in ${vehicle.incidents} Einsätzen von ${from}. Sie bleiben dort, ab jetzt wird ${name} aber ${to ? `${to} zugeordnet` : "keiner Wehr zugeordnet"}. Fortfahren?`)) {
+    select.value = source;
+    return;
+  }
+  if (admin.settings && [source, target].includes(admin.settings.slug) && !confirmDiscard()) { select.value = source; return; }
+  admin.vgVehicles = { vg: admin.vg, ...(await apiJson(`/api/admin/vgs/${encodeURIComponent(admin.vg)}/vehicles/move`, "POST",
+    { name, source: source || null, call_sign: callSign || null, target: target || null })) };
+  admin.settings = admin.savedSettings = null;            // Fahrzeuglisten der Wehren neu laden
+  if ([source, target].includes(config.tenant?.slug)) await refreshCurrentTenant();
+  toast(to ? `${name} gehört jetzt zu ${to}` : `${name} ist keiner Wehr mehr zugeordnet`);
+  renderAdmin();
+}
+
 // ------------------------------------------------------------ BKS-Kennung
 // Zuordnung einer Testzeile: zuerst über den Funkrufnamen der Fahrzeugliste, sonst über die Präfixe
 function fleetMatch(v) {
@@ -522,6 +599,15 @@ async function runAdminAction(button) {
     case "delete-asset":
       await api(`/api/admin/${admin.slug}/assets/${name}`, { method: "DELETE" });
       return afterAssetChange();
+    case "assign-vehicle": {
+      const input = $("#vg-vehicle-name"), select = $("#vg-vehicle-tenant");
+      if (!input.value.trim()) return;
+      const fake = { dataset: { name: input.value.trim(), source: "", callSign: "" }, value: select.value };
+      return moveVehicle(fake);
+    }
+    case "edit-fleet":
+      if (!confirmDiscard()) return;
+      return adminGo({ vg: null, slug: button.dataset.tenant, section: "fleet" });
     case "add-vehicle":
       s.fleet.push({ call_sign: "", name: "", suggested_name: "", types: [], label: "", in_service_from: "", in_service_until: "", replaced_by: "", in_plan_crew: true, incidents: 0 });
       return rerender();
@@ -652,15 +738,12 @@ const emptyRates = () => ({ ...Object.fromEntries(FEE_RATES.map(([key]) => [key,
 
 function feesSection() {
   const { schedules } = admin.fees, draft = admin.feeDraft;
-  const vgSelect = admin.overview.vgs.length > 1 ? adminField("Verbandsgemeinde", `<select data-fee-vg>${admin.overview.vgs.map((v) =>
-    `<option value="${esc(v.slug)}" ${v.slug === admin.feeVg ? "selected" : ""}>${esc(v.name)}</option>`).join("")}</select>`) : "";
   const rows = schedules.map((x) => `<tr>
     <td><strong>${esc(x.name)}</strong></td><td>${formatDate(x.valid_from)}</td><td class="right">${x.rates.vehicles.length}</td>
     <td class="right"><button type="button" class="btn btn-light btn-small" data-admin-action="fee-edit" data-id="${x.id}">Bearbeiten</button>
       <button type="button" class="btn btn-light btn-small" data-admin-action="fee-copy" data-id="${x.id}">Als neue Fassung</button>
       <button type="button" class="btn btn-outline btn-small" data-admin-action="fee-delete" data-id="${x.id}">Löschen</button></td></tr>`).join("");
   return `<p class="small muted">Kostensätze der Satzung über den Kostenersatz der Feuerwehr. Für einen Einsatz gilt die Fassung, die am Einsatztag gilt. Den Fahrzeugtyp eines Fahrzeugs bestimmt seine Bezeichnung in der Fahrzeugliste der Wehr (z. B. „HLF 20“).${helpButton("fees")}</p>
-    ${vgSelect ? `<div class="form-grid">${vgSelect}</div>` : ""}
     <div class="table-wrap section-gap"><table class="mini-table admin-table"><thead><tr><th>Fassung</th><th>gültig ab</th><th class="right">Fahrzeugtypen</th><th></th></tr></thead>
       <tbody>${rows || `<tr><td colspan="4" class="muted">Noch keine Gebührenordnung hinterlegt.</td></tr>`}</tbody></table></div>
     ${draft ? "" : `<button type="button" class="btn btn-light btn-small section-gap" data-admin-action="fee-new">Neue Fassung</button>`}
@@ -688,7 +771,7 @@ function feeEditor(d) {
 }
 
 async function runFeeAction(action, data) {
-  const url = `/api/admin/vgs/${encodeURIComponent(admin.feeVg)}/fees`;
+  const url = `/api/admin/vgs/${encodeURIComponent(admin.vg)}/fees`;
   const find = () => admin.fees.schedules.find((x) => x.id === Number(data.id));
   const copy = (x) => JSON.parse(JSON.stringify(x));
   switch (action) {
@@ -701,13 +784,13 @@ async function runFeeAction(action, data) {
     case "fee-remove-vehicle": admin.feeDraft.rates.vehicles.splice(Number(data.index), 1); break;
     case "fee-delete":
       if (!confirm(`Fassung „${find().name}“ löschen?`)) return;
-      admin.fees = { vg: admin.feeVg, ...(await api(`${url}/${data.id}`, { method: "DELETE" })) };
+      admin.fees = { vg: admin.vg, ...(await api(`${url}/${data.id}`, { method: "DELETE" })) };
       toast("Fassung gelöscht");
       break;
     case "fee-save": {
       const d = admin.feeDraft;
       const body = { name: d.name, valid_from: d.valid_from, rates: d.rates };
-      admin.fees = { vg: admin.feeVg, ...(await apiJson(d.id ? `${url}/${d.id}` : url, d.id ? "PUT" : "POST", body)) };
+      admin.fees = { vg: admin.vg, ...(await apiJson(d.id ? `${url}/${d.id}` : url, d.id ? "PUT" : "POST", body)) };
       admin.feeDraft = null;
       toast("Gebührenordnung gespeichert");
       break;
@@ -780,11 +863,12 @@ $("#view-admin").addEventListener("change", async (e) => {
   const t = e.target;
   try {
     if (t.dataset.adminTenant !== undefined) {
-      if (!confirmDiscard()) { t.value = admin.slug; return; }
-      await adminGo({ slug: t.value, parseResult: null, keywordEdit: null });
+      if (!confirmDiscard()) { t.value = admin.vg ? `vg:${admin.vg}` : admin.slug; return; }
+      const vg = t.value.startsWith("vg:") ? t.value.slice(3) : null;
+      await adminGo({ vg, ...(vg ? {} : { slug: t.value }), parseResult: null, keywordEdit: null });
       return;
     }
-    if (t.dataset.feeVg !== undefined) { await adminGo({ feeVg: t.value }); return; }
+    if (t.dataset.moveVehicle !== undefined) { await moveVehicle(t); return; }
     if (t.dataset.limits !== undefined) { renderAdmin(); return; }     // Auswahl der Standardgrenze aktualisieren
     if (t.dataset.bind?.startsWith("places.") && t.dataset.bind.endsWith(".name")) { renderAdmin(); return; }
     if (/^fleet\.\d+\.label$/.test(t.dataset.bind || "")) { renderAdmin(); return; }   // Hinweis Gebührenordnung

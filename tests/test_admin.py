@@ -232,3 +232,41 @@ def test_fleet_with_full_call_signs(world):
     assert "HLF 20" in saved.json()["fee_types"]
     config = world.get("/api/config").json()
     assert config["vehicle_names"]["01/23-06"] == "RP WW 01/23-06"
+
+
+def test_vg_vehicles_overview_and_move(world):
+    """Wehrleitung: alle Fahrzeuge der VG, Fahrzeug von einer Wehr zur anderen; Einsätze bleiben."""
+    from conftest import CFG
+    with db.connection(tenancy.tenant_path("wehr-a1")) as con:
+        incident_id = con.execute("INSERT INTO incident (year, number, source) VALUES (2025, 1, 'pdf')").lastrowid
+        con.execute("INSERT INTO vehicle (incident_id, call_sign, name) VALUES (?, '01/10', 'FL NR#.BHÖ 01/10-01')",
+                    (incident_id,))
+        con.execute("INSERT INTO vehicle (incident_id, call_sign, name) VALUES (?, '-', 'RP WW 01/23-06')", (incident_id,))
+    assert _as(world, "lead@example.org").get("/api/admin/vgs/vg-a/vehicles").status_code == 403
+    assert _as(world, "other@example.org").get("/api/admin/vgs/vg-a/vehicles").status_code == 403
+    _as(world, "vglead@example.org")
+    data = world.get("/api/admin/vgs/vg-a/vehicles").json()
+    assert [t["slug"] for t in data["tenants"]] == ["wehr-a1", "wehr-a2"]
+    kdow = next(v for v in data["vehicles"] if v["tenant"] == "wehr-a1" and v["call_sign"] == "01/10")
+    assert kdow["suggested_name"] == "FL NR#.BHÖ 01/10-01" and kdow["incidents"] == 1
+    assert {"name": "RP WW 01/23-06", "vg": False} == {k: v for k, v in data["unassigned"][0].items() if k in ("name", "vg")}
+
+    moved = world.post("/api/admin/vgs/vg-a/vehicles/move", json={
+        "name": "FL NR#.BHÖ 01/10-01", "source": "wehr-a1", "call_sign": "01/10", "target": "wehr-a2"})
+    assert moved.status_code == 200, moved.text
+    a2 = [v for v in moved.json()["vehicles"] if v["tenant"] == "wehr-a2"]
+    # wehr-a2 führt 01/10 schon mit Kurznamen: der Eintrag bekommt den Funkrufnamen, kein zweiter Block
+    assert [v["call_sign"] for v in a2] == list(CFG.vehicles)
+    assert next(v["name"] for v in a2 if v["call_sign"] == "01/10") == "FL NR#.BHÖ 01/10-01"
+    assert not any(v["tenant"] == "wehr-a1" and v["call_sign"] == "01/10" for v in moved.json()["vehicles"])
+    with db.connection(tenancy.tenant_path("wehr-a1")) as con:      # Einsatzdaten bleiben bei der alten Wehr
+        assert con.execute("SELECT COUNT(*) FROM vehicle WHERE call_sign = '01/10'").fetchone()[0] == 1
+
+    assigned = world.post("/api/admin/vgs/vg-a/vehicles/move", json={"name": "RP WW 01/23-06", "target": "wehr-a1"})
+    assert ("01/23-06", "RP WW 01/23-06") in [(v["call_sign"], v["name"]) for v in assigned.json()["vehicles"]
+                                              if v["tenant"] == "wehr-a1"]
+    twice = world.post("/api/admin/vgs/vg-a/vehicles/move", json={"name": "RP WW 01/23-06", "target": "wehr-a2"})
+    assert twice.status_code == 409
+    assert world.post("/api/admin/vgs/vg-a/vehicles/move",
+                      json={"name": "RP WW 01/23-06", "target": "wehr-b1"}).status_code == 404
+    assert CFG.vehicles      # Konfiguration der Tests unverändert

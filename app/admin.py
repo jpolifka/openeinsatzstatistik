@@ -8,6 +8,7 @@ Superadmin). Rollen vergeben darf jeder nur im Rahmen von tenancy.GRANTABLE und 
 Bereich; VGs und Wehren anlegen nur der Superadmin.
 """
 import csv
+import dataclasses
 import datetime as dt
 import io
 import json
@@ -274,7 +275,7 @@ def _managed_vg_id(a, vg_slug):
     with tenancy.central() as con:
         row = con.execute("SELECT id FROM vg WHERE slug = ?", (vg_slug,)).fetchone()
     if not row or not a.manages_vg(row["id"]):
-        raise tenancy.Forbidden("Die Gebührenordnung pflegt der Wehrleiter der VG.")
+        raise tenancy.Forbidden("Fahrzeuge und Gebührenordnung der VG pflegt der Wehrleiter der VG.")
     return row["id"]
 
 
@@ -310,6 +311,99 @@ def delete_fee_schedule(vg_slug: str, schedule_id: int, a: tenancy.Access = Depe
     with tenancy.central() as con:
         fees.delete_schedule(con, vg_id, schedule_id)
     return _schedules_json(vg_id)
+
+
+# ---------------------------------------------------------------- Fahrzeuge der VG
+def _vg_vehicles_json(vg_id):
+    """Alle Fahrzeuge der VG auf einen Blick: die der Fahrzeuglisten der Wehren und die übrigen
+    Funkrufnamen aus den Berichten (Stammdatensätze und Einsätze), die noch keiner Wehr gehören."""
+    tenants = tenancy.vg_tenants(vg_id)
+    with tenancy.central() as con:
+        fee_types = fees.vehicle_types(con, vg_id)
+        seen = {v.get("name") or "" for (vehicles,) in con.execute(
+            "SELECT vehicles FROM master_record WHERE vg_id = ?", (vg_id,)) for v in json.loads(vehicles)}
+    vehicles, assigned = [], set()
+    for t in tenants:
+        cfg = t.config
+        with t.connection() as con:
+            used = store.vehicles_with_data(con)
+            seen.update(r[0] for r in con.execute("SELECT DISTINCT name FROM vehicle WHERE name <> ''"))
+        for v in cfg.fleet:
+            name = v.name or _suggested_name(v.call_sign, cfg) or ""
+            assigned.add(name)
+            vehicles.append({"tenant": t.slug, "call_sign": v.call_sign, "name": v.name, "suggested_name": name,
+                             "description": domain.call_sign_text(name), "label": v.label,
+                             "in_service_from": v.in_service_from, "in_service_until": v.in_service_until,
+                             "incidents": used.get(v.call_sign, 0)})
+    centers = {t.config.control_center for t in tenants}
+    prefixes = tuple(t.config.unit_prefix for t in tenants if t.config.unit_prefix)
+    unassigned = [{"name": n, "description": domain.call_sign_text(n), "vg": bool(prefixes) and n.startswith(prefixes),
+                   "label": fees.suggest_type(domain.describe_call_sign(n)["types"], fee_types)}
+                  for n in sorted(seen - assigned - centers) if domain.describe_call_sign(n)]
+    return {"tenants": [{"slug": t.slug, "name": t.name} for t in tenants], "vehicles": vehicles,
+            "unassigned": unassigned, "fee_types": fee_types}
+
+
+@router.get("/api/admin/vgs/{vg_slug}/vehicles")
+def get_vg_vehicles(vg_slug: str, a: tenancy.Access = Depends(access)):
+    return _vg_vehicles_json(_managed_vg_id(a, vg_slug))
+
+
+class VehicleMove(BaseModel):
+    name: str                          # Funkrufname wie im BKS-Bericht
+    source: Optional[str] = None       # Wehr, in deren Fahrzeugliste es steht (mit call_sign); None = keiner
+    call_sign: Optional[str] = None
+    target: Optional[str] = None       # Wehr, zu der es künftig gehört; None = aus der Liste nehmen
+
+
+def _save_fleet(tenant, cfg):
+    with tenant.connection() as con:
+        tenancy.save_config(con, cfg)
+    tenancy.forget_config(tenant.slug)
+
+
+@router.post("/api/admin/vgs/{vg_slug}/vehicles/move")
+def move_vehicle(vg_slug: str, m: VehicleMove, a: tenancy.Access = Depends(access)):
+    """Fahrzeug einer Wehr zuordnen bzw. zu einer anderen verschieben. Einsätze mit seinen Daten bleiben
+    bei der bisherigen Wehr; dort wird es ab jetzt nicht mehr zugeordnet."""
+    vg_id = _managed_vg_id(a, vg_slug)
+    tenants = {t.slug: t for t in tenancy.vg_tenants(vg_id)}
+    name = m.name.strip()
+    if not VEHICLE_NAME.fullmatch(name):
+        _invalid(f"Funkrufname „{name}“: bitte wie im BKS-Bericht angeben, z. B. FL NR#.ABC 02/45-01.")
+    if any(t not in tenants for t in (m.source, m.target) if t):
+        raise HTTPException(404, "Wehr nicht in dieser VG.")
+    if m.source == m.target:
+        return _vg_vehicles_json(vg_id)
+    for slug, t in tenants.items():
+        if slug != m.source and any(v.name == name for v in t.config.fleet):
+            raise HTTPException(409, f"{name} steht schon in der Fahrzeugliste von {t.name}.")
+    with tenancy.central() as con:
+        label = fees.suggest_type(domain.describe_call_sign(name).get("types", []), fees.vehicle_types(con, vg_id))
+    vehicle = Vehicle("", label, name=name)
+    if m.source:
+        source = tenants[m.source]
+        cfg = source.config
+        vehicle = cfg.vehicle(m.call_sign or "")
+        if not vehicle:
+            raise HTTPException(404, "Fahrzeug nicht in der Fahrzeugliste.")
+        cs = vehicle.call_sign
+        fleet = tuple(dataclasses.replace(v, replaced_by=None) if v.replaced_by == cs else v
+                      for v in cfg.fleet if v is not vehicle)
+        _save_fleet(source, dataclasses.replace(cfg, fleet=fleet, substitutes={
+            k: b for k, b in cfg.substitutes.items() if b != cs}))
+        vehicle = dataclasses.replace(vehicle, name=name, replaced_by=None)
+    if m.target:
+        target = tenants[m.target]
+        cfg = target.config
+        existing = cfg.vehicle(cfg.block_of(name) or "")
+        if existing and not existing.name:      # alter Eintrag mit Kurznamen: nur den Funkrufnamen ergänzen
+            fleet = tuple(dataclasses.replace(v, name=name) if v is existing else v for v in cfg.fleet)
+        else:
+            fleet = cfg.fleet + (dataclasses.replace(vehicle, call_sign=cfg.new_call_sign(name)),)
+        _save_fleet(target, dataclasses.replace(cfg, fleet=fleet))
+    log.info("Fahrzeug %s: %s -> %s durch %s", name, m.source or "–", m.target or "–", a.email or "lokal")
+    return _vg_vehicles_json(vg_id)
 
 
 class PlanRelease(BaseModel):
