@@ -248,6 +248,15 @@ Einsatz rückt an seine Stelle, die folgenden Nummern verschieben sich.
 (Karte in der Auswertung oder Verwaltung → Orte & Bedarfsplan) für die übrigen Rollen frei. Ohne
 Freigabe fehlt er für diese auch in der Gesamtansicht und im Kennzahlen-Export.
 
+**Kostenersatz** (Wehrleiter): Verwaltung → Gebührenordnung pflegt die Satzung der VG in Fassungen
+mit „gültig ab“ (für die VG Bad Hönningen vorbelegt mit der Satzung vom 16.05.2024 – Beginn der
+Gültigkeit bitte prüfen). Im Prüfprotokoll rechnet „Kostenersatz berechnen“ einen Einsatz über alle
+beteiligten Wehren: Fahrzeuge vom Ausrücken bis zum Einsatzende des Fahrzeugs, Einsatzkräfte von der
+Alarmierung bis zum Einsatzende, halbstündlich aufgerundet; BSW mit eigenem Satz, Fehlalarm einer
+BMA höchstens die Pauschale, Auslagen mit Verwaltungszuschlag, Umsatzsteuer wählbar. Den
+Fahrzeugtyp liefert die Bezeichnung in der Fahrzeugliste der Wehr (z. B. „HLF 20“). Es wird nichts
+gespeichert; „Drucken / PDF“ für die Ablage.
+
 **Kameraden:** Ein Klick auf eine Person zeigt ihre Einsätze im Jahr, ein Klick auf einen Einsatz
 öffnet ihn in der Einsatzliste.
 
@@ -286,6 +295,7 @@ app/
   pdf_report.py    Einsatzbericht-PDF lesen
   report.py        Felder ableiten, Prüfhinweise, Bericht -> Einsatz
   records.py       Stammdatensätze, Verzeichnis der Berichte, Abgleich/Prüfprotokoll, Hinweise je VG
+  fees.py          Gebührenordnungen der VG und Berechnung des Kostenersatzes
   metrics.py       Formeln der Einsatzübersicht (Kennzahlen, Statistik, Bedarfsplan, Anwesenheit)
   store.py         Datenbankzugriff, Namensabgleich Kameraden
   db.py            SQLite-Verbindungen und Migrationen (zentral und je Wehr)

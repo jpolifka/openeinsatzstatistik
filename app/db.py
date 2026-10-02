@@ -175,10 +175,22 @@ def _add_notices(con):
                 "reviewed_by TEXT, reviewed TEXT NOT NULL DEFAULT (datetime('now', 'localtime')))")
 
 
+def _add_fee_schedules(con):
+    """Gebührenordnungen (Kostenersatz) je VG in Fassungen mit Gültigkeitsbeginn; die VG der früheren
+    Einzel-Installation bekommt die Satzung vom 16.05.2024 (legacy.FEE_SCHEDULE_2024)."""
+    con.execute("CREATE TABLE fee_schedule (id INTEGER PRIMARY KEY, "
+                "vg_id INTEGER NOT NULL REFERENCES vg(id) ON DELETE CASCADE, name TEXT NOT NULL, "
+                "valid_from TEXT NOT NULL, rates TEXT NOT NULL, modified_by TEXT, "
+                "modified TEXT NOT NULL DEFAULT (datetime('now', 'localtime')))")
+    from app import legacy    # erst hier: legacy braucht db
+    for (vg_id,) in con.execute("SELECT id FROM vg WHERE slug = ?", (legacy.VG_SLUG,)).fetchall():
+        legacy.seed_fee_schedule(con, vg_id)
+
+
 # Neue Schemaänderungen nur hinten anfügen; PRAGMA user_version zählt die erledigten Schritte.
 TENANT_MIGRATIONS = [_create_legacy_schema, _rename_to_english, _add_tenant_tables, _add_bks_ids,
                      _add_pending_reports]
-CENTRAL_MIGRATIONS = [_create_central_schema, _add_dpa, _add_records, _add_notices]
+CENTRAL_MIGRATIONS = [_create_central_schema, _add_dpa, _add_records, _add_notices, _add_fee_schedules]
 
 
 def migrate(con, steps=TENANT_MIGRATIONS):
