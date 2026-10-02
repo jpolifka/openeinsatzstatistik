@@ -683,7 +683,7 @@ function peopleEditPanel() {
 }
 
 function readIncidentForm(form) {
-  const vehicles = $$("tr[data-vehicle]", form).filter((row) => $('[data-v="present"]', row).checked).map((row) => {
+  const vehicles = [...$$("tr[data-vehicle]", form)].filter((row) => $('[data-v="present"]', row).checked).map((row) => {
     const value = (key) => $(`[data-v="${key}"]`, row).value;
     return { call_sign: row.dataset.vehicle, crew: value("crew") === "" ? null : Number(value("crew")),
              departed: value("departed") || null, arrived: value("arrived") || null };
