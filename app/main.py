@@ -377,18 +377,54 @@ def api_incidents(year: Optional[int] = None, a: tenancy.Access = Depends(access
     return {"year": year, "incidents": incidents}
 
 
+class VehicleEdit(BaseModel):
+    call_sign: str
+    crew: Optional[int] = None
+    departed: Optional[str] = None
+    arrived: Optional[str] = None
+
+
+class PersonEdit(BaseModel):
+    id: Optional[int] = None          # vorhandener Kamerad
+    name: Optional[str] = None        # sonst „Nachname, Vorname“ (wird bei Bedarf angelegt)
+    role: Optional[str] = None
+    vehicle: Optional[str] = None
+
+
+# Einsatz bearbeiten: Felder, dazu optional Fahrzeuge und Anwesenheit (fehlen sie, bleiben sie unverändert)
+IncidentUpdate = create_model("IncidentUpdate", __base__=IncidentFields,
+                              vehicles=(Optional[List[VehicleEdit]], None), people=(Optional[List[PersonEdit]], None))
+
+
 @app.put("/api/incidents/{key}")
-def api_update_incident(key: str, fields: IncidentFields, a: tenancy.Access = Depends(access)):
+def api_update_incident(key: str, update: IncidentUpdate, a: tenancy.Access = Depends(access)):
     slug, incident_id = parse_incident_key(key)
     tenant = a.tenant(slug, WRITE)
+    changes = update.model_dump(exclude_unset=True)
+    vehicles, people = changes.pop("vehicles", None), changes.pop("people", None)
+    if vehicles is not None and any(v["call_sign"] not in tenant.config.vehicles for v in vehicles):
+        raise HTTPException(422, "Unbekanntes Fahrzeug – Fahrzeuge der Wehr in der Verwaltung pflegen.")
     with tenant.connection() as con:
         try:
-            store.update_incident(con, incident_id, fields.model_dump(exclude_unset=True), modified_by=a.email)
+            store.update_incident(con, incident_id, changes, modified_by=a.email)
+            if vehicles is not None:
+                store.replace_vehicles(con, incident_id, vehicles)
+            if people is not None:
+                store.replace_attendance(con, incident_id, people)
         except KeyError:
             raise HTTPException(404, "Einsatz nicht gefunden.")
         except store.DuplicateIncident as e:
             raise HTTPException(409, str(e))
+        except ValueError as e:
+            raise HTTPException(422, str(e))
         return incident_json(store.load_incident(con, incident_id), store.LeaderNames(con), tenant)
+
+
+@app.get("/api/members")
+def api_members(tenant: str, a: tenancy.Access = Depends(access)):
+    """Kameraden einer Wehr für Vorschläge beim Bearbeiten der Anwesenheit."""
+    with a.tenant(tenant, INCIDENTS).connection() as con:
+        return {"members": store.all_members(con)}
 
 
 @app.delete("/api/incidents/{key}")

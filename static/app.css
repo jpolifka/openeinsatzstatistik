@@ -542,3 +542,23 @@ a.tenant-badge { text-decoration: none; }
   .record-detail[hidden] { display: table-row !important; }
   .records-table .col-toggle { display: none; }
 }
+
+/* Einsatz bearbeiten: Fahrzeuge und Anwesenheit; Einsätze je Kamerad */
+.vehicle-edit input[type="number"], .vehicle-edit input[type="time"], .person-add input, .person-add select {
+  font: inherit; font-size: .88rem; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--white); color: var(--text);
+}
+.vehicle-edit input[type="number"] { width: 64px; }
+.vehicle-edit input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--brand); }
+.person-edit { display: inline-flex; align-items: center; border-radius: 999px; background: var(--light-gray); }
+.person-edit .person { background: transparent; padding-right: 4px; }
+.person-edit .person.leader { background: var(--brand-dark); color: var(--white); }
+.person-remove { border: 0; background: none; cursor: pointer; font-size: 1rem; line-height: 1; padding: 4px 9px 4px 4px; color: var(--gray); border-radius: 0 999px 999px 0; }
+.person-remove:hover { color: var(--brand-dark); }
+.person-add { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+.person-add input[data-p="name"] { flex: 1 1 220px; }
+.person-add input[data-p="role"] { flex: 1 1 140px; }
+.member-incidents { padding: 12px 18px 16px; overflow-x: auto; }
+.member-incidents .mini-table td { white-space: normal; }
+.link-row { cursor: pointer; }
+.link-row:hover td, .link-row:focus-visible td { background: var(--brand-light); }
+#view-members tr[data-member] { cursor: pointer; }

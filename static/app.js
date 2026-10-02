@@ -8,7 +8,8 @@ const state = {
   evaluation: null, incidents: null,
   category: "all", query: "", expanded: new Set(), editing: null,
   tableCards: new Set(),                      // Diagramme, die gerade als Tabelle angezeigt werden
-  memberSort: { field: "incidents", descending: true },
+  memberSort: { field: "incidents", descending: true }, openMembers: new Set(),
+  editDraft: null, memberOptions: [], scrollTo: null,
   upload: { token: null, reports: [], errors: [], notes: [] }, dataChanged: false,
   tenantFilter: new Set(),                    // Gesamtansicht: ausgewählte Wehren (leer = alle)
 };
@@ -144,7 +145,7 @@ const VIEWS = {
   evaluation: { label: "Auswertung", load: loadEvaluation, render: renderEvaluation, permission: "stats" },
   incidents: { label: "Einsätze", load: loadIncidents, render: renderIncidents, permission: "incidents" },
   // Kameraden gehören zu einer Wehr – nicht in der Gesamtansicht einer VG
-  members: { label: "Kameraden", load: loadEvaluation, render: renderMembers, permission: "incidents", single: true },
+  members: { label: "Kameraden", load: loadMembers, render: renderMembers, permission: "incidents", single: true },
 };
 const allowedViews = () => Object.keys(VIEWS).filter((key) => {
   const view = VIEWS[key];
@@ -192,6 +193,36 @@ async function loadEvaluation() {
     state.evaluation.filter = filter;
   }
 }
+
+// Kameraden: Anwesenheit aus der Auswertung, Einsätze je Person aus der Einsatzliste
+async function loadMembers() {
+  await loadEvaluation();
+  await loadIncidents();
+}
+
+// Einsatz in der Einsatzliste aufklappen und hinscrollen (aus Hinweisen und der Kameraden-Ansicht)
+async function openIncident(key, year) {
+  if (year && year !== state.year && state.years.includes(year)) {
+    state.year = year;
+    $("#year").value = String(year);
+  }
+  state.scrollTo = key;
+  // Suche und Filter würden den Einsatz womöglich ausblenden
+  state.query = "";
+  state.category = "all";
+  $("#search").value = "";
+  if (location.hash === "#incidents") {
+    state.expanded.add(key);
+    await showView();
+  } else {
+    location.hash = "#incidents";            // der hashchange-Listener klappt state.scrollTo auf
+  }
+}
+document.addEventListener("app:view", () => {
+  if (!state.scrollTo || state.view !== "incidents") return;
+  $(`#incident-table tr.row[data-id="${CSS.escape(state.scrollTo)}"]`)?.scrollIntoView({ block: "start", behavior: "smooth" });
+  state.scrollTo = null;
+});
 
 async function loadIncidents() {
   if (!state.incidents || state.incidents.year !== state.year) {
@@ -606,10 +637,103 @@ function readForm(el) {
   return values;
 }
 
+// Bearbeiten: Fahrzeuge direkt im Formular, Anwesenheit als Entwurf (state.editDraft) bis zum Speichern
+function vehicleEditTable(e) {
+  const time = (t) => t ? t.slice(0, 5) : "";
+  return `<div class="table-wrap"><table class="mini-table vehicle-edit"><thead><tr>
+    <th>Fzg.</th><th>dabei</th><th>Stärke</th><th>Ausrücken</th><th>Eintreffen</th></tr></thead>
+    <tbody>${e.vehicles.map((v) => `<tr data-vehicle="${esc(v.call_sign)}">
+      <td><strong>${esc(v.call_sign)}</strong></td>
+      <td><input type="checkbox" data-v="present" ${isIdle(v) ? "" : "checked"} aria-label="${esc(v.call_sign)} im Einsatz"></td>
+      <td><input type="number" min="0" max="99" data-v="crew" value="${v.crew ?? ""}" aria-label="Stärke ${esc(v.call_sign)}"></td>
+      <td><input type="time" data-v="departed" value="${time(v.departed)}" aria-label="Ausrücken ${esc(v.call_sign)}"></td>
+      <td><input type="time" data-v="arrived" value="${time(v.arrived)}" aria-label="Eintreffen ${esc(v.call_sign)}"></td>
+    </tr>`).join("")}</tbody></table></div>`;
+}
+
+// "Nachname, Vorname" -> "V. Nachname" (Schreibweise für das EHF-Feld)
+function leaderSpelling(name) {
+  const [last, first = ""] = name.split(",").map((part) => part.trim());
+  return first ? `${first.charAt(0)}. ${last}` : last;
+}
+
+function peopleEditPanel() {
+  const people = state.editDraft.people;
+  const chips = people.map((p, i) => `<span class="person-edit">
+      <button type="button" class="person" data-leader="${esc(p.leader_name)}" data-tip="${esc([p.role, p.vehicle, `Klicken: als EHF eintragen (${p.leader_name})`].filter(Boolean).join(" · "))}">${esc(p.name)}${p.vehicle ? `<small>${esc(p.vehicle)}</small>` : ""}</button>
+      <button type="button" class="person-remove" data-action="remove-person" data-index="${i}" aria-label="${esc(p.name)} entfernen">×</button>
+    </span>`).join("");
+  return `<h4>Anwesenheit · ${people.length} Personen${helpButton("attendance")}</h4>
+    <p class="small muted">Einen Namen anklicken, um die Person als EHF einzutragen; × entfernt sie aus dem Einsatz.</p>
+    <div class="people">${chips || `<span class="muted">Keine Anwesenheit erfasst</span>`}</div>
+    <div class="person-add">
+      <input type="text" list="member-options" data-p="name" placeholder="Nachname, Vorname" aria-label="Person hinzufügen" autocomplete="off">
+      <input type="text" data-p="role" placeholder="Funktion" aria-label="Funktion">
+      <select data-p="vehicle" aria-label="Fahrzeug"><option value="">ohne Fahrzeug</option>
+        ${config.vehicles.map((c) => `<option>${esc(c)}</option>`).join("")}</select>
+      <button type="button" class="btn btn-light btn-small" data-action="add-person">Hinzufügen</button>
+    </div>`;
+}
+
+function readIncidentForm(form) {
+  const vehicles = $$("tr[data-vehicle]", form).filter((row) => $('[data-v="present"]', row).checked).map((row) => {
+    const value = (key) => $(`[data-v="${key}"]`, row).value;
+    return { call_sign: row.dataset.vehicle, crew: value("crew") === "" ? null : Number(value("crew")),
+             departed: value("departed") || null, arrived: value("arrived") || null };
+  });
+  const people = state.editDraft.people.map((p) => ({ id: p.id, name: p.id == null ? p.name : null,
+    role: p.role || null, vehicle: p.vehicle || null }));
+  return { ...readForm(form), vehicles, people };
+}
+
+function addDraftPerson(form) {
+  const field = (key) => $(`.person-add [data-p="${key}"]`, form);
+  const name = field("name").value.trim().replace(/\s+/g, " ");
+  if (!name) { field("name").focus(); return; }
+  const member = state.memberOptions.find((m) => m.name.toLowerCase() === name.toLowerCase());
+  const people = state.editDraft.people;
+  if (people.some((p) => (member && p.id === member.id) || p.name.toLowerCase() === name.toLowerCase())) {
+    toast(`${name} ist schon eingetragen`);
+    return;
+  }
+  const display = member ? member.name : name;
+  people.push({ id: member ? member.id : null, name: display, role: field("role").value.trim(),
+                vehicle: field("vehicle").value, leader_name: leaderSpelling(display) });
+  if (!member) toast(`${display} wird beim Speichern als neuer Kamerad angelegt`);
+  redrawPeople(form);
+}
+
+function redrawPeople(form) {
+  $("[data-people-edit]", form).innerHTML = peopleEditPanel();
+  highlightLeader(form);
+  $('.person-add [data-p="name"]', form).focus();
+}
+
+async function startEditing(id) {
+  const incident = state.incidents.incidents.find((x) => x.id === id);
+  state.editing = id;
+  state.editDraft = { people: incident.people.map((p) => ({ id: p.id, name: p.name, role: p.role || "",
+    vehicle: p.vehicle || "", leader_name: p.leader_name })) };
+  updateDatalists();
+  renderIncidents();
+  try {
+    state.memberOptions = (await api(`/api/members?tenant=${encodeURIComponent(incident.tenant)}`)).members;
+  } catch (e) {
+    state.memberOptions = [];
+  }
+  const options = state.memberOptions.map((m) => `<option value="${esc(m.name)}">`).join("");
+  let list = $("#member-options");
+  if (!list) { list = document.createElement("datalist"); list.id = "member-options"; $("#datalists").append(list); }
+  list.innerHTML = options;
+}
+
 function editForm(e) {
   return `<div class="detail-grid" data-form="${e.id}">
     <div class="panel full"><h4>Einsatz ${e.number ?? ""} bearbeiten</h4>${formFields(e)}</div>
-    <div class="panel full">${attendancePanel(e, { pickLeader: true })}</div>
+    <div class="panel full"><h4>Fahrzeuge${helpButton("vehicles")}</h4>
+      <p class="small muted">Stärke und Zeiten korrigieren oder ein Fahrzeug ergänzen („dabei“). Manuell ergänzte Fahrzeuge und Personen bleiben erhalten, wenn der Bericht später erneut eingelesen wird.</p>
+      ${vehicleEditTable(e)}</div>
+    <div class="panel full" data-people-edit>${peopleEditPanel()}</div>
     <div class="actions panel full bare">
       <button type="button" class="btn btn-outline btn-small" data-action="cancel">Abbrechen</button>
       <button type="button" class="btn btn-primary btn-small" data-action="save" data-id="${e.id}">Speichern</button>
@@ -628,9 +752,15 @@ function updateDatalists() {
   container.innerHTML = `<datalist id="place-options">${options(places)}</datalist><datalist id="leader-options">${options(leaders)}</datalist>`;
 }
 
-async function handleIncidentAction(action, id) {
-  if (action === "edit") { state.editing = id; updateDatalists(); renderIncidents(); return; }
+async function handleIncidentAction(action, id, el) {
+  if (action === "edit") { await startEditing(id); return; }
   if (action === "cancel") { state.editing = null; renderIncidents(); return; }
+  if (action === "add-person") { addDraftPerson(formOf(el)); return; }
+  if (action === "remove-person") {
+    state.editDraft.people.splice(Number(el.dataset.index), 1);
+    redrawPeople(formOf(el));
+    return;
+  }
   try {
     if (action === "delete") {
       const incident = state.incidents.incidents.find((x) => x.id === id);
@@ -640,7 +770,7 @@ async function handleIncidentAction(action, id) {
       toast("Einsatz gelöscht");
     }
     if (action === "save") {
-      await apiJson(`/api/incidents/${encodeURIComponent(id)}`, "PUT", readForm($(`[data-form="${id}"]`)));
+      await apiJson(`/api/incidents/${encodeURIComponent(id)}`, "PUT", readIncidentForm($(`[data-form="${id}"]`)));
       state.editing = null;
       toast("Gespeichert");
     }
@@ -657,6 +787,22 @@ const MEMBER_COLUMNS = [      // [Feld, Titel, CSS-Klassen, Hilfe-Schlüssel]
   ["weekends", "Sa/So/FT", "right hide-mobile", "nights_weekends"], ["last", "Zuletzt", "right hide-mobile"],
 ];
 
+// Einsätze eines Kameraden im gewählten Jahr (Klick öffnet den Einsatz)
+function memberIncidents(member) {
+  const rows = (state.incidents?.incidents || []).filter((e) => e.people.some((p) => p.id === member.id))
+    .sort((a, b) => (b.started_at || "").localeCompare(a.started_at || ""));
+  if (!rows.length) return `<p class="empty-note">Keine Einsätze gefunden.</p>`;
+  return `<div class="member-incidents"><table class="mini-table"><thead><tr>
+    <th>Nr.</th><th>Datum</th><th>Stichwort</th><th>Einsatz</th><th>Fahrzeug</th><th>Funktion</th></tr></thead>
+    <tbody>${rows.map((e) => {
+      const p = e.people.find((x) => x.id === member.id);
+      return `<tr class="link-row" data-open-incident="${esc(e.id)}" tabindex="0">
+        <td>${e.number ?? "–"}</td><td>${formatDate(e.started_at)} ${formatTime(e.started_at)}</td>
+        <td>${esc(e.keyword)}${e.subcode ? "." + esc(e.subcode) : ""}</td><td>${esc(e.description || "–")}</td>
+        <td>${esc(p.vehicle || "–")}</td><td>${esc(p.role || "–")}</td></tr>`;
+    }).join("")}</tbody></table></div>`;
+}
+
 function renderMembers() {
   const a = state.evaluation.attendance;
   const { field, descending } = state.memberSort;
@@ -670,7 +816,7 @@ function renderMembers() {
     <div class="table-wrap"><table class="table">
       <thead><tr><th class="col-number">#</th>${MEMBER_COLUMNS.map(([f, title, cls, help]) =>
         `<th class="sortable ${cls}" data-sort="${f}">${title}${field === f ? (descending ? " ▾" : " ▴") : ""}${help ? helpButton(help) : ""}</th>`).join("")}</tr></thead>
-      <tbody>${list.map((m, i) => `<tr>
+      <tbody>${list.map((m, i) => `<tr class="row ${state.openMembers.has(m.id) ? "open" : ""}" data-member="${m.id}">
         <td class="muted">${i + 1}</td>
         <td><strong>${esc(m.name)}</strong></td>
         <td><div class="inline-bar"><span class="track"><span style="width:${(m.incidents / max) * 100}%"></span></span><b>${m.incidents}</b></div></td>
@@ -679,7 +825,7 @@ function renderMembers() {
         <td class="right hide-mobile">${m.nights}</td>
         <td class="right hide-mobile">${m.weekends}</td>
         <td class="right hide-mobile">${formatDate(m.last)}</td>
-      </tr>`).join("")}</tbody>
+      </tr>${state.openMembers.has(m.id) ? `<tr class="detail"><td colspan="${MEMBER_COLUMNS.length + 1}">${memberIncidents(m)}</td></tr>` : ""}`).join("")}</tbody>
     </table></div>
     ${list.length ? "" : `<p class="empty-note">Für ${state.year} ist keine Anwesenheit erfasst.</p>`}
   </div>`;
@@ -864,7 +1010,11 @@ document.addEventListener("focusin", (e) => {
 document.addEventListener("focusout", hideTooltip);
 
 // ------------------------------------------------------------ Ereignisse
-window.addEventListener("hashchange", () => { state.expanded.clear(); showView(); });
+window.addEventListener("hashchange", () => {
+  state.expanded.clear();
+  if (state.scrollTo) state.expanded.add(state.scrollTo);   // Sprung zu einem Einsatz (openIncident)
+  showView();
+});
 $("#year").addEventListener("change", (e) => {
   state.year = Number(e.target.value);
   remember("year", state.year);
@@ -915,7 +1065,7 @@ $("#incident-table tbody").addEventListener("click", (e) => {
   const chip = e.target.closest("[data-leader]");
   if (chip) { pickLeader(chip); return; }
   const action = e.target.closest("[data-action]");
-  if (action) { handleIncidentAction(action.dataset.action, action.dataset.id); return; }
+  if (action) { handleIncidentAction(action.dataset.action, action.dataset.id, action); return; }
   if (e.target.closest("tr.detail")) return;
   const row = e.target.closest("tr.row");
   if (!row) return;
@@ -929,7 +1079,20 @@ $("#incident-table tbody").addEventListener("click", (e) => {
   renderIncidents();
 });
 
+$("#view-members").addEventListener("keydown", (e) => {
+  const incident = e.target.closest("[data-open-incident]");
+  if (incident && e.key === "Enter") openIncident(incident.dataset.openIncident, state.year);
+});
 $("#view-members").addEventListener("click", (e) => {
+  const incident = e.target.closest("[data-open-incident]");
+  if (incident) { openIncident(incident.dataset.openIncident, state.year); return; }
+  const row = e.target.closest("tr[data-member]");
+  if (row) {
+    const id = Number(row.dataset.member);
+    if (state.openMembers.has(id)) state.openMembers.delete(id); else state.openMembers.add(id);
+    renderMembers();
+    return;
+  }
   const th = e.target.closest("[data-sort]");
   if (!th) return;
   const field = th.dataset.sort;

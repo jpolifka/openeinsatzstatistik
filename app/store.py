@@ -264,6 +264,74 @@ def replace_report_rows(con, incident_id, vehicles, attendance):
             add_attendance(con, incident_id, member_id, role, vehicle)
 
 
+TIME = re.compile(r"([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?")
+
+
+def _time(value):
+    """Uhrzeit aus dem Formular ("HH:MM" oder "HH:MM:SS") -> "HH:MM:SS"; leer -> None."""
+    value = (value or "").strip()
+    if not value:
+        return None
+    m = TIME.fullmatch(value)
+    if not m:
+        raise ValueError(f"Uhrzeit „{value}“ ist ungültig (Format HH:MM).")
+    return f"{m.group(1)}:{m.group(2)}:{m.group(3) or '00'}"
+
+
+def replace_vehicles(con, incident_id, rows):
+    """Fahrzeuge aus dem Formular: [{call_sign, crew, departed, arrived}]. Nicht genannte Fahrzeuge entfallen;
+    vorhandene behalten Name, Alarmierung und Ende, neue gelten als manuell ergänzt."""
+    current = {r["call_sign"]: dict(r) for r in con.execute("SELECT * FROM vehicle WHERE incident_id = ?", (incident_id,))}
+    wanted = {}
+    for row in rows:
+        crew = to_int(row.get("crew"))
+        if crew is not None and not 0 <= crew <= 99:
+            raise ValueError(f"Stärke {crew} bei {row['call_sign']} ist ungültig.")
+        wanted[row["call_sign"]] = {"crew": crew, "departed": _time(row.get("departed")),
+                                    "arrived": _time(row.get("arrived"))}
+    for call_sign in set(current) - set(wanted):
+        con.execute("DELETE FROM vehicle WHERE incident_id = ? AND call_sign = ?", (incident_id, call_sign))
+    for call_sign, values in wanted.items():
+        if call_sign in current:
+            con.execute("UPDATE vehicle SET crew = ?, departed = ?, arrived = ? WHERE incident_id = ? AND call_sign = ?",
+                        (values["crew"], values["departed"], values["arrived"], incident_id, call_sign))
+        else:
+            add_vehicle(con, incident_id, call_sign, None, values["crew"], values["departed"], values["arrived"],
+                        manual=True)
+
+
+def replace_attendance(con, incident_id, people):
+    """Anwesenheit aus dem Formular: [{id oder name, role, vehicle}]. Nicht genannte Personen entfallen;
+    neue gelten als manuell ergänzt, unbekannte Namen („Nachname, Vorname“) werden als Kameraden angelegt."""
+    current = {r["member_id"] for r in con.execute("SELECT member_id FROM attendance WHERE incident_id = ?",
+                                                   (incident_id,))}
+    members, wanted = MemberDirectory(con), {}
+    for p in people:
+        member_id = p.get("id")
+        if member_id is None:
+            name = " ".join((p.get("name") or "").split())
+            if not name:
+                continue
+            last_name, first_name = split_name(name)
+            member_id = members.find_or_create(last_name, first_name)
+        elif not con.execute("SELECT 1 FROM member WHERE id = ?", (member_id,)).fetchone():
+            raise ValueError("Unbekannter Kamerad.")
+        wanted.setdefault(member_id, ((p.get("role") or "").strip() or None, (p.get("vehicle") or "").strip() or None))
+    for member_id in current - set(wanted):
+        con.execute("DELETE FROM attendance WHERE incident_id = ? AND member_id = ?", (incident_id, member_id))
+    for member_id, (role, vehicle) in wanted.items():
+        if member_id in current:
+            con.execute("UPDATE attendance SET role = ?, vehicle = ? WHERE incident_id = ? AND member_id = ?",
+                        (role, vehicle, incident_id, member_id))
+        else:
+            add_attendance(con, incident_id, member_id, role, vehicle, manual=True)
+
+
+def all_members(con):
+    """Alle Kameraden der Wehr (Vorschläge beim Ergänzen der Anwesenheit)."""
+    return [dict(r) for r in con.execute("SELECT id, name FROM member ORDER BY name")]
+
+
 def update_incident(con, incident_id, changes, modified_by=None, source=None):
     """Felder ändern; Jahr und Wochenende/Feiertag werden neu abgeleitet.
     source: {source, filename, warnings} beim Aktualisieren aus einem Bericht."""

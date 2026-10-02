@@ -4,7 +4,7 @@
 // Berichte) und das Prüfprotokoll des Wehrleiters je Stammdatensatz im BKS-Portal.
 // Wird nach app.js geladen und trägt sich in VIEWS ein. Rechte prüft das Backend (app/main.py, app/records.py).
 
-const records = { notices: [], showNotices: true, data: null, onlyOpen: true, expanded: new Set(), scrollTo: null };
+const records = { notices: [], showNotices: true, data: null, onlyOpen: true, expanded: new Set() };
 
 VIEWS.records = { label: "Prüfprotokoll", load: loadRecords, render: renderRecords,
   visible: () => Boolean(config.vg && config.manages_vg) };
@@ -57,23 +57,6 @@ function renderNotices() {
   </div>`;
 }
 
-async function openNoticeIncident(n) {
-  if (n.year && n.year !== state.year && state.years.includes(n.year)) {
-    state.year = n.year;
-    $("#year").value = String(n.year);
-  }
-  records.scrollTo = n.incident_key;
-  if (location.hash === "#incidents") {
-    state.expanded.add(n.incident_key);
-    await showView();
-  } else {
-    // Der Wechsel des Reiters leert state.expanded (Listener in app.js); danach aufklappen –
-    // gezeichnet wird erst, wenn die Einsätze geladen sind
-    window.addEventListener("hashchange", () => state.expanded.add(n.incident_key), { once: true });
-    location.hash = "#incidents";
-  }
-}
-
 // Weitergegebene Berichte einer Wehr lesen und wie hochgeladene PDFs zur Übernahme anzeigen
 async function readPendingReports(slug) {
   const pending = (await api("/api/pending")).reports.filter((p) => p.tenant === slug);
@@ -98,7 +81,10 @@ $("#notices").addEventListener("click", async (e) => {
   const find = (id) => records.notices.find((n) => n.id === Number(id));
   try {
     if (button.matches("[data-notices-toggle]")) { records.showNotices = !records.showNotices; renderNotices(); }
-    if (button.dataset.noticeOpen) await openNoticeIncident(find(button.dataset.noticeOpen));
+    if (button.dataset.noticeOpen) {
+      const n = find(button.dataset.noticeOpen);
+      await openIncident(n.incident_key, n.year);
+    }
     if (button.dataset.noticePending) await readPendingReports(button.dataset.noticePending);
     if (button.dataset.noticeDone) {
       await api(`/api/notices/${button.dataset.noticeDone}/done`, { method: "POST" });
@@ -109,12 +95,6 @@ $("#notices").addEventListener("click", async (e) => {
   }
 });
 document.addEventListener("app:data", loadNotices);
-// Nach „Einsatz öffnen“: aufgeklappten Einsatz in den sichtbaren Bereich holen
-document.addEventListener("app:view", () => {
-  if (!records.scrollTo) return;
-  $(`#incident-table tr.row[data-id="${CSS.escape(records.scrollTo)}"]`)?.scrollIntoView({ block: "start", behavior: "smooth" });
-  records.scrollTo = null;
-});
 
 // ------------------------------------------------------------ Prüfprotokoll
 // Bei jedem Anzeigen neu: Berichte und Hinweise ändern sich auch durch andere Wehren
