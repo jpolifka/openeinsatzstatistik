@@ -404,7 +404,11 @@ h2 .help-btn, h3 .help-btn { color: var(--brand); }
 .admin-head { display: flex; gap: 14px; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; margin-bottom: 18px; }
 .admin-tenant { min-width: 240px; }
 .admin-body h3 { margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
-.admin-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); }
+.admin-actions { display: flex; gap: 10px; justify-content: flex-end; align-items: center; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); }
+.admin-actions .unsaved-note { display: none; font-weight: 700; color: var(--brand-dark); }
+/* Ungespeicherte Änderungen: Leiste klebt unten im Fenster, bis gespeichert ist */
+.admin-actions.dirty { position: sticky; bottom: 0; z-index: 5; background: var(--white); padding: 12px 0; box-shadow: 0 -8px 16px -12px var(--brand-shadow); }
+.admin-actions.dirty .unsaved-note { display: inline; }
 .admin-actions.left { justify-content: flex-start; border-top: 0; padding-top: 0; margin-top: 12px; }
 .admin-status { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 .admin-status .toolbar-right { margin-left: auto; }
