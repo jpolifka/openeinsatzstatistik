@@ -192,6 +192,11 @@ const HELP_SECTIONS = [
         short: "Abgleich je Einsatz über alle Wehren der VG (nur Wehrleiter).",
         text: "Für jeden Einsatz mit Stammdatensatz vergleicht das Protokoll die Zeiten der Leitstelle mit den Berichten der Wehren. „Als geprüft markieren“ gilt für den jetzigen Stand: Kommt ein neuer Befund hinzu (z. B. ein geänderter Bericht), ist der Einsatz wieder offen. „Drucken / PDF“ druckt die angezeigten Einsätze mit ihren Befunden.",
       },
+      fees: {
+        title: "Kostenersatz",
+        short: "Kostenaufstellung nach der Gebührenordnung der VG (nur Wehrleiter).",
+        text: "Im Prüfprotokoll rechnet „Kostenersatz berechnen“ einen Einsatz über alle beteiligten Wehren nach der Gebührenordnung (Verwaltung → Gebührenordnung): Fahrzeuge je Stunde vom Ausrücken bis zum Einsatzende des Fahrzeugs, Einsatzkräfte je Person und Stunde von der Alarmierung bis zum Einsatzende (Brandsicherheitswache mit eigenem Satz). Angefangene Stunden werden bis 30 Minuten als halbe, darüber als volle Stunde abgerechnet. Bei einem Fehlalarm einer Brandmeldeanlage gilt höchstens die Pauschale. Auslagen bekommen den Verwaltungszuschlag, Umsatzsteuer nur, wenn sie anfällt. Den Fahrzeugtyp liefert die Bezeichnung in der Fahrzeugliste (z. B. „HLF 20“). Es wird nichts gespeichert.",
+      },
       findings: {
         title: "Befunde",
         short: "Abweichungen, fehlende und unbearbeitete Berichte.",

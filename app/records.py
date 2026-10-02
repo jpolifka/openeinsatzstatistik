@@ -131,7 +131,8 @@ def vehicle_differences(source, incident, cfg):
     return result
 
 
-def _incident_of(con, bks_record_id):
+def incident_of(con, bks_record_id):
+    """Erfasster Einsatz der Wehr zu einem Stammdatensatz (oder None)."""
     row = con.execute("SELECT id FROM incident WHERE bks_record_id = ? ORDER BY id LIMIT 1", (bks_record_id,)).fetchone()
     return store.load_incident(con, row["id"]) if row else None
 
@@ -157,7 +158,7 @@ def check(central_con, bks_record_id, tenants):
     for t in tenants:
         cfg = t.config
         with t.connection() as con:
-            incident = _incident_of(con, bks_record_id)
+            incident = incident_of(con, bks_record_id)
             pending = any(r.get("bks_record_id") == bks_record_id for r in store.pending_reports(con))
         moved = moved_vehicles(master["vehicles"], cfg) if master else []
         if not incident:
@@ -291,7 +292,7 @@ def notify_others(central_con, source, vehicles, origin, tenants, exclude=None, 
         if not moved:
             continue
         with t.connection() as con:
-            incident = _incident_of(con, record_id) if record_id else None
+            incident = incident_of(con, record_id) if record_id else None
             if not incident and source.get("dispatch_number"):
                 row = con.execute("SELECT id FROM incident WHERE dispatch_number = ? LIMIT 1",
                                   (source["dispatch_number"],)).fetchone()

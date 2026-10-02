@@ -410,7 +410,7 @@ h2 .help-btn, h3 .help-btn { color: var(--brand); }
 .admin-status .toolbar-right { margin-left: auto; }
 .field select, .field textarea { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--white); min-width: 0; width: 100%; font: inherit; }
 .field select:focus, .field textarea:focus { border-color: var(--brand-accent); outline: none; box-shadow: 0 0 0 3px var(--brand-light); }
-.admin-table input[type="text"], .admin-table input[type="date"], .admin-table select, .inline-row input, .inline-row select {
+.admin-table input[type="text"], .admin-table input[type="date"], .admin-table input[type="number"], .admin-table select, .inline-row input, .inline-row select {
   border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; background: var(--white); min-width: 0; width: 100%; font: inherit;
 }
 .admin-table input.narrow, .inline-row input.narrow { width: 80px; }
@@ -562,3 +562,19 @@ a.tenant-badge { text-decoration: none; }
 .link-row { cursor: pointer; }
 .link-row:hover td, .link-row:focus-visible td { background: var(--brand-light); }
 #view-members tr[data-member] { cursor: pointer; }
+
+/* Kostenersatz (records.js) */
+.dialog-fees { width: min(920px, calc(100vw - 32px)); }
+.fee-table tfoot td { padding: 6px; font-weight: 700; border-top: 1px solid var(--line); }
+.fee-table .fee-total td { font-size: 1rem; color: var(--brand-dark); }
+.fee-table tr.fee-cap td, .fee-table tr.fee-surcharge td { color: var(--gray); }
+.fee-table td { white-space: normal; }
+@media print {
+  body.print-fees > :not(#fees-dialog) { display: none !important; }
+  body.print-fees #fees-dialog { position: static; display: block; width: auto; max-width: none; max-height: none;
+    margin: 0; border: 0; box-shadow: none; overflow: visible; }
+  body.print-fees #fees-dialog .btn-close { display: none; }
+}
+.dialog-fees .inline-row input[data-key="label"] { flex: 1 1 240px; width: auto; }
+.dialog-fees .inline-row input[data-key="amount"] { flex: 0 0 110px; }
+.admin-table input.fee-code { width: 130px; }

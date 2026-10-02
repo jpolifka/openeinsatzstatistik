@@ -7,6 +7,7 @@ standen im Code (rheinbrohl_config) und berechtigt waren die Adressen aus AUTH_E
 migrate_single_install() macht daraus beim ersten Start einmalig die VG Bad Hönningen mit der
 Wehr Rheinbrohl. Danach liegen die Werte nur noch in deren Datenbank.
 """
+import json
 import logging
 import os
 import shutil
@@ -43,6 +44,47 @@ def rheinbrohl_config():
         # Ausrückebereich laut Feuerwehrbedarfsplan Pos. 8.4
         plan_places=("Rheinbrohl", "Hammerstein", "Arienheller"),
     )
+
+
+# Satzung über den Kostenersatz und die Gebührenerhebung für Hilfe- und Dienstleistungen der Feuerwehr
+# der VG Bad Hönningen vom 16.05.2024, Anlage „Verzeichnis der Kostensätze“ (Euro je Stunde)
+FEE_SCHEDULE_2024 = {
+    "name": "Satzung vom 16.05.2024", "valid_from": "2024-08-10",
+    "rates": {
+        "personnel": 33.45, "personnel_bma": 33.45, "fire_watch": 12.00, "bma_flat_max": 400.00,
+        "admin_surcharge": 10,
+        "vehicles": [
+            {"code": "TSF", "name": "Tragkraftspritzenfahrzeug", "rate": 67.00},
+            {"code": "LF 8/6", "name": "Löschgruppenfahrzeug 8/6", "rate": 110.00},
+            {"code": "LF 10", "name": "Löschgruppenfahrzeug 10", "rate": 313.00},
+            {"code": "HLF 10", "name": "Hilfeleistungs-Löschgruppenfahrzeug 10", "rate": 341.00},
+            {"code": "HLF 20", "name": "Hilfeleistungs-Löschgruppenfahrzeug 20", "rate": 447.00},
+            {"code": "TLF 16/25", "name": "Tanklöschfahrzeug 16/25", "rate": 106.00},
+            {"code": "GTLF 20/40", "name": "Großtanklöschfahrzeug 20/40", "rate": 102.00},
+            {"code": "DLK 23/12", "name": "Drehleiter mit Korb 23/12", "rate": 366.00},
+            {"code": "ELW 1", "name": "Einsatzleitwagen 1", "rate": 102.00},
+            {"code": "MZB", "name": "Mehrzweckboot", "rate": 97.50},
+            {"code": "RTB 1", "name": "Rettungsboot 1", "rate": 37.00},
+            {"code": "RTB 2", "name": "Rettungsboot 2", "rate": 59.00},
+            {"code": "HWK", "name": "Hochwasserkahn", "rate": 3.00},
+            {"code": "MZF 1", "name": "Mehrzweckfahrzeug", "rate": 61.00},
+            {"code": "MTF", "name": "Mannschaftstransportfahrzeug", "rate": 37.00},
+            {"code": "KdoW", "name": "Kommandowagen", "rate": 43.00},
+            {"code": "Anhänger", "name": "Anhänger (Logistik)", "rate": 2.00},
+            {"code": "Rollcontainer", "name": "Rollcontainer (TS, Schlauch, Unwetter)", "rate": 1.50},
+            {"code": "PFPN 10-1000", "name": "Tragkraftspritze", "rate": 9.75},
+            {"code": "NEA 17 kVA", "name": "Netzersatzanlage 17 kVA", "rate": 10.56},
+        ],
+    },
+}
+
+
+def seed_fee_schedule(con, vg_id):
+    """Gebührenordnung der VG Bad Hönningen anlegen (nur wenn die VG noch keine hat)."""
+    if not con.execute("SELECT 1 FROM fee_schedule WHERE vg_id = ?", (vg_id,)).fetchone():
+        s = FEE_SCHEDULE_2024
+        con.execute("INSERT INTO fee_schedule (vg_id, name, valid_from, rates, modified_by) VALUES (?, ?, ?, ?, 'System')",
+                    (vg_id, s["name"], s["valid_from"], json.dumps(s["rates"], ensure_ascii=False)))
 
 
 def legacy_emails():
@@ -102,6 +144,7 @@ def migrate_single_install(data_dir):
             tenancy.grant(con, email, "lead", tenant_id)
         # Eigenbetrieb der eigenen Wehr: kein AVV nötig (siehe dpa.py)
         con.execute("INSERT INTO dpa (vg_id, status) VALUES (?, 'not_required')", (vg_id,))
+        seed_fee_schedule(con, vg_id)
         con.execute("INSERT INTO dpa_event (vg_id, email, action, detail) VALUES (?, 'System', ?, ?)",
                     (vg_id, "Status: nicht erforderlich (Eigenbetrieb)", "Übernahme der Einzel-Installation"))
     con = sqlite3.connect(staging)

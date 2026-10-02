@@ -20,7 +20,7 @@ import openpyxl
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
-from app import auth, db, domain, store, tenancy, theme
+from app import auth, db, domain, fees, store, tenancy, theme
 from app.tenancy import ADMIN, ROLES
 from app.tenant_config import TenantConfig, Vehicle
 
@@ -189,6 +189,56 @@ def put_settings(slug: str, s: SettingsIn, a: tenancy.Access = Depends(access)):
     log.info("Einstellungen von %s geändert durch %s", slug, a.email or "lokal")
     tenant.name = cfg.name
     return _settings_json(tenant, tenant.config)
+
+
+# ---------------------------------------------------------------- Gebührenordnung der VG
+class ScheduleIn(BaseModel):
+    name: str
+    valid_from: str
+    rates: dict
+
+
+def _managed_vg_id(a, vg_slug):
+    """VG, deren Gebührenordnung der Benutzer pflegen darf (Wehrleiter der VG, Superadmin)."""
+    with tenancy.central() as con:
+        row = con.execute("SELECT id FROM vg WHERE slug = ?", (vg_slug,)).fetchone()
+    if not row or not a.manages_vg(row["id"]):
+        raise tenancy.Forbidden("Die Gebührenordnung pflegt der Wehrleiter der VG.")
+    return row["id"]
+
+
+def _schedules_json(vg_id):
+    with tenancy.central() as con:
+        return {"schedules": fees.schedules(con, vg_id)}
+
+
+@router.get("/api/admin/vgs/{vg_slug}/fees")
+def get_fee_schedules(vg_slug: str, a: tenancy.Access = Depends(access)):
+    return _schedules_json(_managed_vg_id(a, vg_slug))
+
+
+@router.post("/api/admin/vgs/{vg_slug}/fees")
+@router.put("/api/admin/vgs/{vg_slug}/fees/{schedule_id}")
+def save_fee_schedule(vg_slug: str, s: ScheduleIn, schedule_id: Optional[int] = None,
+                      a: tenancy.Access = Depends(access)):
+    vg_id = _managed_vg_id(a, vg_slug)
+    with tenancy.central() as con:
+        try:
+            fees.save_schedule(con, vg_id, s.name, s.valid_from, s.rates, a.email, schedule_id)
+        except ValueError as e:
+            _invalid(str(e))
+        except KeyError:
+            raise HTTPException(404, "Fassung nicht gefunden.")
+    log.info("Gebührenordnung der VG %s geändert durch %s", vg_slug, a.email or "lokal")
+    return _schedules_json(vg_id)
+
+
+@router.delete("/api/admin/vgs/{vg_slug}/fees/{schedule_id}")
+def delete_fee_schedule(vg_slug: str, schedule_id: int, a: tenancy.Access = Depends(access)):
+    vg_id = _managed_vg_id(a, vg_slug)
+    with tenancy.central() as con:
+        fees.delete_schedule(con, vg_id, schedule_id)
+    return _schedules_json(vg_id)
 
 
 class PlanRelease(BaseModel):

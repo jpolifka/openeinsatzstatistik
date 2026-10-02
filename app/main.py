@@ -28,7 +28,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Stre
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, create_model
 
-from app import admin, auth, db, domain, dpa, mail, excel_export, legacy, metrics, pdf_report, records, report, store, tenancy, tenant_config, theme
+from app import admin, auth, db, domain, dpa, fees, mail, excel_export, legacy, metrics, pdf_report, records, report, store, tenancy, tenant_config, theme
 from app.tenancy import ADMIN, INCIDENTS, STATS, WRITE
 from app.timeutil import year_of
 
@@ -837,6 +837,36 @@ def api_review_record(bks_record_id: str, review: Review, a: tenancy.Access = De
         records.review(con, vg_id, bks_record_id, tenants, a.email, review.done)
         entry = records.check(con, bks_record_id, tenants)
     return {"ok": True, "findings": len(entry["findings"])}
+
+
+# ---------------------------------------------------------------- Kostenersatz (Wehrleiter)
+class Expense(BaseModel):
+    label: str = ""
+    amount: float = 0
+
+
+class FeeRequest(BaseModel):
+    schedule_id: Optional[int] = None
+    bma_cap: Optional[bool] = None     # None: bei Stichwort Brandmeldeanlage höchstens die Pauschale
+    expenses: List[Expense] = []
+    vat_percent: float = 0
+
+
+@app.post("/api/records/{bks_record_id}/fees")
+def api_fees(bks_record_id: str, request: FeeRequest, a: tenancy.Access = Depends(access)):
+    """Kostenaufstellung nach der Gebührenordnung der VG – nur berechnet, nicht gespeichert."""
+    vg_id, tenants = _managed_vg(a)
+    if not 0 <= request.vat_percent <= 100 or any(e.amount < 0 for e in request.expenses):
+        raise HTTPException(422, "Auslagen und Umsatzsteuer dürfen nicht negativ sein.")
+    with tenancy.central() as con:
+        try:
+            result = fees.calculate(con, vg_id, bks_record_id, tenants, request.schedule_id, request.bma_cap,
+                                    [e.model_dump() for e in request.expenses], request.vat_percent)
+        except ValueError as e:
+            raise HTTPException(422, str(e))
+        result["schedules"] = [{"id": s["id"], "name": s["name"], "valid_from": s["valid_from"]}
+                               for s in fees.schedules(con, vg_id)]
+    return result
 
 
 # ---------------------------------------------------------------- Export

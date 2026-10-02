@@ -4,16 +4,17 @@
 // Stichwortkatalog, Benutzer und – für Superadmins – Verbandsgemeinden und Wehren.
 // Wird nach app.js geladen und trägt sich in VIEWS ein. Rechte prüft das Backend (app/admin.py).
 
-const ADMIN_SECTIONS = [      // [Schlüssel, Bezeichnung, braucht die Einstellungen der Wehr, nur Superadmin]
+const ADMIN_SECTIONS = [      // [Schlüssel, Bezeichnung, braucht die Einstellungen der Wehr, nur Superadmin, nur Wehrleiter]
   ["unit", "Wehr", true], ["fleet", "Fahrzeuge", true], ["bks", "BKS-Kennung", true],
   ["places", "Orte & Bedarfsplan", true], ["keywords", "Stichworte"], ["users", "Benutzer"],
-  ["super", "Wehren & VGs", false, true],
+  ["fees", "Gebührenordnung", false, false, true], ["super", "Wehren & VGs", false, true],
 ];
 const SETTINGS_SECTIONS = ADMIN_SECTIONS.filter((s) => s[2]).map((s) => s[0]);
 
 const admin = {
   overview: null, slug: null, section: null, settings: null, keywords: null, memberships: null, superOverview: null,
   check: null, importFile: null, importPreview: null, keywordQuery: "", keywordEdit: null, parseResult: null, error: "",
+  fees: null, feeVg: null, feeDraft: null,
 };
 
 VIEWS.admin = { label: "Verwaltung", load: loadAdmin, render: renderAdmin, noYear: true,
@@ -38,12 +39,20 @@ async function loadAdmin() {
   }
   if (s === "users" && !admin.memberships) admin.memberships = (await api("/api/admin/memberships")).memberships;
   if (s === "super" && !admin.superOverview) admin.superOverview = await api("/api/super/overview");
+  if (s === "fees") {
+    admin.feeVg = admin.feeVg || admin.overview.vgs[0].slug;
+    if (admin.fees?.vg !== admin.feeVg) {
+      admin.fees = { vg: admin.feeVg, ...(await api(`/api/admin/vgs/${encodeURIComponent(admin.feeVg)}/fees`)) };
+      admin.feeDraft = null;
+    }
+  }
 }
 
 function adminSections() {
   const hasTenant = Boolean(admin.overview.tenants.length);
-  return ADMIN_SECTIONS.filter(([, , needsTenant, superOnly]) =>
-    (!superOnly || admin.overview.superadmin) && (!needsTenant || hasTenant) && (hasTenant || superOnly));
+  return ADMIN_SECTIONS.filter(([, , needsTenant, superOnly, vgOnly]) =>
+    (!superOnly || admin.overview.superadmin) && (!needsTenant || hasTenant) && (hasTenant || superOnly)
+    && (!vgOnly || admin.overview.vgs.length > 0));
 }
 
 async function adminGo(changes) {
@@ -54,14 +63,14 @@ async function adminGo(changes) {
 // ------------------------------------------------------------ Rahmen
 function renderAdmin() {
   const { tenants } = admin.overview;
-  const tenantSelect = tenants.length > 1 && !["users", "super"].includes(admin.section)
+  const tenantSelect = tenants.length > 1 && !["users", "super", "fees"].includes(admin.section)
     ? `<label class="field admin-tenant"><span>Wehr</span><select data-admin-tenant>${tenants.map((t) =>
       `<option value="${esc(t.slug)}" ${t.slug === admin.slug ? "selected" : ""}>${esc(t.name)} · ${esc(t.vg)}</option>`).join("")}</select></label>` : "";
   const sections = `<div class="segments" role="tablist">${adminSections().map(([key, label]) =>
     `<button type="button" data-admin-section="${key}" class="${key === admin.section ? "active" : ""}">${label}</button>`).join("")}</div>`;
   const body = {
     unit: unitSection, fleet: fleetSection, bks: bksSection, places: placesSection,
-    keywords: keywordsSection, users: usersSection, super: superSection,
+    keywords: keywordsSection, users: usersSection, super: superSection, fees: feesSection,
   }[admin.section]();
   $("#view-admin").innerHTML = `<div class="card admin-card">
     <div class="admin-head">${sections}${tenantSelect}</div>
@@ -401,6 +410,7 @@ async function runAdminAction(button) {
   const s = admin.settings;
   const i = Number(index);
   const rerender = () => renderAdmin();
+  if (action.startsWith("fee-")) { await runFeeAction(action, button.dataset); return; }
   switch (action) {
     case "save-settings": {
       admin.settings = await apiJson(`/api/admin/${admin.slug}/settings`, "PUT", settingsPayload());
@@ -540,6 +550,87 @@ async function afterAssetChange() {
   renderAdmin();
 }
 
+// ------------------------------------------------------------ Gebührenordnung der VG (Wehrleiter)
+const FEE_RATES = [      // [Schlüssel, Bezeichnung, Einheit]
+  ["personnel", "Je freiwilligem Feuerwehrangehörigen", "€/Std."], ["personnel_bma", "Je Angehörigem bei Brandmeldeanlagen", "€/Std."],
+  ["fire_watch", "Brandsicherheitswache", "€/Std."], ["bma_flat_max", "Fehlalarm Brandmeldeanlage (höchstens)", "€"],
+  ["admin_surcharge", "Verwaltungszuschlag auf Auslagen", "%"],
+];
+const emptyRates = () => ({ ...Object.fromEntries(FEE_RATES.map(([key]) => [key, 0])), vehicles: [] });
+
+function feesSection() {
+  const { schedules } = admin.fees, draft = admin.feeDraft;
+  const vgSelect = admin.overview.vgs.length > 1 ? adminField("Verbandsgemeinde", `<select data-fee-vg>${admin.overview.vgs.map((v) =>
+    `<option value="${esc(v.slug)}" ${v.slug === admin.feeVg ? "selected" : ""}>${esc(v.name)}</option>`).join("")}</select>`) : "";
+  const rows = schedules.map((x) => `<tr>
+    <td><strong>${esc(x.name)}</strong></td><td>${formatDate(x.valid_from)}</td><td class="right">${x.rates.vehicles.length}</td>
+    <td class="right"><button type="button" class="btn btn-light btn-small" data-admin-action="fee-edit" data-id="${x.id}">Bearbeiten</button>
+      <button type="button" class="btn btn-light btn-small" data-admin-action="fee-copy" data-id="${x.id}">Als neue Fassung</button>
+      <button type="button" class="btn btn-outline btn-small" data-admin-action="fee-delete" data-id="${x.id}">Löschen</button></td></tr>`).join("");
+  return `<p class="small muted">Kostensätze der Satzung über den Kostenersatz der Feuerwehr. Für einen Einsatz gilt die Fassung, die am Einsatztag gilt. Den Fahrzeugtyp eines Fahrzeugs bestimmt seine Bezeichnung in der Fahrzeugliste der Wehr (z. B. „HLF 20“).${helpButton("fees")}</p>
+    ${vgSelect ? `<div class="form-grid">${vgSelect}</div>` : ""}
+    <div class="table-wrap section-gap"><table class="mini-table admin-table"><thead><tr><th>Fassung</th><th>gültig ab</th><th class="right">Fahrzeugtypen</th><th></th></tr></thead>
+      <tbody>${rows || `<tr><td colspan="4" class="muted">Noch keine Gebührenordnung hinterlegt.</td></tr>`}</tbody></table></div>
+    ${draft ? "" : `<button type="button" class="btn btn-light btn-small section-gap" data-admin-action="fee-new">Neue Fassung</button>`}
+    ${draft ? feeEditor(draft) : ""}`;
+}
+
+function feeEditor(d) {
+  const vehicles = d.rates.vehicles.map((v, i) => `<tr>
+    <td><input type="text" data-fee="rates.vehicles.${i}.code" value="${esc(v.code)}" placeholder="HLF 20" class="fee-code"></td>
+    <td><input type="text" data-fee="rates.vehicles.${i}.name" value="${esc(v.name)}" placeholder="Hilfeleistungs-Löschgruppenfahrzeug 20"></td>
+    <td><input type="number" step="0.01" min="0" data-fee="rates.vehicles.${i}.rate" value="${v.rate}" class="narrow"></td>
+    <td><button type="button" class="icon-button" data-admin-action="fee-remove-vehicle" data-index="${i}" aria-label="entfernen">✕</button></td></tr>`).join("");
+  return `<h3 class="section-gap">${d.id ? "Fassung bearbeiten" : "Neue Fassung"}</h3>
+    <div class="form-grid">
+      ${adminField("Bezeichnung", `<input type="text" data-fee="name" value="${esc(d.name)}" placeholder="Satzung vom …">`, "span-3")}
+      ${adminField("gültig ab", `<input type="date" data-fee="valid_from" value="${esc(d.valid_from)}">`)}
+      ${FEE_RATES.map(([key, label, unit]) => adminField(`${label} (${unit})`,
+        `<input type="number" step="0.01" min="0" data-fee="rates.${key}" value="${d.rates[key]}">`, "span-2")).join("")}
+    </div>
+    <div class="table-wrap section-gap"><table class="mini-table admin-table"><thead><tr><th>Fahrzeugtyp</th><th>Beschreibung</th><th>€/Std.</th><th></th></tr></thead>
+      <tbody>${vehicles}</tbody></table></div>
+    <button type="button" class="btn btn-light btn-small section-gap" data-admin-action="fee-add-vehicle">Fahrzeugtyp hinzufügen</button>
+    <div class="admin-actions"><button type="button" class="btn btn-outline" data-admin-action="fee-cancel">Abbrechen</button>
+      <button type="button" class="btn btn-primary" data-admin-action="fee-save">Speichern</button></div>`;
+}
+
+async function runFeeAction(action, data) {
+  const url = `/api/admin/vgs/${encodeURIComponent(admin.feeVg)}/fees`;
+  const find = () => admin.fees.schedules.find((x) => x.id === Number(data.id));
+  const copy = (x) => JSON.parse(JSON.stringify(x));
+  switch (action) {
+    case "fee-edit": admin.feeDraft = copy(find()); break;
+    case "fee-copy": admin.feeDraft = { ...copy(find()), id: null, name: "", valid_from: "" }; break;
+    case "fee-new": admin.feeDraft = { id: null, name: "", valid_from: "",
+      rates: admin.fees.schedules[0] ? copy(admin.fees.schedules[0].rates) : emptyRates() }; break;
+    case "fee-cancel": admin.feeDraft = null; break;
+    case "fee-add-vehicle": admin.feeDraft.rates.vehicles.push({ code: "", name: "", rate: 0 }); break;
+    case "fee-remove-vehicle": admin.feeDraft.rates.vehicles.splice(Number(data.index), 1); break;
+    case "fee-delete":
+      if (!confirm(`Fassung „${find().name}“ löschen?`)) return;
+      admin.fees = { vg: admin.feeVg, ...(await api(`${url}/${data.id}`, { method: "DELETE" })) };
+      toast("Fassung gelöscht");
+      break;
+    case "fee-save": {
+      const d = admin.feeDraft;
+      const body = { name: d.name, valid_from: d.valid_from, rates: d.rates };
+      admin.fees = { vg: admin.feeVg, ...(await apiJson(d.id ? `${url}/${d.id}` : url, d.id ? "PUT" : "POST", body)) };
+      admin.feeDraft = null;
+      toast("Gebührenordnung gespeichert");
+      break;
+    }
+  }
+  renderAdmin();
+}
+
+function setFeePath(path, value) {
+  const keys = path.split(".");
+  let target = admin.feeDraft;
+  for (const key of keys.slice(0, -1)) target = target[key];
+  target[keys.at(-1)] = value;
+}
+
 // ------------------------------------------------------------ Ereignisse
 $("#view-admin").addEventListener("click", async (e) => {
   const section = e.target.closest("[data-admin-section]");
@@ -559,6 +650,7 @@ $("#view-admin").addEventListener("click", async (e) => {
 $("#view-admin").addEventListener("input", (e) => {
   const t = e.target;
   if (t.dataset.bind) { setPath(t.dataset.bind, t.dataset.number !== undefined ? Number(t.value) : inputValue(t)); return; }
+  if (t.dataset.fee) { setFeePath(t.dataset.fee, t.type === "number" ? Number(t.value || 0) : t.value); return; }
   if (t.dataset.colorPicker) { setColor(t.dataset.colorPicker, t.value.toUpperCase(), "picker"); return; }
   if (t.dataset.colorHex !== undefined && t.dataset.colorHex) { setColor(t.dataset.colorHex, t.value.trim().toUpperCase(), "hex"); return; }
   if (t.dataset.colorRgb) {
@@ -585,6 +677,7 @@ $("#view-admin").addEventListener("change", async (e) => {
   const t = e.target;
   try {
     if (t.dataset.adminTenant !== undefined) { await adminGo({ slug: t.value, parseResult: null, keywordEdit: null }); return; }
+    if (t.dataset.feeVg !== undefined) { await adminGo({ feeVg: t.value }); return; }
     if (t.dataset.limits !== undefined) { renderAdmin(); return; }     // Auswahl der Standardgrenze aktualisieren
     if (t.dataset.bind?.startsWith("places.") && t.dataset.bind.endsWith(".name")) { renderAdmin(); return; }
     if (t.dataset.planPlace !== undefined) {

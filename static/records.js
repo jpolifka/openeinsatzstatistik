@@ -5,6 +5,8 @@
 // Wird nach app.js geladen und trägt sich in VIEWS ein. Rechte prüft das Backend (app/main.py, app/records.py).
 
 const records = { notices: [], showNotices: true, data: null, onlyOpen: true, expanded: new Set() };
+// Kostenersatz: Eingaben im Dialog und letztes Ergebnis (nur berechnet, nichts gespeichert)
+const feeCalc = { record: null, request: null, result: null, error: "" };
 
 VIEWS.records = { label: "Prüfprotokoll", load: loadRecords, render: renderRecords,
   visible: () => Boolean(config.vg && config.manages_vg) };
@@ -135,10 +137,11 @@ function recordDetail(entry) {
       ${findings ? `<table class="mini-table"><thead><tr><th>Wehr</th><th>Art</th><th>Fahrzeug</th><th>Wert</th><th>Stammdatensatz / Leitstelle</th><th>Bericht der Wehr</th></tr></thead><tbody>${findings}</tbody></table>`
         : `<p class="muted small">Keine Abweichungen.</p>`}
     </div>
-    ${entry.findings.length ? `<div class="actions panel full bare no-print">
-      ${entry.reviewed ? `<button type="button" class="btn btn-outline btn-small" data-review="${id}" data-done="0">Prüfvermerk entfernen</button>`
+    <div class="actions panel full bare no-print">
+      ${entry.incidents.length ? `<button type="button" class="btn btn-light btn-small" data-fees="${id}">Kostenersatz berechnen</button>` : ""}
+      ${!entry.findings.length ? "" : entry.reviewed ? `<button type="button" class="btn btn-outline btn-small" data-review="${id}" data-done="0">Prüfvermerk entfernen</button>`
         : `<button type="button" class="btn btn-primary btn-small" data-review="${id}" data-done="1">Als geprüft markieren</button>`}
-    </div>` : ""}
+    </div>
   </div>`;
 }
 
@@ -179,6 +182,8 @@ $("#view-records").addEventListener("click", async (e) => {
   const filter = e.target.closest("[data-records-filter]");
   if (filter) { records.onlyOpen = filter.dataset.recordsFilter === "open"; renderRecords(); return; }
   if (e.target.closest("[data-records-print]")) { window.print(); return; }
+  const fees = e.target.closest("[data-fees]");
+  if (fees) { openFees(fees.dataset.fees); return; }
   const review = e.target.closest("[data-review]");
   if (review) {
     try {
@@ -197,4 +202,89 @@ $("#view-records").addEventListener("click", async (e) => {
   const id = row.dataset.record;
   if (records.expanded.has(id)) records.expanded.delete(id); else records.expanded.add(id);
   renderRecords();
+});
+
+// ------------------------------------------------------------ Kostenersatz nach der Gebührenordnung
+const euro = (n) => n == null ? "–" : Number(n).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
+const hours = (h) => h == null ? "" : `${num(h, 1)} h`;
+
+async function openFees(recordId) {
+  feeCalc.record = recordId;
+  feeCalc.request = { schedule_id: null, bma_cap: null, expenses: [], vat_percent: 0 };
+  feeCalc.result = null;
+  $("#fees-dialog").showModal();
+  await calculateFees();
+}
+
+async function calculateFees() {
+  try {
+    feeCalc.result = await apiJson(`/api/records/${encodeURIComponent(feeCalc.record)}/fees`, "POST", feeCalc.request);
+    feeCalc.error = "";
+  } catch (e) {
+    feeCalc.error = e.message;
+  }
+  renderFees();
+}
+
+function renderFees() {
+  const r = feeCalc.result, q = feeCalc.request;
+  if (!r) { $("#fees-body").innerHTML = feeCalc.error ? errorBox(feeCalc.error) : ""; return; }
+  const first = r.incidents[0];
+  $("#fees-subtitle").textContent = `${formatDate(first.started_at)} · ${r.keyword} · ${first.description || ""}`;
+  const incidents = r.incidents.map((i) => `<tr><td>${esc(i.tenant)}</td><td>${i.number ?? "–"}</td>
+    <td>${formatDate(i.started_at)} ${formatTime(i.started_at)} – ${formatTime(i.ended_at)}</td><td>${esc(i.place || "–")}</td></tr>`).join("");
+  const positions = r.positions.map((p) => `<tr class="fee-${p.kind}">
+    <td>${esc(p.tenant || "")}</td><td>${esc(p.label)}</td><td class="right">${p.count ?? ""}</td>
+    <td class="right">${p.minutes == null ? "" : `${Math.round(p.minutes)} min`}</td><td class="right">${hours(p.hours)}</td>
+    <td class="right">${p.rate == null ? "" : euro(p.rate)}</td><td class="right">${euro(p.amount)}</td></tr>`).join("");
+  const expenses = q.expenses.map((x, i) => `<div class="inline-row">
+    <input type="text" data-fee-expense="${i}" data-key="label" value="${esc(x.label)}" placeholder="z. B. Bindemittel" aria-label="Auslage">
+    <input type="number" min="0" step="0.01" data-fee-expense="${i}" data-key="amount" value="${x.amount}" aria-label="Betrag in Euro" class="narrow">
+    <button type="button" class="icon-button" data-fee-remove="${i}" aria-label="entfernen">✕</button></div>`).join("");
+  $("#fees-body").innerHTML = `
+    ${feeCalc.error ? errorBox(feeCalc.error) : ""}
+    <div class="form-grid no-print">
+      <label class="field span-3"><span>Gebührenordnung</span><select data-fee-option="schedule_id">
+        ${r.schedules.map((x) => `<option value="${x.id}" ${x.id === r.schedule.id ? "selected" : ""}>${esc(x.name)} (ab ${formatDate(x.valid_from)})</option>`).join("")}</select></label>
+      <label class="field"><span>Umsatzsteuer (%)</span><input type="number" min="0" max="100" step="1" data-fee-option="vat_percent" value="${q.vat_percent}"></label>
+      ${r.alarm_system ? `<label class="toggle span-2"><input type="checkbox" data-fee-option="bma_cap" ${r.bma_cap ? "checked" : ""}> Fehlalarm Brandmeldeanlage (höchstens Pauschale)</label>` : ""}
+    </div>
+    <div class="no-print section-gap"><h4>Auslagen (mit Verwaltungszuschlag)</h4>${expenses}
+      <button type="button" class="btn btn-light btn-small" data-fee-add>Auslage hinzufügen</button></div>
+    <h4 class="section-gap">Einsatz</h4>
+    <table class="mini-table"><thead><tr><th>Wehr</th><th>Nr.</th><th>Zeit</th><th>Ort</th></tr></thead><tbody>${incidents}</tbody></table>
+    <h4 class="section-gap">Kostenaufstellung · ${esc(r.schedule.name)}</h4>
+    <div class="table-wrap"><table class="mini-table fee-table"><thead><tr><th>Wehr</th><th>Position</th><th class="right">Anzahl</th>
+      <th class="right">Dauer</th><th class="right">abgerechnet</th><th class="right">Satz</th><th class="right">Betrag</th></tr></thead>
+      <tbody>${positions}</tbody>
+      <tfoot>
+        ${r.vat ? `<tr><td colspan="6">Summe netto</td><td class="right">${euro(r.net)}</td></tr>
+          <tr><td colspan="6">Umsatzsteuer ${num(r.vat_percent, 1)} %</td><td class="right">${euro(r.vat)}</td></tr>` : ""}
+        <tr class="fee-total"><td colspan="6">Gesamt</td><td class="right">${euro(r.total)}</td></tr>
+      </tfoot></table></div>
+    ${r.hints.length ? `<h4 class="section-gap">Hinweise</h4>${warningsList(r.hints)}` : ""}
+    <p class="small muted section-gap">Fahrzeuge vom Ausrücken bis zum Einsatzende des Fahrzeugs, Einsatzkräfte von der Alarmierung bis zum Einsatzende; angefangene Stunden bis 30 Minuten als halbe, darüber als volle Stunde. Nur Berechnung – es wird nichts gespeichert. Stand ${formatDate(new Date().toISOString())}.</p>
+    <div class="actions no-print"><button type="button" class="btn btn-primary btn-small" data-fee-print>Drucken / PDF</button></div>`;
+}
+
+$("#fees-body").addEventListener("change", async (e) => {
+  const t = e.target, q = feeCalc.request;
+  if (t.dataset.feeOption === "schedule_id") q.schedule_id = Number(t.value);
+  else if (t.dataset.feeOption === "vat_percent") q.vat_percent = Number(t.value || 0);
+  else if (t.dataset.feeOption === "bma_cap") q.bma_cap = t.checked;
+  else if (t.dataset.feeExpense !== undefined) {
+    const x = q.expenses[Number(t.dataset.feeExpense)];
+    x[t.dataset.key] = t.dataset.key === "amount" ? Number(t.value || 0) : t.value;
+  } else return;
+  await calculateFees();
+});
+$("#fees-body").addEventListener("click", async (e) => {
+  if (e.target.closest("[data-fee-add]")) { feeCalc.request.expenses.push({ label: "", amount: 0 }); renderFees(); return; }
+  const remove = e.target.closest("[data-fee-remove]");
+  if (remove) { feeCalc.request.expenses.splice(Number(remove.dataset.feeRemove), 1); await calculateFees(); return; }
+  if (e.target.closest("[data-fee-print]")) {
+    document.body.classList.add("print-fees");
+    window.addEventListener("afterprint", () => document.body.classList.remove("print-fees"), { once: true });
+    window.print();
+  }
 });
