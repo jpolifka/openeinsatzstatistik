@@ -12,7 +12,7 @@ const helpValue = (v) => typeof v === "function" ? v() : v;
 const HELP_SECTIONS = [
   {
     title: "Einsatz erfassen",
-    intro: "Diese Felder stehen in der PDF-Vorschau und unter „Einsätze → Bearbeiten“. Sie werden aus dem Einsatzbericht des BKS-Portals vorbelegt und können vor dem Übernehmen korrigiert werden.",
+    intro: "Diese Felder stehen in der Vorschau und unter „Einsätze → Bearbeiten“. Sie werden aus dem Einsatzbericht des BKS-Portals (PDF oder Excel-Export) vorbelegt und können vor dem Übernehmen korrigiert werden.",
     entries: {
       number: {
         title: "Nr.",
@@ -128,7 +128,7 @@ const HELP_SECTIONS = [
       attendance: {
         title: "Anwesenheit",
         short: "Alle Personen laut Anwesenheitsliste des Berichts.",
-        text: "Personen aus der Anwesenheitsliste des Berichts, mit Fahrzeug und Funktion. Namen werden mit den bekannten Kameraden abgeglichen; unbekannte Namen sind markiert und werden beim Übernehmen als neue Kameraden angelegt. Beim Bearbeiten und in der PDF-Vorschau trägt ein Klick auf einen Namen die Person als EHF ein; der EHF ist dunkelrot hervorgehoben.",
+        text: "Personen aus der Anwesenheitsliste des Berichts, mit Fahrzeug und Funktion. Namen werden mit den bekannten Kameraden abgeglichen; unbekannte Namen sind markiert und werden beim Übernehmen als neue Kameraden angelegt. Beim Bearbeiten und in der Vorschau trägt ein Klick auf einen Namen die Person als EHF ein; der EHF ist dunkelrot hervorgehoben.",
       },
     },
   },
@@ -267,7 +267,7 @@ const HELP_SECTIONS = [
       admin_roles: {
         title: "Rollen",
         short: "Wer was sehen und ändern darf.",
-        text: "<b>Wehrführer</b>: Einsätze und Personal der Wehr, PDF einlesen, Verwaltung der Wehr, vergibt Erfasser und Benutzer. <b>Erfasser</b>: Einsätze und Personal, PDF einlesen und bearbeiten. <b>Benutzer</b>: nur die Auswertung, ohne Namen. <b>Wehrleiter</b> (VG): wie Wehrführer für alle Wehren der VG, mit Gesamtansicht, vergibt alle Rollen der VG. <b>Statistik VG</b> (z. B. Bürgermeister): nur die Auswertung aller Wehren der VG, ohne Namen. Wer keine Zuordnung mehr hat, ist beim nächsten Aufruf abgemeldet.",
+        text: "<b>Wehrführer</b>: Einsätze und Personal der Wehr, Berichte einlesen, Verwaltung der Wehr, vergibt Erfasser und Benutzer. <b>Erfasser</b>: Einsätze und Personal, Berichte einlesen und bearbeiten. <b>Benutzer</b>: nur die Auswertung, ohne Namen. <b>Wehrleiter</b> (VG): wie Wehrführer für alle Wehren der VG, mit Gesamtansicht, vergibt alle Rollen der VG. <b>Statistik VG</b> (z. B. Bürgermeister): nur die Auswertung aller Wehren der VG, ohne Namen. Wer keine Zuordnung mehr hat, ist beim nächsten Aufruf abgemeldet.",
       },
     },
   },

@@ -29,7 +29,7 @@
         </label>
         <button type="button" class="btn btn-white" id="btn-pdf">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0-4.5 4.5M12 4l4.5 4.5M5 20h14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <span>PDF einlesen</span>
+          <span>Bericht einlesen</span>
         </button>
         <button type="button" class="btn-help-header" id="btn-help" data-help="" aria-label="Hilfe öffnen" title="Hilfe">?</button>
         <form method="post" action="/logout" id="logout" hidden>
@@ -88,20 +88,20 @@
     <section id="view-records" class="view" hidden></section>
   </main>
 
-  <!-- PDF einlesen -->
+  <!-- Bericht einlesen (PDF oder Excel-Export) -->
   <dialog id="pdf-dialog" class="dialog">
     <div class="dialog-header">
       <div>
         <h2>Einsatzbericht einlesen</h2>
-        <p class="muted">PDFs aus dem BKS-Portal, einzeln oder als ZIP – Daten prüfen, bei Bedarf korrigieren und übernehmen.</p>
+        <p class="muted">PDFs oder Excel-Exporte aus dem BKS-Portal, einzeln oder als ZIP – Daten prüfen, bei Bedarf korrigieren und übernehmen.</p>
       </div>
       <button type="button" class="btn-close" data-close="pdf-dialog" aria-label="Schließen"></button>
     </div>
     <div class="dialog-body">
       <label class="dropzone" id="dropzone" tabindex="0">
-        <input type="file" id="pdf-input" multiple accept=".pdf,application/pdf,.zip,application/zip" hidden>
+        <input type="file" id="pdf-input" multiple accept=".pdf,application/pdf,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.zip,application/zip" hidden>
         <svg class="dropzone-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M24 32V10m0 0-8 8m8-8 8 8" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 30v6a4 4 0 0 0 4 4h24a4 4 0 0 0 4-4v-6" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>
-        <strong>Einsatzbericht-PDFs oder ZIP-Datei hierher ziehen</strong>
+        <strong>Einsatzberichte (PDF oder Excel) oder ZIP-Datei hierher ziehen</strong>
         <span class="muted">oder klicken, um Dateien auszuwählen</span>
       </label>
       <div class="progress" id="progress" hidden>

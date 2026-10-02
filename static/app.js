@@ -589,7 +589,7 @@ function incidentDetail(e) {
       <dt>Ort</dt><dd>${esc(e.place || "–")}</dd>
       <dt>EHF${helpButton("unit_leader")}</dt><dd>${esc(e.unit_leader || "–")}</dd>
       <dt>Gerätehaus${helpButton("station_staff")}</dt><dd>${e.station_staff}</dd>
-      <dt>Quelle</dt><dd class="small">${e.source === "pdf" ? `PDF · ${esc(e.filename)}` : "Einsatzübersicht (Excel)"}</dd>
+      <dt>Quelle</dt><dd class="small">${sourceLabel(e)}</dd>
       ${e.bks_url ? `<dt>BKS-Portal${helpButton("bks_url")}</dt><dd class="small">${bksLink(e)}</dd>` : ""}
     </dl></div>
     <div class="panel"><h4>Fahrzeuge${helpButton("vehicles")}</h4>${vehicleTable(e)}</div>
@@ -844,7 +844,14 @@ function bksLink(e) {
     + (e.bks_record_id && e.bks_record_id !== e.bks_report_id ? ` · Stammdatensatz ${esc(e.bks_record_id)}` : "");
 }
 
-// ------------------------------------------------------------ PDF einlesen
+// ------------------------------------------------------------ Bericht einlesen (PDF oder Excel-Export)
+// Herkunft eines Einsatzes: Bericht als PDF bzw. Excel-Export des BKS-Portals oder frühere Einsatzübersicht
+const SOURCES = { pdf: "PDF", bks_xlsx: "Excel-Export BKS" };
+
+function sourceLabel(e) {
+  return SOURCES[e.source] ? `${SOURCES[e.source]} · ${esc(e.filename)}` : "Einsatzübersicht (Excel)";
+}
+
 function showUploadError(html) {
   const el = $("#pdf-error");
   el.innerHTML = html;
@@ -852,9 +859,9 @@ function showUploadError(html) {
 }
 
 async function readPdfs(files) {
-  files = [...files].filter((f) => /\.(pdf|zip)$/i.test(f.name));
+  files = [...files].filter((f) => /\.(pdf|xlsx|zip)$/i.test(f.name));
   $("#pdf-error").hidden = true;
-  if (!files.length) { showUploadError("Bitte eine PDF- oder ZIP-Datei wählen."); return; }
+  if (!files.length) { showUploadError("Bitte eine PDF-, Excel- oder ZIP-Datei wählen."); return; }
   $("#progress").hidden = false;
   const form = new FormData();
   for (const f of files) form.append("pdfs", f, f.name.normalize("NFC"));
@@ -926,7 +933,7 @@ function previewStatus(r) {
     `<div class="preview-status ${cls}"><span class="number">${number}</span><div><strong>${title}</strong><span>${sub}</span></div></div>`;
   if (r.saved) return status("done", "✓", `Einsatz ${r.saved.number ?? ""}/${r.saved.year} ist in der Statistik`, esc(r.filename));
   if (existing) {
-    const origin = existing.source === "pdf" ? "aus einer PDF" : "aus der Einsatzübersicht (Excel)";
+    const origin = { pdf: "aus einer PDF", bks_xlsx: "aus einem Excel-Export" }[existing.source] || "aus der Einsatzübersicht (Excel)";
     const diffs = existing.differences.length ? plural(existing.differences.length, "Abweichung", "Abweichungen") : "keine Abweichungen";
     return status("existing", r.number ?? "?", `Einsatz ${r.number}/${r.year} ist bereits erfasst`, `${origin} · ${diffs}`);
   }
@@ -937,7 +944,7 @@ function previewStatus(r) {
 function differencesTable(existing) {
   if (!existing?.differences.length) return "";
   return `<h4 class="section-gap">Abweichungen zur Statistik</h4>
-    <table class="mini-table diff-table"><thead><tr><th>Feld</th><th>erfasst</th><th>PDF</th></tr></thead><tbody>
+    <table class="mini-table diff-table"><thead><tr><th>Feld</th><th>erfasst</th><th>Bericht</th></tr></thead><tbody>
     ${existing.differences.map((d) => `<tr><td>${esc(d.field)}</td><td>${esc(d.stored)}</td><td>${esc(d.report)}</td></tr>`).join("")}</tbody></table>`;
 }
 
@@ -960,7 +967,7 @@ function renderPreviews() {
         </div>
         <div class="panel outlined">${attendancePanel(r, { markNew: true, pickLeader: true })}</div>
         <div class="preview-footer">
-          ${existing ? `<label class="toggle"><input type="checkbox" data-replace="${i}" ${r.replace ? "checked" : ""}> erfassten Einsatz mit dieser PDF aktualisieren
+          ${existing ? `<label class="toggle"><input type="checkbox" data-replace="${i}" ${r.replace ? "checked" : ""}> erfassten Einsatz mit diesem Bericht aktualisieren
             <span class="muted">(manuell ergänzte Fahrzeuge und Personen bleiben)</span></label>` : ""}
           <button type="button" class="btn btn-primary" data-accept="${i}" ${existing && !r.replace ? "disabled" : ""}>
             ${existing ? "Aktualisieren" : "In Statistik übernehmen"}</button>

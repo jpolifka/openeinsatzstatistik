@@ -25,7 +25,8 @@ Feuerwehrbedarfsplan, Anwesenheit) rechnet die App direkt im Browser nach.
 
 ## Funktionen
 
-- **PDF einlesen** – Einsatzberichte per Drag & Drop (einzeln, mehrere oder als ZIP), Vorschau mit Prüfhinweisen,
+- **Bericht einlesen** – Einsatzberichte als PDF oder Excel-Export des BKS-Portals per Drag & Drop (einzeln,
+  mehrere oder als ZIP), Vorschau mit Prüfhinweisen,
   Korrektur einzelner Felder vor dem Übernehmen, Abgleich mit bereits erfassten Einsätzen.
 - **Auswertung** – Kennzahlen, Feuerwehrbedarfsplan Pos. 8.4 (8 oder 10 Minuten),
   Einsatzarten, Alarmstufen, Einsatzgebiet, Monate im Vorjahresvergleich, Uhrzeiten,
@@ -107,7 +108,7 @@ eine eigene Datenbank und eine eigene Fachkonfiguration (Fahrzeuge, BKS-Kennung,
 Bedarfsplan). Wer sich anmeldet, sieht nur die Wehren, denen er zugeordnet ist; bei mehreren
 gibt es oben eine Auswahl.
 
-| Rolle | Bereich | Statistik | Einsätze und Personal | PDF einlesen, bearbeiten | Verwaltung der Wehr |
+| Rolle | Bereich | Statistik | Einsätze und Personal | Berichte einlesen, bearbeiten | Verwaltung der Wehr |
 |---|---|:-:|:-:|:-:|:-:|
 | Superadmin (`ADMIN_EMAILS`) | alle | ✓ | ✓ | ✓ | ✓ |
 | Wehrleiter | alle Wehren einer VG | ✓ | ✓ | ✓ | ✓ |
@@ -128,7 +129,7 @@ Excel-Export sind für sie gesperrt. Geprüft wird im Backend, die Oberfläche b
 - Excel-Export als eine Mappe mit Übersicht und je Wehr Einsatzübersicht und Anwesenheit.
   „Kennzahlen (Excel)“ enthält nur die Zahlen je Wehr, ohne Namen.
 - „Drucken / PDF“ öffnet die Druckansicht der Auswertung (im Druckdialog als PDF sichern).
-- PDF einlesen verteilt die Berichte auf die passende Wehr (über die berichtende Einheit; die
+- Bericht einlesen verteilt die Berichte auf die passende Wehr (über die berichtende Einheit; die
   eigenen Fahrzeuge im Bericht nur bei Wehren ohne BKS-Kennung). Haben andere Wehren denselben
   Einsatz schon erfasst, zeigt die Vorschau „gemeinsamer Einsatz mit …“.
 
@@ -206,7 +207,7 @@ Die Vorlage ist ein Muster und keine Rechtsberatung.
 
 ## Bedienung
 
-1. **PDF einlesen** (oben rechts): Bericht hineinziehen, mehrere PDFs auch als ZIP-Datei. Die Vorschau zeigt erkannte
+1. **Bericht einlesen** (oben rechts): Bericht hineinziehen, mehrere auch als ZIP-Datei. Die Vorschau zeigt erkannte
    Felder, Fahrzeuge, Anwesenheit und Prüfhinweise. Berichte ohne Anmerkungen (keine
    Prüfhinweise, keine neuen Personen, keine Abweichungen) werden direkt übernommen, angezeigt
    werden nur die übrigen.
@@ -214,6 +215,12 @@ Die Vorlage ist ein Muster und keine Rechtsberatung.
 3. Ist der Bericht schon erfasst (gleiche Berichtsnummer im BKS-Portal, bei älteren Einsätzen
    gleiche Nr. und Jahr), werden die Abweichungen angezeigt; **Aktualisieren** übernimmt den
    neuen Stand. Der Einsatz behält seine ID, manuell ergänzte Fahrzeuge und Personen bleiben.
+
+**Excel-Export statt PDF:** Das BKS-Portal exportiert einen Bericht auch als Excel-Datei (Blätter
+„Einsatzbericht“, „Ausger. Fahrzeuge und Personen“, „Anwesenheitsliste“). Sie enthält dieselben Angaben
+wie die PDF und wird genauso eingelesen. Weil die Unterblätter nicht auf den Bericht verweisen, wird nur
+ein Bericht je Datei angenommen. In der Anwesenheitsliste stehen die Werte eine Spalte rechts von ihrer
+Überschrift; die App richtet die Spalten am Inhalt aus.
 
 **Mehrfachberichte:** Ein Einsatz hat im BKS-Portal einen *Stammdatensatz* (Verbandsgemeinde, alle
 Fahrzeuge mit den Zeiten der Leitstelle, keine Personen) und je beteiligter Einheit einen Haupt-
@@ -293,6 +300,7 @@ app/
   tenant_config.py Fachkonfiguration einer Wehr (Fahrzeuge, Orte, Bedarfsplan) – auch für die Oberfläche
   legacy.py        Übernahme der bisherigen Einzel-Installation (FF Rheinbrohl)
   pdf_report.py    Einsatzbericht-PDF lesen
+  xlsx_report.py   Einsatzbericht als Excel-Export des BKS-Portals lesen
   report.py        Felder ableiten, Prüfhinweise, Bericht -> Einsatz
   records.py       Stammdatensätze, Verzeichnis der Berichte, Abgleich/Prüfprotokoll, Hinweise je VG
   fees.py          Gebührenordnungen der VG und Berechnung des Kostenersatzes

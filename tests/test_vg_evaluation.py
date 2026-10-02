@@ -96,17 +96,17 @@ def test_reports_are_matched_to_the_reporting_tenant():
     candidates = [("wehr-a1", CFG), ("wehr-a2", OTHER)]
     texts = (FULL, LEFT, "")
     # Ohne Kopfzeile der Einheit: die meisten eigenen Fahrzeuge (zwei 02/.. gegen ein 01/..)
-    assert report.match_tenant(texts, "17-25.pdf", candidates) == ("wehr-a1", "vehicles")
+    assert report.match_tenant(report.pdf_parser(texts, "17-25.pdf"), candidates) == ("wehr-a1", "vehicles")
     header = "FW NR#.BHÖ 01 Bad Hönningen Alarmierung: 12.03.2025 10:05:00 Einsatznummer: 1\n"
-    assert report.match_tenant((header + FULL, LEFT, ""), "17-25.pdf", candidates) == ("wehr-a2", "unit")
+    assert report.match_tenant(report.pdf_parser((header + FULL, LEFT, ""), "17-25.pdf"), candidates) == ("wehr-a2", "unit")
     foreign = dataclasses.replace(CFG, unit_prefix="FL NR#.XYZ ", own_prefix="05/", unit_marker="FW NR#.XYZ 05")
-    assert report.match_tenant(texts, "17-25.pdf", [("fremd", foreign)]) == (None, None)
+    assert report.match_tenant(report.pdf_parser(texts, "17-25.pdf"), [("fremd", foreign)]) == (None, None)
     # Bericht der FEZ mit mitalarmierten Fahrzeugen: keine Zuordnung über die Fahrzeuge
     fez = "Feuerwehrhaus: FW NR#.BHÖ 00 FEZ VG\n"
-    assert report.match_tenant((fez + FULL, LEFT, ""), "17-25.pdf", candidates) == (None, None)
+    assert report.match_tenant(report.pdf_parser((fez + FULL, LEFT, ""), "17-25.pdf"), candidates) == (None, None)
     # Wehr ohne BKS-Kennung: weiterhin über ihre Fahrzeuge
     unmarked = dataclasses.replace(CFG, unit_marker="")
-    assert report.match_tenant((fez + FULL, LEFT, ""), "17-25.pdf", [("ohne", unmarked)]) == ("ohne", "vehicles")
+    assert report.match_tenant(report.pdf_parser((fez + FULL, LEFT, ""), "17-25.pdf"), [("ohne", unmarked)]) == ("ohne", "vehicles")
 
 
 def test_upload_in_vg_view_distributes_reports(vg, monkeypatch):
