@@ -25,7 +25,7 @@ MATRIX = {
     "viewer@example.org":     (200,  200,       403,      403,   403,     403,  403,         403),
     "vglead@example.org":     (200,  200,       200,      200,   400,     200,  403,         403),
     "vgstats@example.org":    (200,  200,       403,      403,   403,     403,  403,         403),
-    "admin@example.org":      (200,  200,       200,      200,   400,     200,  200,         403),
+    "admin@example.org":      (200,  200,       200,      200,   400,     200,  200,         200),
 }
 
 
@@ -145,11 +145,10 @@ def test_saved_report_records_author(world):
     assert row["modified_by"] == "editor@example.org"
 
 
-@pytest.mark.parametrize("email", ["vglead@example.org", "admin@example.org"])
-def test_lead_roles_above_tenant_see_no_attendance(world, email):
-    """Wehrleiter und Superadmin: Einsätze ja, Anwesenheit (Namen der Kameraden) nein."""
+def test_vg_lead_sees_no_attendance(world):
+    """Wehrleiter: Einsätze ja, Anwesenheit (Namen der Kameraden) nein."""
     client, ids = world
-    _as(client, email)
+    _as(client, "vglead@example.org")
     incident = client.get("/api/incidents?year=2025").json()["incidents"][0]
     assert incident["people"] == [] and incident["people_count"] == 1 and not incident["people_visible"]
     assert "Max" not in client.get("/api/incidents?year=2025").text
@@ -165,9 +164,10 @@ def test_lead_roles_above_tenant_see_no_attendance(world, email):
         assert len(store.load_incidents(con)[0]["people"]) == 1
 
 
-def test_tenant_lead_sees_attendance(world):
+@pytest.mark.parametrize("email", ["lead@example.org", "editor@example.org", "admin@example.org"])
+def test_attendance_roles_see_attendance(world, email):
     client, _ = world
-    incident = _as(client, "lead@example.org").get("/api/incidents?year=2025").json()["incidents"][0]
+    incident = _as(client, email).get("/api/incidents?year=2025").json()["incidents"][0]
     assert incident["people_visible"] and incident["people"][0]["name"].startswith("Muster")
     assert client.get("/api/evaluation?year=2025").json()["attendance"] is not None
 

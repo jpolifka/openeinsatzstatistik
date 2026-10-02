@@ -272,7 +272,7 @@ const HELP_SECTIONS = [
       admin_roles: {
         title: "Rollen",
         short: "Wer was sehen und ändern darf.",
-        text: "<b>Wehrführer</b>: Einsätze, Anwesenheit und Kameraden der Wehr, Berichte einlesen, Verwaltung der Wehr, vergibt Erfasser und Benutzer. <b>Erfasser</b>: Einsätze, Anwesenheit und Kameraden, Berichte einlesen und bearbeiten. <b>Benutzer</b>: nur die Auswertung, ohne Namen. <b>Wehrleiter</b> (VG): wie Wehrführer für alle Wehren der VG, mit Wehrleitung (Gesamtansicht), vergibt alle Rollen der VG – sieht aber keine Anwesenheit (nur die Anzahl). Die Anwesenheit sehen nur Wehrführer und Erfasser, auch kein Superadmin; diese Rollen kann man sich nicht selbst geben. <b>Statistik VG</b> (z. B. Bürgermeister): nur die Auswertung aller Wehren der VG, ohne Namen. Wer keine Zuordnung mehr hat, ist beim nächsten Aufruf abgemeldet.",
+        text: "<b>Wehrführer</b>: Einsätze, Anwesenheit und Kameraden der Wehr, Berichte einlesen, Verwaltung der Wehr, vergibt Erfasser und Benutzer. <b>Erfasser</b>: Einsätze, Anwesenheit und Kameraden, Berichte einlesen und bearbeiten. <b>Benutzer</b>: nur die Auswertung, ohne Namen. <b>Wehrleiter</b> (VG): wie Wehrführer für alle Wehren der VG, mit Wehrleitung (Gesamtansicht), vergibt alle Rollen der VG – sieht aber keine Anwesenheit (nur die Anzahl). Die Anwesenheit sehen nur Wehrführer, Erfasser und der Superadmin; diese Rollen kann man sich nicht selbst geben. <b>Statistik VG</b> (z. B. Bürgermeister): nur die Auswertung aller Wehren der VG, ohne Namen. Wer keine Zuordnung mehr hat, ist beim nächsten Aufruf abgemeldet.",
       },
     },
   },

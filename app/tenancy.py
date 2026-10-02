@@ -11,9 +11,9 @@ Rollen (Bereich, Rechte):
   lead      Wehrführer      Wehr  Statistik, Einsätze, Anwesenheit, Erfassen, Verwaltung, vergibt Erfasser/Benutzer
   editor    Erfasser        Wehr  Statistik, Einsätze, Anwesenheit, Erfassen
   viewer    Benutzer        Wehr  nur Statistik
-Superadmins (ADMIN_EMAILS) dürfen alles außer Anwesenheit (Namen der Kameraden): die sehen nur Wehrführer und
-Erfasser der Wehr. Ohne ADMIN_EMAILS ist die Anmeldung aus (lokaler Betrieb): dann gilt jeder Aufruf als
-Superadmin mit allen Rechten.
+Superadmins (ADMIN_EMAILS) dürfen alles. Die Anwesenheit (Namen der Kameraden) sehen sonst nur Wehrführer und
+Erfasser der Wehr, nicht der Wehrleiter. Ohne ADMIN_EMAILS ist die Anmeldung aus (lokaler Betrieb): dann gilt
+jeder Aufruf als Superadmin.
 """
 import dataclasses
 import json
@@ -32,7 +32,7 @@ SLUG = re.compile(r"[a-z0-9][a-z0-9-]{0,38}[a-z0-9]")
 # Rechte
 STATS = "stats"            # Auswertung ohne Personenbezug
 INCIDENTS = "incidents"    # Einsatzliste, Einsätze, Export (ohne Anwesenheit)
-PEOPLE = "people"          # Anwesenheit und Kameraden (Namen) – nur Wehrführer und Erfasser der Wehr
+PEOPLE = "people"          # Anwesenheit und Kameraden (Namen) – Wehrführer, Erfasser und Superadmin
 WRITE = "write"            # PDF einlesen, Einsätze bearbeiten und löschen
 ADMIN = "admin"            # Fachkonfiguration und Branding der Wehr, Benutzer zuordnen
 
@@ -44,7 +44,6 @@ ROLES = {  # Rolle -> (Bereich, Bezeichnung, Rechte)
     "viewer": ("tenant", "Benutzer", {STATS}),
 }
 ALL_PERMISSIONS = frozenset({STATS, INCIDENTS, PEOPLE, WRITE, ADMIN})
-SUPERADMIN_PERMISSIONS = ALL_PERMISSIONS - {PEOPLE}
 # Welche Rollen eine Rolle vergeben darf (innerhalb ihres Bereichs)
 GRANTABLE = {"vg_lead": set(ROLES), "lead": {"editor", "viewer"}}
 
@@ -366,9 +365,7 @@ def access_for(email, scope=None):
         signed = {r[0] for r in con.execute("SELECT vg_id FROM dpa WHERE status IN ('signed', 'not_required')")}
         memberships = con.execute("SELECT scope, scope_id, role FROM membership WHERE email = ?",
                                   (email,)).fetchall() if email else []
-    # Angemeldete Superadmins ohne Anwesenheit; nur ohne Anmeldung (lokal) gibt es alle Rechte
-    everything = ALL_PERMISSIONS if email is None else SUPERADMIN_PERMISSIONS
-    permissions = {r["slug"]: set(everything) if superadmin else set() for r in rows}
+    permissions = {r["slug"]: set(ALL_PERMISSIONS) if superadmin else set() for r in rows}
     for m in memberships:
         if m["role"] not in ROLES:
             continue
