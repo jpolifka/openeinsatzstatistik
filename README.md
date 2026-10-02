@@ -218,9 +218,21 @@ Die Vorlage ist ein Muster und keine Rechtsberatung.
 **Mehrfachberichte:** Ein Einsatz hat im BKS-Portal einen *Stammdatensatz* (Verbandsgemeinde, alle
 Fahrzeuge mit den Zeiten der Leitstelle, keine Personen) und je beteiligter Einheit einen Haupt-
 bzw. Nebenbericht, der auf ihn verweist. Beim Einlesen wird der Stammdatensatz zentral bei der VG
-gespeichert, jeder Bericht kommt zu seiner Wehr. Berichte von Einheiten ohne Wehr in der Auswahl
-(z. B. die FEZ) werden mit Hinweis übersprungen. Haupt- und Nebenberichte haben einen Link ins
-BKS-Portal.
+gespeichert, jeder Bericht kommt zu seiner Wehr. Gehört ein Bericht zu einer anderen Wehr der VG,
+für die der Hochladende keine Schreibrechte hat, wird er dort zur Übernahme abgelegt. Berichte von
+Einheiten ohne Wehr (z. B. die FEZ) werden mit Hinweis übersprungen. Haupt- und Nebenberichte haben
+einen Link ins BKS-Portal.
+
+**Hinweise** (oben in jeder Ansicht) bekommt eine Wehr, wenn jemand ohne eigene Rolle dort einen
+ihrer Einsätze einliest (z. B. der Wehrleiter), wenn ein Bericht einer anderen Wehr für ihre
+Fahrzeuge andere Werte nennt, wenn ihre Fahrzeuge laut Stammdatensatz ausgerückt sind, sie aber
+noch keinen Bericht hat, und wenn ein Bericht zur Übernahme bereitliegt. Die Texte enthalten keine
+Namen; erledigt markiert, wer die Einsätze der Wehr bearbeiten darf.
+
+**Prüfprotokoll** (Wehrleiter, Gesamtansicht der VG): je Einsatz mit Stammdatensatz die Berichte
+der Wehren und die Befunde – Stärke und Zeiten der Fahrzeuge im Vergleich zum Stammdatensatz,
+anderes Stichwort, fehlende, unbearbeitete (ohne Anwesenheit) und Berichte ohne Nr. „Als geprüft
+markieren“ gilt für den jetzigen Stand der Befunde; „Drucken / PDF“ für die Ablage.
 
 Was die einzelnen Felder und Kennzahlen bedeuten, erklärt die Online-Hilfe in der App.
 
@@ -256,7 +268,7 @@ app/
   legacy.py        Übernahme der bisherigen Einzel-Installation (FF Rheinbrohl)
   pdf_report.py    Einsatzbericht-PDF lesen
   report.py        Felder ableiten, Prüfhinweise, Bericht -> Einsatz
-  records.py       Stammdatensätze des BKS-Portals und Verzeichnis der Berichte je VG
+  records.py       Stammdatensätze, Verzeichnis der Berichte, Abgleich/Prüfprotokoll, Hinweise je VG
   metrics.py       Formeln der Einsatzübersicht (Kennzahlen, Statistik, Bedarfsplan, Anwesenheit)
   store.py         Datenbankzugriff, Namensabgleich Kameraden
   db.py            SQLite-Verbindungen und Migrationen (zentral und je Wehr)
@@ -269,6 +281,7 @@ app/
 static/
   index.html       Oberfläche
   app.js           Ansichten und Bedienung
+  records.js       Hinweise an die Wehr, Ansicht Prüfprotokoll
   admin.js         Ansicht Verwaltung
   dpa.js           Ansicht Auftragsverarbeitung
   help.js          Texte und Logik der Online-Hilfe

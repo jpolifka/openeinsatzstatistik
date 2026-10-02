@@ -313,6 +313,15 @@ class Access:
             raise Forbidden("Keine Wehr zugeordnet.")
         return self.tenant(self.selected.slug, permission)
 
+    def manages_vg(self, vg_id):
+        """Superadmin oder Wehrleiter dieser VG (Prüfprotokoll, Rollen der VG)."""
+        return self.superadmin or any(r["role"] == "vg_lead" and r["scope"] == "vg" and r["scope_id"] == vg_id
+                                      for r in self.roles)
+
+    def is_member(self, tenant):
+        """Hat eine eigene Rolle in dieser Wehr (nicht nur über VG-Rolle oder als Superadmin)."""
+        return any(r["scope"] == "tenant" and r["scope_id"] == tenant.id for r in self.roles)
+
     @property
     def scope_key(self):
         return f"vg:{self.vg}" if self.vg else f"t:{self.selected.slug}" if self.selected else None
@@ -325,6 +334,16 @@ class Access:
         result += [{"key": f"t:{t.slug}", "name": t.name, "vg": t.vg_name}
                    for t in sorted(self.tenants.values(), key=lambda t: (t.vg_name, t.name))]
         return result
+
+
+def vg_tenants(vg_id):
+    """Alle aktiven Wehren einer VG, ohne Rechte eines Benutzers – für Abgleich, Hinweise und Weitergabe
+    von Berichten zwischen den Wehren (keine Ausgabe von Einsatzdaten an den Aufrufer)."""
+    with central() as con:
+        rows = con.execute("SELECT t.id, t.slug, t.name, t.vg_id, v.slug AS vg_slug, v.name AS vg_name "
+                           "FROM tenant t JOIN vg v ON v.id = t.vg_id WHERE t.active AND t.vg_id = ? ORDER BY t.name",
+                           (vg_id,)).fetchall()
+    return [Tenant(r["id"], r["slug"], r["name"], r["vg_id"], r["vg_slug"], r["vg_name"], frozenset()) for r in rows]
 
 
 def access_for(email, scope=None):

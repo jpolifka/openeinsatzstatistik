@@ -211,6 +211,7 @@ async function showView() {
   try {
     await view.load();
     view.render();
+    document.dispatchEvent(new Event("app:view"));    // Ansicht gezeichnet (z. B. Sprung zu einem Einsatz)
   } catch (e) {
     section.innerHTML = errorBox(e.message);
   } finally {
@@ -223,6 +224,7 @@ async function reloadData() {
   state.incidents = null;
   await loadYears();
   await showView();
+  document.dispatchEvent(new Event("app:data"));     // z. B. Hinweise neu laden (records.js)
 }
 
 // ------------------------------------------------------------ Auswertung
@@ -704,18 +706,22 @@ async function readPdfs(files) {
   const form = new FormData();
   for (const f of files) form.append("pdfs", f, f.name.normalize("NFC"));
   try {
-    const data = await api("/api/reports", { method: "POST", body: form });
-    // Erfasster Einsatz: Aktualisieren ist vorausgewählt (manuell ergänzte Fahrzeuge und Personen bleiben)
-    state.upload = { token: data.token, reports: data.reports.map((r) => ({ ...r, replace: Boolean(r.existing), saved: null })),
-                     errors: data.errors, notes: data.notes || [] };
-    if (data.errors.length) showUploadError(data.errors.map((e) => `${esc(e.file)}: ${esc(e.message)}`).join("<br>"));
-    await acceptCleanReports();
-    renderPreviews();
+    await showUploadResult(await api("/api/reports", { method: "POST", body: form }));
   } catch (e) {
     showUploadError(esc(e.message));
   } finally {
     $("#progress").hidden = true;
   }
+}
+
+// Gelesene Berichte (hochgeladen oder von einer anderen Wehr weitergegeben): saubere übernehmen, Rest zeigen
+async function showUploadResult(data) {
+  // Erfasster Einsatz: Aktualisieren ist vorausgewählt (manuell ergänzte Fahrzeuge und Personen bleiben)
+  state.upload = { token: data.token, reports: data.reports.map((r) => ({ ...r, replace: Boolean(r.existing), saved: null })),
+                   errors: data.errors, notes: data.notes || [] };
+  if (data.errors.length) showUploadError(data.errors.map((e) => `${esc(e.file)}: ${esc(e.message)}`).join("<br>"));
+  await acceptCleanReports();
+  renderPreviews();
 }
 
 // Zu prüfen sind Berichte mit Prüfhinweisen, neuen Personen oder Abweichungen zu einem erfassten Einsatz
@@ -1131,4 +1137,5 @@ $("#scope").addEventListener("change", async (e) => {
   }
   state.limit = config.default_limit;
   await showView();
+  document.dispatchEvent(new Event("app:data"));
 })();
