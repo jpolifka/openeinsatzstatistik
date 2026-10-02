@@ -34,14 +34,16 @@ WIDTHS = {"number": 6, "date": 11, "weekday": 11, "day_night": 8, "description":
 
 
 class Sheet:
-    """Spaltenaufbau und Formeln der Einsatzübersicht einer Wehr."""
+    """Spaltenaufbau und Formeln der Einsatzübersicht einer Wehr für ein Jahr: Spalten für die
+    Fahrzeuge, die im Jahr im Dienst waren oder in einem der Einsätze vorkommen."""
 
-    def __init__(self, cfg):
+    def __init__(self, cfg, year=None, incidents=()):
         self.cfg = cfg
-        self.layout = Layout(cfg.vehicles, cfg.default_limit, cfg.second_limit)
+        vehicles = cfg.vehicles_in(year, incidents) if year else cfg.vehicles
+        self.layout = Layout(vehicles, cfg.default_limit, cfg.second_limit)
         self.file_column = self.layout.last_column + 2
         self.warnings_column = self.layout.last_column + 3
-        self.number_formats = {**NUMBER_FORMATS, **{f"{cs}.{part}": "h:mm" for cs in cfg.vehicles
+        self.number_formats = {**NUMBER_FORMATS, **{f"{cs}.{part}": "h:mm" for cs in vehicles
                                                     for part in ("departed", "arrived")}}
         self.formula_keys = set(formulas(self, FIRST_ROW))
 
@@ -55,7 +57,7 @@ def formulas(sheet, r):
     """Formeln einer Zeile wie in der Einsatzübersicht (Kriterien-Texte mit Dezimalkomma wie im Original)."""
     cfg, column = sheet.cfg, sheet.layout.column
     c = {key: f"{letter}{r}" for key, letter in column.items()}
-    vehicles = cfg.vehicles
+    vehicles = sheet.layout.vehicles
     crew = [f"{cs}.crew" for cs in vehicles]
     arrival_pairs = [(c[f"{cs}.crew"], c[f"{cs}.arrival"]) for cs in vehicles]
     limit, second = cfg.default_limit, cfg.second_limit
@@ -83,7 +85,7 @@ def formulas(sheet, r):
     return f
 
 
-def values(incident, cfg):
+def values(incident, vehicles):
     """Werte einer Zeile aus einem gespeicherten Einsatz."""
     start, end = parse_iso(incident["started_at"]), parse_iso(incident["ended_at"])
     v = {"number": incident["number"],
@@ -92,7 +94,7 @@ def values(incident, cfg):
          "keyword": incident["keyword"], "subcode": incident["subcode"], "description": incident["description"],
          "place": incident["place"], "unit_leader": incident["unit_leader"],
          "station_staff": incident["station_staff"], "weekend_or_holiday": incident["weekend_or_holiday"]}
-    for cs in cfg.vehicles:
+    for cs in vehicles:
         vehicle = incident["vehicles"].get(cs) or {}
         v[f"{cs}.crew"] = vehicle.get("crew") or None
         v[f"{cs}.departed"] = parse_time(vehicle.get("departed")) or "-"
@@ -138,7 +140,7 @@ def _write_overview(ws, sheet, incidents, year):
     ws.row_dimensions[HEADER_ROW].height = 60
 
     for r, incident in enumerate(incidents, start=FIRST_ROW):
-        row_values, row_formulas = values(incident, sheet.cfg), formulas(sheet, r)
+        row_values, row_formulas = values(incident, sheet.layout.vehicles), formulas(sheet, r)
         for i, (key, _) in enumerate(layout.columns, start=1):
             if key != "gap":
                 _format(sheet, ws.cell(r, i, row_formulas.get(key, row_values.get(key))), key)
@@ -230,7 +232,7 @@ def _write_instructions(ws, sheet, last_member_column):
 
 def write_workbook(incidents, members, year, target, cfg):
     """incidents wie aus store.load_incidents, members wie aus store.members_of_year, cfg: TenantConfig."""
-    sheet = Sheet(cfg)
+    sheet = Sheet(cfg, year, incidents)
     wb = openpyxl.Workbook()
     overview = wb.active
     overview.title = OVERVIEW_SHEET
@@ -297,7 +299,7 @@ def write_combined_workbook(parts, rows, total, year, limit, target, notes=()):
     write_summary(wb.active, rows, total, year, limit, notes)
     taken = {"Übersicht"}
     for cfg, incidents, members in parts:
-        sheet = Sheet(cfg)
+        sheet = Sheet(cfg, year, incidents)
         overview_title = _sheet_title("Einsätze", cfg.name, taken)
         _write_overview(wb.create_sheet(overview_title), sheet, incidents, year)
         _write_attendance(wb.create_sheet(_sheet_title("Anwesenheit", cfg.name, taken)), sheet, incidents, members,

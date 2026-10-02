@@ -50,6 +50,7 @@ class TenantConfig:
     second_limit: int = domain.SECOND_LIMIT
     day_hours: tuple = (domain.DAY_START_HOUR, domain.DAY_END_HOUR)
     keywords: tuple = domain.KEYWORD_CATALOG  # (Stichwort.Stufe, Bezeichnung, Suchbegriffe)
+    inactive_keywords: tuple = ()             # deaktivierte: nur noch Bezeichnung für alte Einsätze
     colors: dict = dataclasses.field(default_factory=dict)   # {"brand": "#RRGGBB", "brand_dark": …}, siehe theme.py
 
     # ------------------------------------------------------------ Fahrzeuge
@@ -57,6 +58,30 @@ class TenantConfig:
     def vehicles(self):
         """Funkrufnamen aller Fahrzeuge in der Reihenfolge der Einsatzübersicht."""
         return tuple(v.call_sign for v in self.fleet)
+
+    def vehicles_on(self, day: dt.date):
+        """Fahrzeuge, die an diesem Tag im Dienst sind."""
+        return tuple(v.call_sign for v in self.fleet if v.in_service_on(day))
+
+    def vehicles_in(self, year, incidents=()):
+        """Spalten der Einsatzübersicht eines Jahres: im Jahr mindestens einen Tag im Dienst, oder mit
+        Daten in einem der Einsätze."""
+        used = {cs for i in incidents for cs in i["vehicles"]}
+        return tuple(v.call_sign for v in self.fleet if v.in_service_during(year) or v.call_sign in used)
+
+    def vehicles_for(self, incident):
+        """Fahrzeugblöcke eines Einsatzes: am Einsatztag im Dienst oder mit Daten im Einsatz."""
+        start = (incident.get("started_at") or "")[:10]
+        day = dt.date.fromisoformat(start) if start else None
+        return tuple(v.call_sign for v in self.fleet
+                     if v.call_sign in incident["vehicles"] or day is None or v.in_service_on(day))
+
+    def with_new_vehicles(self, call_signs, day):
+        """Konfiguration mit neu aufgenommenen Fahrzeugen (für die Vorschau vor dem Speichern)."""
+        known = set(self.vehicles)
+        new = tuple(Vehicle(cs, in_service_from=day.isoformat() if day else None) for cs in call_signs
+                    if cs not in known)
+        return dataclasses.replace(self, fleet=self.fleet + new) if new else self
 
     @property
     def excluded_from_plan_crew(self):
@@ -111,7 +136,10 @@ class TenantConfig:
             "day_hours": list(self.day_hours),
             "fire_alarm_system": ".".join(domain.FIRE_ALARM_SYSTEM),
             "fire_watch": ".".join(domain.FIRE_WATCH),
-            "keyword_catalog": [{"code": code, "name": name, "terms": terms} for code, name, terms in self.keywords],
+            "keyword_catalog": [{"code": code, "name": name, "terms": terms, "active": True}
+                                for code, name, terms in self.keywords] +
+                               [{"code": code, "name": name, "terms": terms, "active": False}
+                                for code, name, terms in self.inactive_keywords],
         }
 
 

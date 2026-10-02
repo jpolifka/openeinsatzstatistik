@@ -194,6 +194,47 @@ const HELP_SECTIONS = [
       },
     },
   },
+  {
+    title: "Verwaltung",
+    intro: "Nur für Wehrführer, Wehrleiter und Superadmins. Änderungen gelten sofort für alle Benutzer der Wehr.",
+    entries: {
+      admin_colors: {
+        title: "Farben",
+        short: "Hauptfarbe (und optional eine dunkle Variante) der Wehr.",
+        text: "Farbe über den Farbwähler, als Hex-Wert (#RRGGBB) oder als Rot/Grün/Blau-Anteile (0–255) einstellen – die drei Eingaben bleiben gleich. Aus der Hauptfarbe leitet die App alle anderen Töne ab (Flächen, Tabellenköpfe, Diagramme Tag/Nacht) und dunkelt sie bei Bedarf so weit ab, dass Schrift und Diagramme lesbar bleiben. Ist die Hauptfarbe selbst zu hell für weiße Schrift (Kontrast unter 4,5:1), lässt sie sich nicht speichern. Ohne eigene Farbe gilt das Standardrot. Die Gesamtansicht einer VG und die Anmeldung sind immer neutral gestaltet.",
+      },
+      admin_logos: {
+        title: "Logos",
+        short: "Logo für Kopfzeile, Fußzeile und Browser-Tab.",
+        text: "<b>Logo hell</b> steht auf der farbigen Kopfzeile (am besten weiß auf transparent), <b>Logo dunkel</b> in der Fußzeile, das <b>Symbol</b> im Browser-Tab. Erlaubt sind PNG, JPEG und WebP bis 512 KB; SVG geht aus Sicherheitsgründen nicht. Ohne eigenes Bild erscheint das neutrale Signet.",
+      },
+      admin_fleet: {
+        title: "Fahrzeuge",
+        short: "Fahrzeugblöcke der Einsatzübersicht mit Dienstzeitraum.",
+        text: "Jedes Fahrzeug ist ein Block der Einsatzübersicht (Stärke, Ausrücken, Eintreffen). <b>Im Dienst ab / außer Dienst ab</b> begrenzen, wann ein Fahrzeug beim Einlesen zugeordnet und als Spalte im Excel-Export des Jahres angezeigt wird – ein ausgemustertes Fahrzeug muss so nicht gelöscht werden, alte Einsätze bleiben vollständig. <b>Ersetzt durch</b> hält fest, welches Fahrzeug nachfolgt. Ohne Haken bei <b>Bedarfsplan</b> zählt die Besatzung nicht zur Gesamtstärke des Bedarfsplans. Eigene Fahrzeuge, die in einem Bericht vorkommen, aber noch fehlen, werden beim Übernehmen automatisch angefügt.",
+      },
+      admin_bks: {
+        title: "BKS-Kennung",
+        short: "Woran die App die eigenen Fahrzeuge und Berichte erkennt.",
+        text: "<b>Einheiten-Präfix</b>: Anfang der Fahrzeugnamen der Einheit im Bericht, z. B. „FL NR#.ABC “ (mit Leerzeichen). <b>Eigener Präfix</b>: Funkrufnamen der eigenen Wehr, z. B. „02/“ – deren früheste Alarmierung ist der Einsatzbeginn. <b>Einheit im Bericht</b>: Kopfzeile des Berichts, z. B. „FW NR#.ABC 02“ – darüber werden Berichte in der Gesamtansicht der richtigen Wehr zugeordnet. <b>FEZ-Kennung</b>: die Feuerwehreinsatzzentrale, deren Einsatzende mitzählt. Mit dem Testfeld lässt sich eine Zeile aus einem Bericht prüfen.",
+      },
+      admin_places: {
+        title: "Orte und Bedarfsplan",
+        short: "Einsatzgebiete und Ausrückebereich des Feuerwehrbedarfsplans.",
+        text: "Ein Einsatz gehört zu dem Ort, dessen <b>Namensanfang</b> zum Ortsnamen im Bericht passt (Groß-/Kleinschreibung egal). Nur Orte mit Haken bei <b>Bedarfsplan</b> zählen für den Erreichungsgrad. Dazu kommen die Mindest-Alarmstufe, die Zeitgrenzen (mehrere möglich, z. B. 8 und 10 Minuten), die zweite Grenze für „Stärke nach … Min.“ und die Stunden, die als Tag gelten.",
+      },
+      admin_keywords: {
+        title: "Stichwortkatalog",
+        short: "Stichworte der AAO für die Suche im Feld Stichwort.",
+        text: "Standard ist die Vorlage der AAO. Sobald ein Stichwort ergänzt, geändert oder gelöscht wird, hat die Wehr ihren eigenen Katalog. <b>Deaktivierte</b> Stichworte erscheinen nicht mehr in der Suche, alte Einsätze behalten aber ihre Bezeichnung. Ein ganzer Katalog lässt sich als CSV oder Excel (Stichwort, Bezeichnung, Suchbegriffe) einlesen – vorher zeigt die App, was neu ist oder sich ändert.",
+      },
+      admin_roles: {
+        title: "Rollen",
+        short: "Wer was sehen und ändern darf.",
+        text: "<b>Wehrführer</b>: Einsätze und Personal der Wehr, PDF einlesen, Verwaltung der Wehr, vergibt Erfasser und Benutzer. <b>Erfasser</b>: Einsätze und Personal, PDF einlesen und bearbeiten. <b>Benutzer</b>: nur die Auswertung, ohne Namen. <b>Wehrleiter</b> (VG): wie Wehrführer für alle Wehren der VG, mit Gesamtansicht, vergibt alle Rollen der VG. <b>Statistik VG</b> (z. B. Bürgermeister): nur die Auswertung aller Wehren der VG, ohne Namen. Wer keine Zuordnung mehr hat, ist beim nächsten Aufruf abgemeldet.",
+      },
+    },
+  },
 ];
 
 const HELP = Object.fromEntries(HELP_SECTIONS.flatMap((s) => Object.entries(s.entries)));
