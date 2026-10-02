@@ -17,3 +17,9 @@ services:
     volumes:
       - ./daten:/daten
     restart: unless-stopped
+    networks:
+      - pdf2einsatz
+
+networks:
+  pdf2einsatz:
+      - name: pdf2einsatz
