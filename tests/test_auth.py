@@ -3,7 +3,7 @@ import re
 
 import pytest
 
-from app import auth, tenancy
+from app import auth, mail, tenancy
 from conftest import grant, make_tenant
 
 
@@ -93,24 +93,22 @@ def test_browser_navigation_to_api_redirects(client):
 
 
 def test_failed_mail_allows_immediate_retry(client, monkeypatch):
-    monkeypatch.setattr(auth, "RESEND_API_KEY", "test")
-    monkeypatch.setattr(auth, "MAIL_FROM", "Test <test@example.org>")
+    monkeypatch.setattr(mail, "SMTP_HOST", "smtp.example.org")
     calls = []
 
-    def fail(req, timeout):
-        calls.append(req)
+    def fail(to, subject, text, html):
+        calls.append(to)
         raise OSError("kein Netz")
 
-    monkeypatch.setattr(auth.urllib.request, "urlopen", fail)
+    monkeypatch.setattr(mail, "send", fail)
     client.post("/login", data={"email": "m.muster@example.org"})
     client.post("/login", data={"email": "m.muster@example.org"})
-    assert len(calls) == 2
+    assert calls == ["m.muster@example.org"] * 2
 
 
-def test_resend_key_without_sender_stops_start(monkeypatch):
-    monkeypatch.setattr(auth, "RESEND_API_KEY", "test")
-    monkeypatch.setattr(auth, "MAIL_FROM", "")
-    with pytest.raises(RuntimeError):
+def test_old_resend_key_stops_start(monkeypatch):
+    monkeypatch.setenv("RESEND_API_KEY", "test")
+    with pytest.raises(RuntimeError, match="SMTP"):
         auth.check_config()
 
 

@@ -4,7 +4,7 @@ Anmeldung per Magic Link.
 
 Aktiv, sobald ADMIN_EMAILS gesetzt ist. Berechtigt sind die Superadmins aus ADMIN_EMAILS und
 alle Adressen mit einer Zuordnung zu einer aktiven Wehr bzw. VG (tenancy.is_allowed). Wer sich
-anmelden will, gibt seine Adresse ein und bekommt über Resend einen Link, der 15 Minuten gilt
+anmelden will, gibt seine Adresse ein und bekommt per Mail (mail.py, SMTP der eigenen Domain) einen Link, der 15 Minuten gilt
 und nur einmal benutzt werden kann. Danach hält ein signiertes Cookie die Sitzung (30 Tage).
 Wird die letzte Zuordnung einer Adresse entfernt, verliert sie beim nächsten Aufruf den Zugang.
 
@@ -15,24 +15,20 @@ import base64
 import hashlib
 import hmac
 import html
-import json
 import logging
 import os
 import secrets
+import smtplib
 import threading
 import time
-import urllib.error
-import urllib.request
 
 from fastapi import APIRouter, BackgroundTasks, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from app import db, tenancy, theme
+from app import db, mail, tenancy, theme
 
 log = logging.getLogger("pdf2einsatz")
 
-RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
-MAIL_FROM = os.environ.get("MAIL_FROM", "")
 BASE_URL = os.environ.get("BASE_URL", "").rstrip("/")
 SECRET_KEY = os.environ.get("SECRET_KEY", "")
 
@@ -41,7 +37,7 @@ SCOPE_COOKIE = "scope"     # ausgewählte Wehr, wird bei jeder Anfrage gegen die
 LINK_TTL = 15 * 60
 SESSION_TTL = 30 * 24 * 60 * 60
 # Mindestabstand zwischen zwei Mails an dieselbe Adresse
-RESEND_COOLDOWN = 60
+MAIL_COOLDOWN = 60
 
 router = APIRouter()
 _lock = threading.Lock()
@@ -58,8 +54,10 @@ def check_config():
     """Bricht den Start ab, wenn die Anmeldung so nicht funktionieren kann."""
     if enabled() and not BASE_URL:
         raise RuntimeError("ADMIN_EMAILS ist gesetzt, BASE_URL fehlt (siehe README)")
-    if RESEND_API_KEY and not MAIL_FROM:
-        raise RuntimeError("RESEND_API_KEY ist gesetzt, MAIL_FROM fehlt (siehe README)")
+    if os.environ.get("RESEND_API_KEY"):
+        # Nicht still ohne Mails starten, wenn noch die alte Konfiguration gesetzt ist
+        raise RuntimeError("RESEND_API_KEY wird nicht mehr unterstützt – Versand per SMTP_* (siehe README)")
+    mail.check_config()
 
 
 def _secret():
@@ -132,31 +130,24 @@ def send_link(email):
         log.info("Anmeldung mit nicht berechtigter Adresse abgelehnt")
         return
     with _lock:
-        if time.time() - _last_mail.get(email, 0) < RESEND_COOLDOWN:
+        if time.time() - _last_mail.get(email, 0) < MAIL_COOLDOWN:
             return
         _last_mail[email] = time.time()
     link = f"{BASE_URL}/auth/verify?token={_sign('link', email, LINK_TTL)}"
-    if not RESEND_API_KEY:
-        log.warning("RESEND_API_KEY fehlt – Anmeldelink für %s: %s", email, link)
+    if not mail.enabled():
+        log.warning("SMTP_HOST fehlt – Anmeldelink für %s: %s", email, link)
         return
-    body = {
-        "from": MAIL_FROM, "to": [email], "subject": "Anmeldung Einsatzstatistik",
-        "text": f"Hallo,\n\nmit diesem Link meldest du dich bei der Einsatzstatistik an:\n{link}\n\n"
+    text = (f"Hallo,\n\nmit diesem Link meldest du dich bei der Einsatzstatistik an:\n{link}\n\n"
                 "Der Link gilt 15 Minuten und nur einmal. Wenn du keine Anmeldung angefordert hast, "
-                "kannst du diese Mail ignorieren.",
-        "html": f"<p>Hallo,</p><p>mit diesem Link meldest du dich bei der Einsatzstatistik an:</p>"
+                "kannst du diese Mail ignorieren.")
+    body = (f"<p>Hallo,</p><p>mit diesem Link meldest du dich bei der Einsatzstatistik an:</p>"
                 f"<p><a href=\"{html.escape(link)}\">Jetzt anmelden</a></p>"
                 "<p>Der Link gilt 15 Minuten und nur einmal. Wenn du keine Anmeldung angefordert hast, "
-                "kannst du diese Mail ignorieren.</p>",
-    }
-    req = urllib.request.Request("https://api.resend.com/emails", data=json.dumps(body).encode(), method="POST",
-                                 headers={"Authorization": f"Bearer {RESEND_API_KEY}",
-                                          "Content-Type": "application/json", "User-Agent": "pdf2einsatz"})
+                "kannst du diese Mail ignorieren.</p>")
     try:
-        urllib.request.urlopen(req, timeout=10).close()
-    except (urllib.error.URLError, OSError) as e:
-        detail = e.read().decode(errors="replace") if isinstance(e, urllib.error.HTTPError) else e
-        log.error("Mailversand über Resend fehlgeschlagen: %s", detail)
+        mail.send(email, "Anmeldung Einsatzstatistik", text, body)
+    except (smtplib.SMTPException, OSError) as e:
+        log.error("Mailversand über %s fehlgeschlagen: %s", mail.SMTP_HOST, e)
         # Gleich wieder anfordern lassen statt 60 Sekunden ohne Mail
         with _lock:
             _last_mail.pop(email, None)

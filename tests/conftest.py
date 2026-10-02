@@ -57,7 +57,6 @@ def make_client(data_dir, monkeypatch):
         if login:
             monkeypatch.setattr(tenancy, "ADMIN_EMAILS", {"admin@example.org"})
             monkeypatch.setattr(auth, "BASE_URL", "http://testserver")
-            monkeypatch.setattr(auth, "RESEND_API_KEY", "")
             monkeypatch.setattr(auth, "_key", None)
         client = TestClient(main.app)
         client.__enter__()

@@ -29,8 +29,8 @@ log = logging.getLogger("pdf2einsatz")
 router = APIRouter()
 access = auth.access
 
-TEMPLATE_VERSION = 1
-TEMPLATE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", f"avv_v{TEMPLATE_VERSION}.html")
+TEMPLATE_VERSION = 2          # 2: Mailversand über das eigene Postfach statt Resend
+TEMPLATES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
 STATUSES = {
     "pending": "AVV ausstehend",
     "draft": "ausgefüllt – Unterschrift ausstehend",
@@ -53,7 +53,8 @@ def processor():
     return {"processor_name": "Polifka IT Beratung", "processor_address": env("DPA_PROCESSOR_ADDRESS"),
             "processor_representative": env("DPA_PROCESSOR_REPRESENTATIVE"),
             "processor_contact": env("DPA_PROCESSOR_CONTACT"), "hosting": env("DPA_HOSTING"),
-            "hosting_location": env("DPA_HOSTING_LOCATION"), "backup": env("DPA_BACKUP")}
+            "hosting_location": env("DPA_HOSTING_LOCATION"), "backup": env("DPA_BACKUP"),
+            "mail_provider": env("DPA_MAIL_PROVIDER"), "mail_location": env("DPA_MAIL_LOCATION")}
 
 
 # ---------------------------------------------------------------- Datenbank
@@ -86,12 +87,13 @@ def set_status(con, vg_id, new_status, email, detail=""):
 
 
 # ---------------------------------------------------------------- Dokument
-def render(client_data, tenant_names):
-    """Vertragstext (HTML-Ausschnitt) aus der Vorlage und seine Prüfsumme (SHA-256)."""
-    with open(TEMPLATE, encoding="utf-8") as f:
+def render(client_data, tenant_names, version=TEMPLATE_VERSION):
+    """Vertragstext (HTML-Ausschnitt) aus der Vorlage und seine Prüfsumme (SHA-256). Ein erzeugter Vertrag
+    wird immer mit der Vorlage gezeigt, aus der er entstand."""
+    with open(os.path.join(TEMPLATES, f"avv_v{version}.html"), encoding="utf-8") as f:
         text = f.read()
     values = {**processor(), **{key: (client_data.get(key) or "").strip() or MISSING for key, _ in CLIENT_FIELDS},
-              "tenants": ", ".join(tenant_names) or MISSING, "template_version": str(TEMPLATE_VERSION)}
+              "tenants": ", ".join(tenant_names) or MISSING, "template_version": str(version)}
     body = re.sub(r"\{\{(\w+)\}\}", lambda m: html.escape(values.get(m.group(1), MISSING)).replace("\n", "<br>"), text)
     return body, hashlib.sha256(body.encode("utf-8")).hexdigest()
 
@@ -208,7 +210,8 @@ def document(slug: str, a: tenancy.Access = Depends(access)):
     with tenancy.central() as con:
         vg, _ = _require(con, a, slug)
         d = status(con, vg["id"])
-        body, checksum = render(json.loads(d.get("client_data") or "{}"), _tenant_names(con, vg["id"]))
+        body, checksum = render(json.loads(d.get("client_data") or "{}"), _tenant_names(con, vg["id"]),
+                                d.get("template_version") or TEMPLATE_VERSION)
     return HTMLResponse(page(body, checksum, f"AVV {vg['name']}", d.get("generated_hash")),
                         headers={"Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; "
                                                             "script-src 'unsafe-inline'"})

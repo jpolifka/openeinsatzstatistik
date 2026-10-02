@@ -28,7 +28,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Stre
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, create_model
 
-from app import admin, auth, db, dpa, excel_export, legacy, metrics, pdf_report, report, store, tenancy, tenant_config, theme
+from app import admin, auth, db, dpa, mail, excel_export, legacy, metrics, pdf_report, report, store, tenancy, tenant_config, theme
 from app.tenancy import INCIDENTS, STATS, WRITE
 from app.timeutil import year_of
 
@@ -55,6 +55,7 @@ async def lifespan(_app):
     elif legacy.legacy_emails():
         log.warning("AUTH_EMAILS wird ignoriert – Benutzer werden in der Verwaltung den Wehren zugeordnet")
     tenancy.setup()
+    mail.log_check()
     yield
 
 
