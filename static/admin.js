@@ -224,29 +224,48 @@ function setColor(key, hex, source) {
 }
 
 // ------------------------------------------------------------ Fahrzeuge
+// Fahrzeug in Auswahllisten: Kurzname (Block), bei neuen Fahrzeugen bis zum Speichern der Funkrufname
+const vehicleKey = (v) => v.call_sign || v.name;
+const knownVehicle = (name) => admin.settings.known_vehicles.find((k) => k.name === name);
+
+// Funkrufname mit Auflösung (Kennung, Standort, Fahrzeugart) und Block der Einsatzübersicht
+function callSignCell(v, i) {
+  const known = knownVehicle(v.name);
+  const description = known ? known.description : "";
+  const block = v.call_sign ? `Block ${esc(v.call_sign)}` : "Block wird beim Speichern vergeben";
+  const hint = v.name ? [block, description && esc(description)].filter(Boolean).join(" · ")
+    : `<span class="missing-name">Funkrufnamen wie im BKS-Bericht eintragen (bisher nur ${esc(v.call_sign)})</span>`;
+  const placeholder = esc(v.suggested_name || "z. B. FL NR#.ABC 02/45-01");
+  return `${textInput(`fleet.${i}.name`, v.name, `list="known-vehicles" placeholder="${placeholder}" spellcheck="false" class="wide"`)}
+    <div class="small muted">${hint}</div>`;
+}
+
 function fleetSection() {
   const s = admin.settings;
-  const others = (v) => s.fleet.filter((x) => x.call_sign && x !== v);
+  const others = (v) => s.fleet.filter((x) => vehicleKey(x) && x !== v);
   const rows = s.fleet.map((v, i) => `<tr>
     <td class="order"><button type="button" class="icon-button" data-admin-action="move-vehicle" data-index="${i}" data-step="-1" ${i ? "" : "disabled"} aria-label="nach oben">↑</button><button type="button" class="icon-button" data-admin-action="move-vehicle" data-index="${i}" data-step="1" ${i < s.fleet.length - 1 ? "" : "disabled"} aria-label="nach unten">↓</button></td>
-    <td>${textInput(`fleet.${i}.call_sign`, v.call_sign, 'placeholder="02/45" maxlength="5" class="narrow"')}</td>
+    <td>${callSignCell(v, i)}</td>
     <td>${textInput(`fleet.${i}.label`, v.label, 'placeholder="z. B. HLF 20"')}</td>
     <td><input type="date" data-bind="fleet.${i}.in_service_from" value="${esc(v.in_service_from || "")}"></td>
     <td><input type="date" data-bind="fleet.${i}.in_service_until" value="${esc(v.in_service_until || "")}"></td>
     <td><select data-bind="fleet.${i}.replaced_by"><option value="">–</option>${others(v).map((x) =>
-      `<option ${x.call_sign === v.replaced_by ? "selected" : ""}>${esc(x.call_sign)}</option>`).join("")}</select></td>
+      `<option value="${esc(vehicleKey(x))}" ${vehicleKey(x) === v.replaced_by ? "selected" : ""}>${esc(x.call_sign || x.name)}</option>`).join("")}</select></td>
     <td class="center"><input type="checkbox" data-bind="fleet.${i}.in_plan_crew" ${v.in_plan_crew ? "checked" : ""} aria-label="zählt zur Gesamtstärke"></td>
     <td class="right">${v.incidents || ""}</td>
     <td><button type="button" class="icon-button" data-admin-action="remove-vehicle" data-index="${i}" aria-label="entfernen">✕</button></td>
   </tr>`).join("");
   const unused = Object.entries(s.unused_data);
   const substitutes = Object.entries(s.substitutes).map(([sub, block], i) => `<div class="inline-row">
-    <input type="text" data-substitute="${i}" value="${esc(sub)}" placeholder="01/23" maxlength="5" class="narrow" aria-label="Ersatzfahrzeug">
+    <input type="text" data-substitute="${i}" value="${esc(sub)}" list="known-vehicles" placeholder="z. B. FL NR#.ABC 01/23-01" spellcheck="false" class="wide" aria-label="Ersatzfahrzeug (Funkrufname)">
     <span>wird geführt im Block</span>
-    <select data-substitute-block="${i}">${s.fleet.map((v) => `<option ${v.call_sign === block ? "selected" : ""}>${esc(v.call_sign)}</option>`).join("")}</select>
+    <select data-substitute-block="${i}">${s.fleet.map((v) => `<option value="${esc(vehicleKey(v))}" ${vehicleKey(v) === block ? "selected" : ""}>${esc(v.call_sign || v.name)}</option>`).join("")}</select>
     <button type="button" class="icon-button" data-admin-action="remove-substitute" data-sub="${esc(sub)}" aria-label="entfernen">✕</button></div>`).join("");
-  return `<p class="small muted">Reihenfolge wie in der Einsatzübersicht. Neue eigene Fahrzeuge aus BKS-Berichten werden beim Übernehmen automatisch hinten angefügt (im Dienst ab Einsatztag).${helpButton("admin_fleet")}</p>
-    <div class="table-wrap"><table class="mini-table admin-table"><thead><tr><th></th><th>Funkruf</th><th>Bezeichnung</th><th>im Dienst ab</th><th>außer Dienst ab</th><th>ersetzt durch</th><th>Bedarfsplan</th><th class="right">Einsätze</th><th></th></tr></thead>
+  const datalist = `<datalist id="known-vehicles">${s.known_vehicles.map((k) =>
+    `<option value="${esc(k.name)}">${esc(k.description)}</option>`).join("")}</datalist>`;
+  return `<p class="small muted">Reihenfolge wie in der Einsatzübersicht. Funkrufname genau wie im BKS-Bericht – zur Auswahl stehen die Fahrzeuge aus den bisher eingelesenen Berichten (<a href="${esc(s.call_sign_directory)}" target="_blank" rel="noopener">Funkrufnamenverzeichnis RLP</a>). Neue eigene Fahrzeuge aus BKS-Berichten werden beim Übernehmen automatisch hinten angefügt (im Dienst ab Einsatztag).${helpButton("admin_fleet")}</p>
+    ${datalist}
+    <div class="table-wrap"><table class="mini-table admin-table"><thead><tr><th></th><th>Funkrufname</th><th>Fahrzeugtyp</th><th>im Dienst ab</th><th>außer Dienst ab</th><th>ersetzt durch</th><th>Bedarfsplan</th><th class="right">Einsätze</th><th></th></tr></thead>
     <tbody>${rows}</tbody></table></div>
     <button type="button" class="btn btn-light btn-small section-gap" data-admin-action="add-vehicle">Fahrzeug hinzufügen</button>
     ${unused.length ? `<div class="message message-info section-gap">Daten zu Fahrzeugen, die nicht (mehr) in der Liste stehen und daher nicht ausgewertet werden: ${unused.map(([cs, n]) => `${esc(cs)} (${n} Einsätze)`).join(", ")}.</div>` : ""}
@@ -258,11 +277,19 @@ function fleetSection() {
 }
 
 // ------------------------------------------------------------ BKS-Kennung
+// Zuordnung einer Testzeile: zuerst über den Funkrufnamen der Fahrzeugliste, sonst über die Präfixe
+function fleetMatch(v) {
+  const listed = admin.settings.fleet.find((x) => x.name && x.name === v.name);
+  if (listed) return `Block ${esc(listed.call_sign || listed.name)} · <b>Fahrzeug der Liste</b>`;
+  if (!v.call_sign) return "nicht der Einheit zugeordnet";
+  return `Funkruf ${esc(v.call_sign)}${v.own ? " · <b>eigenes Fahrzeug</b>" : " · Fahrzeug der Einheit"}`;
+}
+
 function bksSection() {
   const s = admin.settings;
   const result = admin.parseResult;
   const found = result ? (result.length ? `<ul class="plain-list">${result.map((v) =>
-    `<li><b>${esc(v.name)}</b> → ${v.call_sign ? `Funkruf ${esc(v.call_sign)}${v.own ? " · <b>eigenes Fahrzeug</b>" : " · Fahrzeug der Einheit"}` : "nicht der Einheit zugeordnet"}</li>`).join("")}</ul>`
+    `<li><b>${esc(v.name)}</b> → ${fleetMatch(v)}</li>`).join("")}</ul>`
     : `<p class="message message-error">Keine Fahrzeugzeile erkannt.</p>`) : "";
   return `<p class="small muted">So erkennt die App im Einsatzbericht des BKS-Portals, welche Fahrzeuge zur Wehr gehören und von welcher Einheit ein Bericht stammt.${helpButton("admin_bks")}</p>
     <div class="form-grid">
@@ -465,7 +492,7 @@ async function runAdminAction(button) {
       await api(`/api/admin/${admin.slug}/assets/${name}`, { method: "DELETE" });
       return afterAssetChange();
     case "add-vehicle":
-      s.fleet.push({ call_sign: "", label: "", in_service_from: "", in_service_until: "", replaced_by: "", in_plan_crew: true, incidents: 0 });
+      s.fleet.push({ call_sign: "", name: "", label: "", in_service_from: "", in_service_until: "", replaced_by: "", in_plan_crew: true, incidents: 0 });
       return rerender();
     case "move-vehicle": {
       const j = i + Number(step);
@@ -474,12 +501,12 @@ async function runAdminAction(button) {
     }
     case "remove-vehicle": {
       const v = s.fleet[i];
-      if (v.incidents && !confirm(`${v.call_sign} hat Daten in ${v.incidents} Einsätzen. Ohne Eintrag in der Liste erscheinen sie nicht mehr in Auswertung und Export (die Daten bleiben erhalten). Entfernen?`)) return;
+      if (v.incidents && !confirm(`${v.name || v.call_sign} hat Daten in ${v.incidents} Einsätzen. Ohne Eintrag in der Liste erscheinen sie nicht mehr in Auswertung und Export (die Daten bleiben erhalten). Entfernen?`)) return;
       s.fleet.splice(i, 1);
       return rerender();
     }
     case "add-substitute":
-      s.substitutes[""] = s.fleet[0].call_sign;
+      s.substitutes[""] = vehicleKey(s.fleet[0]);
       return rerender();
     case "remove-substitute":
       delete s.substitutes[button.dataset.sub];
@@ -729,6 +756,14 @@ $("#view-admin").addEventListener("change", async (e) => {
     if (t.dataset.feeVg !== undefined) { await adminGo({ feeVg: t.value }); return; }
     if (t.dataset.limits !== undefined) { renderAdmin(); return; }     // Auswahl der Standardgrenze aktualisieren
     if (t.dataset.bind?.startsWith("places.") && t.dataset.bind.endsWith(".name")) { renderAdmin(); return; }
+    if (/^fleet\.\d+\.name$/.test(t.dataset.bind || "")) {
+      const v = admin.settings.fleet[Number(t.dataset.bind.split(".")[1])];
+      v.name = v.name.trim();
+      const known = knownVehicle(v.name);
+      if (known?.label && !v.label) v.label = known.label;     // Fahrzeugtyp, wenn die Kennzahl eindeutig ist
+      renderAdmin();
+      return;
+    }
     if (t.dataset.planPlace !== undefined) {
       const place = admin.settings.places[Number(t.dataset.planPlace)].name;
       admin.settings.plan_places = t.checked ? [...new Set([...admin.settings.plan_places, place])]

@@ -3,6 +3,7 @@
 import json
 import re
 
+from app import domain
 from app.holidays import is_weekend_or_holiday
 from app.names import NameMatcher, leader_spelling, matches_leader, normalize, split_name
 from app.timeutil import normalize_iso, parse_iso, to_iso, year_of
@@ -365,12 +366,13 @@ def update_incident(con, incident_id, changes, modified_by=None, source=None):
                 "WHERE id = ?", [*f.values(), modified_by, incident_id])
 
 
-def add_fleet_vehicles(con, call_signs, day):
-    """Beim Import entdeckte eigene Fahrzeuge hinten an die Fahrzeugliste der Wehr anfügen."""
+def add_fleet_vehicles(con, vehicles, day):
+    """Beim Import entdeckte eigene Fahrzeuge [(call_sign, Funkrufname)] hinten an die Fahrzeugliste anfügen."""
     order = con.execute("SELECT COALESCE(MAX(sort_order), 0) FROM fleet").fetchone()[0]
-    for i, call_sign in enumerate(call_signs, start=1):
-        con.execute("INSERT OR IGNORE INTO fleet (call_sign, sort_order, in_service_from) VALUES (?, ?, ?)",
-                    (call_sign, order + i, day.isoformat() if day else None))
+    for i, (call_sign, name) in enumerate(vehicles, start=1):
+        label = domain.describe_call_sign(name).get("label", "")    # Fahrzeugtyp, wenn die Kennzahl eindeutig ist
+        con.execute("INSERT OR IGNORE INTO fleet (call_sign, name, label, sort_order, in_service_from) "
+                    "VALUES (?, ?, ?, ?, ?)", (call_sign, name or "", label, order + i, day.isoformat() if day else None))
 
 
 def vehicles_with_data(con):

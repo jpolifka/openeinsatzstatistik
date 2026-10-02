@@ -7,20 +7,30 @@ Jede Wehr hat ihre eigene TenantConfig. Backend und Oberfläche lesen die Werte 
 """
 import dataclasses
 import datetime as dt
+import re
 from typing import Optional
 
 from app import domain
 
 
+_LEGACY = re.compile(r"(\d\d/\d\d)-\d\d")
+
+
 @dataclasses.dataclass(frozen=True)
 class Vehicle:
-    """Fahrzeug der Wehr. Ohne Dienstzeitraum ist es unbegrenzt im Dienst."""
-    call_sign: str                            # Funkrufname ohne Einheit, z. B. 02/45
+    """Fahrzeug der Wehr. Ohne Dienstzeitraum ist es unbegrenzt im Dienst.
+
+    Zugeordnet wird über den vollen Funkrufnamen aus dem BKS-Bericht (name). call_sign ist der Kurzname und
+    Schlüssel des Blocks in Einsätzen und Einsatzübersicht; er wird aus dem Namen abgeleitet (new_call_sign).
+    Ältere Fahrzeuge ohne Namen werden über unit_prefix + Kurzname erkannt.
+    """
+    call_sign: str                            # Kurzname, z. B. 02/45 oder 01/23-06
     label: str = ""                           # Bezeichnung, z. B. HLF 20
     in_service_from: Optional[str] = None     # ISO-Datum, erster Tag im Dienst
     in_service_until: Optional[str] = None    # ISO-Datum, letzter Tag im Dienst
     replaced_by: Optional[str] = None         # Funkrufname des Nachfolgers
     in_plan_crew: bool = True                 # zählt zur Gesamtstärke des Bedarfsplans (Excel-Spalte AU)
+    name: str = ""                            # Funkrufname im BKS-Bericht, z. B. „FL NR#.ABC 02/45-01“
 
     def in_service_on(self, day: dt.date):
         day = day.isoformat()
@@ -80,12 +90,58 @@ class TenantConfig:
         return tuple(v.call_sign for v in self.fleet
                      if v.call_sign in incident["vehicles"] or day is None or v.in_service_on(day))
 
-    def with_new_vehicles(self, call_signs, day):
-        """Konfiguration mit neu aufgenommenen Fahrzeugen (für die Vorschau vor dem Speichern)."""
+    def with_new_vehicles(self, vehicles, day):
+        """Konfiguration mit neu aufgenommenen Fahrzeugen [(call_sign, name)] (Vorschau vor dem Speichern)."""
         known = set(self.vehicles)
-        new = tuple(Vehicle(cs, in_service_from=day.isoformat() if day else None) for cs in call_signs
-                    if cs not in known)
+        new = tuple(Vehicle(cs, in_service_from=day.isoformat() if day else None, name=name or "")
+                    for cs, name in vehicles if cs not in known)
         return dataclasses.replace(self, fleet=self.fleet + new) if new else self
+
+    def _legacy_call_sign(self, name):
+        """Kurzname nach der früheren Regel: unit_prefix + 02/45-01 -> 02/45."""
+        m = _LEGACY.match(name[len(self.unit_prefix):]) if self.unit_prefix and name.startswith(self.unit_prefix) \
+            else None
+        return m.group(1) if m else None
+
+    def block_of(self, name):
+        """Block (call_sign) eines Fahrzeugs aus dem BKS-Bericht; None, wenn es keinem zugeordnet ist.
+
+        Zuerst über den vollen Funkrufnamen der Fahrzeugliste, sonst nach der früheren Regel über
+        unit_prefix – aber nur, wenn der Kurzname nicht einem Fahrzeug mit anderem Namen gehört.
+        """
+        if not name:
+            return None
+        for v in self.fleet:
+            if v.name == name:
+                return v.call_sign
+        short = self._legacy_call_sign(name)
+        if short and any(v.call_sign == short and v.name for v in self.fleet):
+            return None
+        return short
+
+    def is_own(self, name):
+        """Eigenes Fahrzeug der Wehr: steht in der Fahrzeugliste oder beginnt mit unit_prefix + own_prefix."""
+        return bool(name) and (any(v.name == name for v in self.fleet) or
+                               bool(self.own_prefix) and name.startswith(self.own_vehicle_prefix))
+
+    def vehicle(self, call_sign):
+        return next((v for v in self.fleet if v.call_sign == call_sign), None)
+
+    def new_call_sign(self, name, taken=None):
+        """Kurzname für ein neues Fahrzeug: ohne Präfix und ohne „-01“ (FL NR#.ABC 02/45-01 -> 02/45,
+        RP WW 01/23-06 -> 01/23-06); ist er vergeben, mit Nummer, notfalls der volle Name."""
+        taken = set(self.vehicles if taken is None else taken)
+        parts = domain.describe_call_sign(name)
+        candidates = [name]
+        if parts:
+            base = f"{parts['station']}/{parts['code']}"
+            full = f"{base}-{parts['number']:02d}" if parts["number"] else base
+            candidates = [base if parts["number"] in (None, 1) else full, full, name]
+        return next((c for c in candidates if c not in taken), name)
+
+    def substitute_of(self, name):
+        """Block, in dem ein Ersatzfahrzeug geführt wird (Schlüssel: voller Name oder alter Kurzname)."""
+        return self.substitutes.get(name) or self.substitutes.get(self.block_of(name) or "")
 
     @property
     def excluded_from_plan_crew(self):
@@ -98,9 +154,15 @@ class TenantConfig:
 
     def substitute_label(self, vehicle_name, call_sign):
         """Kurzname eines Ersatzfahrzeugs im Block (z. B. '01/23-01'); None, wenn das Stammfahrzeug fuhr."""
-        if not vehicle_name or call_sign in vehicle_name:
+        if not vehicle_name:
             return None
-        return vehicle_name.replace(self.unit_prefix, "")
+        own = self.vehicle(call_sign)
+        if own and own.name:
+            if vehicle_name == own.name:
+                return None
+        elif call_sign in vehicle_name:
+            return None
+        return vehicle_name.replace(self.unit_prefix, "") if self.unit_prefix else vehicle_name
 
     # ------------------------------------------------------------ Orte und Bedarfsplan
     @property
@@ -127,6 +189,7 @@ class TenantConfig:
         """Fachkonstanten für die Oberfläche."""
         return {
             "vehicles": list(self.vehicles),
+            "vehicle_names": {v.call_sign: v.name for v in self.fleet if v.name},
             "own_prefix": self.own_prefix,
             "substitutes": dict(self.substitutes),
             "categories": [{"code": code, "name": name} for code, name in domain.CATEGORIES],

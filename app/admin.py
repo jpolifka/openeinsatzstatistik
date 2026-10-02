@@ -10,6 +10,7 @@ Bereich; VGs und Wehren anlegen nur der Superadmin.
 import csv
 import datetime as dt
 import io
+import json
 import logging
 import os
 import re
@@ -27,7 +28,8 @@ from app.tenant_config import TenantConfig, Vehicle
 log = logging.getLogger("pdf2einsatz")
 router = APIRouter()
 
-CALL_SIGN = re.compile(r"\d\d/\d\d")
+# Funkrufname wie im BKS-Bericht; als Schlüssel eines Ersatzfahrzeugs auch der alte Kurzname (01/23)
+VEHICLE_NAME = re.compile(r"[A-ZÄÖÜ0-9][\w#./^ -]{0,59}")
 KEYWORD_CODE = re.compile(r"[A-Z]\d(\.\d\d)?")
 NUMBERINGS = ("bks", "by_date")
 MAX_KEYWORD_FILE = 2 * 1024 * 1024
@@ -60,7 +62,8 @@ def admin_overview(a: tenancy.Access = Depends(access)):
 
 # ---------------------------------------------------------------- Einstellungen der Wehr
 class VehicleIn(BaseModel):
-    call_sign: str
+    name: str = ""                 # Funkrufname wie im BKS-Bericht
+    call_sign: str = ""            # Kurzname; leer bei neuen Fahrzeugen, dann aus dem Namen abgeleitet
     label: str = ""
     in_service_from: Optional[dt.date] = None
     in_service_until: Optional[dt.date] = None
@@ -102,7 +105,9 @@ def _settings_json(tenant, cfg):
         "assets": {name: assets.get(name) for name in theme.ASSETS},
         "slug": tenant.slug, "name": cfg.name, "colors": cfg.colors,
         "palette": theme.palette(cfg.colors) if cfg.colors else None,
-        "fleet": [{"call_sign": v.call_sign, "label": v.label, "in_service_from": v.in_service_from,
+        "fleet": [{"call_sign": v.call_sign, "name": v.name, "description": domain.call_sign_text(v.name),
+                   "suggested_name": "" if v.name else _suggested_name(v.call_sign, cfg) or "",
+                   "label": v.label, "in_service_from": v.in_service_from,
                    "in_service_until": v.in_service_until, "replaced_by": v.replaced_by,
                    "in_plan_crew": v.in_plan_crew, "incidents": used.get(v.call_sign, 0)} for v in cfg.fleet],
         "unused_data": {cs: n for cs, n in used.items() if cs not in cfg.vehicles},
@@ -111,13 +116,73 @@ def _settings_json(tenant, cfg):
                                                "plan_places", "plan_min_level", "response_limits", "default_limit",
                                                "second_limit", "day_hours", "numbering", "response_plan_public")},
         "places": [{"name": n, "prefix": p} for n, p in cfg.places],
+        "known_vehicles": [{"name": n, "description": domain.call_sign_text(n),
+                            "label": domain.describe_call_sign(n)["label"]} for n in _known_vehicles(tenant, cfg)],
+        "call_sign_directory": domain.CALL_SIGN_DIRECTORY_URL,
     }
+
+
+def _suggested_name(call_sign, cfg):
+    """Vorschlag für Einträge mit altem Kurznamen ohne Funkrufnamen: unit_prefix + 02/45 + „-01“."""
+    if cfg.unit_prefix and re.fullmatch(r"\d\d/\d\d", call_sign):
+        return f"{cfg.unit_prefix}{call_sign}-01"
+    return None
+
+
+def _known_vehicles(tenant, cfg):
+    """Funkrufnamen aus Berichten zur Auswahl in der Fahrzeugliste: aus den Einsätzen der Wehr und den
+    Stammdatensätzen ihrer VG (personenfrei), ohne Leitstelle und Zeilen ohne Funkrufnummer."""
+    with tenant.connection() as con:
+        names = {r[0] for r in con.execute("SELECT DISTINCT name FROM vehicle WHERE name <> ''")}
+    with tenancy.central() as con:
+        for (vehicles,) in con.execute("SELECT vehicles FROM master_record WHERE vg_id = ?", (tenant.vg_id,)):
+            names.update(v.get("name") or "" for v in json.loads(vehicles))
+    names.update(v.name for v in cfg.fleet)
+    names.update(filter(None, (_suggested_name(cs, cfg) for cs in [v.call_sign for v in cfg.fleet] + list(cfg.substitutes))))
+    return sorted(n for n in names if n and n != cfg.control_center and domain.describe_call_sign(n))
 
 
 @router.get("/api/admin/{slug}/settings")
 def get_settings(slug: str, a: tenancy.Access = Depends(access)):
     tenant = a.tenant(slug, ADMIN)
     return _settings_json(tenant, tenant.config)
+
+
+def _check_fleet(s: SettingsIn):
+    """Fahrzeugliste prüfen; neue Fahrzeuge bekommen ihren Kurznamen aus dem Funkrufnamen."""
+    rows = [(v, v.name.strip(), v.call_sign.strip()) for v in s.fleet]
+    names = [name for _, name, _ in rows if name]
+    if len(set(names)) != len(names):
+        _invalid("Ein Funkrufname steht doppelt in der Fahrzeugliste.")
+    derive = TenantConfig(name="", unit_prefix=s.unit_prefix)
+    taken = {call_sign for _, _, call_sign in rows if call_sign}
+    result = []
+    for v, name, call_sign in rows:
+        label = name or call_sign
+        if not label:
+            _invalid("Jedes Fahrzeug braucht einen Funkrufnamen wie im BKS-Bericht, z. B. FL NR#.ABC 02/45-01.")
+        if name and not VEHICLE_NAME.fullmatch(name):
+            _invalid(f"Funkrufname „{name}“: bitte wie im BKS-Bericht angeben, z. B. FL NR#.ABC 02/45-01.")
+        if not call_sign:
+            call_sign = derive.new_call_sign(name, taken)
+            taken.add(call_sign)
+        if v.in_service_from and v.in_service_until and v.in_service_until < v.in_service_from:
+            _invalid(f"{label}: „außer Dienst ab“ liegt vor „im Dienst ab“.")
+        result.append((v, name, call_sign))
+    call_signs = [call_sign for _, _, call_sign in result]
+    if len(set(call_signs)) != len(call_signs):
+        _invalid("Ein Kurzname steht doppelt in der Fahrzeugliste.")
+    by_name = {name: call_sign for _, name, call_sign in result if name}
+    fleet = []
+    for v, name, call_sign in result:
+        successor = by_name.get(v.replaced_by, v.replaced_by) or None
+        if successor and successor not in call_signs:
+            _invalid(f"{name or call_sign}: Nachfolger {v.replaced_by} steht nicht in der Fahrzeugliste.")
+        fleet.append(Vehicle(call_sign, v.label.strip(),
+                             v.in_service_from.isoformat() if v.in_service_from else None,
+                             v.in_service_until.isoformat() if v.in_service_until else None,
+                             successor, v.in_plan_crew, name))
+    return tuple(fleet)
 
 
 def _check_settings(s: SettingsIn):
@@ -129,19 +194,15 @@ def _check_settings(s: SettingsIn):
     problems = theme.check(colors)
     if problems:
         _invalid(" ".join(problems))
-    call_signs = [v.call_sign.strip() for v in s.fleet]
-    for v in s.fleet:
-        if not CALL_SIGN.fullmatch(v.call_sign.strip()):
-            _invalid(f"Funkrufname „{v.call_sign}“: bitte wie 02/45 angeben.")
-        if v.in_service_from and v.in_service_until and v.in_service_until < v.in_service_from:
-            _invalid(f"{v.call_sign}: „außer Dienst ab“ liegt vor „im Dienst ab“.")
-        if v.replaced_by and v.replaced_by not in call_signs:
-            _invalid(f"{v.call_sign}: Nachfolger {v.replaced_by} steht nicht in der Fahrzeugliste.")
-    if len(set(call_signs)) != len(call_signs):
-        _invalid("Ein Funkrufname steht doppelt in der Fahrzeugliste.")
+    fleet = _check_fleet(s)
+    call_signs = [v.call_sign for v in fleet]
+    by_name = {v.name: v.call_sign for v in fleet if v.name}
+    substitutes = {}
     for sub, block in s.substitutes.items():
-        if not CALL_SIGN.fullmatch(sub) or block not in call_signs:
+        sub, block = sub.strip(), by_name.get(block, block)
+        if not VEHICLE_NAME.fullmatch(sub) or block not in call_signs:
             _invalid(f"Ersatzfahrzeug {sub}: der Block {block} muss ein Fahrzeug der Liste sein.")
+        substitutes[sub] = block
     names = [p.name.strip() for p in s.places]
     if any(not p.name.strip() or not p.prefix.strip() for p in s.places) or len(set(names)) != len(names):
         _invalid("Jeder Ort braucht einen eindeutigen Namen und einen Namensanfang.")
@@ -161,11 +222,7 @@ def _check_settings(s: SettingsIn):
     if s.own_prefix and not re.fullmatch(r"\d\d/", s.own_prefix):
         _invalid("Eigener Präfix: zwei Ziffern und Schrägstrich, z. B. 02/.")
     return TenantConfig(
-        name=s.name.strip(), colors=colors, substitutes=dict(s.substitutes),
-        fleet=tuple(Vehicle(v.call_sign.strip(), v.label.strip(),
-                            v.in_service_from.isoformat() if v.in_service_from else None,
-                            v.in_service_until.isoformat() if v.in_service_until else None,
-                            v.replaced_by or None, v.in_plan_crew) for v in s.fleet),
+        name=s.name.strip(), colors=colors, substitutes=substitutes, fleet=fleet,
         unit_prefix=s.unit_prefix, own_prefix=s.own_prefix, unit_marker=s.unit_marker.strip(),
         control_center=s.control_center.strip() or domain.CONTROL_CENTER,
         places=tuple((p.name.strip(), p.prefix.strip().lower()) for p in s.places), plan_places=tuple(s.plan_places),

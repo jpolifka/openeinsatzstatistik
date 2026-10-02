@@ -14,8 +14,9 @@ import pdfplumber
 # Seite 1 ist zweispaltig; manche Felder sind nur im linken oder rechten Teil eindeutig
 COLUMN_SPLIT = 0.495
 TIMESTAMP = r"(\d\d\.\d\d\.\d\d \d\d:\d\d:\d\d)"
-VEHICLE_ROW = re.compile(r"^(FL NR#\.\w+(?: \d\d/\d\d-\d\d)?|WW [\d/-]+|KO [\d/-]+|H CH \d+)\s+"
-                         r"(\d+) / (\d+) / (\d+) / (\d+) / (\d+)\s+(.*)$")
+# Fahrzeugzeile: Funkrufname (alles vor der Stärke, z. B. „FL NR#.ABC 02/45-01“, „RP WW 01/23-06“,
+# „H CH 23“; Zeilen ohne Namen wie „- 0 / 0 …“ nicht), Stärke „0 / 1 / 5 / 6 / 2“, dann die Zeiten
+VEHICLE_ROW = re.compile(r"^([A-Z].*?)\s+(\d+) / (\d+) / (\d+) / (\d+) / (\d+)\s+(.*)$")
 VEHICLE_VALUES = re.compile(TIMESTAMP + r"\d?|(?<!\S)(-)(?!\S)|\b(Ja|Nein)\b")
 DISPATCH_NUMBER = re.compile(r"Einsatznummer Leitstelle:\s*(\d+)")
 # Kopfzeile mit der berichtenden Einheit, z. B. "FW NR#.ABC 02 Musterstadt Alarmierung: …";
@@ -28,8 +29,10 @@ REPORT_KIND = re.compile(r"^(Stammdatensatz|Hauptbericht|Nebenbericht) (\d+)", r
 RECORD = re.compile(r"^Datensatz:\s*(\d+)", re.M)
 KINDS = {"Stammdatensatz": "master", "Hauptbericht": "main", "Nebenbericht": "secondary"}
 PERSON_ROW = re.compile(r"^(\S+) (\S+)(.*?)\s(nein|ja|AGT)\s(\d+)\s*(.*)$")
-PERSON_VEHICLE = re.compile(r"FL NR#\.\w+ (\d\d/\d\d)-\d\d")
-PERSON_NOISE = re.compile(r"FL NR#\.\S+ \S+|\d\d\.\d\d\.\d\d \d\d:\d\d")
+# Fahrzeug einer Person: voller Funkrufname, z. B. „FL NR#.ABC 02/45-01“ oder „RP WW 01/23-06“
+PERSON_VEHICLE = re.compile(r"(?:[A-Z]{2} )?[A-Z][A-Z0-9#.ÄÖÜ]* \d\d/\d\d-\d\d")
+PERSON_NOISE = re.compile(PERSON_VEHICLE.pattern + r"|\d\d\.\d\d\.\d\d \d\d:\d\d")
+SHORT_CALL_SIGN = re.compile(r"(\d\d/\d\d)-\d\d$")
 NOT_A_PERSON = ("Name", "FW", "EINSATZBERICHT")
 
 
@@ -105,8 +108,10 @@ def _parse_people(text):
             continue
         middle = m.group(3)
         vehicle = PERSON_VEHICLE.search(middle)
+        # vehicle: Kurzname wie früher (z. B. 02/45); den Block der Wehr bestimmt report.derive
         people.append({"last_name": m.group(1), "first_name": m.group(2),
-                       "vehicle": vehicle.group(1) if vehicle else None,
+                       "vehicle_name": vehicle.group(0) if vehicle else None,
+                       "vehicle": SHORT_CALL_SIGN.search(vehicle.group(0)).group(1) if vehicle else None,
                        "role": PERSON_NOISE.sub("", middle).strip()})
     return people
 

@@ -667,7 +667,7 @@ def _shared_with(r, tenant, a):
 
 
 def _preview_json(r, tenant, a):
-    cfg = tenant.config.with_new_vehicles(r.get("new_vehicles", ()), r.get("day"))
+    cfg = tenant.config.with_new_vehicles(report.new_fleet_vehicles(r), r.get("day"))
     with tenant.connection() as con:
         incident, existing = report.preview(con, r)
         result = incident_json(incident, store.LeaderNames(con), tenant, cfg=cfg)
