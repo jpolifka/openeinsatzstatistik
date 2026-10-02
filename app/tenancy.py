@@ -75,7 +75,7 @@ def setup():
 # ---------------------------------------------------------------- Fachkonfiguration
 # Schlüssel in der Tabelle setting; Fahrzeuge und Stichworte haben eigene Tabellen
 _SETTINGS = ("substitutes", "unit_prefix", "own_prefix", "unit_marker", "control_center", "places", "plan_places",
-             "plan_min_level", "response_limits", "default_limit", "second_limit", "day_hours")
+             "plan_min_level", "response_limits", "default_limit", "second_limit", "day_hours", "colors")
 _TUPLES = {"places", "plan_places", "response_limits", "day_hours"}
 
 _configs = {}

@@ -21,9 +21,10 @@ LEGACY_FILE = "einsaetze.db"
 BACKUP_FILE = "einsaetze-vor-mandanten.db"
 VG_SLUG, VG_NAME = "bad-hoenningen", "VG Bad Hönningen"
 TENANT_SLUG = "rheinbrohl"
-STATIC_IMG = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static", "img")
-# Logos der bisherigen Oberfläche -> Assets der Wehr
-LOGOS = {"logo-light": "logo-weiss.png", "logo-dark": "logo-schwarz.png"}
+ASSET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "legacy_assets")
+# Logos der bisherigen Oberfläche -> Assets der Wehr (Name: Datei, Typ)
+LOGOS = {"logo-light": ("logo-weiss.png", "image/png"), "logo-dark": ("logo-schwarz.png", "image/png"),
+         "icon": ("logo.svg", "image/svg+xml")}
 
 
 def rheinbrohl_config():
@@ -85,12 +86,10 @@ def migrate_single_install(data_dir):
     cfg = rheinbrohl_config()
     with db.connection(target) as con:
         tenancy.save_config(con, cfg)
-        for name, filename in LOGOS.items():
-            path = os.path.join(STATIC_IMG, filename)
-            if os.path.exists(path):
-                with open(path, "rb") as f:
-                    con.execute("INSERT OR REPLACE INTO asset (name, content_type, data) VALUES (?, ?, ?)",
-                                (name, "image/png", f.read()))
+        for name, (filename, content_type) in LOGOS.items():
+            with open(os.path.join(ASSET_DIR, filename), "rb") as f:
+                con.execute("INSERT OR REPLACE INTO asset (name, content_type, data) VALUES (?, ?, ?)",
+                            (name, content_type, f.read()))
         incidents = con.execute("SELECT COUNT(*) FROM incident").fetchone()[0]
 
     db.setup(staging, db.CENTRAL_MIGRATIONS)

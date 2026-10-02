@@ -2,6 +2,13 @@
 
 // Online-Hilfe: eine Quelle für die ?-Symbole an Feldern/Kennzahlen und das Hilfefenster.
 // Schlüssel = Feld- bzw. Kennzahlname der API. short = Tooltip, text = Erklärung im Hilfefenster (HTML erlaubt).
+// Texte mit Werten der Wehr (Fahrzeuge, Orte, Zeitgrenzen) sind Funktionen: config aus app.js gibt es erst zur Laufzeit.
+const helpList = (values) => values.length ? values.map(esc).join(", ") : "–";
+const helpLimit = () => config.default_limit;
+const helpLimits = () => config.limits.join(" oder ");
+const helpDay = () => config.day_hours.map((h) => `${String(h).padStart(2, "0")}:00`);
+const helpValue = (v) => typeof v === "function" ? v() : v;
+
 const HELP_SECTIONS = [
   {
     title: "Einsatz erfassen",
@@ -14,8 +21,8 @@ const HELP_SECTIONS = [
       },
       started_at: {
         title: "Beginn",
-        short: "Früheste Alarmierung eines Rheinbrohler Fahrzeugs (02/..).",
-        text: "Einsatzbeginn = frühester Alarmierungszeitpunkt der eigenen Fahrzeuge (Funkrufname 02/..). Gibt es keine, zählt die erste Alarmierung im Bericht. Alle Minutenwerte (Azeit, Ezeit) werden ab diesem Zeitpunkt gerechnet. Der Beginn bestimmt außerdem Jahr, Monat, Wochentag und das Zeitfenster Tag/Nacht.",
+        short: () => `Früheste Alarmierung eines eigenen Fahrzeugs (${esc(config.own_prefix)}..).`,
+        text: () => `Einsatzbeginn = frühester Alarmierungszeitpunkt der eigenen Fahrzeuge (Funkrufname ${esc(config.own_prefix)}..). Gibt es keine, zählt die erste Alarmierung im Bericht. Alle Minutenwerte (Azeit, Ezeit) werden ab diesem Zeitpunkt gerechnet. Der Beginn bestimmt außerdem Jahr, Monat, Wochentag und das Zeitfenster Tag/Nacht.`,
       },
       ended_at: {
         title: "Ende",
@@ -45,7 +52,7 @@ const HELP_SECTIONS = [
       place: {
         title: "Ort",
         short: "Einsatzort; bestimmt Einsatzgebiet und Bedarfsplan.",
-        text: "Ortsteil oder Ort des Einsatzes. Bekannte Orte (Rheinbrohl, Arienheller, Hammerstein, Ariendorf, Bad Hönningen, Leutesdorf) werden vorgeschlagen. Nur Einsätze in Rheinbrohl, Hammerstein und Arienheller zählen für den Feuerwehrbedarfsplan – bitte den Ort daher genau so schreiben.",
+        text: () => `Ortsteil oder Ort des Einsatzes. Bekannte Orte (${helpList(config.places)}) werden vorgeschlagen. Nur Einsätze in ${helpList(config.plan_places)} zählen für den Feuerwehrbedarfsplan – bitte den Ort daher genau so schreiben.`,
       },
       unit_leader: {
         title: "EHF",
@@ -66,12 +73,12 @@ const HELP_SECTIONS = [
       arrival_min: {
         title: "Ezeit (Eintreffzeit)",
         short: "Minuten von der Alarmierung bis zum Eintreffen des ersten Fahrzeugs.",
-        text: "Minuten vom Einsatzbeginn bis zum Eintreffen (Status 4) des ersten eigenen Fahrzeugs an der Einsatzstelle. Rot markiert, wenn sie über 8 Minuten liegt. Ohne Eintreffzeit wird der Einsatz im Bedarfsplan nicht berücksichtigt.",
+        text: () => `Minuten vom Einsatzbeginn bis zum Eintreffen (Status 4) des ersten eigenen Fahrzeugs an der Einsatzstelle. Rot markiert, wenn sie über ${helpLimit()} Minuten liegt. Ohne Eintreffzeit wird der Einsatz im Bedarfsplan nicht berücksichtigt.`,
       },
       on_time: {
-        title: "8 Min. erreicht",
+        title: () => `${helpLimit()} Min. erreicht`,
         short: "Ja, wenn das erste Fahrzeug innerhalb der Zeitgrenze eingetroffen ist.",
-        text: "„Ja“, wenn die Ezeit höchstens der Zeitgrenze entspricht (8 Minuten; in der Auswertung auf 10 umschaltbar). Grundlage des Erreichungsgrads im Feuerwehrbedarfsplan.",
+        text: () => `„Ja“, wenn die Ezeit höchstens der Zeitgrenze entspricht (${helpLimit()} Minuten; in der Auswertung umschaltbar: ${helpLimits()}). Grundlage des Erreichungsgrads im Feuerwehrbedarfsplan.`,
       },
       crew_on_arrival: {
         title: "Stärke bei Eintreffen",
@@ -79,19 +86,19 @@ const HELP_SECTIONS = [
         text: "Summe der Besatzung aller Fahrzeuge, die zum Zeitpunkt der Ezeit eingetroffen sind.",
       },
       crew_within_limit: {
-        title: "Stärke nach 8 Min.",
+        title: () => `Stärke nach ${helpLimit()} Min.`,
         short: "Zusätzliche Kräfte, die bis zur Zeitgrenze nachgekommen sind.",
-        text: "Summe der Besatzung der Fahrzeuge, die nach dem ersten Fahrzeug, aber noch innerhalb der Zeitgrenze (8 bzw. 10 Minuten) eingetroffen sind.",
+        text: () => `Summe der Besatzung der Fahrzeuge, die nach dem ersten Fahrzeug, aber noch innerhalb der Zeitgrenze (${helpLimits()} Minuten) eingetroffen sind.`,
       },
       crew_within_second: {
-        title: "Stärke nach 15 Min.",
-        short: "Zusätzliche Kräfte zwischen Zeitgrenze und 15 Minuten.",
-        text: "Summe der Besatzung der Fahrzeuge, die nach der Zeitgrenze und bis 15 Minuten nach Einsatzbeginn eingetroffen sind.",
+        title: () => `Stärke nach ${config.second_limit} Min.`,
+        short: () => `Zusätzliche Kräfte zwischen Zeitgrenze und ${config.second_limit} Minuten.`,
+        text: () => `Summe der Besatzung der Fahrzeuge, die nach der Zeitgrenze und bis ${config.second_limit} Minuten nach Einsatzbeginn eingetroffen sind.`,
       },
       crew_total: {
         title: "Gesamtstärke",
         short: "Besatzung aller Fahrzeuge plus Personen im Gerätehaus.",
-        text: "Besatzung aller eigenen Fahrzeuge plus Personen im Gerätehaus. Im Bedarfsplan wird – wie in der Einsatzübersicht – ohne 01/10 gerechnet.",
+        text: () => `Besatzung aller eigenen Fahrzeuge plus Personen im Gerätehaus.${config.plan_excluded_vehicles.length ? ` Im Bedarfsplan wird – wie in der Einsatzübersicht – ohne ${helpList(config.plan_excluded_vehicles)} gerechnet.` : ""}`,
       },
       duration: {
         title: "Dauer",
@@ -101,12 +108,12 @@ const HELP_SECTIONS = [
       time_window: {
         title: "Zeitfenster",
         short: "Werktag oder Sa/So/Feiertag, Tag (06–18 Uhr) oder Nacht.",
-        text: "Einordnung nach Einsatzbeginn: <b>Tag</b> 06:00–18:00 Uhr, sonst <b>Nacht</b>; <b>Sa/So/Feiertag</b> an Wochenenden und gesetzlichen Feiertagen in Rheinland-Pfalz, sonst <b>Werktag</b>. In der Liste als „WE/FT“ gekennzeichnet.",
+        text: () => `Einordnung nach Einsatzbeginn: <b>Tag</b> ${helpDay().join("–")} Uhr, sonst <b>Nacht</b>; <b>Sa/So/Feiertag</b> an Wochenenden und gesetzlichen Feiertagen in Rheinland-Pfalz, sonst <b>Werktag</b>. In der Liste als „WE/FT“ gekennzeichnet.`,
       },
       vehicles: {
         title: "Fahrzeuge",
         short: "Stärke sowie Ausrücke- und Eintreffzeit je Fahrzeug.",
-        text: "Je Fahrzeug (02/45, 02/24, 02/71, 02/19, 01/10 – in der Reihenfolge der Einsatzübersicht): Stärke, Uhrzeit Ausrücken und Eintreffen sowie die daraus berechneten Minuten. 01/23 wird bei Rheinbrohler Besatzung als Ersatz im Block 02/45 eingetragen. Grau = nicht im Einsatz.",
+        text: () => `Je Fahrzeug (${helpList(config.vehicles)} – in der Reihenfolge der Einsatzübersicht): Stärke, Uhrzeit Ausrücken und Eintreffen sowie die daraus berechneten Minuten.${Object.entries(config.substitutes).map(([sub, block]) => ` ${esc(sub)} wird bei eigener Besatzung als Ersatz im Block ${esc(block)} eingetragen.`).join("")} Grau = nicht im Einsatz.`,
       },
       warnings: {
         title: "Prüfhinweise",
@@ -147,7 +154,7 @@ const HELP_SECTIONS = [
       response_plan: {
         title: "Feuerwehrbedarfsplan Pos. 8.4",
         short: "Anteil der Einsätze, bei denen das erste Fahrzeug rechtzeitig eintraf.",
-        text: "Berücksichtigt werden Einsätze ab Alarmstufe 2 (Stichwort x2–x4) in Rheinbrohl, Hammerstein und Arienheller mit Eintreffzeit. Erreichungsgrad = Anteil der Einsätze, bei denen das erste Fahrzeug innerhalb der Zeitgrenze (8 oder 10 Minuten, umschaltbar) eingetroffen ist – getrennt nach den vier Zeitfenstern Werktag/Wochenende × Tag/Nacht. Die Stärken sind Mittelwerte je Einsatz.",
+        text: () => `Berücksichtigt werden Einsätze ab Alarmstufe ${config.plan_min_level} (Stichwort x${config.plan_min_level}–x4) in ${helpList(config.plan_places)} mit Eintreffzeit. Erreichungsgrad = Anteil der Einsätze, bei denen das erste Fahrzeug innerhalb der Zeitgrenze (${helpLimits()} Minuten, umschaltbar) eingetroffen ist – getrennt nach den vier Zeitfenstern Werktag/Wochenende × Tag/Nacht. Die Stärken sind Mittelwerte je Einsatz.`,
       },
       alarm_level: {
         title: "Alarmstufen",
@@ -157,7 +164,7 @@ const HELP_SECTIONS = [
       area: {
         title: "Einsatzgebiet",
         short: "Einsätze je Ort anhand des Anfangs des Ortsnamens.",
-        text: "Zuordnung nach dem Anfang des Ortsnamens (z. B. „Rheinbrohl-…“ → Rheinbrohl). Orte außerhalb der bekannten Liste erscheinen als „sonstige“.",
+        text: () => `Zuordnung nach dem Anfang des Ortsnamens${config.places.length ? ` (z. B. „${esc(config.places[0])}-…“ → ${esc(config.places[0])})` : ""}. Orte außerhalb der bekannten Liste erscheinen als „sonstige“.`,
       },
       participations: {
         title: "Einsätze und Beteiligungen (alle Wehren)",
@@ -182,8 +189,8 @@ const HELP_SECTIONS = [
       },
       nights_weekends: {
         title: "nachts / Sa/So/FT",
-        short: "Einsätze zwischen 18 und 6 Uhr bzw. an Wochenenden und Feiertagen.",
-        text: "Anzahl der Einsätze mit Beginn in der Nacht (18:00–06:00 Uhr) bzw. an Samstagen, Sonntagen und Feiertagen.",
+        short: () => `Einsätze zwischen ${config.day_hours[1]} und ${config.day_hours[0]} Uhr bzw. an Wochenenden und Feiertagen.`,
+        text: () => `Anzahl der Einsätze mit Beginn in der Nacht (${helpDay().reverse().join("–")} Uhr) bzw. an Samstagen, Sonntagen und Feiertagen.`,
       },
     },
   },
@@ -195,14 +202,14 @@ const HELP = Object.fromEntries(HELP_SECTIONS.flatMap((s) => Object.entries(s.en
 function helpButton(key) {
   const h = HELP[key];
   if (!h) return "";
-  return `<button type="button" class="help-btn" data-help="${key}" data-tip="${esc(h.short)}" aria-label="Hilfe: ${esc(h.title)}">?</button>`;
+  return `<button type="button" class="help-btn" data-help="${key}" data-tip="${esc(helpValue(h.short))}" aria-label="Hilfe: ${esc(helpValue(h.title))}">?</button>`;
 }
 
 function helpContent() {
   return HELP_SECTIONS.map((s) => `<section class="help-section">
     <h3>${s.title}</h3>${s.intro ? `<p class="muted">${s.intro}</p>` : ""}
     <dl class="help-list">${Object.entries(s.entries).map(([k, e]) =>
-      `<div id="help-${k}"><dt>${e.title}</dt><dd>${e.text}</dd></div>`).join("")}</dl>
+      `<div id="help-${k}"><dt>${helpValue(e.title)}</dt><dd>${helpValue(e.text)}</dd></div>`).join("")}</dl>
   </section>`).join("");
 }
 

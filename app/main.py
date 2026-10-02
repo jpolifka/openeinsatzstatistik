@@ -28,7 +28,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Stre
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, create_model
 
-from app import auth, db, excel_export, legacy, metrics, pdf_report, report, store, tenancy, tenant_config
+from app import auth, db, excel_export, legacy, metrics, pdf_report, report, store, tenancy, tenant_config, theme
 from app.tenancy import INCIDENTS, STATS, WRITE
 from app.timeutil import year_of
 
@@ -206,6 +206,39 @@ def _selection_config(tenants, a):
     return tenant_config.combine(a.vgs.get(a.vg, "Alle Wehren"), [t.config for t in tenants])
 
 
+def _branding(tenant):
+    """Adressen der Logos einer Wehr (mit Stand als Cache-Schlüssel); None = neutrales Signet."""
+    urls = dict.fromkeys(("logo_light", "logo_dark", "icon"))
+    if tenant:
+        with tenant.connection() as con:
+            for row in con.execute("SELECT name, modified FROM asset"):
+                key = row["name"].replace("-", "_")
+                if key in urls:
+                    urls[key] = f"/api/branding/{tenant.slug}/{row['name']}?v={row['modified'].replace(' ', 'T')}"
+    return urls
+
+
+@app.get("/api/theme.css")
+def api_theme(a: tenancy.Access = Depends(access)):
+    """Farben der ausgewählten Wehr; in der Gesamtansicht einer VG das neutrale Farbschema."""
+    colors = a.selected.config.colors if a.selected else theme.NEUTRAL
+    return Response(theme.css(colors), media_type="text/css", headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/api/branding/{slug}/{name}")
+def api_branding(slug: str, name: str, a: tenancy.Access = Depends(access)):
+    """Logo einer Wehr, für alle mit Zugriff auf diese Wehr."""
+    tenant = a.tenant(slug, STATS)
+    with tenant.connection() as con:
+        row = con.execute("SELECT content_type, data FROM asset WHERE name = ?", (name,)).fetchone()
+    if not row:
+        raise HTTPException(404, "Kein Logo hinterlegt.")
+    # Eigener Ursprung, aber nie als Dokument mit Skripten ausführen (auch nicht das SVG-Symbol der Übernahme)
+    return Response(row["data"], media_type=row["content_type"], headers={
+        "X-Content-Type-Options": "nosniff", "Cache-Control": "private, max-age=86400",
+        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox"})
+
+
 @app.get("/api/config")
 def api_config(a: tenancy.Access = Depends(access)):
     """Fachkonfiguration der Auswahl, Benutzer, Rechte und Auswahlmöglichkeiten.
@@ -218,6 +251,7 @@ def api_config(a: tenancy.Access = Depends(access)):
     return {**cfg.client_config(), "name": cfg.name, "user": a.email, "superadmin": a.superadmin, "roles": a.roles,
             "scope": a.scope_key, "vg": {"slug": a.vg, "name": a.vgs[a.vg]} if a.vg else None,
             "tenant": a.selected.json() if a.selected else None, "tenants": [t.json() for t in tenants],
+            "branding": _branding(a.selected),
             "permissions": sorted(set().union(*(t.permissions for t in tenants))), "scopes": a.scopes()}
 
 

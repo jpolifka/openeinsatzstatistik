@@ -150,6 +150,18 @@ function renderTabs() {
   $("#tabs").innerHTML = allowedViews().map((key) => `<a href="#${key}" data-view="${key}">${VIEWS[key].label}</a>`).join("");
 }
 
+// Name und Logos der Wehr; ohne eigene Logos (und in der Gesamtansicht) das neutrale Signet
+function applyBranding() {
+  const b = config.branding;
+  document.title = `Einsatzstatistik · ${config.name}`;
+  $(".topbar-kicker").textContent = `Einsatzstatistik · ${config.name}`;
+  $("#footer-name").textContent = `${config.name} · Einsatzstatistik`;
+  $("#logo-light").src = b.logo_light || "/static/img/app-icon-light.svg";
+  $("#logo-light").alt = b.logo_light ? config.name : "";
+  $("#logo-dark").src = b.logo_dark || "/static/img/app-icon.svg";
+  $("#favicon").href = b.icon || "/static/img/app-icon.svg";
+}
+
 // Auswahl der Wehr in der Kopfzeile, nur wenn mehrere sichtbar sind
 function renderScopes() {
   $("#scope-select").hidden = config.scopes.length < 2;
@@ -1068,7 +1080,7 @@ $("#scope").addEventListener("change", async (e) => {
     fail(e.message);
     return;
   }
-  $(".topbar-kicker").textContent = `Einsatzstatistik · ${config.name}`;
+  applyBranding();
   if (config.user) {
     $("#logout").hidden = false;
     $("#logout button").dataset.tip = `Abmelden (${config.user})`;
