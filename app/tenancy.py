@@ -328,10 +328,10 @@ class Access:
         return f"vg:{self.vg}" if self.vg else f"t:{self.selected.slug}" if self.selected else None
 
     def scopes(self):
-        """Auswahlmöglichkeiten für die Kopfzeile: je VG mit Gesamtansicht „alle Wehren“, dann die Wehren."""
+        """Auswahlmöglichkeiten für die Kopfzeile: je VG die Wehrleitung (Gesamtansicht aller Wehren), dann die Wehren."""
         result = []
         for vg_slug, vg_name in self.vgs.items():
-            result.append({"key": f"vg:{vg_slug}", "name": f"Alle Wehren · {vg_name}", "vg": vg_name})
+            result.append({"key": f"vg:{vg_slug}", "name": f"Wehrleitung · {vg_name}", "vg": vg_name})
         result += [{"key": f"t:{t.slug}", "name": t.name, "vg": t.vg_name}
                    for t in sorted(self.tenants.values(), key=lambda t: (t.vg_name, t.name))]
         return result
