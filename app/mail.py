@@ -15,6 +15,7 @@ Befehle (im Container: docker compose exec einsatzberichte python -m app.mail â€
   test ADR   Test-Mail an ADR senden
 """
 import base64
+import email.policy
 import email.utils
 import logging
 import os
@@ -101,7 +102,9 @@ def sign(data):
 def send(to, subject, text, html):
     """Mail Ã¼ber den SMTP-Server des Domain-Anbieters einliefern; Fehler als smtplib.SMTPException/OSError."""
     _, address, _ = sender()
-    data = build(to, subject, text, html).as_bytes()
+    # SMTP verlangt CRLF als Zeilenende; smtplib wandelt Bytes nicht um (sonst 554 bei Strato).
+    # Signiert wird danach genau das, was eingeliefert wird.
+    data = build(to, subject, text, html).as_bytes(policy=email.policy.SMTP)
     if DKIM_SELECTOR:
         data = sign(data)
     context = ssl.create_default_context()

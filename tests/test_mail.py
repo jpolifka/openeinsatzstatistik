@@ -63,6 +63,17 @@ def test_mail_is_dkim_signed_and_aligned(smtp):
     assert not dkim.verify(tampered, dnsfunc=lambda name, timeout=5: published)
 
 
+@pytest.mark.parametrize("selector", ["app2026", ""])
+def test_lines_end_with_crlf(smtp, monkeypatch, selector):
+    """Strato lehnt Kopfzeilen ohne CRLF ab (554 5.6.0) – auch mit vorangestellter DKIM-Signatur."""
+    monkeypatch.setattr(mail, "DKIM_SELECTOR", selector)
+    mail.send("m.muster@example.org", "Anmeldung Einsatzstatistik", "Zeile 1\nZeile 2", "<p>Hallo</p>\n<p>Welt</p>")
+    data = smtp["sent"][0]["data"]
+    assert b"\n" not in data.replace(b"\r\n", b"") and b"\r" not in data.replace(b"\r\n", b"")
+    if selector:
+        assert dkim.verify(data, dnsfunc=lambda name, timeout=5: smtp["record"].encode())
+
+
 def test_starttls_and_without_dkim(smtp, monkeypatch):
     monkeypatch.setattr(mail, "SMTP_SECURITY", "starttls")
     monkeypatch.setattr(mail, "SMTP_PORT", 587)
