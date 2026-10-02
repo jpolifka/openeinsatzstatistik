@@ -94,3 +94,11 @@ def test_only_vg_lead_maintains_and_calculates(vg, monkeypatch):
     lead.cookies.set("scope", "t:wehr-a1")
     assert lead.get("/api/admin/vgs/vg-a/fees").status_code == 403
     assert _fees(lead).status_code == 403
+
+
+def test_suggest_type_prefers_fee_schedule():
+    fee_types = ["LF 10", "HLF 20", "TLF 16/25", "DLK 23/12"]
+    assert fees.suggest_type(["TLF 3000", "TLF 16/24Tr", "TLF16/25"], fee_types) == "TLF 16/25"
+    assert fees.suggest_type(["HLF 20", "HLF 20/16", "LF 24"], fee_types) == "HLF 20"
+    assert fees.suggest_type(["LF 10", "HLF 10"], fee_types + ["HLF 10"]) == ""      # zwei möglich
+    assert fees.suggest_type(["TSF"], fee_types) == "TSF"

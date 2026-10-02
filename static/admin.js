@@ -228,16 +228,46 @@ function setColor(key, hex, source) {
 const vehicleKey = (v) => v.call_sign || v.name;
 const knownVehicle = (name) => admin.settings.known_vehicles.find((k) => k.name === name);
 
+// Fahrzeugtyp vergleichen wie fees._type_key (ohne Leerzeichen und Satzzeichen)
+const typeKey = (text) => (text || "").replace(/[\s\-./]/g, "").toLowerCase();
+
+// Funkrufname, den ein anderer Eintrag schon hat (oder als Vorschlag für seinen alten Kurznamen)
+function takenBy(v) {
+  if (!v.name) return null;
+  return admin.settings.fleet.find((x) => x !== v && (x.name === v.name || (!x.name && x.suggested_name === v.name)));
+}
+
 // Funkrufname mit Auflösung (Kennung, Standort, Fahrzeugart) und Block der Einsatzübersicht
 function callSignCell(v, i) {
+  const s = admin.settings;
   const known = knownVehicle(v.name);
-  const description = known ? known.description : "";
+  const other = takenBy(v);
   const block = v.call_sign ? `Block ${esc(v.call_sign)}` : "Block wird beim Speichern vergeben";
-  const hint = v.name ? [block, description && esc(description)].filter(Boolean).join(" · ")
-    : `<span class="missing-name">Funkrufnamen wie im BKS-Bericht eintragen (bisher nur ${esc(v.call_sign)})</span>`;
+  const hint = other ? `<span class="missing-name">Steht schon in der Liste (${esc(other.call_sign || other.name)})${other.name ? "" : " – bitte dort eintragen"}</span>`
+    : v.name ? [block, known && esc(known.description)].filter(Boolean).join(" · ")
+    : v.call_sign ? `<span class="missing-name">Funkrufnamen wie im BKS-Bericht eintragen (bisher nur ${esc(v.call_sign)})</span>`
+    : "Funkrufnamen auswählen oder eintragen";
+  // Zur Auswahl nur Fahrzeuge, die noch nicht in der Liste stehen; der Vorschlag für diesen Eintrag zuerst
+  const used = new Set(s.fleet.filter((x) => x !== v).flatMap((x) => [x.name, x.name ? "" : x.suggested_name]).filter(Boolean));
+  const options = [...new Set([v.suggested_name, ...s.known_vehicles.map((k) => k.name)].filter((n) => n && !used.has(n)))];
   const placeholder = esc(v.suggested_name || "z. B. FL NR#.ABC 02/45-01");
-  return `${textInput(`fleet.${i}.name`, v.name, `list="known-vehicles" placeholder="${placeholder}" spellcheck="false" class="wide"`)}
+  return `${textInput(`fleet.${i}.name`, v.name, `list="vehicles-${i}" placeholder="${placeholder}" spellcheck="false" class="wide"`)}
+    <datalist id="vehicles-${i}">${options.map((n) => `<option value="${esc(n)}">${esc(knownVehicle(n)?.description || "")}</option>`).join("")}</datalist>
     <div class="small muted">${hint}</div>`;
+}
+
+// Fahrzeugtyp: Auswahl aus den Typen der Kennzahl (Funkrufnamenverzeichnis) und der Gebührenordnung
+function vehicleTypeCell(v, i) {
+  const s = admin.settings;
+  const types = knownVehicle(v.name)?.types || v.types || [];
+  const fee = new Set(s.fee_types.map(typeKey));
+  const options = [...new Set([...types, ...s.fee_types])];
+  let hint = "";
+  if (!v.label && types.length > 1) hint = `laut Kennzahl: ${types.map(esc).join(" / ")}`;
+  else if (v.label && s.fee_types.length && !fee.has(typeKey(v.label))) hint = '<span class="missing-name">nicht in der Gebührenordnung</span>';
+  return `${textInput(`fleet.${i}.label`, v.label, `list="types-${i}" placeholder="${esc(types[0] || "z. B. HLF 20")}"`)}
+    <datalist id="types-${i}">${options.map((t) => `<option value="${esc(t)}">${types.includes(t) ? "laut Funkrufname" : "Gebührenordnung"}</option>`).join("")}</datalist>
+    ${hint ? `<div class="small muted">${hint}</div>` : ""}`;
 }
 
 function fleetSection() {
@@ -246,7 +276,7 @@ function fleetSection() {
   const rows = s.fleet.map((v, i) => `<tr>
     <td class="order"><button type="button" class="icon-button" data-admin-action="move-vehicle" data-index="${i}" data-step="-1" ${i ? "" : "disabled"} aria-label="nach oben">↑</button><button type="button" class="icon-button" data-admin-action="move-vehicle" data-index="${i}" data-step="1" ${i < s.fleet.length - 1 ? "" : "disabled"} aria-label="nach unten">↓</button></td>
     <td>${callSignCell(v, i)}</td>
-    <td>${textInput(`fleet.${i}.label`, v.label, 'placeholder="z. B. HLF 20"')}</td>
+    <td>${vehicleTypeCell(v, i)}</td>
     <td><input type="date" data-bind="fleet.${i}.in_service_from" value="${esc(v.in_service_from || "")}"></td>
     <td><input type="date" data-bind="fleet.${i}.in_service_until" value="${esc(v.in_service_until || "")}"></td>
     <td><select data-bind="fleet.${i}.replaced_by"><option value="">–</option>${others(v).map((x) =>
@@ -263,11 +293,12 @@ function fleetSection() {
     <button type="button" class="icon-button" data-admin-action="remove-substitute" data-sub="${esc(sub)}" aria-label="entfernen">✕</button></div>`).join("");
   const datalist = `<datalist id="known-vehicles">${s.known_vehicles.map((k) =>
     `<option value="${esc(k.name)}">${esc(k.description)}</option>`).join("")}</datalist>`;
+  const emptyRow = s.fleet.some((v) => !v.name && !v.call_sign);
   return `<p class="small muted">Reihenfolge wie in der Einsatzübersicht. Funkrufname genau wie im BKS-Bericht – zur Auswahl stehen die Fahrzeuge aus den bisher eingelesenen Berichten (<a href="${esc(s.call_sign_directory)}" target="_blank" rel="noopener">Funkrufnamenverzeichnis RLP</a>). Neue eigene Fahrzeuge aus BKS-Berichten werden beim Übernehmen automatisch hinten angefügt (im Dienst ab Einsatztag).${helpButton("admin_fleet")}</p>
     ${datalist}
     <div class="table-wrap"><table class="mini-table admin-table"><thead><tr><th></th><th>Funkrufname</th><th>Fahrzeugtyp</th><th>im Dienst ab</th><th>außer Dienst ab</th><th>ersetzt durch</th><th>Bedarfsplan</th><th class="right">Einsätze</th><th></th></tr></thead>
     <tbody>${rows}</tbody></table></div>
-    <button type="button" class="btn btn-light btn-small section-gap" data-admin-action="add-vehicle">Fahrzeug hinzufügen</button>
+    <button type="button" class="btn btn-light btn-small section-gap" data-admin-action="add-vehicle" ${emptyRow ? 'disabled title="Erst den Funkrufnamen des neuen Fahrzeugs eintragen"' : ""}>Fahrzeug hinzufügen</button>
     ${unused.length ? `<div class="message message-info section-gap">Daten zu Fahrzeugen, die nicht (mehr) in der Liste stehen und daher nicht ausgewertet werden: ${unused.map(([cs, n]) => `${esc(cs)} (${n} Einsätze)`).join(", ")}.</div>` : ""}
     <h3 class="section-gap">Ersatzfahrzeuge</h3>
     <p class="small muted">Fährt ein Ersatzfahrzeug mit eigener Besatzung (Werkstatt), wird es im Block eines Stammfahrzeugs geführt.</p>
@@ -492,7 +523,7 @@ async function runAdminAction(button) {
       await api(`/api/admin/${admin.slug}/assets/${name}`, { method: "DELETE" });
       return afterAssetChange();
     case "add-vehicle":
-      s.fleet.push({ call_sign: "", name: "", label: "", in_service_from: "", in_service_until: "", replaced_by: "", in_plan_crew: true, incidents: 0 });
+      s.fleet.push({ call_sign: "", name: "", suggested_name: "", types: [], label: "", in_service_from: "", in_service_until: "", replaced_by: "", in_plan_crew: true, incidents: 0 });
       return rerender();
     case "move-vehicle": {
       const j = i + Number(step);
@@ -756,11 +787,13 @@ $("#view-admin").addEventListener("change", async (e) => {
     if (t.dataset.feeVg !== undefined) { await adminGo({ feeVg: t.value }); return; }
     if (t.dataset.limits !== undefined) { renderAdmin(); return; }     // Auswahl der Standardgrenze aktualisieren
     if (t.dataset.bind?.startsWith("places.") && t.dataset.bind.endsWith(".name")) { renderAdmin(); return; }
+    if (/^fleet\.\d+\.label$/.test(t.dataset.bind || "")) { renderAdmin(); return; }   // Hinweis Gebührenordnung
     if (/^fleet\.\d+\.name$/.test(t.dataset.bind || "")) {
       const v = admin.settings.fleet[Number(t.dataset.bind.split(".")[1])];
       v.name = v.name.trim();
       const known = knownVehicle(v.name);
-      if (known?.label && !v.label) v.label = known.label;     // Fahrzeugtyp, wenn die Kennzahl eindeutig ist
+      if (known) v.types = known.types;
+      if (known?.label && !v.label) v.label = known.label;     // Fahrzeugtyp, wenn er eindeutig ist
       renderAdmin();
       return;
     }

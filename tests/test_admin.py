@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from app import db, tenancy
+from app import db, legacy, tenancy
 from conftest import grant, login, make_tenant
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 20
@@ -29,12 +29,13 @@ def _as(client, email):
 
 def _settings(client, slug="wehr-a1"):
     s = client.get(f"/api/admin/{slug}/settings").json()
-    for key in ("slug", "palette", "unused_data", "known_vehicles", "call_sign_directory"):
+    for key in ("slug", "palette", "unused_data", "known_vehicles", "call_sign_directory", "fee_types"):
         s.pop(key)
     for v in s["fleet"]:
         v.pop("incidents")
         v.pop("description")
         v.pop("suggested_name")
+        v.pop("types")
     return s
 
 
@@ -72,6 +73,7 @@ def test_settings_roundtrip_changes_config(world):
     ({"fleet": [{"name": "kaputt!"}]}, "wie im BKS-Bericht"),
     ({"fleet": [{"name": ""}]}, "braucht einen Funkrufnamen"),
     ({"fleet": [{"name": "RP WW 01/23-06"}, {"name": "RP WW 01/23-06"}]}, "doppelt"),
+    ({"fleet": [{"call_sign": "02/45"}, {"name": "FL NR#.BHÖ 02/45-01"}]}, "schon in der Liste"),
     ({"fleet": [{"call_sign": "02/45"}, {"call_sign": "02/45"}]}, "doppelt"),
     ({"fleet": [{"call_sign": "02/45", "in_service_from": "2025-01-01", "in_service_until": "2024-01-01"}]}, "außer Dienst"),
     ({"substitutes": {"01/23": "09/99"}}, "Block"),
@@ -203,6 +205,8 @@ def test_superadmin_manages_vgs_and_tenants(world, data_dir):
 
 def test_fleet_with_full_call_signs(world):
     """Neue Fahrzeuge bekommen den Kurznamen aus dem Funkrufnamen; bestehende behalten ihren."""
+    with tenancy.central() as con:                              # Gebührenordnung für die Vorbelegung des Typs
+        legacy.seed_fee_schedule(con, con.execute("SELECT id FROM vg WHERE slug = 'vg-a'").fetchone()[0])
     _as(world, "lead@example.org")
     s = _settings(world)
     s["fleet"] = [{"call_sign": "02/45", "name": "FL NR#.BHÖ 02/45-01", "label": "HLF 20"}, {"call_sign": "02/24"},
@@ -222,5 +226,9 @@ def test_fleet_with_full_call_signs(world):
     assert known["RP WW 01/23-06"]["description"].startswith("Rheinpfalz (Land) · WW · Standort 01 · 23 Tanklösch")
     assert fleet[0]["description"].endswith("Nr. 1")
     assert "FL NR#.BHÖ 02/24-01" in known                     # Vorschlag zum alten Kurznamen 02/24
+    assert known["RP WW 01/23-06"]["types"] == ["TLF 3000", "TLF 16/24Tr", "TLF 16/25"]
+    assert known["RP WW 01/23-06"]["label"] == "TLF 16/25"    # der einzige Typ, der in der Gebührenordnung steht
+    assert fleet[0]["types"] == ["LF 10", "HLF 10", "LF 16/12", "LF 16"]
+    assert "HLF 20" in saved.json()["fee_types"]
     config = world.get("/api/config").json()
     assert config["vehicle_names"]["01/23-06"] == "RP WW 01/23-06"

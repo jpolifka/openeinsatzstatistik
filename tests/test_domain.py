@@ -36,7 +36,7 @@ def test_keyword_catalog_codes_are_valid():
 def test_describe_call_sign():
     assert domain.describe_call_sign("RP WW 01/23-06") == {
         "bos": "Rheinpfalz (Land)", "place": "WW", "station": "01", "code": "23", "number": 6,
-        "kind": "Tanklöschfahrzeug 3000 (TLF 16/24Tr, 16/25)", "label": ""}
+        "kind": "Tanklöschfahrzeug 3000", "types": ["TLF 3000", "TLF 16/24Tr", "TLF 16/25"], "label": ""}
     florian = domain.describe_call_sign("FL NR#.ABC 02/41-01")
     assert (florian["bos"], florian["place"], florian["station"], florian["label"]) == ("Florian", "NR#.ABC", "02", "TSF")
     assert domain.describe_call_sign("WW 16/83-01")["label"] == "RTW"
