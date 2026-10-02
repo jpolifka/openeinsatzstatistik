@@ -6,7 +6,7 @@
 
 const dpaState = { data: null, error: "" };
 
-VIEWS.dpa = { label: "Auftragsverarbeitung", load: loadDpa, render: renderDpa, noYear: true,
+VIEWS.dpa = { label: "Auftragsverarbeitung", load: loadDpa, render: renderDpa, noYear: true, help: "dpa",
   visible: () => config.superadmin || config.dpa_blocked.length > 0 || can("admin") };
 
 async function loadDpa() {

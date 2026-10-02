@@ -42,7 +42,8 @@ DKIM_SELECTOR = os.environ.get("DKIM_SELECTOR", "")
 DKIM_KEY_FILE = os.environ.get("DKIM_KEY_FILE", "")
 TIMEOUT = 15
 # Signierte Kopfzeilen; Date und Message-ID schützen gegen Wiederverwendung der Signatur
-SIGNED_HEADERS = [b"from", b"to", b"subject", b"date", b"message-id", b"mime-version", b"content-type"]
+SIGNED_HEADERS = [b"from", b"to", b"subject", b"date", b"message-id", b"reply-to", b"mime-version",
+                  b"content-type"]
 
 
 def enabled():
@@ -73,12 +74,14 @@ def check_config():
 
 
 # ---------------------------------------------------------------- Mail bauen und senden
-def build(to, subject, text, html):
+def build(to, subject, text, html, reply_to=None):
     name, address, domain = sender()
     msg = EmailMessage()
     msg["From"] = email.utils.formataddr((name, address))
     msg["To"] = to
     msg["Subject"] = subject
+    if reply_to:
+        msg["Reply-To"] = reply_to
     msg["Date"] = email.utils.formatdate(localtime=True)
     msg["Message-ID"] = email.utils.make_msgid(domain=domain)
     msg.set_content(text)
@@ -99,12 +102,12 @@ def sign(data):
     return signature + data
 
 
-def send(to, subject, text, html):
+def send(to, subject, text, html, reply_to=None):
     """Mail über den SMTP-Server des Domain-Anbieters einliefern; Fehler als smtplib.SMTPException/OSError."""
     _, address, _ = sender()
     # SMTP verlangt CRLF als Zeilenende; smtplib wandelt Bytes nicht um (sonst 554 bei Strato).
     # Signiert wird danach genau das, was eingeliefert wird.
-    data = build(to, subject, text, html).as_bytes(policy=email.policy.SMTP)
+    data = build(to, subject, text, html, reply_to).as_bytes(policy=email.policy.SMTP)
     if DKIM_SELECTOR:
         data = sign(data)
     context = ssl.create_default_context()
