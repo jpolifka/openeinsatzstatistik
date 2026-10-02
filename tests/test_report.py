@@ -48,6 +48,7 @@ def test_parse_fields_vehicles_and_people():
     assert r["vehicles"][3]["departed"] is None
     assert [(p["last_name"], p["vehicle"], p["role"]) for p in r["people"]] == [
         ("Muster", "02/45", "Einheitsführer"), ("Beispiel", "02/45", "Maschinist"), ("Probe", None, "")]
+    assert r["people"][0]["vehicle_name"] == "FL NR#.BHÖ 02/45-01"
 
 
 def test_derived_fields():

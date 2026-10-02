@@ -29,10 +29,12 @@ def _as(client, email):
 
 def _settings(client, slug="wehr-a1"):
     s = client.get(f"/api/admin/{slug}/settings").json()
-    for key in ("slug", "palette", "unused_data"):
+    for key in ("slug", "palette", "unused_data", "known_vehicles", "call_sign_directory"):
         s.pop(key)
     for v in s["fleet"]:
         v.pop("incidents")
+        v.pop("description")
+        v.pop("suggested_name")
     return s
 
 
@@ -67,7 +69,9 @@ def test_settings_roundtrip_changes_config(world):
 @pytest.mark.parametrize("change, message", [
     ({"colors": {"brand": "#FFD700"}}, "zu hell"),
     ({"colors": {"brand": "red;}body{display:none"}}, "#RRGGBB"),
-    ({"fleet": [{"call_sign": "HLF"}]}, "wie 02/45"),
+    ({"fleet": [{"name": "kaputt!"}]}, "wie im BKS-Bericht"),
+    ({"fleet": [{"name": ""}]}, "braucht einen Funkrufnamen"),
+    ({"fleet": [{"name": "RP WW 01/23-06"}, {"name": "RP WW 01/23-06"}]}, "doppelt"),
     ({"fleet": [{"call_sign": "02/45"}, {"call_sign": "02/45"}]}, "doppelt"),
     ({"fleet": [{"call_sign": "02/45", "in_service_from": "2025-01-01", "in_service_until": "2024-01-01"}]}, "außer Dienst"),
     ({"substitutes": {"01/23": "09/99"}}, "Block"),
@@ -195,3 +199,28 @@ def test_superadmin_manages_vgs_and_tenants(world, data_dir):
     assert "wehr-c1" not in [t["slug"] for t in overview["tenants"]]
     assert not os.path.exists(tenancy.tenant_path("wehr-c1"))
     assert len(os.listdir(data_dir / "deleted")) == 1
+
+
+def test_fleet_with_full_call_signs(world):
+    """Neue Fahrzeuge bekommen den Kurznamen aus dem Funkrufnamen; bestehende behalten ihren."""
+    _as(world, "lead@example.org")
+    s = _settings(world)
+    s["fleet"] = [{"call_sign": "02/45", "name": "FL NR#.BHÖ 02/45-01", "label": "HLF 20"}, {"call_sign": "02/24"},
+                  {"name": "FL NR#.BHÖ 01/23-01"}, {"name": "RP WW 01/23-06", "label": "TLF 3000"},
+                  {"name": "RP WW 01/23-07", "replaced_by": "RP WW 01/23-06"}]
+    s["substitutes"] = {"FL NR#.BHÖ 01/46-01": "RP WW 01/23-06"}
+    saved = world.put("/api/admin/wehr-a1/settings", json=s)
+    assert saved.status_code == 200, saved.text
+    fleet = saved.json()["fleet"]
+    assert [(v["call_sign"], v["name"]) for v in fleet] == [
+        ("02/45", "FL NR#.BHÖ 02/45-01"), ("02/24", ""), ("01/23", "FL NR#.BHÖ 01/23-01"),
+        ("01/23-06", "RP WW 01/23-06"), ("01/23-07", "RP WW 01/23-07")]
+    assert fleet[1]["suggested_name"] == "FL NR#.BHÖ 02/24-01"
+    assert fleet[4]["replaced_by"] == "01/23-06"
+    assert saved.json()["substitutes"] == {"FL NR#.BHÖ 01/46-01": "01/23-06"}
+    known = {v["name"]: v for v in saved.json()["known_vehicles"]}
+    assert known["RP WW 01/23-06"]["description"].startswith("Rheinpfalz (Land) · WW · Standort 01 · 23 Tanklösch")
+    assert fleet[0]["description"].endswith("Nr. 1")
+    assert "FL NR#.BHÖ 02/24-01" in known                     # Vorschlag zum alten Kurznamen 02/24
+    config = world.get("/api/config").json()
+    assert config["vehicle_names"]["01/23-06"] == "RP WW 01/23-06"

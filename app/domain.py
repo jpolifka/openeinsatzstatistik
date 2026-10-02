@@ -5,12 +5,62 @@ Fachkonstanten, die für alle Wehren gelten, und Standardwerte für neue Wehren.
 Was je Wehr verschieden ist (Fahrzeuge, Kennungen, Orte, Bedarfsplan), steht in deren
 TenantConfig (tenant_config.py). Die Oberfläche bekommt beides über /api/config.
 """
+import re
 
 # Feuerwehreinsatzzentrale (FEZ) im BKS-Bericht – Standard für neue Wehren
 CONTROL_CENTER = "FL NR#.LIN"
 
 # Bericht im BKS-Portal RLP; {} = Nummer des Haupt- bzw. Nebenberichts (bks_report_id)
 BKS_REPORT_URL = "https://bks-portal.rlp.de/bkslist/continue/einsatzbericht/{}"
+
+# Funkrufnamen in RLP (BOS-Funkrufnamenverzeichnis, Stand 01.06.2026), z. B. „FL NR#.ABC 02/45-01“ oder
+# „RP WW 01/23-06“: [BOS-Kennung] Ort Standort/Kennzahl-laufende Nummer
+CALL_SIGN_DIRECTORY_URL = ("https://bks-portal.rlp.de/system/files/gruppen/1409/dateien/"
+                           "202606_fmorg_funkrufnamenverzeichnis.pdf")
+BOS_IDS = {"FL": "Florian", "RP": "Rheinpfalz (Land)", "KA": "Kater", "RK": "Rotkreuz", "AK": "Akkon",
+           "SA": "Sama", "JO": "Johannes", "HE": "Heros", "PE": "Pelikan", "RE": "Rettung", "TE": "Tetra"}
+# Kennzahl -> (Fahrzeugart, Fahrzeugtyp für die Fahrzeugliste). Der Typ ist nur gesetzt, wenn die Kennzahl
+# eindeutig ist; er ist zugleich Schlüssel der Gebührenordnung (fees.py) und bleibt deshalb änderbar.
+VEHICLE_CODES = {
+    "10": ("Kommandowagen", "KdoW"), "11": ("Einsatzleitwagen 1", "ELW 1"), "12": ("Einsatzleitwagen 2", "ELW 2"),
+    "16": ("Motorrad", "KRAD"), "17": ("Zubringerfahrzeug", ""), "18": ("All-Terrain-Vehicle", "ATV"),
+    "19": ("Mannschaftstransportfahrzeug", "MTF"),
+    "22": ("Tanklöschfahrzeug 2000 (TLF 8/18, 8/20W)", ""),
+    "23": ("Tanklöschfahrzeug 3000 (TLF 16/24Tr, 16/25)", ""),
+    "24": ("Tanklöschfahrzeug 4000 (TLF 16/45, 20/40, 24/48, 24/50)", ""),
+    "25": ("Tanklöschfahrzeug 4000 S / Pulver", ""), "29": ("sonstiges Tanklöschfahrzeug", ""),
+    "32": ("Drehleiter 12-9", "DLK 12/9"), "33": ("Drehleiter 18-12", "DLK 18/12"),
+    "34": ("Drehleiter 23-12", "DLK 23/12"), "37": ("Teleskopgelenkmast 18-12", ""),
+    "38": ("Teleskopgelenkmast 23-12", ""), "39": ("sonstiges Hubrettungsfahrzeug", ""),
+    "40": ("Gerätewagen mit Tragkraftspritze / TS-Anhänger", ""), "41": ("Tragkraftspritzenfahrzeug", "TSF"),
+    "42": ("Kleinlöschfahrzeug / TSF-W", ""), "43": ("Löschgruppenfahrzeug 8 / 16-TS", ""),
+    "44": ("Mittleres Löschfahrzeug / LF 8/6", ""),
+    "45": ("Löschgruppenfahrzeug 10 / HLF 10 / LF 16/12 / LF 16", ""),
+    "46": ("Hilfeleistungs-Löschgruppenfahrzeug 20 / LF 24", ""), "48": ("Löschgruppenfahrzeug KatS", ""),
+    "49": ("sonstiges Löschfahrzeug", ""),
+    "50": ("Vorausrüstwagen", "VRW"), "51": ("Rüstwagen 1", "RW"), "52": ("Rüstwagen (2)", "RW"),
+    "53": ("Gerätewagen Messtechnik", "GW-Mess"), "54": ("Gerätewagen Gefahrgut", ""),
+    "55": ("CBRN-Erkunder", "ABC-ErkW"), "56": ("Gerätewagen Atemschutz / Strahlenschutz", "GW-A"),
+    "57": ("Gerätewagen Dekontamination", ""), "58": ("Gerätewagen Wasserrettung", "GW-WR"),
+    "59": ("Gerätewagen Sanität 7", ""), "60": ("Gerätewagen Sanität 15", ""), "61": ("Gerätewagen Sanität 50", ""),
+    "62": ("Gerätewagen Betreuung", ""), "63": ("Gerätewagen Verpflegung", ""), "64": ("Gerätewagen RHOT", ""),
+    "65": ("Wechselladerfahrzeug", "WLF"), "66": ("Wechselladerfahrzeug mit Kran", "WLF-K"),
+    "67": ("Schlauchwagen 1000", "SW 1000"), "68": ("Schlauchwagen 2000", "SW 2000"),
+    "69": ("sonstiger Gerätewagen", ""),
+    "71": ("Mehrzweckfahrzeug 1", "MZF 1"), "72": ("Mehrzweckfahrzeug 2 / GW-L 1", ""),
+    "73": ("Mehrzweckfahrzeug 3 / GW-L 2", ""), "74": ("Feuerwehr-Kran", "FwK"),
+    "75": ("Kleinalarmfahrzeug", ""), "76": ("Abrollbehälter", ""), "77": ("Rettungsboot", ""),
+    "78": ("Löschboot", ""), "79": ("Mehrzweckboot", "MZB"),
+    "80": ("Bedarf-Notarzteinsatzfahrzeug", ""), "81": ("Notarztwagen / ITW", ""),
+    "82": ("Notarzteinsatzfahrzeug", "NEF"), "83": ("Rettungswagen", "RTW"),
+    "84": ("Notfallkrankenwagen", "NKTW"), "85": ("Krankentransportwagen", "KTW"),
+    "86": ("Rettungswagen (Kat-S/SEG)", "RTW"), "87": ("Krankentransportwagen (Kat-S/SEG)", "KTW"),
+    "88": ("Großraumrettungswagen", "GRTW"), "89": ("Luftrettungsmittel", "RTH"),
+    "90": ("Wehrleiter", ""), "91": ("Wehrführer", ""), "93": ("Verbandsführer", ""), "94": ("Zugführer", ""),
+    "95": ("Gruppenführer", ""), "96": ("Handfunkgerät", ""),
+}
+CALL_SIGN_PARTS = re.compile(r"^(?:(?P<bos>[A-Z]{2}) (?=\S+ \d))?(?P<place>.*?) ?(?P<station>\d\d)/(?P<code>\d\d)"
+                             r"(?:-(?P<number>\d\d))?$")
 
 # Einsatzarten: erster Buchstabe des Stichworts
 CATEGORIES = (("H", "Hilfeleistung"), ("B", "Brand"), ("W", "Wasser"), ("G", "Gefahrstoff"), ("S", "Sonderlage"))
@@ -222,3 +272,28 @@ def is_fire_watch(keyword, subcode):
 
 def is_fire_alarm_system(keyword, subcode):
     return (keyword, subcode) == FIRE_ALARM_SYSTEM
+
+
+def describe_call_sign(name):
+    """Funkrufname aus dem BKS-Bericht zerlegen -> {bos, place, station, code, number, kind, label}.
+
+    „RP WW 01/23-06“ -> Rheinpfalz (Land), Ort WW, Standort 01, Kennzahl 23 (TLF 3000), Nr. 6. Unbekannte
+    Namen liefern nur die erkannten Teile (leeres Dict, wenn nichts passt).
+    """
+    m = CALL_SIGN_PARTS.match((name or "").strip())
+    if not m:
+        return {}
+    kind, label = VEHICLE_CODES.get(m["code"], ("", ""))
+    return {"bos": BOS_IDS.get(m["bos"], m["bos"] or ""), "place": m["place"], "station": m["station"],
+            "code": m["code"], "number": int(m["number"]) if m["number"] else None, "kind": kind, "label": label}
+
+
+def call_sign_text(name):
+    """Auflösung für die Oberfläche, z. B. „Rheinpfalz (Land) · WW · Standort 01 · 23 Tanklöschfahrzeug 3000 … · Nr. 6“."""
+    d = describe_call_sign(name)
+    if not d:
+        return ""
+    parts = [d["bos"], d["place"], f"Standort {d['station']}", f"{d['code']} {d['kind'] or 'Kennzahl unbekannt'}"]
+    if d["number"]:
+        parts.append(f"Nr. {d['number']}")
+    return " · ".join(p for p in parts if p)

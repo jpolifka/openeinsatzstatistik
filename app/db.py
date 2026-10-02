@@ -187,9 +187,19 @@ def _add_fee_schedules(con):
         legacy.seed_fee_schedule(con, vg_id)
 
 
+def _add_fleet_names(con):
+    """Voller Funkrufname je Fahrzeug der Fahrzeugliste (wie im BKS-Bericht, z. B. „RP WW 01/23-06“),
+    vorbelegt mit dem häufigsten Namen aus den Einsätzen; ohne solchen bleibt er leer (Zuordnung dann
+    weiter über unit_prefix)."""
+    con.execute("ALTER TABLE fleet ADD COLUMN name TEXT NOT NULL DEFAULT ''")
+    con.execute("UPDATE fleet SET name = COALESCE((SELECT v.name FROM vehicle v WHERE v.call_sign = fleet.call_sign "
+                "AND v.name <> '' AND v.name NOT IN (SELECT name FROM fleet) "
+                "GROUP BY v.name ORDER BY COUNT(*) DESC, v.name LIMIT 1), '')")
+
+
 # Neue Schemaänderungen nur hinten anfügen; PRAGMA user_version zählt die erledigten Schritte.
 TENANT_MIGRATIONS = [_create_legacy_schema, _rename_to_english, _add_tenant_tables, _add_bks_ids,
-                     _add_pending_reports]
+                     _add_pending_reports, _add_fleet_names]
 CENTRAL_MIGRATIONS = [_create_central_schema, _add_dpa, _add_records, _add_notices, _add_fee_schedules]
 
 

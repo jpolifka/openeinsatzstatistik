@@ -418,6 +418,8 @@ h2 .help-btn, h3 .help-btn { color: var(--brand); }
   border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; background: var(--white); min-width: 0; width: 100%; font: inherit;
 }
 .admin-table input.narrow, .inline-row input.narrow { width: 80px; }
+.admin-table input.wide { min-width: 220px; }
+.admin-table .missing-name { color: var(--brand-dark); font-weight: 600; }
 .admin-table td { vertical-align: middle; }
 .admin-table .center, .admin-table td.center { text-align: center; }
 .admin-table .nowrap { white-space: nowrap; }

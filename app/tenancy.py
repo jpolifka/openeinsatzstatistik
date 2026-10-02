@@ -91,7 +91,7 @@ def load_config(con, name):
     for key in _TUPLES & set(kwargs):
         kwargs[key] = tuple(tuple(v) if isinstance(v, list) else v for v in kwargs[key])
     fleet = tuple(Vehicle(r["call_sign"], r["label"], r["in_service_from"], r["in_service_until"], r["replaced_by"],
-                          bool(r["in_plan_crew"]))
+                          bool(r["in_plan_crew"]), r["name"])
                   for r in con.execute("SELECT * FROM fleet ORDER BY sort_order, call_sign"))
     rows = con.execute("SELECT code, name, terms, active FROM keyword ORDER BY sort_order, code").fetchall()
     keywords = tuple((r["code"], r["name"], r["terms"]) for r in rows if r["active"])
@@ -108,9 +108,9 @@ def save_config(con, cfg, keywords=False):
                     (key, json.dumps(getattr(cfg, key), ensure_ascii=False)))
     con.execute("DELETE FROM fleet")
     for order, v in enumerate(cfg.fleet, start=1):
-        con.execute("INSERT INTO fleet (call_sign, label, sort_order, in_service_from, in_service_until, replaced_by, "
-                    "in_plan_crew) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (v.call_sign, v.label, order, v.in_service_from, v.in_service_until, v.replaced_by,
+        con.execute("INSERT INTO fleet (call_sign, name, label, sort_order, in_service_from, in_service_until, "
+                    "replaced_by, in_plan_crew) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (v.call_sign, v.name, v.label, order, v.in_service_from, v.in_service_until, v.replaced_by,
                      int(v.in_plan_crew)))
     if keywords:
         con.execute("DELETE FROM keyword")

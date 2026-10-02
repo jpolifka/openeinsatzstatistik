@@ -14,12 +14,10 @@ Wehrleiters. Hinweise (notice) an eine Wehr entstehen beim Einlesen durch andere
 import datetime as dt
 import hashlib
 import json
-import re
 
 from app import store
 from app.timeutil import to_iso
 
-CALL_SIGN = re.compile(r"\d\d/\d\d")
 # Werte je Fahrzeug, die Stammdatensatz und Berichte gemeinsam haben
 VEHICLE_FIELDS = (("crew", "Stärke"), ("alerted", "Alarmierung"), ("departed", "Ausrücken"),
                   ("arrived", "Eintreffen"), ("finished", "Ende"))
@@ -94,16 +92,15 @@ def _value(field, value):
 
 
 def call_sign_of(name, cfg):
-    """Funkrufname aus dem Fahrzeugnamen im Bericht, z. B. "FL NR#.ABC 02/45-01" -> "02/45"."""
-    m = CALL_SIGN.match(name[len(cfg.unit_prefix):]) if name.startswith(cfg.unit_prefix) else None
-    return m.group(0) if m else name
+    """Block der Wehr zum Fahrzeugnamen im Bericht, z. B. "FL NR#.ABC 02/45-01" -> "02/45"; sonst der Name."""
+    return cfg.block_of(name) or name
 
 
 def moved_vehicles(vehicles, cfg):
     """Eigene Fahrzeuge der Wehr, die laut Bericht bzw. Stammdatensatz ausgerückt sind."""
     seen, result = set(), []
     for v in vehicles:
-        if v["name"].startswith(cfg.own_vehicle_prefix) and (v.get("departed") or v.get("arrived")) \
+        if cfg.is_own(v["name"]) and (v.get("departed") or v.get("arrived")) \
                 and v["name"] not in seen:
             seen.add(v["name"])
             result.append(v)

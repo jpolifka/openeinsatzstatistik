@@ -49,7 +49,7 @@ def match_tenant(texts, filename, candidates):
             return key, "unit"
         if cfg.unit_marker and report["unit"]:
             continue
-        score = sum(1 for v in report["vehicles"] if cfg.own_prefix and _is_own(v, cfg))
+        score = sum(1 for v in report["vehicles"] if cfg.is_own(v["name"]))
         if score > best_score:
             best, best_score = key, score
     return (best, "vehicles") if best else (None, None)
@@ -84,7 +84,7 @@ def complete_number(report):
 
 # ---------------------------------------------------------------- Ableitungen
 def _is_own(vehicle, cfg):
-    return vehicle["name"].startswith(cfg.own_vehicle_prefix)
+    return cfg.is_own(vehicle["name"])
 
 
 def _report_day(report):
@@ -97,29 +97,45 @@ def _report_day(report):
 def assign_vehicles(report, cfg):
     """Fahrzeuge den Blöcken der Einsatzübersicht zuordnen (inkl. Ersatzfahrzeuge).
 
-    Eigene Fahrzeuge, die noch nicht in der Fahrzeugliste stehen, bekommen einen eigenen Block und
-    stehen in report["new_vehicles"] (beim Speichern werden sie in die Liste aufgenommen).
+    Zugeordnet wird über den vollen Funkrufnamen (TenantConfig.block_of); danach tragen Fahrzeuge und
+    Personen im Feld call_sign bzw. vehicle den Block der Wehr. Eigene Fahrzeuge, die noch nicht in der
+    Fahrzeugliste stehen, bekommen einen eigenen Block und stehen in report["new_vehicles"] (beim Speichern
+    werden sie in die Liste aufgenommen, siehe new_fleet_vehicles).
     """
     slots, day = {}, _report_day(report)
     report["new_vehicles"] = []
     in_service = set(cfg.vehicles_on(day)) if day else set(cfg.vehicles)
-    crewed = {p["vehicle"] for p in report["people"] if p["vehicle"]}
+    for v in report["vehicles"]:
+        v["call_sign"] = cfg.block_of(v["name"])
+    for p in report["people"]:
+        if p.get("vehicle_name"):
+            p["vehicle"] = cfg.block_of(p["vehicle_name"])
+    crewed = {p.get("vehicle_name") or p["vehicle"] for p in report["people"] if p["vehicle"] or p.get("vehicle_name")}
     for v in report["vehicles"]:
         if v["call_sign"] in cfg.vehicles:
             slots[v["call_sign"]] = v
             if v["call_sign"] not in in_service:
                 report["warnings"].append(f"{v['call_sign']} ist laut Fahrzeugliste an diesem Tag außer Dienst")
     for v in report["vehicles"]:
-        target = cfg.substitutes.get(v["call_sign"])
-        if target and target not in slots and v["call_sign"] in crewed:
+        target = cfg.substitute_of(v["name"])
+        if target and target not in slots and (v["name"] in crewed or v["call_sign"] in crewed):
             slots[target] = v
             report["warnings"].append(f"{v['name']} als Ersatz für {target} eingetragen")
     for v in report["vehicles"]:
-        if _is_own(v, cfg) and v["call_sign"] and v not in slots.values() and v["call_sign"] not in slots:
-            slots[v["call_sign"]] = v
-            report["new_vehicles"].append(v["call_sign"])
+        if not _is_own(v, cfg) or v in slots.values():
+            continue
+        call_sign = v["call_sign"] or cfg.new_call_sign(v["name"], set(cfg.vehicles) | set(slots))
+        if call_sign not in slots and call_sign not in cfg.vehicles:
+            v["call_sign"] = call_sign
+            slots[call_sign] = v
+            report["new_vehicles"].append(call_sign)
     report["day"] = day
     return slots
+
+
+def new_fleet_vehicles(report):
+    """Neu aufzunehmende Fahrzeuge als [(call_sign, Funkrufname im Bericht)]."""
+    return [(cs, report["slots"][cs]["name"]) for cs in report.get("new_vehicles", ())]
 
 
 def _start_and_end(report, cfg):
@@ -253,7 +269,7 @@ def save(con, report, fields, update_id=None, modified_by=None):
     else:
         incident_id = store.create_incident(con, fields, source="pdf", filename=report["filename"],
                                             warnings=report["warnings"], modified_by=modified_by)
-    store.add_fleet_vehicles(con, report.get("new_vehicles", ()), report.get("day"))
+    store.add_fleet_vehicles(con, new_fleet_vehicles(report), report.get("day"))
     members = store.MemberDirectory(con)
     attendance = [(members.find_or_create(p["last_name"], p["first_name"]), p["role"] or None, p["vehicle"])
                   for p in report["people"]]
