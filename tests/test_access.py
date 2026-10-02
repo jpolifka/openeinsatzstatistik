@@ -19,13 +19,13 @@ USERS = {  # Adresse -> (Rolle, Bereich)
 }
 # Rechtematrix wie in der README: Rolle -> erwarteter Status je Endpunkt (Wehr A1 ausgewählt)
 MATRIX = {
-    #                          years evaluation incidents export reports  edit  delete-in-B1
-    "lead@example.org":       (200,  200,       200,      200,   400,     200,  403),
-    "editor@example.org":     (200,  200,       200,      200,   400,     200,  403),
-    "viewer@example.org":     (200,  200,       403,      403,   403,     403,  403),
-    "vglead@example.org":     (200,  200,       200,      200,   400,     200,  403),
-    "vgstats@example.org":    (200,  200,       403,      403,   403,     403,  403),
-    "admin@example.org":      (200,  200,       200,      200,   400,     200,  200),
+    #                          years evaluation incidents export reports  edit  delete-in-B1 members
+    "lead@example.org":       (200,  200,       200,      200,   400,     200,  403,         200),
+    "editor@example.org":     (200,  200,       200,      200,   400,     200,  403,         200),
+    "viewer@example.org":     (200,  200,       403,      403,   403,     403,  403,         403),
+    "vglead@example.org":     (200,  200,       200,      200,   400,     200,  403,         403),
+    "vgstats@example.org":    (200,  200,       403,      403,   403,     403,  403,         403),
+    "admin@example.org":      (200,  200,       200,      200,   400,     200,  200,         403),
 }
 
 
@@ -70,6 +70,7 @@ def test_permission_matrix(world, email):
         client.post("/api/reports", files=[("pdfs", ("a.txt", b"x", "text/plain"))]).status_code,
         client.put(f"/api/incidents/{ids['wehr-a1']}", json={"description": "geändert"}).status_code,
         client.delete(f"/api/incidents/{ids['wehr-b1']}").status_code,
+        client.get("/api/members?tenant=wehr-a1").status_code,
     )
     assert statuses == MATRIX[email]
 
@@ -142,3 +143,39 @@ def test_saved_report_records_author(world):
     with db.connection(tenancy.tenant_path(slug)) as con:
         row = con.execute("SELECT modified_by FROM incident WHERE id = ?", (incident_id,)).fetchone()
     assert row["modified_by"] == "editor@example.org"
+
+
+@pytest.mark.parametrize("email", ["vglead@example.org", "admin@example.org"])
+def test_lead_roles_above_tenant_see_no_attendance(world, email):
+    """Wehrleiter und Superadmin: Einsätze ja, Anwesenheit (Namen der Kameraden) nein."""
+    client, ids = world
+    _as(client, email)
+    incident = client.get("/api/incidents?year=2025").json()["incidents"][0]
+    assert incident["people"] == [] and incident["people_count"] == 1 and not incident["people_visible"]
+    assert "Max" not in client.get("/api/incidents?year=2025").text
+    assert client.get("/api/evaluation?year=2025").json()["attendance"] is None
+    assert "people" not in client.get("/api/config").json()["permissions"]
+    export = client.get("/api/export?year=2025")
+    assert export.status_code == 200
+    import io, openpyxl
+    assert not any(n.startswith("Anwesenheit") for n in openpyxl.load_workbook(io.BytesIO(export.content)).sheetnames)
+    response = client.put(f"/api/incidents/{ids['wehr-a1']}", json={"people": []})
+    assert response.status_code == 403
+    with db.connection(tenancy.tenant_path("wehr-a1")) as con:
+        assert len(store.load_incidents(con)[0]["people"]) == 1
+
+
+def test_tenant_lead_sees_attendance(world):
+    client, _ = world
+    incident = _as(client, "lead@example.org").get("/api/incidents?year=2025").json()["incidents"][0]
+    assert incident["people_visible"] and incident["people"][0]["name"].startswith("Muster")
+    assert client.get("/api/evaluation?year=2025").json()["attendance"] is not None
+
+
+def test_no_self_grant_of_attendance_roles(world):
+    client, _ = world
+    _as(client, "vglead@example.org")
+    grant_self = {"email": "vglead@example.org", "role": "lead", "scope": "tenant", "slug": "wehr-a1"}
+    assert client.post("/api/admin/memberships", json=grant_self).status_code == 403
+    grant_other = {**grant_self, "email": "neu@example.org"}
+    assert client.post("/api/admin/memberships", json=grant_other).status_code == 200
