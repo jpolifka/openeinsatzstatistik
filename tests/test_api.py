@@ -67,7 +67,7 @@ def test_expired_preview(client):
 
 def _zip(entries):
     data = io.BytesIO()
-    with zipfile.ZipFile(data, "w") as archive:
+    with zipfile.ZipFile(data, "w", zipfile.ZIP_DEFLATED) as archive:
         for name, content in entries.items():
             archive.writestr(name, content)
     return data.getvalue()
@@ -110,6 +110,22 @@ def test_zip_upload_errors(client):
                                                   ("pdfs", ("leer.zip", _zip({"a.txt": b"x"}), "application/zip"))])
     assert [e["file"] for e in response.json()["errors"]] == ["kaputt.zip", "leer.zip"]
     assert client.post("/api/reports", files=[("pdfs", ("a.txt", b"x", "text/plain"))]).status_code == 400
+
+
+def test_upload_size_is_limited(client, monkeypatch):
+    """Upload und entpackte ZIP-Inhalte zusammen begrenzt; je Eintrag wird nur bis zur Grenze entpackt."""
+    read = []
+    monkeypatch.setattr(main.pdf_report, "extract_text", lambda path: read.append(path) or (_ for _ in ()).throw(
+        ValueError("kein Bericht")))
+    monkeypatch.setattr(main, "UPLOAD_MAX_BYTES", 2500)
+    archive = _zip({f"{n}.pdf": b"0" * 1000 for n in range(5)})          # stark komprimierbar
+    data = client.post("/api/reports", files=[("pdfs", ("b.zip", archive, "application/zip"))]).json()
+    assert len(archive) < 1000 and 1 <= len(read) < 5 and any("Zu groß" in e["message"] for e in data["errors"])
+    big = client.post("/api/reports", files=[("pdfs", ("a.pdf", b"0" * 3000, "application/pdf"))]).json()
+    assert big["errors"][0]["file"] == "a.pdf" and "Zu groß" in big["errors"][0]["message"]
+    monkeypatch.setattr(main, "ZIP_MAX_BYTES", 500)
+    data = client.post("/api/reports", files=[("pdfs", ("b.zip", _zip({"x.pdf": b"0" * 1000}), "application/zip"))])
+    assert "zu groß" in data.json()["errors"][0]["message"]
 
 
 def test_export(client):

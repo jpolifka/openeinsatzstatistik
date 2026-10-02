@@ -29,18 +29,35 @@ TIME_FORMATS = ("%d.%m.%y %H:%M:%S", "%d.%m.%Y %H:%M:%S", "%d.%m.%y %H:%M", "%d.
 YES_NO = ("ja", "nein", "agt")
 
 
+# Ein Bericht hat wenige hundert Zeilen; mehr deutet auf eine fremde oder präparierte Datei
+MAX_UNPACKED_BYTES = 50 * 1024 * 1024
+MAX_ROWS = 5000
+
+
 def read_workbook(source):
     """Blätter der Arbeitsmappe (Pfad oder Bytes) -> {blattname: [zeilen]}; Zeilen als Tupel ohne Leerzeilen."""
+    source = io.BytesIO(source) if isinstance(source, bytes) else source
     try:
-        wb = openpyxl.load_workbook(io.BytesIO(source) if isinstance(source, bytes) else source,
-                                    read_only=True, data_only=True)
+        with zipfile.ZipFile(source) as archive:     # xlsx ist eine ZIP-Datei: entpackte Größe vorab prüfen
+            if sum(i.file_size for i in archive.infolist()) > MAX_UNPACKED_BYTES:
+                raise ValueError("Die Excel-Datei ist zu groß für einen Einsatzbericht.")
+        wb = openpyxl.load_workbook(source, read_only=True, data_only=True)
     except (InvalidFileException, zipfile.BadZipFile, KeyError, OSError):
         raise ValueError("Keine gültige Excel-Datei (xlsx).")
     try:
-        return {ws.title: [row for row in ws.iter_rows(values_only=True) if any(c not in (None, "") for c in row)]
-                for ws in wb.worksheets}
+        return {ws.title: _rows(ws) for ws in wb.worksheets}
     finally:
         wb.close()
+
+
+def _rows(ws):
+    rows = []
+    for i, row in enumerate(ws.iter_rows(values_only=True)):
+        if i >= MAX_ROWS:
+            raise ValueError("Die Excel-Datei hat zu viele Zeilen für einen Einsatzbericht.")
+        if any(c not in (None, "") for c in row):
+            rows.append(row)
+    return rows
 
 
 def _sheet(sheets, prefix):

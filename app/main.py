@@ -506,7 +506,8 @@ def api_delete_incident(key: str, a: tenancy.Access = Depends(access)):
 
 # ---------------------------------------------------------------- Berichte einlesen (PDF, Excel-Export)
 ZIP_MAX_PDFS = 500
-ZIP_MAX_BYTES = 50 * 1024 * 1024  # je entpacktem Bericht
+ZIP_MAX_BYTES = 50 * 1024 * 1024     # je entpacktem Bericht
+UPLOAD_MAX_BYTES = 200 * 1024 * 1024  # je Upload: hochgeladen bzw. entpackt zusammen (Speicher, Platte)
 REPORT_TYPES = (".pdf", ".xlsx")
 
 
@@ -524,13 +525,30 @@ def _unique_filename(filename, taken):
     return candidate
 
 
-def _unpack_zip(data, zip_name, errors):
-    """Berichte (PDF, xlsx) aus einer ZIP-Datei holen -> [(dateiname, inhalt)]. Andere Dateien werden übergangen."""
+class Budget:
+    """Bytes, die ein Upload insgesamt noch belegen darf (hochgeladen und entpackt)."""
+
+    def __init__(self, limit=None):
+        self.left = UPLOAD_MAX_BYTES if limit is None else limit
+
+    def take(self, size):
+        if size > self.left:
+            return False
+        self.left -= size
+        return True
+
+
+TOO_BIG = f"Zu groß – je Upload höchstens {UPLOAD_MAX_BYTES // (1024 * 1024)} MB, bitte in Teilen hochladen."
+
+
+def _unpack_zip(data, zip_name, errors, budget):
+    """Berichte (PDF, xlsx) aus einer ZIP-Datei holen -> erzeugt (dateiname, inhalt) einzeln, damit nicht alle
+    gleichzeitig im Speicher liegen. Andere Dateien werden übergangen."""
     try:
         archive = zipfile.ZipFile(io.BytesIO(data))
     except zipfile.BadZipFile:
         errors.append({"file": zip_name, "message": "Keine gültige ZIP-Datei."})
-        return []
+        return
     entries = [i for i in archive.infolist() if not i.is_dir() and i.filename.lower().endswith(REPORT_TYPES)
                and not i.filename.startswith("__MACOSX/") and not os.path.basename(i.filename).startswith("._")]
     if not entries:
@@ -538,17 +556,24 @@ def _unpack_zip(data, zip_name, errors):
     if len(entries) > ZIP_MAX_PDFS:
         errors.append({"file": zip_name, "message": f"Mehr als {ZIP_MAX_PDFS} Berichte, nur die ersten werden gelesen."})
         entries = entries[:ZIP_MAX_PDFS]
-    files = []
     for info in entries:
         name = _safe_filename(info.filename)
         if info.file_size > ZIP_MAX_BYTES:
             errors.append({"file": name, "message": "Bericht in der ZIP-Datei ist zu groß."})
             continue
         try:
-            files.append((name, archive.read(info)))
+            with archive.open(info) as fh:      # Größe aus dem Verzeichnis nicht trauen: begrenzt lesen
+                content = fh.read(ZIP_MAX_BYTES + 1)
         except Exception as e:  # verschlüsselt oder beschädigt
             errors.append({"file": name, "message": f"Nicht entpackbar ({e or type(e).__name__})."})
-    return files
+            continue
+        if len(content) > ZIP_MAX_BYTES:
+            errors.append({"file": name, "message": "Bericht in der ZIP-Datei ist zu groß."})
+            continue
+        if not budget.take(len(content)):
+            errors.append({"file": zip_name, "message": TOO_BIG})
+            return
+        yield name, content
 
 
 class Skipped(Exception):
@@ -606,11 +631,20 @@ def _read_report(path, filename, tenants):
 
 def _read_uploads(uploads, tenants, email=None):
     """Hochgeladene Berichte (PDF, xlsx) und ZIP-Dateien lesen -> ([(bericht, wehr)], fehler, hinweise)."""
-    errors, files = [], []
-    for upload in uploads:
-        filename, data = _safe_filename(upload.filename), upload.file.read()
-        files += _unpack_zip(data, filename, errors) if filename.lower().endswith(".zip") else [(filename, data)]
-    reports, more_errors, notes = _read_files(files, tenants, email)
+    errors, budget = [], Budget()
+
+    def files():
+        for upload in uploads:
+            filename, data = _safe_filename(upload.filename), upload.file.read(budget.left + 1)
+            if not budget.take(len(data)):
+                errors.append({"file": filename, "message": TOO_BIG})
+                return
+            if filename.lower().endswith(".zip"):
+                yield from _unpack_zip(data, filename, errors, budget)
+            else:
+                yield filename, data
+
+    reports, more_errors, notes = _read_files(files(), tenants, email)
     return reports, errors + more_errors, notes
 
 

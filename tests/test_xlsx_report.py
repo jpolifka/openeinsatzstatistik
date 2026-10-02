@@ -114,3 +114,12 @@ def test_rejects_several_reports_and_other_files():
         parse(data.getvalue())
     with pytest.raises(ValueError, match="Keine gültige Excel-Datei"):
         xlsx_report.read_workbook(b"kein xlsx")
+
+
+def test_rejects_oversized_workbooks(monkeypatch):
+    monkeypatch.setattr(xlsx_report, "MAX_ROWS", 3)
+    with pytest.raises(ValueError, match="zu viele Zeilen"):
+        xlsx_report.read_workbook(make_workbook())
+    monkeypatch.setattr(xlsx_report, "MAX_UNPACKED_BYTES", 1000)
+    with pytest.raises(ValueError, match="zu groß"):
+        xlsx_report.read_workbook(make_workbook())
