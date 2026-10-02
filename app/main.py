@@ -128,9 +128,27 @@ class PreviewSessions:
         """(bericht, slug) oder (None, None), auch wenn die Vorschau einem anderen Benutzer gehört."""
         with self._lock:
             session = self._sessions.get(token)
-        if not session or session["owner"] != owner or filename not in session["reports"]:
+        if not session or session["owner"] != owner or filename not in session["reports"] \
+                or session["time"] < time.time() - self.TTL:
             return None, None
         return session["reports"][filename]
+
+    @contextlib.contextmanager
+    def claim(self, token, filename, owner):
+        """Bericht zur Übernahme entnehmen: ein zweiter Aufruf (Doppelklick) findet ihn nicht mehr.
+        Scheitert die Übernahme, liegt er wieder bereit."""
+        entry = None
+        with self._lock:
+            session = self._sessions.get(token)
+            if session and session["owner"] == owner and session["time"] >= time.time() - self.TTL:
+                entry = session["reports"].pop(filename, None)
+        try:
+            yield entry or (None, None)
+        except BaseException:
+            if entry:
+                with self._lock:
+                    session["reports"][filename] = entry
+            raise
 
     def _expire(self):
         cutoff = time.time() - self.TTL
@@ -723,10 +741,17 @@ class Acceptance(BaseModel):
 
 @app.post("/api/reports/accept")
 def api_accept_report(acceptance: Acceptance, a: tenancy.Access = Depends(access)):
-    r, slug = previews.get(acceptance.token, acceptance.filename, a.email)
-    if not r:
-        raise HTTPException(410, "Die Vorschau ist abgelaufen – bitte den Bericht erneut einlesen.")
+    with previews.claim(acceptance.token, acceptance.filename, a.email) as (r, slug):
+        if not r:
+            raise HTTPException(410, "Die Vorschau ist abgelaufen oder der Bericht wurde schon übernommen – "
+                                     "bitte den Bericht erneut einlesen.")
+        return _accept_report(acceptance, a, r, slug)
+
+
+def _accept_report(acceptance, a, r, slug):
     tenant = a.tenant(slug, IMPORT)
+    if acceptance.replace:
+        a.tenant(slug, WRITE)              # erfassten Einsatz überschreiben = bearbeiten
     fields = {**report.to_fields(r), **acceptance.fields.model_dump(exclude_unset=True)}
     by_date = tenant.config.numbering == "by_date"
     year = year_of(fields.get("started_at"))

@@ -126,6 +126,7 @@ def test_preview_belongs_to_its_user_and_tenant(world):
     body = {"token": token, "filename": r["filename"], "fields": {}}
     assert _as(client, "editor@example.org").post("/api/reports/accept", json=body).status_code == 410
     assert _as(client, "lead@example.org").post("/api/reports/accept", json=body).status_code == 200
+    assert client.post("/api/reports/accept", json=body).status_code == 410      # Doppelklick: nur einmal
     # Vorschau einer fremden Wehr (z. B. nach Entzug der Rolle) wird nicht übernommen
     token = main.previews.add([(read(), "wehr-b1")], "lead@example.org")
     response = client.post("/api/reports/accept", json={**body, "token": token})
@@ -204,3 +205,33 @@ def test_fine_grained_rights_of_own_role(world):
 def test_records_need_vg_right(world, email, status):
     client, _ = world
     assert _as(client, email, scope="vg:vg-a").get("/api/records?year=2025").status_code == status
+
+
+def test_import_right_alone_does_not_overwrite_incidents(world):
+    """Mit nur „Berichte einlesen“ neue Einsätze ja, einen erfassten überschreiben (replace) nein."""
+    client, ids = world
+    _as(client, "admin@example.org")
+    client.post("/api/admin/roles", json={"label": "Einleser", "scope": "tenant", "vg": "vg-a",
+                                          "permissions": ["incidents.view", "reports.import"]})
+    client.post("/api/admin/memberships", json={"email": "einleser@example.org", "scope": "tenant",
+                                                "slug": "wehr-a1", "role": "einleser"})
+    _as(client, "einleser@example.org")
+    r = read()
+    token = main.previews.add([(r, "wehr-a1")], "einleser@example.org")
+    body = {"token": token, "filename": r["filename"], "fields": {"number": 1}, "replace": True}
+    assert client.post("/api/reports/accept", json=body).status_code == 403
+    with db.connection(tenancy.tenant_path("wehr-a1")) as con:
+        assert store.load_incidents(con)[0]["keyword"] == "B2"          # unverändert
+    # ohne replace als neuer Einsatz – die Vorschau liegt nach dem Fehler noch bereit
+    saved = client.post("/api/reports/accept", json={**body, "replace": False, "fields": {"number": 2}})
+    assert saved.status_code == 200 and saved.json()["id"] != ids["wehr-a1"]
+
+
+def test_expired_preview_is_not_accepted(world):
+    client, _ = world
+    r = read()
+    token = main.previews.add([(r, "wehr-a1")], "lead@example.org")
+    main.previews._sessions[token]["time"] -= main.PreviewSessions.TTL + 1
+    response = _as(client, "lead@example.org").post(
+        "/api/reports/accept", json={"token": token, "filename": r["filename"], "fields": {}})
+    assert response.status_code == 410

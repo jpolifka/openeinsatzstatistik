@@ -888,7 +888,7 @@ async function readPdfs(files) {
 // Gelesene Berichte (hochgeladen oder von einer anderen Wehr weitergegeben): saubere übernehmen, Rest zeigen
 async function showUploadResult(data) {
   // Erfasster Einsatz: Aktualisieren ist vorausgewählt (manuell ergänzte Fahrzeuge und Personen bleiben)
-  state.upload = { token: data.token, reports: data.reports.map((r) => ({ ...r, replace: Boolean(r.existing), saved: null })),
+  state.upload = { token: data.token, reports: data.reports.map((r) => ({ ...r, replace: Boolean(r.existing && r.can_edit), saved: null })),
                    errors: data.errors, notes: data.notes || [] };
   if (data.errors.length) showUploadError(data.errors.map((e) => `${esc(e.file)}: ${esc(e.message)}`).join("<br>"));
   await acceptCleanReports();
@@ -978,8 +978,9 @@ function renderPreviews() {
         </div>
         <div class="panel outlined">${attendancePanel(r, { markNew: true, pickLeader: true })}</div>
         <div class="preview-footer">
-          ${existing ? `<label class="toggle"><input type="checkbox" data-replace="${i}" ${r.replace ? "checked" : ""}> erfassten Einsatz mit diesem Bericht aktualisieren
+          ${existing && r.can_edit ? `<label class="toggle"><input type="checkbox" data-replace="${i}" ${r.replace ? "checked" : ""}> erfassten Einsatz mit diesem Bericht aktualisieren
             <span class="muted">(manuell ergänzte Fahrzeuge und Personen bleiben)</span></label>` : ""}
+          ${existing && !r.can_edit ? `<span class="muted">Einen erfassten Einsatz aktualisiert, wer Einsätze bearbeiten darf.</span>` : ""}
           <button type="button" class="btn btn-primary" data-accept="${i}" ${existing && !r.replace ? "disabled" : ""}>
             ${existing ? "Aktualisieren" : "In Statistik übernehmen"}</button>
         </div>
