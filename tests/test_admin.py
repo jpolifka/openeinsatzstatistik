@@ -194,6 +194,8 @@ def test_superadmin_manages_vgs_and_tenants(world, data_dir):
                                                      "email": "c1@example.org"})
     assert created.status_code == 200 and tenancy.is_allowed("c1@example.org")
     assert world.post("/api/super/tenants", json={"slug": "wehr-c1", "name": "x", "vg": "vg-c"}).status_code == 422
+    with tenancy.central() as con:
+        c1_id = con.execute("SELECT id FROM tenant WHERE slug = 'wehr-c1'").fetchone()[0]
     assert world.put("/api/super/tenants/wehr-c1", json={"active": False}).status_code == 200
     assert not tenancy.is_allowed("c1@example.org")
     assert world.delete("/api/super/tenants/wehr-c1", params={"confirm": "falsch"}).status_code == 422
@@ -201,6 +203,13 @@ def test_superadmin_manages_vgs_and_tenants(world, data_dir):
     assert "wehr-c1" not in [t["slug"] for t in overview["tenants"]]
     assert not os.path.exists(tenancy.tenant_path("wehr-c1"))
     assert len(os.listdir(data_dir / "deleted")) == 1
+    # Neue Wehr bekommt nicht die ID der gelöschten – sonst sähe ihre Wehrführung deren Rollen-Protokoll
+    world.post("/api/super/tenants", json={"slug": "wehr-c2", "name": "Wehr C2", "vg": "vg-c",
+                                           "email": "c2@example.org"})
+    with tenancy.central() as con:
+        assert con.execute("SELECT id FROM tenant WHERE slug = 'wehr-c2'").fetchone()[0] > c1_id
+    events = _as(world, "c2@example.org").get("/api/admin/role-events").json()["events"]
+    assert not any("c1@example.org" in e["detail"] for e in events)
 
 
 def test_fleet_with_full_call_signs(world):

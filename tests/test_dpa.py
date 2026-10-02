@@ -77,6 +77,9 @@ def test_form_document_upload_and_confirmation(pending, data_dir):
     _as(pending, "lead@example.org")
     assert pending.get("/api/years").status_code == 200
     assert _fill(pending).status_code == 409                                 # abgeschlossen
+    assert pending.post("/api/dpa/vg-neu/upload", files={"file": ("avv.pdf", PDF + b"3")}).status_code == 409
+    assert pending.put("/api/dpa/vg-neu/link", json={"link": ""}).status_code == 409
+    assert pending.get("/api/dpa/vg-neu/file").content == PDF + b"2"         # bestätigter Vertrag unverändert
     _as(pending, "admin@example.org").post("/api/dpa/vg-neu/status", json={"status": "revoked", "note": "Kündigung"})
     assert _as(pending, "lead@example.org").get("/api/years").status_code == 403
 

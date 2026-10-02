@@ -61,10 +61,10 @@ def formulas(sheet, r):
     crew = [f"{cs}.crew" for cs in vehicles]
     arrival_pairs = [(c[f"{cs}.crew"], c[f"{cs}.arrival"]) for cs in vehicles]
     limit, second = cfg.default_limit, cfg.second_limit
-    day_start, day_end = cfg.day_hours
+    day_start, day_end = (f"TIME({h},0,0)" if h < 24 else "1" for h in cfg.day_hours)
     f = {
         "weekday": f'=TEXT({c["date"]},"TTTT")',
-        "day_night": f'=IF(AND({c["start"]}>{day_start / 24:g},{c["start"]}<{day_end / 24:g}),"Tag","Nacht")',
+        "day_night": f'=IF(AND({c["start"]}>{day_start},{c["start"]}<{day_end}),"Tag","Nacht")',
         "duration": f'=MOD(({c["end"]}-{c["start"]}),1)',
         "crew_total": f'=SUM({_cells(column, crew + ["station_staff"], r)})',
         "turnout": f'=SUM(MIN({_cells(column, [f"{cs}.turnout" for cs in vehicles], r)}))',

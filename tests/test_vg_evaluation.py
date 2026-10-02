@@ -162,7 +162,7 @@ def test_multi_report_is_distributed_and_updates_on_reimport(vg, monkeypatch):
     assert a1["bks_url"].endswith("/einsatzbericht/9000003")
     assert not any("Fahrzeuge im Bericht" in w for w in a1["warnings"])
     with tenancy.central() as con:
-        master = records.load_master(con, "9000001")
+        master = records.load_master(con, con.execute("SELECT id FROM vg WHERE slug = 'vg-a'").fetchone()[0], "9000001")
     assert master["dispatch_number"] == "1250000009" and len(master["vehicles"]) == 4
 
     saved = vg.post("/api/reports/accept", json={"token": data["token"], "filename": "a1.pdf", "fields": {}}).json()

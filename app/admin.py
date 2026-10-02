@@ -994,8 +994,11 @@ def create_tenant(t: TenantIn, a: tenancy.Access = Depends(access)):
             tenant_id = tenancy.create_tenant(con, t.slug, t.name, row["id"])
         except ValueError as e:
             _invalid(str(e))
+        rbac.log(con, a.email, "Wehr angelegt", t.name, row["id"], tenant_id)
         if t.email:
-            tenancy.grant(con, t.email, "lead", tenant_id)
+            role = tenancy.grant(con, t.email, "lead", tenant_id)
+            rbac.log(con, a.email, "Rolle vergeben", f"{role.label} für {tenancy.normalize_email(t.email)} in {t.name}",
+                     row["id"], tenant_id)
     log.info("Wehr %s angelegt durch %s", t.slug, a.email or "lokal")
     return super_overview(a)
 
@@ -1033,9 +1036,10 @@ def delete_tenant(slug: str, confirm: str = "", a: tenancy.Access = Depends(acce
     if confirm != slug:
         _invalid("Zum Bestätigen den Kurznamen der Wehr eintippen.")
     with tenancy.central() as con:
-        row = con.execute("SELECT id FROM tenant WHERE slug = ?", (slug,)).fetchone()
+        row = con.execute("SELECT id, vg_id, name FROM tenant WHERE slug = ?", (slug,)).fetchone()
         if not row:
             raise HTTPException(404, "Wehr nicht gefunden.")
+        rbac.log(con, a.email, "Wehr entfernt", row["name"], row["vg_id"], row["id"])
         con.execute("DELETE FROM membership WHERE scope = 'tenant' AND scope_id = ?", (row["id"],))
         con.execute("DELETE FROM tenant WHERE id = ?", (row["id"],))
         con.execute("DELETE FROM account WHERE NOT EXISTS (SELECT 1 FROM membership m WHERE m.email = account.email)")

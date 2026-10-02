@@ -180,9 +180,9 @@ class TenantConfig:
         return level in domain.ALARM_LEVELS and level >= self.plan_min_level and incident["place"] in self.plan_places
 
     def is_daytime(self, t: dt.time):
-        """Wie Excel =UND(E>0,25;E<0,75): die Grenzen selbst zählen zur Nacht."""
+        """Wie Excel =UND(E>0,25;E<0,75): die Grenzen selbst zählen zur Nacht. Ende 24 = bis Mitternacht."""
         start, end = self.day_hours
-        return dt.time(start) < t < dt.time(end)
+        return dt.time(start) < t and (end >= 24 or t < dt.time(end))
 
     # ------------------------------------------------------------ Oberfläche
     def client_config(self):

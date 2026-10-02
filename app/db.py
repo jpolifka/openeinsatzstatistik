@@ -231,10 +231,29 @@ def _add_roles(con):
     con.execute("CREATE INDEX membership_scope ON membership(scope, scope_id)")
 
 
+def _records_per_vg(con):
+    """Stammdatensätze und Prüfvermerke je VG: Schlüssel (bks_record_id, vg_id) statt nur bks_record_id,
+    damit eine VG weder den Stammdatensatz noch den Prüfvermerk einer anderen belegt oder überschreibt."""
+    for table, columns in (
+            ("master_record", "bks_record_id TEXT NOT NULL, "
+                              "vg_id INTEGER NOT NULL REFERENCES vg(id) ON DELETE CASCADE, dispatch_number TEXT, "
+                              "first_alarm TEXT, keyword TEXT, subcode TEXT, reported_as TEXT, town TEXT, "
+                              "district TEXT, street TEXT, vehicles TEXT NOT NULL DEFAULT '[]', filename TEXT, "
+                              "imported_by TEXT, imported TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))"),
+            ("record_review", "bks_record_id TEXT NOT NULL, "
+                              "vg_id INTEGER NOT NULL REFERENCES vg(id) ON DELETE CASCADE, findings_hash TEXT NOT NULL, "
+                              "reviewed_by TEXT, reviewed TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))")):
+        con.execute(f"CREATE TABLE {table}_new ({columns}, PRIMARY KEY (bks_record_id, vg_id))")
+        con.execute(f"INSERT INTO {table}_new SELECT * FROM {table}")
+        con.execute(f"DROP TABLE {table}")
+        con.execute(f"ALTER TABLE {table}_new RENAME TO {table}")
+
+
 # Neue Schemaänderungen nur hinten anfügen; PRAGMA user_version zählt die erledigten Schritte.
 TENANT_MIGRATIONS = [_create_legacy_schema, _rename_to_english, _add_tenant_tables, _add_bks_ids,
                      _add_pending_reports, _add_fleet_names]
-CENTRAL_MIGRATIONS = [_create_central_schema, _add_dpa, _add_records, _add_notices, _add_fee_schedules, _add_roles]
+CENTRAL_MIGRATIONS = [_create_central_schema, _add_dpa, _add_records, _add_notices, _add_fee_schedules, _add_roles,
+                      _records_per_vg]
 
 
 def migrate(con, steps=TENANT_MIGRATIONS):

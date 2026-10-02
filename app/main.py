@@ -854,7 +854,7 @@ def api_review_record(bks_record_id: str, review: Review, a: tenancy.Access = De
     vg_id, tenants = _managed_vg(a)
     with tenancy.central() as con:
         records.review(con, vg_id, bks_record_id, tenants, a.email, review.done)
-        entry = records.check(con, bks_record_id, tenants)
+        entry = records.check(con, vg_id, bks_record_id, tenants)
     return {"ok": True, "findings": len(entry["findings"])}
 
 

@@ -162,8 +162,11 @@ def create_tenant(con, slug, name, vg_id, cfg=None):
     path = tenant_path(slug)
     if os.path.exists(path):
         raise ValueError(f"Für „{slug}“ gibt es schon eine Datenbank.")
-    tenant_id = con.execute("INSERT INTO tenant (slug, name, vg_id) VALUES (?, ?, ?)",
-                            (slug, name.strip(), vg_id)).lastrowid
+    # IDs gelöschter Wehren nicht wiederverwenden: das Rollen-Protokoll verweist weiter auf sie
+    tenant_id = con.execute("SELECT MAX(id) FROM (SELECT MAX(id) AS id FROM tenant "
+                            "UNION ALL SELECT MAX(tenant_id) FROM role_event)").fetchone()[0] or 0
+    tenant_id = con.execute("INSERT INTO tenant (id, slug, name, vg_id) VALUES (?, ?, ?, ?)",
+                            (tenant_id + 1, slug, name.strip(), vg_id)).lastrowid
     db.setup(path)
     with db.connection(path) as tenant_con:
         save_config(tenant_con, cfg or TenantConfig(name=name))

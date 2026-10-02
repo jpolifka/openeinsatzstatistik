@@ -193,3 +193,24 @@ def test_edit_rejects_invalid_values(vg):
     incident = [i for i in client.get("/api/incidents?year=2025").json()["incidents"] if i["id"] == saved["id"]][0]
     assert incident["description"] != "geändert"
     assert client.get("/api/members?tenant=wehr-a2").status_code == 403
+
+
+def test_other_vg_cannot_touch_master_record_or_review(vg):
+    """Stammdatensatz und Prüfvermerk gelten je VG – eine andere VG belegt oder überschreibt sie nicht."""
+    client = _as(vg, "vglead@example.org", "vg:vg-a")
+    data = _upload(client, "stamm.pdf", "a1.pdf")
+    _accept(client, data, "a1.pdf")
+    assert client.post("/api/records/9000001/review", json={"done": True}).status_code == 200
+
+    vg_b, _ = make_tenant("wehr-b1", "vg-b")
+    grant("vglead-b@example.org", "vg_lead", vg_b)
+    other = _as(vg, "vglead-b@example.org", "vg:vg-b")
+    assert other.post("/api/records/9000001/review", json={"done": True}).status_code == 200
+    assert other.post("/api/records/9000001/review", json={"done": False}).status_code == 200
+    with tenancy.central() as con:
+        assert records.load_master(con, vg_b, "9000001") is None             # nichts von VG A sichtbar
+        a_id = con.execute("SELECT id FROM vg WHERE slug = 'vg-a'").fetchone()[0]
+        assert records.load_master(con, a_id, "9000001")["dispatch_number"] == "1250000009"
+
+    client = _as(vg, "vglead@example.org", "vg:vg-a")
+    assert client.get("/api/records?year=2025").json()["records"][0]["reviewed"]["by"] == "vglead@example.org"

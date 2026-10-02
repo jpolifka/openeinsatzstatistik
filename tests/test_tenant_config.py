@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import dataclasses
 import datetime as dt
 
 from app import domain
@@ -11,6 +12,12 @@ def test_daytime_excludes_boundaries_like_excel():
     assert CFG.is_daytime(dt.time(6, 0, 1))
     assert CFG.is_daytime(dt.time(17, 59, 59))
     assert not CFG.is_daytime(dt.time(18, 0, 0))
+
+
+def test_daytime_until_midnight():
+    """Tag bis 24 Uhr ist zulässig (Einstellungen) und darf nicht an dt.time(24) scheitern."""
+    late = dataclasses.replace(CFG, day_hours=(6, 24))
+    assert late.is_daytime(dt.time(23, 59, 59)) and not late.is_daytime(dt.time(6, 0))
 
 
 def test_area_by_name_prefix():

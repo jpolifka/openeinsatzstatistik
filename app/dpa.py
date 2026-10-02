@@ -143,6 +143,14 @@ def _require(con, a, slug, needed="view"):
     return vg, right
 
 
+def _require_open(con, a, slug):
+    """Recht DPA_EDIT und Vertrag noch offen – einen bestätigten Vertrag ändert nur der Superadmin."""
+    vg, right = _require(con, a, slug, "edit")
+    if not a.superadmin and status(con, vg["id"])["status"] not in OPEN:
+        raise HTTPException(409, "Der Vertrag ist bereits abgeschlossen.")
+    return vg, right
+
+
 def _tenant_names(con, vg_id):
     return [r[0] for r in con.execute("SELECT name FROM tenant WHERE vg_id = ? ORDER BY name", (vg_id,))]
 
@@ -186,9 +194,7 @@ class ClientData(BaseModel):
 def save_form(slug: str, form: ClientData, a: tenancy.Access = Depends(access)):
     """Angaben des Auftraggebers speichern und den Vertrag dazu erzeugen (Status: ausgefüllt)."""
     with tenancy.central() as con:
-        vg, _ = _require(con, a, slug, "edit")
-        if status(con, vg["id"])["status"] not in OPEN:
-            raise HTTPException(409, "Der Vertrag ist bereits abgeschlossen.")
+        vg, _ = _require_open(con, a, slug)
         data = {key: str(form.client_data.get(key) or "").strip()[:500] for key, _ in CLIENT_FIELDS}
         if not data["client_name"] or not data["client_representative"]:
             raise HTTPException(422, "Bitte mindestens Auftraggeber und vertretungsberechtigte Person angeben.")
@@ -222,7 +228,7 @@ def upload(slug: str, file: UploadFile = File(...), a: tenancy.Access = Depends(
         raise HTTPException(422, "Bitte den unterschriebenen Vertrag als PDF hochladen.")
     checksum = hashlib.sha256(data).hexdigest()
     with tenancy.central() as con:
-        vg, _ = _require(con, a, slug, "edit")
+        vg, _ = _require_open(con, a, slug)
         folder = os.path.join(db.DATA_DIR, "avv", vg["slug"])
         os.makedirs(folder, exist_ok=True)
         name = f"{dt.datetime.now():%Y%m%d-%H%M%S}-{checksum[:12]}.pdf"
@@ -246,7 +252,7 @@ def save_link(slug: str, body: Link, a: tenancy.Access = Depends(access)):
     if link and not re.fullmatch(r"https?://\S+", link):
         raise HTTPException(422, "Bitte einen Link mit http:// oder https:// angeben.")
     with tenancy.central() as con:
-        vg, _ = _require(con, a, slug, "edit")
+        vg, _ = _require_open(con, a, slug)
         _save(con, vg["id"], document_link=link or None)
         event(con, vg["id"], a.email, "Link zur Ablage" if link else "Link entfernt", link)
         return item(con, a, vg)
