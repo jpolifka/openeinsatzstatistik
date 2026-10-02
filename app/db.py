@@ -197,10 +197,44 @@ def _add_fleet_names(con):
                 "GROUP BY v.name ORDER BY COUNT(*) DESC, v.name LIMIT 1), '')")
 
 
+def _add_roles(con):
+    """Rollen und Rechte in die Datenbank (siehe rbac.py): Startbestand aus rbac.SYSTEM_ROLES, Zuordnungen
+    verweisen auf role.id, mehrere Rollen je Person und Bereich; Protokoll nur anhängbar."""
+    from app import rbac    # erst hier, wie legacy
+    con.execute("CREATE TABLE role (id INTEGER PRIMARY KEY, key TEXT NOT NULL, "
+                "vg_id INTEGER REFERENCES vg(id) ON DELETE CASCADE, "
+                "scope TEXT NOT NULL CHECK (scope IN ('vg', 'tenant')), label TEXT NOT NULL, "
+                "description TEXT NOT NULL DEFAULT '', parent_id INTEGER REFERENCES role(id), "
+                "system INTEGER NOT NULL DEFAULT 0, created TEXT NOT NULL DEFAULT (datetime('now', 'localtime')))")
+    con.execute("CREATE UNIQUE INDEX role_key ON role(COALESCE(vg_id, 0), key)")
+    con.execute("CREATE TABLE role_permission (role_id INTEGER NOT NULL REFERENCES role(id) ON DELETE CASCADE, "
+                "permission TEXT NOT NULL, PRIMARY KEY (role_id, permission))")
+    con.execute("CREATE TABLE role_grant (role_id INTEGER NOT NULL REFERENCES role(id) ON DELETE CASCADE, "
+                "grantable_role_id INTEGER NOT NULL REFERENCES role(id) ON DELETE CASCADE, "
+                "PRIMARY KEY (role_id, grantable_role_id))")
+    con.execute("CREATE TABLE role_event (id INTEGER PRIMARY KEY, at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')), "
+                "email TEXT, vg_id INTEGER, tenant_id INTEGER, action TEXT NOT NULL, detail TEXT NOT NULL DEFAULT '')")
+    for change in ("UPDATE", "DELETE"):
+        con.execute(f"CREATE TRIGGER role_event_no_{change.lower()} BEFORE {change} ON role_event "
+                    "BEGIN SELECT RAISE(ABORT, 'Das Rollen-Protokoll wird nur ergänzt.'); END")
+    rbac.seed(con)
+    con.execute("CREATE TABLE membership_new (email TEXT NOT NULL REFERENCES account(email) ON DELETE CASCADE, "
+                "scope TEXT NOT NULL CHECK (scope IN ('vg', 'tenant')), scope_id INTEGER NOT NULL, "
+                "role_id INTEGER NOT NULL REFERENCES role(id), "
+                "created TEXT NOT NULL DEFAULT (datetime('now', 'localtime')), "
+                "PRIMARY KEY (email, scope, scope_id, role_id))")
+    con.execute("INSERT INTO membership_new (email, scope, scope_id, role_id, created) "
+                "SELECT m.email, m.scope, m.scope_id, r.id, m.created FROM membership m "
+                "JOIN role r ON r.key = m.role AND r.vg_id IS NULL AND r.scope = m.scope")
+    con.execute("DROP TABLE membership")
+    con.execute("ALTER TABLE membership_new RENAME TO membership")
+    con.execute("CREATE INDEX membership_scope ON membership(scope, scope_id)")
+
+
 # Neue Schemaänderungen nur hinten anfügen; PRAGMA user_version zählt die erledigten Schritte.
 TENANT_MIGRATIONS = [_create_legacy_schema, _rename_to_english, _add_tenant_tables, _add_bks_ids,
                      _add_pending_reports, _add_fleet_names]
-CENTRAL_MIGRATIONS = [_create_central_schema, _add_dpa, _add_records, _add_notices, _add_fee_schedules]
+CENTRAL_MIGRATIONS = [_create_central_schema, _add_dpa, _add_records, _add_notices, _add_fee_schedules, _add_roles]
 
 
 def migrate(con, steps=TENANT_MIGRATIONS):

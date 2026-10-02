@@ -161,7 +161,7 @@ def test_role_grants_follow_the_rules(world):
     listed = world.get("/api/admin/memberships").json()["memberships"]
     assert {(m["email"], m["editable"]) for m in listed} >= {("lead@example.org", False), ("neu@example.org", True)}
     assert world.delete("/api/admin/memberships", params={"email": "lead@example.org", "scope": "tenant",
-                                                           "slug": "wehr-a1"}).status_code == 403
+                                                           "slug": "wehr-a1", "role": "lead"}).status_code == 403
 
     _as(world, "vglead@example.org")
     assert grant_("lead", "wehr-a2").status_code == 200
@@ -169,15 +169,15 @@ def test_role_grants_follow_the_rules(world):
     assert grant_("lead", "wehr-b1").status_code == 403
     assert grant_("vg_lead", "vg-b", "vg").status_code == 403
     assert grant_("lead", "vg-a", "vg").status_code == 422         # Rolle passt nicht zum Bereich
-    # Der letzte Wehrleiter kann sich nicht selbst entfernen
+    # Eigene Zuordnungen ändert jemand anderes
     response = world.delete("/api/admin/memberships", params={"email": "vglead@example.org", "scope": "vg",
-                                                              "slug": "vg-a"})
+                                                              "slug": "vg-a", "role": "vg_lead"})
     assert response.status_code == 403 and "Superadmin" in response.json()["detail"]
     assert world.delete("/api/admin/memberships", params={"email": "neu@example.org", "scope": "tenant",
-                                                           "slug": "wehr-a1"}).status_code == 200
+                                                           "slug": "wehr-a1", "role": "editor"}).status_code == 200
     assert tenancy.is_allowed("bm@example.org")
     assert world.delete("/api/admin/memberships", params={"email": "neu@example.org", "scope": "tenant",
-                                                           "slug": "wehr-a2"}).status_code == 200
+                                                           "slug": "wehr-a2", "role": "lead"}).status_code == 200
     with tenancy.central() as con:                                   # ohne Zuordnung kein Konto mehr
         assert not con.execute("SELECT 1 FROM account WHERE email = 'neu@example.org'").fetchone()
     assert not tenancy.is_allowed("neu@example.org")

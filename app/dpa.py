@@ -23,7 +23,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 
-from app import auth, db, tenancy
+from app import auth, db, rbac, tenancy
 
 log = logging.getLogger("pdf2einsatz")
 router = APIRouter()
@@ -127,17 +127,12 @@ def _vg(con, slug):
 
 
 def rights(con, a, vg_id):
-    """'edit' (Superadmin, Rollen der VG, Wehrführer einer ihrer Wehren), 'view' (übrige Zugeordnete) oder None."""
+    """'edit' (Recht DPA_EDIT aus einer Rolle der VG oder einer ihrer Wehren, Superadmin), 'view' (DPA_VIEW)
+    oder None – unabhängig von der Sperre, die der fehlende Vertrag auslöst."""
     if a.superadmin:
         return "edit"
-    rows = con.execute(
-        "SELECT m.role FROM membership m LEFT JOIN tenant t ON m.scope = 'tenant' AND t.id = m.scope_id "
-        "WHERE m.email = ? AND ((m.scope = 'vg' AND m.scope_id = ?) OR (m.scope = 'tenant' AND t.vg_id = ?))",
-        (a.email, vg_id, vg_id)).fetchall()
-    roles = {r["role"] for r in rows}
-    if roles & {"vg_lead", "vg_stats", "lead"}:
-        return "edit"
-    return "view" if roles else None
+    granted = rbac.member_permissions(con, a.email, vg_id)
+    return "edit" if rbac.DPA_EDIT in granted else "view" if rbac.DPA_VIEW in granted else None
 
 
 def _require(con, a, slug, needed="view"):

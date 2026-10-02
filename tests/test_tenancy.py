@@ -73,8 +73,12 @@ def test_permissions_add_up_over_roles(data_dir):
     grant("x@example.org", "viewer", a1)
     grant("x@example.org", "vg_stats", vg_id)
     access = tenancy.access_for("x@example.org")
-    assert access.tenants["wehr-a1"].permissions == {"stats"} and access.tenants["wehr-a2"].permissions == {"stats"}
-    grant("x@example.org", "editor", a1)                    # ersetzt die Rolle in derselben Wehr
+    assert access.tenants["wehr-a1"].permissions == {"stats.view", "dpa.view", "dpa.edit"}
+    assert access.tenants["wehr-a2"].permissions == {"stats.view", "dpa.view", "dpa.edit"}
+    assert access.vg_can(vg_id, "vg.overview") and not access.vg_can(vg_id, "vg.records")
+    grant("x@example.org", "editor", a1)                    # zusätzlich zur Rolle Benutzer in derselben Wehr
     access = tenancy.access_for("x@example.org")
-    assert access.tenants["wehr-a1"].permissions == {"stats", "incidents", "people", "write"}
+    assert {"incidents.view", "people.view", "incidents.edit", "stats.view"} <= access.tenants["wehr-a1"].permissions
+    assert "people.view" not in access.tenants["wehr-a2"].permissions
+    assert "vg.overview" not in access.tenants["wehr-a1"].permissions      # reine VG-Rechte nur auf VG-Ebene
     assert not access.superadmin and tenancy.access_for(None).superadmin

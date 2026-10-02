@@ -193,12 +193,12 @@ const HELP_SECTIONS = [
       },
       records: {
         title: "Prüfprotokoll",
-        short: "Abgleich je Einsatz über alle Wehren der VG (nur Wehrleiter).",
+        short: "Abgleich je Einsatz über alle Wehren der VG (Recht „Prüfprotokoll und Kostenersatz“, z. B. Wehrleiter).",
         text: "Für jeden Einsatz mit Stammdatensatz vergleicht das Protokoll die Zeiten der Leitstelle mit den Berichten der Wehren. „Als geprüft markieren“ gilt für den jetzigen Stand: Kommt ein neuer Befund hinzu (z. B. ein geänderter Bericht), ist der Einsatz wieder offen. „Drucken / PDF“ druckt die angezeigten Einsätze mit ihren Befunden.",
       },
       fees: {
         title: "Kostenersatz",
-        short: "Kostenaufstellung nach der Gebührenordnung der VG (nur Wehrleiter).",
+        short: "Kostenaufstellung nach der Gebührenordnung der VG (Recht „Prüfprotokoll und Kostenersatz“, z. B. Wehrleiter).",
         text: "Im Prüfprotokoll rechnet „Kostenersatz berechnen“ einen Einsatz über alle beteiligten Wehren nach der Gebührenordnung (Verwaltung → Gebührenordnung): Fahrzeuge je Stunde vom Ausrücken bis zum Einsatzende des Fahrzeugs, Einsatzkräfte je Person und Stunde von der Alarmierung bis zum Einsatzende (Brandsicherheitswache mit eigenem Satz). Angefangene Stunden werden bis 30 Minuten als halbe, darüber als volle Stunde abgerechnet. Bei einem Fehlalarm einer Brandmeldeanlage gilt höchstens die Pauschale. Auslagen bekommen den Verwaltungszuschlag, Umsatzsteuer nur, wenn sie anfällt. Den Fahrzeugtyp liefert die Bezeichnung in der Fahrzeugliste (z. B. „HLF 20“). Es wird nichts gespeichert.",
       },
       findings: {
@@ -233,7 +233,7 @@ const HELP_SECTIONS = [
   {
     id: "sec_admin",
     title: "Verwaltung",
-    intro: "Nur für Wehrführer, Wehrleiter und Superadmins. Änderungen gelten sofort für alle Benutzer der Wehr.",
+    intro: "Je Bereich mit dem passenden Recht (siehe Rechte), im Startbestand für Wehrführer, Wehrleiter und Superadmins. Änderungen gelten sofort für alle Benutzer der Wehr.",
     entries: {
       admin_colors: {
         title: "Farben",
@@ -273,12 +273,139 @@ const HELP_SECTIONS = [
       dpa: {
         title: "Auftragsverarbeitung (AVV)",
         short: "Vertrag nach Art. 28 DSGVO zwischen VG und Betreiber.",
-        text: "Die Verbandsgemeinde ist als Träger der Feuerwehr für die Daten verantwortlich, der Betreiber der App verarbeitet sie in ihrem Auftrag. Ablauf: Angaben des Auftraggebers ausfüllen → der Vertrag wird aus der Vorlage erzeugt (mit Prüfsumme des Textes) → drucken und unterschreiben lassen → unterschriebenes PDF hochladen und/oder einen Link zur Ablage der VG eintragen → der Betreiber bestätigt. Bis dahin sind die Einsatzdaten der Wehren dieser VG gesperrt. Ausfüllen dürfen Wehrleitung, Statistik VG und Wehrführer; hochgeladene Dateien werden nie überschrieben, alle Schritte werden protokolliert.",
+        text: "Die Verbandsgemeinde ist als Träger der Feuerwehr für die Daten verantwortlich, der Betreiber der App verarbeitet sie in ihrem Auftrag. Ablauf: Angaben des Auftraggebers ausfüllen → der Vertrag wird aus der Vorlage erzeugt (mit Prüfsumme des Textes) → drucken und unterschreiben lassen → unterschriebenes PDF hochladen und/oder einen Link zur Ablage der VG eintragen → der Betreiber bestätigt. Bis dahin sind die Einsatzdaten der Wehren dieser VG gesperrt. Ausfüllen darf, wer das Recht „Auftragsverarbeitung ausfüllen“ hat (im Startbestand Wehrleiter, Statistik VG und Wehrführer); hochgeladene Dateien werden nie überschrieben, alle Schritte werden protokolliert.",
+      },
+      admin_users: {
+        title: "Benutzer",
+        short: "Wer welche Rolle in welcher Wehr bzw. VG hat.",
+        text: "Eine Zuordnung verbindet eine E-Mail-Adresse mit einer Rolle in einer Wehr oder in einer VG (dann gilt sie in allen Wehren der VG). Eine Person kann mehrere Rollen haben; ihre Rechte addieren sich. Vergeben und entziehen darf man nur die Rollen, die die eigene Rolle verteilen darf (siehe Rollen → Verteilung), nur im eigenen Bereich und nie bei sich selbst. <b>Rechte</b> zeigt, was eine Person darf und über welche Rolle. Wer keine Zuordnung mehr hat, ist beim nächsten Aufruf abgemeldet.",
       },
       admin_roles: {
         title: "Rollen",
-        short: "Wer was sehen und ändern darf.",
-        text: "<b>Wehrführer</b>: Einsätze, Anwesenheit und Kameraden der Wehr, Berichte einlesen, Verwaltung der Wehr, vergibt Erfasser und Benutzer. <b>Erfasser</b>: Einsätze, Anwesenheit und Kameraden, Berichte einlesen und bearbeiten. <b>Benutzer</b>: nur die Auswertung, ohne Namen. <b>Wehrleiter</b> (VG): wie Wehrführer für alle Wehren der VG, mit Wehrleitung (Gesamtansicht), vergibt alle Rollen der VG – sieht aber keine Anwesenheit (nur die Anzahl). Die Anwesenheit sehen nur Wehrführer, Erfasser und der Superadmin; diese Rollen kann man sich nicht selbst geben. <b>Statistik VG</b> (z. B. Bürgermeister): nur die Auswertung aller Wehren der VG, ohne Namen. Wer keine Zuordnung mehr hat, ist beim nächsten Aufruf abgemeldet.",
+        short: "Welche Rolle welche Rechte hat – als Übersicht.",
+        text: "Startbestand: <b>Benutzer</b> (nur Auswertung, ohne Namen) → <b>Erfasser</b> (erbt Benutzer; Einsätze, Anwesenheit und Kameraden, Berichte einlesen, bearbeiten) → <b>Wehrführer</b> (erbt Erfasser; Verwaltung der Wehr, vergibt Erfasser und Benutzer). Für die VG: <b>Statistik VG</b> (z. B. Bürgermeister: Auswertung aller Wehren, ohne Namen) → <b>Wehrleiter</b> (erbt Statistik VG; Einsätze und Verwaltung aller Wehren, Prüfprotokoll, Gebührenordnung, vergibt alle Rollen, pflegt eigene Rollen der VG – sieht aber keine Anwesenheit). Der Wehrleiter kann eigene Rollen für seine VG anlegen, der Superadmin Rollen für alle VGs. Die Tabelle zeigt ● eigene und ○ geerbte Rechte.",
+      },
+      admin_role_editor: {
+        title: "Rolle bearbeiten",
+        short: "Bezeichnung, Bereich, Vererbung, Rechte und Verteilung einer Rolle.",
+        text: "<b>Bereich</b>: Rolle einer Wehr oder der VG (gilt dann in allen Wehren der VG); er lässt sich nach dem Anlegen nicht ändern. <b>Gilt in</b>: eigene Rolle einer VG oder (nur Superadmin) in allen VGs. <b>Erbt von</b>: die Rolle bekommt alle Rechte und die Verteilung der gewählten Rolle dazu – Änderungen dort wirken mit. Geerbte Rechte lassen sich nicht abwählen; für weniger Rechte von einer kleineren Rolle erben (z. B. Benutzer statt Erfasser). Ein Recht, das ein anderes voraussetzt, setzt dieses mit. <b>Leitplanken</b>: Anwesenheit und Kameraden gibt es nur für Rollen einer Wehr; Gesamtansicht, Prüfprotokoll, Gebühren und Rollenpflege nur für Rollen der VG. Systemrollen ändert nur der Superadmin, Rollen, die man selbst hat (auch über Vererbung), ändert jemand anderes. Löschen lässt sich eine Rolle erst, wenn sie niemand mehr hat und keine Rolle von ihr erbt. Änderungen gelten sofort.",
+      },
+      admin_role_grants: {
+        title: "Verteilung",
+        short: "Wer diese Rolle vergeben darf – und was Inhaber dieser Rolle vergeben.",
+        text: "Vergeben darf nur, wer das Recht „Rollen vergeben“ hat, und nur die Rollen, die hier freigegeben sind – in der Wehr seiner Rolle bzw. in der VG und ihren Wehren. Beispiel Startbestand: der Wehrführer vergibt Erfasser und Benutzer, der Wehrleiter alle Rollen. Neue Rollen darf zunächst vergeben, wer Rollen der VG pflegt.",
+      },
+      admin_role_events: {
+        title: "Protokoll",
+        short: "Wer wann welche Rolle vergeben, entzogen oder geändert hat.",
+        text: "Jede Vergabe, jeder Entzug und jede Änderung an Rollen wird mit Zeit und Adresse protokolliert. Das Protokoll lässt sich nur ergänzen, nicht ändern. Sichtbar sind die Einträge der Bereiche, deren Zuordnungen man sehen darf.",
+      },
+    },
+  },
+  {
+    id: "sec_permissions",
+    title: "Rechte",
+    intro: "Jede Rolle ist eine Sammlung dieser Rechte. Eine Rolle der VG gilt in allen Wehren der VG; mehrere Rollen addieren sich. Superadmins dürfen alles.",
+    entries: {
+      perm_stats_view: {
+        title: "Auswertung ansehen",
+        short: "Kennzahlen, Diagramme und Bedarfsplan (wenn freigegeben) – ohne Namen.",
+        text: "Kennzahlen, Diagramme und Bedarfsplan (wenn freigegeben) – ohne Namen.",
+      },
+      perm_plan_view: {
+        title: "Bedarfsplan ohne Freigabe sehen",
+        short: "Der Bedarfsplan einer Wehr ist sichtbar, auch solange die Wehr ihn nicht für alle freigegeben hat.",
+        text: "Der Bedarfsplan einer Wehr ist sichtbar, auch solange die Wehr ihn nicht für alle freigegeben hat.",
+      },
+      perm_plan_release: {
+        title: "Bedarfsplan freigeben",
+        short: "Schalter „Bedarfsplan für alle“ in der Auswertung bzw. unter Orte & Bedarfsplan.",
+        text: "Schalter „Bedarfsplan für alle“ in der Auswertung bzw. unter Orte & Bedarfsplan.",
+      },
+      perm_incidents_view: {
+        title: "Einsätze ansehen",
+        short: "Einsatzliste, einzelne Einsätze und Hinweise – ohne Anwesenheit, wenn das Recht dafür fehlt.",
+        text: "Einsatzliste, einzelne Einsätze und Hinweise – ohne Anwesenheit, wenn das Recht dafür fehlt.",
+      },
+      perm_incidents_export: {
+        title: "Excel-Export",
+        short: "Einsatzübersicht als Excel; die Anwesenheit nur mit dem Recht „Anwesenheit und Kameraden sehen“.",
+        text: "Einsatzübersicht als Excel; die Anwesenheit nur mit dem Recht „Anwesenheit und Kameraden sehen“.",
+      },
+      perm_reports_import: {
+        title: "Berichte einlesen",
+        short: "Einsatzberichte (PDF, Excel) einlesen und übernehmen, auch Berichte, die eine andere Wehr weitergegeben hat.",
+        text: "Einsatzberichte (PDF, Excel) einlesen und übernehmen, auch Berichte, die eine andere Wehr weitergegeben hat.",
+      },
+      perm_incidents_edit: {
+        title: "Einsätze bearbeiten",
+        short: "Felder und Fahrzeuge eines Einsatzes ändern, Hinweise erledigen.",
+        text: "Felder und Fahrzeuge eines Einsatzes ändern, Hinweise erledigen.",
+      },
+      perm_incidents_delete: {
+        title: "Einsätze löschen",
+        short: "Einen Einsatz endgültig entfernen.",
+        text: "Einen Einsatz endgültig entfernen.",
+      },
+      perm_people_view: {
+        title: "Anwesenheit und Kameraden sehen",
+        short: "Namen der Kameraden, Anwesenheit je Einsatz und Reiter Kameraden. Nur für Rollen einer Wehr.",
+        text: "Namen der Kameraden, Anwesenheit je Einsatz und Reiter Kameraden. Nur für Rollen einer Wehr.",
+      },
+      perm_people_edit: {
+        title: "Anwesenheit bearbeiten",
+        short: "Anwesenheit eines Einsatzes ändern und Kameraden ergänzen. Nur für Rollen einer Wehr.",
+        text: "Anwesenheit eines Einsatzes ändern und Kameraden ergänzen. Nur für Rollen einer Wehr.",
+      },
+      perm_tenant_settings: {
+        title: "Einstellungen, Farben und Logos",
+        short: "Name, Farben, Logos, Fahrzeuge, BKS-Kennung, Orte und Zeitgrenzen der Wehr.",
+        text: "Name, Farben, Logos, Fahrzeuge, BKS-Kennung, Orte und Zeitgrenzen der Wehr.",
+      },
+      perm_tenant_keywords: {
+        title: "Stichwortkatalog",
+        short: "Stichworte der Wehr ergänzen, ändern, deaktivieren oder einlesen.",
+        text: "Stichworte der Wehr ergänzen, ändern, deaktivieren oder einlesen.",
+      },
+      perm_vg_overview: {
+        title: "Gesamtansicht der VG",
+        short: "Auswahl „Wehrleitung“ oben: Auswertung aller Wehren der VG zusammen. Nur für Rollen der VG.",
+        text: "Auswahl „Wehrleitung“ oben: Auswertung aller Wehren der VG zusammen. Nur für Rollen der VG.",
+      },
+      perm_vg_records: {
+        title: "Prüfprotokoll und Kostenersatz",
+        short: "Abgleich der Berichte aller Wehren je Einsatz und Kostenaufstellung. Nur für Rollen der VG.",
+        text: "Abgleich der Berichte aller Wehren je Einsatz und Kostenaufstellung. Nur für Rollen der VG.",
+      },
+      perm_vg_fees: {
+        title: "Gebührenordnung und Fahrzeuge der VG",
+        short: "Gebührenordnung pflegen und Fahrzeuge zwischen den Wehren der VG zuordnen. Nur für Rollen der VG.",
+        text: "Gebührenordnung pflegen und Fahrzeuge zwischen den Wehren der VG zuordnen. Nur für Rollen der VG.",
+      },
+      perm_dpa_view: {
+        title: "Auftragsverarbeitung ansehen",
+        short: "Stand des AVV der VG ansehen.",
+        text: "Stand des AVV der VG ansehen.",
+      },
+      perm_dpa_edit: {
+        title: "Auftragsverarbeitung ausfüllen",
+        short: "AVV ausfüllen, Vertrag erzeugen und das unterschriebene Dokument ablegen.",
+        text: "AVV ausfüllen, Vertrag erzeugen und das unterschriebene Dokument ablegen.",
+      },
+      perm_users_view: {
+        title: "Zuordnungen sehen",
+        short: "Wer welche Rolle hat, Rechte einer Person und das Protokoll – im eigenen Bereich.",
+        text: "Wer welche Rolle hat, Rechte einer Person und das Protokoll – im eigenen Bereich.",
+      },
+      perm_users_grant: {
+        title: "Rollen vergeben",
+        short: "Rollen vergeben und entziehen, soweit die Verteilung der eigenen Rolle es erlaubt.",
+        text: "Rollen vergeben und entziehen, soweit die Verteilung der eigenen Rolle es erlaubt.",
+      },
+      perm_roles_manage: {
+        title: "Rollen der VG anlegen und ändern",
+        short: "Eigene Rollen der VG anlegen, ändern und löschen. Nur für Rollen der VG.",
+        text: "Eigene Rollen der VG anlegen, ändern und löschen. Nur für Rollen der VG.",
       },
     },
   },

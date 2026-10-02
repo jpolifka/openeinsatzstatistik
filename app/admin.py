@@ -3,9 +3,10 @@
 Verwaltung: Fachkonfiguration, Farben und Logos einer Wehr, Stichwortkatalog, Benutzer und
 (für Superadmins) Verbandsgemeinden und Wehren.
 
-Rechte: die Wehr-Einstellungen brauchen das Recht ADMIN für die Wehr (Wehrführer, Wehrleiter,
-Superadmin). Rollen vergeben darf jeder nur im Rahmen von tenancy.GRANTABLE und nur in seinem
-Bereich; VGs und Wehren anlegen nur der Superadmin.
+Rechte (rbac.py): Einstellungen, Logos und Bedarfsplan-Freigabe brauchen SETTINGS bzw. PLAN_RELEASE,
+der Stichwortkatalog KEYWORDS, Gebührenordnung und Fahrzeuge der VG VG_FEES. Rollen vergibt jeder nur
+nach der Verteilung seiner Rollen und nur in seinem Bereich, nie sich selbst; Rollen der VG pflegt, wer
+ROLES_MANAGE hat, System- und globale Rollen sowie VGs und Wehren nur der Superadmin.
 """
 import csv
 import dataclasses
@@ -22,8 +23,8 @@ import openpyxl
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
-from app import auth, db, domain, fees, store, tenancy, theme
-from app.tenancy import ADMIN, ROLES
+from app import auth, db, domain, fees, rbac, store, tenancy, theme
+from app.rbac import KEYWORDS, PLAN_RELEASE, ROLES_MANAGE, SETTINGS, USERS_VIEW, VG_FEES
 from app.tenant_config import TenantConfig, Vehicle
 
 log = logging.getLogger("pdf2einsatz")
@@ -44,20 +45,33 @@ def _invalid(message):
 
 
 # ---------------------------------------------------------------- Übersicht
+TENANT_ADMIN = (SETTINGS, KEYWORDS, USERS_VIEW)
+VG_ADMIN = (VG_FEES, USERS_VIEW, ROLES_MANAGE)
+
+
+def has_admin(a):
+    """Sieht die Verwaltung: Superadmin oder ein Verwaltungsrecht in einer Wehr bzw. VG."""
+    return a.superadmin or any(t.can(p) for t in a.tenants.values() for p in TENANT_ADMIN) or \
+        any(p in granted for granted in a.vg_permissions.values() for p in VG_ADMIN)
+
+
 @router.get("/api/admin")
 def admin_overview(a: tenancy.Access = Depends(access)):
-    """Was der Benutzer verwalten darf: Wehren mit Verwaltungsrecht, VGs mit Rollenvergabe."""
-    tenants = [t for t in a.tenants.values() if t.can(ADMIN)]
-    if not tenants and not a.superadmin:
+    """Was der Benutzer verwalten darf: Wehren und VGs mit ihren Verwaltungsrechten."""
+    if not has_admin(a):
         raise tenancy.Forbidden("Keine Berechtigung für die Verwaltung.")
+    tenants = [t for t in a.tenants.values() if a.superadmin or any(t.can(p) for p in TENANT_ADMIN)]
     vgs = {}
-    for t in tenants:
-        if _manages_vg(a, t.vg_id):
-            vgs[t.vg_slug] = t.vg_name
+    for t in a.tenants.values():
+        granted = sorted(p for p in VG_ADMIN if a.vg_can(t.vg_id, p))
+        if granted:
+            vgs[t.vg_slug] = {"slug": t.vg_slug, "name": t.vg_name, "permissions": granted}
     return {"superadmin": a.superadmin,
-            "tenants": [{"slug": t.slug, "name": t.name, "vg": t.vg_name, "vg_slug": t.vg_slug} for t in tenants],
-            "vgs": [{"slug": slug, "name": name} for slug, name in vgs.items()],
-            "roles": {role: {"scope": scope, "label": label} for role, (scope, label, _) in ROLES.items()},
+            "tenants": [{"slug": t.slug, "name": t.name, "vg": t.vg_name, "vg_slug": t.vg_slug,
+                         "permissions": sorted(p for p in TENANT_ADMIN if t.can(p))} for t in tenants],
+            "vgs": list(vgs.values()),
+            "users": a.superadmin or any(t.can(USERS_VIEW) for t in a.tenants.values()) or
+            any(USERS_VIEW in granted for granted in a.vg_permissions.values()),
             "assets": theme.ASSETS}
 
 
@@ -153,7 +167,7 @@ def _known_vehicles(tenant, cfg):
 
 @router.get("/api/admin/{slug}/settings")
 def get_settings(slug: str, a: tenancy.Access = Depends(access)):
-    tenant = a.tenant(slug, ADMIN)
+    tenant = a.tenant(slug, SETTINGS)
     return _settings_json(tenant, tenant.config)
 
 
@@ -248,8 +262,10 @@ def _check_settings(s: SettingsIn):
 
 @router.put("/api/admin/{slug}/settings")
 def put_settings(slug: str, s: SettingsIn, a: tenancy.Access = Depends(access)):
-    tenant = a.tenant(slug, ADMIN)
+    tenant = a.tenant(slug, SETTINGS)
     cfg = _check_settings(s)
+    if not tenant.can(PLAN_RELEASE):            # Freigabe des Bedarfsplans ist ein eigenes Recht
+        cfg = dataclasses.replace(cfg, response_plan_public=tenant.config.response_plan_public)
     with tenant.connection() as con:
         tenancy.save_config(con, cfg)
         if cfg.numbering == "by_date":         # beim Umstellen alle Jahre nach Datum durchnummerieren
@@ -271,11 +287,11 @@ class ScheduleIn(BaseModel):
 
 
 def _managed_vg_id(a, vg_slug):
-    """VG, deren Gebührenordnung der Benutzer pflegen darf (Wehrleiter der VG, Superadmin)."""
+    """VG, deren Gebührenordnung und Fahrzeuge der Benutzer pflegen darf (Recht VG_FEES)."""
     with tenancy.central() as con:
         row = con.execute("SELECT id FROM vg WHERE slug = ?", (vg_slug,)).fetchone()
-    if not row or not a.manages_vg(row["id"]):
-        raise tenancy.Forbidden("Fahrzeuge und Gebührenordnung der VG pflegt der Wehrleiter der VG.")
+    if not row or not a.vg_can(row["id"], VG_FEES):
+        raise tenancy.Forbidden("Keine Berechtigung für Fahrzeuge und Gebührenordnung dieser VG.")
     return row["id"]
 
 
@@ -413,7 +429,7 @@ class PlanRelease(BaseModel):
 @router.put("/api/admin/{slug}/response-plan")
 def release_response_plan(slug: str, release: PlanRelease, a: tenancy.Access = Depends(access)):
     """Bedarfsplan für alle Rollen der Wehr freigeben bzw. wieder nur für die Verwaltung zeigen."""
-    tenant = a.tenant(slug, ADMIN)
+    tenant = a.tenant(slug, PLAN_RELEASE)
     with tenant.connection() as con:
         con.execute("INSERT INTO setting (key, value) VALUES ('response_plan_public', ?) "
                     "ON CONFLICT(key) DO UPDATE SET value = excluded.value", ("true" if release.public else "false",))
@@ -456,7 +472,7 @@ def parse_test(t: ParseTest, a: tenancy.Access = Depends(access)):
 # ---------------------------------------------------------------- Logos
 @router.put("/api/admin/{slug}/assets/{name}")
 def put_asset(slug: str, name: str, file: UploadFile = File(...), a: tenancy.Access = Depends(access)):
-    tenant = a.tenant(slug, ADMIN)
+    tenant = a.tenant(slug, SETTINGS)
     if name not in theme.ASSETS:
         raise HTTPException(404, "Unbekanntes Logo.")
     data = file.file.read(theme.MAX_ASSET_BYTES + 1)
@@ -474,7 +490,7 @@ def put_asset(slug: str, name: str, file: UploadFile = File(...), a: tenancy.Acc
 
 @router.delete("/api/admin/{slug}/assets/{name}")
 def delete_asset(slug: str, name: str, a: tenancy.Access = Depends(access)):
-    with a.tenant(slug, ADMIN).connection() as con:
+    with a.tenant(slug, SETTINGS).connection() as con:
         con.execute("DELETE FROM asset WHERE name = ?", (name,))
     return {"ok": True}
 
@@ -503,12 +519,12 @@ def _changed_keywords(tenant, change):
 
 @router.get("/api/admin/{slug}/keywords")
 def get_keywords(slug: str, a: tenancy.Access = Depends(access)):
-    return _keywords_json(a.tenant(slug, ADMIN))
+    return _keywords_json(a.tenant(slug, KEYWORDS))
 
 
 @router.put("/api/admin/{slug}/keywords/{code}")
 def put_keyword(slug: str, code: str, k: KeywordIn, a: tenancy.Access = Depends(access)):
-    tenant = a.tenant(slug, ADMIN)
+    tenant = a.tenant(slug, KEYWORDS)
     code = code.strip().upper()
     if not KEYWORD_CODE.fullmatch(code):
         _invalid(f"Stichwort „{code}“: bitte wie B2 oder B2.07 angeben.")
@@ -518,7 +534,7 @@ def put_keyword(slug: str, code: str, k: KeywordIn, a: tenancy.Access = Depends(
 
 @router.delete("/api/admin/{slug}/keywords/{code}")
 def delete_keyword(slug: str, code: str, a: tenancy.Access = Depends(access)):
-    tenant = a.tenant(slug, ADMIN)
+    tenant = a.tenant(slug, KEYWORDS)
     _changed_keywords(tenant, lambda con: tenancy.delete_keyword(con, code))
     return _keywords_json(tenant)
 
@@ -526,7 +542,7 @@ def delete_keyword(slug: str, code: str, a: tenancy.Access = Depends(access)):
 @router.post("/api/admin/{slug}/keywords/template")
 def keywords_from_template(slug: str, a: tenancy.Access = Depends(access)):
     """Fehlende Stichworte der Vorlage ergänzen."""
-    tenant = a.tenant(slug, ADMIN)
+    tenant = a.tenant(slug, KEYWORDS)
     _changed_keywords(tenant, tenancy.add_template_keywords)
     return _keywords_json(tenant)
 
@@ -534,7 +550,7 @@ def keywords_from_template(slug: str, a: tenancy.Access = Depends(access)):
 @router.delete("/api/admin/{slug}/keywords")
 def reset_keywords(slug: str, a: tenancy.Access = Depends(access)):
     """Eigenen Katalog verwerfen, wieder die Vorlage verwenden."""
-    tenant = a.tenant(slug, ADMIN)
+    tenant = a.tenant(slug, KEYWORDS)
     _changed_keywords(tenant, lambda con: tenancy.replace_keywords(con, []))
     return _keywords_json(tenant)
 
@@ -572,7 +588,7 @@ def read_keyword_file(filename, data):
 def import_keywords(slug: str, mode: str = "preview", file: UploadFile = File(...),
                     a: tenancy.Access = Depends(access)):
     """Katalog aus CSV/XLSX: mode=preview zeigt die Änderungen, merge ergänzt/ändert, replace ersetzt."""
-    tenant = a.tenant(slug, ADMIN)
+    tenant = a.tenant(slug, KEYWORDS)
     data = file.file.read(MAX_KEYWORD_FILE + 1)
     if len(data) > MAX_KEYWORD_FILE:
         _invalid("Die Datei ist größer als 2 MB.")
@@ -607,108 +623,307 @@ def import_keywords(slug: str, mode: str = "preview", file: UploadFile = File(..
 
 
 # ---------------------------------------------------------------- Benutzer und Rollen
-def _manages_vg(a, vg_id):
-    """Superadmin oder Wehrleiter dieser VG."""
-    return a.manages_vg(vg_id)
-
-
-def _grantable(a, scope, scope_id, vg_id):
-    """Rollen, die der Benutzer in diesem Bereich vergeben und entziehen darf."""
-    if _manages_vg(a, vg_id):
-        return {role for role, (s, _, _) in ROLES.items() if s == scope}
-    if scope == "tenant" and any(r["role"] == "lead" and r["scope"] == "tenant" and r["scope_id"] == scope_id
-                                 for r in a.roles):
-        return tenancy.GRANTABLE["lead"]
-    return set()
-
-
 def _scope_row(con, scope, slug):
     """(scope_id, vg_id, name) eines Bereichs; 404, wenn es ihn nicht gibt."""
     if scope == "tenant":
         row = con.execute("SELECT id, vg_id, name FROM tenant WHERE slug = ?", (slug,)).fetchone()
-    else:
+    elif scope == "vg":
         row = con.execute("SELECT id, id AS vg_id, name FROM vg WHERE slug = ?", (slug,)).fetchone()
+    else:
+        row = None
     if not row:
         raise HTTPException(404, "Wehr bzw. VG nicht gefunden.")
     return row["id"], row["vg_id"], row["name"]
 
 
+def _sees_users(a, scope, scope_id, vg_id):
+    """Darf die Zuordnungen dieses Bereichs sehen: Superadmin, USERS_VIEW in der VG oder in dieser Wehr."""
+    if a.vg_can(vg_id, USERS_VIEW):
+        return True
+    return scope == "tenant" and any(t.id == scope_id and t.can(USERS_VIEW) for t in a.tenants.values())
+
+
+def _not_self(a, email):
+    if email == a.email and not a.superadmin:
+        raise tenancy.Forbidden("Eigene Zuordnungen ändert jemand anderes (Wehrleiter oder Superadmin) – "
+                                "nicht man selbst.")
+
+
+def _areas(con):
+    """Alle Bereiche zum Vergeben: VGs, dann ihre aktiven Wehren -> [(scope, id, vg_id, slug, Bezeichnung)]."""
+    result = []
+    for v in con.execute("SELECT id, slug, name FROM vg ORDER BY name").fetchall():
+        result.append(("vg", v["id"], v["id"], v["slug"], f"{v['name']} (alle Wehren)"))
+        result += [("tenant", t["id"], v["id"], t["slug"], t["name"]) for t in con.execute(
+            "SELECT id, slug, name FROM tenant WHERE vg_id = ? AND active ORDER BY name", (v["id"],))]
+    return result
+
+
 @router.get("/api/admin/memberships")
 def get_memberships(a: tenancy.Access = Depends(access)):
-    """Zuordnungen in allen Bereichen, in denen der Benutzer Rollen vergeben darf."""
+    """Zuordnungen in allen Bereichen, die der Benutzer sehen oder vergeben darf, und je Bereich die
+    Rollen, die er dort vergeben darf."""
     with tenancy.central() as con:
+        roles = rbac.Roles(con)
         rows = con.execute(
-            "SELECT m.email, m.scope, m.role, m.scope_id, COALESCE(t.slug, v.slug) AS slug, "
+            "SELECT m.email, m.scope, m.scope_id, m.role_id, COALESCE(t.slug, v.slug) AS slug, "
             "COALESCE(t.name, v.name) AS name, COALESCE(t.vg_id, v.id) AS vg_id, a.last_login "
             "FROM membership m JOIN account a ON a.email = m.email "
             "LEFT JOIN tenant t ON m.scope = 'tenant' AND t.id = m.scope_id "
             "LEFT JOIN vg v ON m.scope = 'vg' AND v.id = m.scope_id ORDER BY name, m.email").fetchall()
+        areas = _areas(con)
+    grantable = {}
+
+    def granted(scope, scope_id, vg_id):
+        if (scope, scope_id) not in grantable:
+            grantable[scope, scope_id] = a.grantable(roles, scope, scope_id, vg_id)
+        return grantable[scope, scope_id]
+
     result = []
     for r in rows:
-        grantable = _grantable(a, r["scope"], r["scope_id"], r["vg_id"])
-        if grantable or (r["scope"] == "tenant" and r["slug"] in a.tenants and a.tenants[r["slug"]].can(ADMIN)):
+        role = roles.get(r["role_id"])
+        allowed = granted(r["scope"], r["scope_id"], r["vg_id"])
+        if role and (allowed or _sees_users(a, r["scope"], r["scope_id"], r["vg_id"])):
             result.append({"email": r["email"], "scope": r["scope"], "slug": r["slug"], "name": r["name"],
-                           "role": r["role"], "label": ROLES.get(r["role"], ("", r["role"]))[1],
-                           "last_login": r["last_login"], "editable": r["role"] in grantable})
-    return {"memberships": result}
+                           "role": role.key, "label": role.label, "last_login": r["last_login"],
+                           "editable": role.id in allowed and (r["email"] != a.email or a.superadmin)})
+    scopes = []
+    for scope, scope_id, vg_id, slug, label in areas:
+        ids = granted(scope, scope_id, vg_id)
+        if ids:
+            scopes.append({"key": f"{scope}:{slug}", "label": label,
+                           "roles": [{"key": r.key, "label": r.label} for r in roles.visible(vg_id) if r.id in ids]})
+    return {"memberships": result, "scopes": scopes}
 
 
 class MembershipIn(BaseModel):
     email: str
     scope: str            # 'tenant' oder 'vg'
     slug: str
-    role: str
+    role: str             # Schlüssel der Rolle
 
 
 @router.post("/api/admin/memberships")
 def grant_membership(m: MembershipIn, a: tenancy.Access = Depends(access)):
+    """Rolle zuordnen (zusätzlich zu vorhandenen Rollen im selben Bereich)."""
     email = tenancy.normalize_email(m.email)
     if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
         _invalid("Bitte eine gültige E-Mail-Adresse angeben.")
-    if m.role not in ROLES or ROLES[m.role][0] != m.scope:
-        _invalid("Diese Rolle passt nicht zum Bereich.")
     with tenancy.central() as con:
-        scope_id, vg_id, _ = _scope_row(con, m.scope, m.slug)
-        existing = con.execute("SELECT role FROM membership WHERE email = ? AND scope = ? AND scope_id = ?",
-                               (email, m.scope, scope_id)).fetchone()
-        grantable = _grantable(a, m.scope, scope_id, vg_id)
-        if m.role not in grantable or (existing and existing["role"] not in grantable):
+        scope_id, vg_id, name = _scope_row(con, m.scope, m.slug)
+        roles = rbac.Roles(con)
+        role = roles.find(m.role, vg_id)
+        if not role or role.scope != m.scope:
+            _invalid("Diese Rolle passt nicht zum Bereich.")
+        _not_self(a, email)
+        if role.id not in a.grantable(roles, m.scope, scope_id, vg_id):
             raise tenancy.Forbidden("Diese Rolle darfst du hier nicht vergeben.")
-        if email == a.email and not a.superadmin and tenancy.PEOPLE in ROLES[m.role][2]:
-            raise tenancy.Forbidden("Rollen mit Zugriff auf die Anwesenheit vergibt jemand anderes – nicht man selbst.")
-        if existing and existing["role"] == "vg_lead" and m.role != "vg_lead":
-            _check_last_vg_lead(con, a, scope_id, email)
-        tenancy.grant(con, email, m.role, scope_id)
-    log.info("Rolle %s für %s in %s %s vergeben durch %s", m.role, email, m.scope, m.slug, a.email or "lokal")
+        tenancy.add_account(con, email)
+        con.execute("INSERT OR IGNORE INTO membership (email, scope, scope_id, role_id) VALUES (?, ?, ?, ?)",
+                    (email, m.scope, scope_id, role.id))
+        rbac.log(con, a.email, "Rolle vergeben", f"{role.label} für {email} in {name}", vg_id,
+                 scope_id if m.scope == "tenant" else None)
+    log.info("Rolle %s für %s in %s %s vergeben durch %s", role.key, email, m.scope, m.slug, a.email or "lokal")
     return get_memberships(a)
-
-
-def _check_last_vg_lead(con, a, vg_id, email):
-    """Den letzten Wehrleiter einer VG entfernt nur der Superadmin."""
-    others = con.execute("SELECT COUNT(*) FROM membership WHERE scope = 'vg' AND scope_id = ? AND role = 'vg_lead' "
-                         "AND email != ?", (vg_id, email)).fetchone()[0]
-    if not others and not a.superadmin:
-        raise tenancy.Forbidden("Der letzte Wehrleiter einer VG kann nur vom Superadmin entfernt werden.")
 
 
 @router.delete("/api/admin/memberships")
-def revoke_membership(email: str, scope: str, slug: str, a: tenancy.Access = Depends(access)):
+def revoke_membership(email: str, scope: str, slug: str, role: str, a: tenancy.Access = Depends(access)):
     email = tenancy.normalize_email(email)
     with tenancy.central() as con:
-        scope_id, vg_id, _ = _scope_row(con, scope, slug)
-        row = con.execute("SELECT role FROM membership WHERE email = ? AND scope = ? AND scope_id = ?",
-                          (email, scope, scope_id)).fetchone()
-        if not row:
+        scope_id, vg_id, name = _scope_row(con, scope, slug)
+        roles = rbac.Roles(con)
+        found = roles.find(role, vg_id)
+        if not found or not con.execute("SELECT 1 FROM membership WHERE email = ? AND scope = ? AND scope_id = ? "
+                                        "AND role_id = ?", (email, scope, scope_id, found.id)).fetchone():
             raise HTTPException(404, "Zuordnung nicht gefunden.")
-        if row["role"] not in _grantable(a, scope, scope_id, vg_id):
+        _not_self(a, email)
+        if found.id not in a.grantable(roles, scope, scope_id, vg_id):
             raise tenancy.Forbidden("Diese Rolle darfst du hier nicht entziehen.")
-        if row["role"] == "vg_lead":
-            _check_last_vg_lead(con, a, scope_id, email)
-        con.execute("DELETE FROM membership WHERE email = ? AND scope = ? AND scope_id = ?", (email, scope, scope_id))
+        con.execute("DELETE FROM membership WHERE email = ? AND scope = ? AND scope_id = ? AND role_id = ?",
+                    (email, scope, scope_id, found.id))
         con.execute("DELETE FROM account WHERE email = ? AND NOT EXISTS (SELECT 1 FROM membership WHERE email = ?)",
                     (email, email))
-    log.info("Rolle %s für %s in %s %s entzogen durch %s", row["role"], email, scope, slug, a.email or "lokal")
+        rbac.log(con, a.email, "Rolle entzogen", f"{found.label} für {email} in {name}", vg_id,
+                 scope_id if scope == "tenant" else None)
+    log.info("Rolle %s für %s in %s %s entzogen durch %s", found.key, email, scope, slug, a.email or "lokal")
     return get_memberships(a)
+
+
+@router.get("/api/admin/users/effective")
+def effective_permissions(email: str, a: tenancy.Access = Depends(access)):
+    """Was eine Person darf: je VG bzw. Wehr ihre Rechte mit Herkunft (Rolle und Bereich) – nur in Bereichen,
+    deren Zuordnungen der Benutzer sehen darf."""
+    email = tenancy.normalize_email(email)
+    with tenancy.central() as con:
+        roles = rbac.Roles(con)
+        rows = con.execute(
+            "SELECT m.scope, m.scope_id, m.role_id, COALESCE(t.name, v.name) AS name, COALESCE(t.vg_id, v.id) AS vg_id "
+            "FROM membership m LEFT JOIN tenant t ON m.scope = 'tenant' AND t.id = m.scope_id "
+            "LEFT JOIN vg v ON m.scope = 'vg' AND v.id = m.scope_id WHERE m.email = ?", (email,)).fetchall()
+        areas = _areas(con)
+    result = []
+    for scope, scope_id, vg_id, _, label in areas:
+        if not _sees_users(a, scope, scope_id, vg_id):
+            continue
+        sources = [m for m in rows if (m["scope"] == scope and m["scope_id"] == scope_id) or
+                   (scope == "tenant" and m["scope"] == "vg" and m["scope_id"] == vg_id)]
+        origins = {}
+        for m in sources:
+            for p in roles.permissions(m["role_id"]):
+                if scope in rbac.PERMISSIONS[p].scopes:
+                    origins.setdefault(p, []).append(f"{roles.get(m['role_id']).label} ({m['name']})")
+        if origins:
+            result.append({"scope": scope, "name": label,
+                           "permissions": [{"key": key, "label": p.label, "group": p.group, "from": origins[key]}
+                                           for key, p in rbac.PERMISSIONS.items() if key in origins]})
+    return {"email": email, "superadmin": email in tenancy.ADMIN_EMAILS, "areas": result}
+
+
+@router.get("/api/admin/role-events")
+def role_events(a: tenancy.Access = Depends(access)):
+    """Protokoll der Vergaben und Rollenänderungen in den Bereichen, die der Benutzer sehen darf."""
+    with tenancy.central() as con:
+        rows = con.execute("SELECT e.at, e.email, e.action, e.detail, e.vg_id, e.tenant_id FROM role_event e "
+                           "ORDER BY e.id DESC LIMIT 1000").fetchall()
+    events = [{key: r[key] for key in ("at", "email", "action", "detail")} for r in rows
+              if a.superadmin or (r["vg_id"] is not None and _sees_users(
+                  a, "tenant" if r["tenant_id"] else "vg", r["tenant_id"] or r["vg_id"], r["vg_id"]))]
+    return {"events": events[:200]}
+
+
+# ---------------------------------------------------------------- Rollen
+def _held(a, roles):
+    """Eigene Rollen samt Vorfahren – die ändert man nicht selbst."""
+    return set().union(*(roles.chain(r["role_id"]) for r in a.roles)) if a.roles else set()
+
+
+def _may_edit(a, role, roles):
+    if a.superadmin:
+        return True
+    return role.vg_id is not None and a.vg_can(role.vg_id, ROLES_MANAGE) and role.id not in _held(a, roles)
+
+
+def _role_vgs(a, con):
+    """VGs, deren Rollen der Benutzer sieht -> {id: {slug, name, manage}}."""
+    result = {}
+    for v in con.execute("SELECT id, slug, name FROM vg ORDER BY name"):
+        sees = a.superadmin or a.vg_can(v["id"], USERS_VIEW) or \
+            any(t.vg_id == v["id"] and t.can(USERS_VIEW) for t in a.tenants.values())
+        if sees:
+            result[v["id"]] = {"slug": v["slug"], "name": v["name"], "manage": a.vg_can(v["id"], ROLES_MANAGE)}
+    return result
+
+
+@router.get("/api/admin/roles")
+def get_roles(a: tenancy.Access = Depends(access)):
+    """Rechtekatalog und Rollen (System-, globale und eigene Rollen der sichtbaren VGs) mit Vererbung und Verteilung."""
+    with tenancy.central() as con:
+        roles = rbac.Roles(con)
+        vgs = _role_vgs(a, con)
+        members = dict(con.execute("SELECT role_id, COUNT(*) FROM membership GROUP BY role_id").fetchall())
+    if not vgs and not a.superadmin:
+        raise tenancy.Forbidden("Keine Berechtigung für die Rollen.")
+    listed = [r for r in roles if r.vg_id is None or r.vg_id in vgs]
+    ids = {r.id for r in listed}
+
+    def role_json(r):
+        editable = _may_edit(a, r, roles)
+        children = any(x.parent_id == r.id for x in roles)
+        return {"id": r.id, "key": r.key, "label": r.label, "description": r.description, "scope": r.scope,
+                "vg": vgs[r.vg_id]["slug"] if r.vg_id else None, "parent": r.parent_id, "system": r.system,
+                "permissions": sorted(r.own), "effective": sorted(roles.permissions(r.id)),
+                "grants": sorted(r.own_grants & ids),
+                "granted_by": sorted(x.id for x in listed if r.id in x.own_grants),
+                "members": members.get(r.id, 0), "editable": editable,
+                "deletable": editable and not r.system and not members.get(r.id) and not children}
+
+    return {"permissions": [{"key": p.key, "group": p.group, "label": p.label, "scopes": list(p.scopes),
+                             "requires": list(p.requires)} for p in rbac.PERMISSIONS.values()],
+            "scopes": rbac.SCOPES, "superadmin": a.superadmin,
+            "vgs": [{"slug": v["slug"], "name": v["name"], "manage": v["manage"]} for v in vgs.values()],
+            "roles": [role_json(r) for r in listed]}
+
+
+class RoleIn(BaseModel):
+    label: str
+    description: str = Field("", max_length=300)
+    scope: str = "tenant"
+    vg: Optional[str] = None          # Slug der VG; leer = für alle VGs (nur Superadmin)
+    parent: Optional[int] = None
+    permissions: List[str] = []
+    granted_by: List[int] = []        # Rollen, die diese Rolle vergeben dürfen
+    grants: List[int] = []            # Rollen, die Inhaber dieser Rolle vergeben dürfen
+
+
+def _role_summary(r: RoleIn):
+    labels = [rbac.PERMISSIONS[p].label for p in rbac.PERMISSIONS if p in r.permissions]
+    return f"{r.label.strip()}: {', '.join(labels) or 'keine eigenen Rechte'}"
+
+
+@router.post("/api/admin/roles")
+def create_role(r: RoleIn, a: tenancy.Access = Depends(access)):
+    with tenancy.central() as con:
+        vg_id = None
+        if r.vg:
+            row = con.execute("SELECT id FROM vg WHERE slug = ?", (r.vg,)).fetchone()
+            if not row:
+                raise HTTPException(404, "Verbandsgemeinde nicht gefunden.")
+            vg_id = row["id"]
+        if vg_id is None and not a.superadmin:
+            raise tenancy.Forbidden("Rollen für alle VGs legt nur der Superadmin an.")
+        if vg_id is not None and not a.vg_can(vg_id, ROLES_MANAGE):
+            raise tenancy.Forbidden("Keine Berechtigung, Rollen dieser VG anzulegen.")
+        try:
+            rbac.save_role(con, rbac.Roles(con), None, vg_id=vg_id, scope=r.scope, label=r.label,
+                           description=r.description, parent_id=r.parent, permissions=r.permissions,
+                           granted_by=r.granted_by, grants=r.grants)
+        except rbac.Invalid as e:
+            _invalid(str(e))
+        rbac.log(con, a.email, "Rolle angelegt", _role_summary(r), vg_id)
+    log.info("Rolle %s angelegt durch %s", r.label, a.email or "lokal")
+    return get_roles(a)
+
+
+def _editable_role(con, a, role_id):
+    roles = rbac.Roles(con)
+    role = roles.get(role_id)
+    if not role:
+        raise HTTPException(404, "Rolle nicht gefunden.")
+    if not _may_edit(a, role, roles):
+        if role.id in _held(a, roles):
+            raise tenancy.Forbidden("Rollen, die du selbst hast (auch über Vererbung), ändert jemand anderes.")
+        raise tenancy.Forbidden("Diese Rolle darfst du nicht ändern.")
+    return roles, role
+
+
+@router.put("/api/admin/roles/{role_id}")
+def change_role(role_id: int, r: RoleIn, a: tenancy.Access = Depends(access)):
+    """Rolle ändern; Bereich und VG bleiben."""
+    with tenancy.central() as con:
+        roles, role = _editable_role(con, a, role_id)
+        try:
+            rbac.save_role(con, roles, role.id, vg_id=role.vg_id, scope=role.scope, label=r.label,
+                           description=r.description, parent_id=r.parent, permissions=r.permissions,
+                           granted_by=r.granted_by, grants=r.grants)
+        except rbac.Invalid as e:
+            _invalid(str(e))
+        rbac.log(con, a.email, "Rolle geändert", _role_summary(r), role.vg_id)
+    log.info("Rolle %s geändert durch %s", role.key, a.email or "lokal")
+    return get_roles(a)
+
+
+@router.delete("/api/admin/roles/{role_id}")
+def delete_role(role_id: int, a: tenancy.Access = Depends(access)):
+    with tenancy.central() as con:
+        roles, role = _editable_role(con, a, role_id)
+        try:
+            rbac.delete_role(con, roles, role.id)
+        except rbac.Invalid as e:
+            _invalid(str(e))
+        rbac.log(con, a.email, "Rolle gelöscht", role.label, role.vg_id)
+    log.info("Rolle %s gelöscht durch %s", role.key, a.email or "lokal")
+    return get_roles(a)
 
 
 # ---------------------------------------------------------------- Superadmin: VGs und Wehren

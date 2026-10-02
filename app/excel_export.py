@@ -207,7 +207,7 @@ def _write_instructions(ws, sheet, last_member_column):
         f"2. Blatt '{ATTENDANCE_SHEET}': Spalten {get_column_letter(ATTENDANCE_FIRST_COLUMN)} bis "
         f"{get_column_letter(last_member_column)} der gleichen Zeilen kopieren und im Blatt Anwesenheit ab Spalte "
         f"{get_column_letter(ATTENDANCE_FIRST_COLUMN)} einfügen (Rechtsklick > Einfügeoptionen > Werte)."
-        if last_member_column else "2. Die Anwesenheit ist nur im Export für Wehrführer und Erfasser enthalten.",
+        if last_member_column else "2. Die Anwesenheit ist nur im Export für Rollen mit Recht auf die Anwesenheit enthalten.",
         f"3. Spalte 'Prüfhinweise' ({get_column_letter(sheet.warnings_column)}) beachten – gelb markierte Zeilen bitte "
         "kontrollieren.",
         "",

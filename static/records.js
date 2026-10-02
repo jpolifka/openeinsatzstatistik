@@ -9,7 +9,7 @@ const records = { notices: [], showNotices: true, data: null, onlyOpen: true, ex
 const feeCalc = { record: null, request: null, result: null, error: "" };
 
 VIEWS.records = { label: "Prüfprotokoll", load: loadRecords, render: renderRecords, help: "records",
-  visible: () => Boolean(config.vg && config.manages_vg) };
+  visible: () => Boolean(config.vg && config.vg_permissions.includes("vg.records")) };
 
 const NOTICE_KINDS = { import: "Eingelesen", deviation: "Abweichung", missing: "Bericht fehlt", pending: "Zur Übernahme" };
 const FINDING_KINDS = { vehicle: "Abweichung", keyword: "Stichwort", missing: "Bericht fehlt", unedited: "unbearbeitet",
@@ -17,7 +17,7 @@ const FINDING_KINDS = { vehicle: "Abweichung", keyword: "Stichwort", missing: "B
 
 // ------------------------------------------------------------ Hinweise
 async function loadNotices() {
-  if (!config.tenants.length || !can("incidents")) return;
+  if (!config.tenants.length || !can("incidents.view")) return;
   try {
     records.notices = (await api("/api/notices")).notices;
   } catch (e) {

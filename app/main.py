@@ -28,8 +28,8 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Stre
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, create_model
 
-from app import admin, auth, db, domain, dpa, feedback, fees, mail, excel_export, legacy, metrics, pdf_report, records, report, store, tenancy, tenant_config, theme
-from app.tenancy import ADMIN, INCIDENTS, PEOPLE, STATS, WRITE
+from app import admin, auth, db, domain, dpa, feedback, fees, mail, excel_export, legacy, metrics, pdf_report, rbac, records, report, store, tenancy, tenant_config, theme
+from app.rbac import DELETE, EXPORT, IMPORT, INCIDENTS, PEOPLE, PEOPLE_EDIT, PLAN_VIEW, STATS, VG_RECORDS, WRITE
 from app.timeutil import year_of
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -166,7 +166,7 @@ def parse_incident_key(key):
 def incident_json(incident, leaders, tenant, limit=None, cfg=None):
     """Einsatz mit Kennzahlen für die Oberfläche. leaders: store.LeaderNames für die EHF-Auswahl.
     cfg: abweichende Konfiguration (Vorschau mit neu entdeckten Fahrzeugen), sonst die der Wehr.
-    Die Anwesenheit (Namen) nur mit Recht PEOPLE; sonst nur ihre Anzahl."""
+    Die Anwesenheit (Namen) nur mit Recht rbac.PEOPLE; sonst nur ihre Anzahl."""
     cfg = cfg or tenant.config
     m = metrics.incident_metrics(incident, cfg, limit)
     vehicles = []
@@ -194,6 +194,9 @@ def incident_json(incident, leaders, tenant, limit=None, cfg=None):
         if tenant.can(PEOPLE) else [],
         "people_count": len(incident["people"]),
         "people_visible": tenant.can(PEOPLE),
+        "people_editable": tenant.can(PEOPLE_EDIT),
+        "can_edit": tenant.can(WRITE),
+        "can_delete": tenant.can(DELETE),
     }
 
 
@@ -262,8 +265,15 @@ def api_config(a: tenancy.Access = Depends(access)):
             "tenant": a.selected.json() if a.selected else None, "tenants": [t.json() for t in tenants],
             "branding": _branding(a.selected), "dpa_blocked": a.blocked,
             "feedback": feedback.enabled() and bool(a.email),
-            "manages_vg": bool(a.vg and tenants and a.manages_vg(tenants[0].vg_id)),
+            "vg_permissions": sorted(_vg_permissions(a, tenants)), "admin": admin.has_admin(a),
             "permissions": sorted(set().union(*(t.permissions for t in tenants))), "scopes": a.scopes()}
+
+
+def _vg_permissions(a, tenants):
+    """Rechte auf Ebene der VG für die Gesamtansicht (Prüfprotokoll usw.); bei einer Wehr keine."""
+    if not a.vg or not tenants:
+        return set()
+    return set(rbac.ALL_PERMISSIONS) if a.superadmin else set(a.vg_permissions.get(tenants[0].vg_id, ()))
 
 
 class Scope(BaseModel):
@@ -330,8 +340,8 @@ PLAN_KEYS = ("plan_count", "on_time", "rate", "arrival_min")
 
 
 def _plan_visible(tenant):
-    """Bedarfsplan einer Wehr: freigegeben oder für Rollen mit Verwaltungsrecht."""
-    return tenant.config.response_plan_public or tenant.can(ADMIN)
+    """Bedarfsplan einer Wehr: freigegeben oder mit Recht PLAN_VIEW."""
+    return tenant.config.response_plan_public or tenant.can(PLAN_VIEW)
 
 
 def _without_plan(row, visible=False):
@@ -359,7 +369,7 @@ def api_evaluation(year: Optional[int] = None, limit: Optional[int] = None, tena
     previous = [i for _, _, prev in parts for i in prev]
     previous_evaluated = [e for t, _, prev in parts for e in metrics.evaluate(prev, t.config, limit)]
     single = len(selection) == 1 and not a.vg
-    # Bedarfsplan nur aus Wehren, für die er sichtbar ist (Freigabe oder Verwaltungsrecht)
+    # Bedarfsplan nur aus Wehren, für die er sichtbar ist (Freigabe oder Recht PLAN_VIEW)
     plan_parts = [(t, evaluated, prev) for t, evaluated, prev in parts if _plan_visible(t)]
     plan_cfg = _selection_config([t for t, _, _ in plan_parts], a) if plan_parts else None
     plan_current = [e for _, evaluated, _ in plan_parts for e in evaluated]
@@ -432,8 +442,8 @@ def api_update_incident(key: str, update: IncidentUpdate, a: tenancy.Access = De
     by_date = tenant.config.numbering == "by_date"
     if by_date:
         changes.pop("number", None)          # ergibt sich aus dem Beginn
-    if people is not None and not tenant.can(PEOPLE):
-        raise tenancy.Forbidden("Die Anwesenheit bearbeiten nur Wehrführer und Erfasser der Wehr.")
+    if people is not None and not tenant.can(PEOPLE_EDIT):
+        raise tenancy.Forbidden("Keine Berechtigung, die Anwesenheit zu bearbeiten.")
     if vehicles is not None and any(v["call_sign"] not in tenant.config.vehicles for v in vehicles):
         raise HTTPException(422, "Unbekanntes Fahrzeug – Fahrzeuge der Wehr in der Verwaltung pflegen.")
     with tenant.connection() as con:
@@ -466,7 +476,7 @@ def api_members(tenant: str, a: tenancy.Access = Depends(access)):
 @app.delete("/api/incidents/{key}")
 def api_delete_incident(key: str, a: tenancy.Access = Depends(access)):
     slug, incident_id = parse_incident_key(key)
-    tenant = a.tenant(slug, WRITE)
+    tenant = a.tenant(slug, DELETE)
     with tenant.connection() as con:
         year = (store.load_incident(con, incident_id) or {}).get("year")
         store.delete_incident(con, incident_id)
@@ -694,7 +704,7 @@ def _preview_json(r, tenant, a):
 def api_read_reports(pdfs: List[UploadFile] = File(...), a: tenancy.Access = Depends(access)):
     """Berichte lesen – für die ausgewählte Wehr oder, in der Gesamtansicht, verteilt auf die passende
     Wehr der VG (nur Wehren mit Schreibrecht)."""
-    tenants = a.selection_with(WRITE) if a.vg else [a.current(WRITE)]
+    tenants = a.selection_with(IMPORT) if a.vg else [a.current(IMPORT)]
     pdfs = [p for p in pdfs if _is_upload(p.filename)]
     if not pdfs:
         raise HTTPException(400, "Bitte eine PDF-, Excel- oder ZIP-Datei (Einsatzberichte aus dem BKS-Portal) auswählen.")
@@ -716,7 +726,7 @@ def api_accept_report(acceptance: Acceptance, a: tenancy.Access = Depends(access
     r, slug = previews.get(acceptance.token, acceptance.filename, a.email)
     if not r:
         raise HTTPException(410, "Die Vorschau ist abgelaufen – bitte den Bericht erneut einlesen.")
-    tenant = a.tenant(slug, WRITE)
+    tenant = a.tenant(slug, IMPORT)
     fields = {**report.to_fields(r), **acceptance.fields.model_dump(exclude_unset=True)}
     by_date = tenant.config.numbering == "by_date"
     year = year_of(fields.get("started_at"))
@@ -752,7 +762,7 @@ def api_accept_report(acceptance: Acceptance, a: tenancy.Access = Depends(access
 def api_pending(a: tenancy.Access = Depends(access)):
     """Berichte, die jemand aus einer anderen Wehr für die ausgewählten Wehren eingelesen hat."""
     result = []
-    for tenant in a.selection_with(WRITE):
+    for tenant in a.selection_with(IMPORT):
         with tenant.connection() as con:
             result += [{**p, "id": incident_key(tenant, p["id"]), "tenant": tenant.slug, "tenant_name": tenant.name}
                        for p in store.pending_reports(con)]
@@ -769,7 +779,7 @@ def api_read_pending(selection: PendingSelection, a: tenancy.Access = Depends(ac
     reports, errors, notes = [], [], []
     for key in selection.ids:
         slug, pending_id = parse_incident_key(key)
-        tenant = a.tenant(slug, WRITE)
+        tenant = a.tenant(slug, IMPORT)
         with tenant.connection() as con:
             filename, data = store.pending_pdf(con, pending_id)
         if not filename:
@@ -789,7 +799,7 @@ def api_read_pending(selection: PendingSelection, a: tenancy.Access = Depends(ac
 @app.delete("/api/pending/{key}")
 def api_discard_pending(key: str, a: tenancy.Access = Depends(access)):
     slug, pending_id = parse_incident_key(key)
-    with a.tenant(slug, WRITE).connection() as con:
+    with a.tenant(slug, IMPORT).connection() as con:
         store.delete_pending(con, pending_id)
     return {"ok": True}
 
@@ -817,12 +827,12 @@ def api_close_notice(notice_id: int, a: tenancy.Access = Depends(access)):
     return {"ok": True}
 
 
-# ---------------------------------------------------------------- Prüfprotokoll (Wehrleiter)
+# ---------------------------------------------------------------- Prüfprotokoll (Recht VG_RECORDS)
 def _managed_vg(a):
-    """VG der Gesamtansicht, wenn der Benutzer sie leitet -> (vg_id, alle Wehren der VG)."""
+    """VG der Gesamtansicht mit Recht auf das Prüfprotokoll -> (vg_id, alle Wehren der VG)."""
     tenants = a.selection if a.vg else []
-    if not tenants or not a.manages_vg(tenants[0].vg_id):
-        raise tenancy.Forbidden("Das Prüfprotokoll gibt es für Wehrleiter in der Gesamtansicht der VG.")
+    if not tenants or not a.vg_can(tenants[0].vg_id, VG_RECORDS):
+        raise tenancy.Forbidden("Das Prüfprotokoll gibt es in der Gesamtansicht der VG – mit Recht darauf.")
     vg_id = tenants[0].vg_id
     return vg_id, tenancy.vg_tenants(vg_id)
 
@@ -848,7 +858,7 @@ def api_review_record(bks_record_id: str, review: Review, a: tenancy.Access = De
     return {"ok": True, "findings": len(entry["findings"])}
 
 
-# ---------------------------------------------------------------- Kostenersatz (Wehrleiter)
+# ---------------------------------------------------------------- Kostenersatz (Recht VG_RECORDS)
 class Expense(BaseModel):
     label: str = ""
     amount: float = 0
@@ -915,7 +925,7 @@ def _summary(tenants, year, limit):
 def api_export(year: Optional[int] = None, a: tenancy.Access = Depends(access)):
     """Excel im Format der Einsatzübersicht (Spalten je Fahrzeug + Anwesenheit). In der Gesamtansicht
     eine Mappe mit Übersicht und je Wehr Einsatzübersicht und Anwesenheit."""
-    tenants = a.selection_with(INCIDENTS)
+    tenants = a.selection_with(EXPORT)
     year = year or _latest_year(tenants)
     if len(tenants) == 1 and not a.vg:
         tenant = tenants[0]

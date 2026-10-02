@@ -63,7 +63,7 @@ class TenantConfig:
     # Einsatznummern: "bks" = Nr. aus dem Bericht (fehlt sie, die nächste freie), "by_date" = nach Beginn
     # durchnummeriert (ein später eingelesener Einsatz rückt an seine Stelle)
     numbering: str = "bks"
-    response_plan_public: bool = False        # Bedarfsplan für alle Rollen; sonst nur mit Verwaltungsrecht
+    response_plan_public: bool = False        # Bedarfsplan für alle Rollen; sonst nur mit Recht plan.view
     inactive_keywords: tuple = ()             # deaktivierte: nur noch Bezeichnung für alte Einsätze
     colors: dict = dataclasses.field(default_factory=dict)   # {"brand": "#RRGGBB", "brand_dark": …}, siehe theme.py
 

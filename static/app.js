@@ -143,12 +143,12 @@ function chartCard({ id, title, subtitle = "", chart, table, extra = "", heading
 // help: Abschnitt (sec_…) oder Feld der Hilfe, das das ?-Symbol im Kopf in dieser Ansicht öffnet.
 // Weitere Ansichten tragen sich selbst ein (admin.js).
 const VIEWS = {
-  evaluation: { label: "Auswertung", load: loadEvaluation, render: renderEvaluation, permission: "stats",
+  evaluation: { label: "Auswertung", load: loadEvaluation, render: renderEvaluation, permission: "stats.view",
     help: () => config.vg ? "sec_vg" : "sec_evaluation" },
-  incidents: { label: "Einsätze", load: loadIncidents, render: renderIncidents, permission: "incidents",
+  incidents: { label: "Einsätze", load: loadIncidents, render: renderIncidents, permission: "incidents.view",
     help: () => state.editing != null ? "sec_capture" : "sec_metrics" },
   // Kameraden gehören zu einer Wehr – nicht in der Gesamtansicht einer VG
-  members: { label: "Kameraden", load: loadMembers, render: renderMembers, permission: "people", single: true,
+  members: { label: "Kameraden", load: loadMembers, render: renderMembers, permission: "people.view", single: true,
     help: "sec_members" },
 };
 const allowedViews = () => Object.keys(VIEWS).filter((key) => {
@@ -350,7 +350,7 @@ function responsePlanCard(plan, previousPlan) {
   </div>` : "";
   const e = state.evaluation;
   // Freigabe: Verwaltungsrollen sehen den Plan immer und geben ihn für die übrigen Rollen frei
-  const release = config.tenant && can("admin") ? `<label class="toggle no-print" data-tip="Ohne Freigabe sehen den Bedarfsplan nur Wehrführer und Wehrleiter">
+  const release = config.tenant && can("plan.release") ? `<label class="toggle no-print" data-tip="Ohne Freigabe sehen den Bedarfsplan nur Rollen mit dem Recht „Bedarfsplan ohne Freigabe sehen“ (z. B. Wehrführer, Wehrleiter)">
       <input type="checkbox" data-plan-release ${e.response_plan_public ? "checked" : ""}> für alle freigegeben</label>` : "";
   const hidden = e.response_plan_hidden.length ? ` Ohne ${esc(e.response_plan_hidden.join(", "))} (nicht freigegeben).` : "";
   const footer = `<p class="plan-footer">${!e.response_plan_public && !hidden ? "<b>Nur für die Verwaltung sichtbar.</b> " : ""}Zeiten ab Einsatzbeginn (früheste Alarmierung). Gesamtstärke ohne ${config.plan_excluded_vehicles.join(", ")}, wie in der Einsatzübersicht.
@@ -579,7 +579,7 @@ function attendancePanel(e, options = {}) {
   // Ohne Recht auf Anwesenheit (z. B. Wehrleiter) nur die Anzahl
   if (!e.people_visible) {
     return `<h4>Anwesenheit · ${e.people_count} Personen${helpButton("attendance")}</h4>
-      <p class="small muted">Die Namen sehen nur Wehrführer und Erfasser der Wehr.</p>`;
+      <p class="small muted">Die Namen sehen nur Rollen der Wehr mit Recht auf die Anwesenheit (z. B. Wehrführer, Erfasser).</p>`;
   }
   const newCount = options.markNew ? e.people.filter((p) => p.new).length : 0;
   const hint = options.pickLeader && e.people.length ? `<p class="small muted">Einen Namen anklicken, um die Person als EHF einzutragen.</p>` : "";
@@ -615,8 +615,8 @@ function incidentDetail(e) {
     </div>
     <div class="panel full">${attendancePanel(e)}</div>
     <div class="actions panel full bare">
-      <button type="button" class="btn btn-outline btn-small" data-action="delete" data-id="${e.id}">Löschen</button>
-      <button type="button" class="btn btn-light btn-small" data-action="edit" data-id="${e.id}">Bearbeiten</button>
+      ${e.can_delete ? `<button type="button" class="btn btn-outline btn-small" data-action="delete" data-id="${e.id}">Löschen</button>` : ""}
+      ${e.can_edit ? `<button type="button" class="btn btn-light btn-small" data-action="edit" data-id="${e.id}">Bearbeiten</button>` : ""}
     </div>
   </div>`;
 }
@@ -729,11 +729,11 @@ function redrawPeople(form) {
 async function startEditing(id) {
   const incident = state.incidents.incidents.find((x) => x.id === id);
   state.editing = id;
-  state.editDraft = { visible: incident.people_visible, people: incident.people.map((p) => ({ id: p.id, name: p.name,
+  state.editDraft = { visible: incident.people_editable, people: incident.people.map((p) => ({ id: p.id, name: p.name,
     role: p.role || "", vehicle: p.vehicle || "", leader_name: p.leader_name })) };
   updateDatalists();
   renderIncidents();
-  if (!incident.people_visible) { state.memberOptions = []; return; }
+  if (!incident.people_editable) { state.memberOptions = []; return; }
   try {
     state.memberOptions = (await api(`/api/members?tenant=${encodeURIComponent(incident.tenant)}`)).members;
   } catch (e) {
@@ -1328,7 +1328,8 @@ $("#scope").addEventListener("change", async (e) => {
     return;
   }
   renderScopes();
-  $("#btn-pdf").hidden = !can("write");
+  $("#btn-pdf").hidden = !can("reports.import");
+  $("#btn-export").hidden = !can("incidents.export");
   try {
     await loadYears();
   } catch (e) {

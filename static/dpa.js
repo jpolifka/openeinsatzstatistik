@@ -7,7 +7,7 @@
 const dpaState = { data: null, error: "" };
 
 VIEWS.dpa = { label: "Auftragsverarbeitung", load: loadDpa, render: renderDpa, noYear: true, help: "dpa",
-  visible: () => config.superadmin || config.dpa_blocked.length > 0 || can("admin") };
+  visible: () => config.superadmin || config.dpa_blocked.length > 0 || can("dpa.edit") };
 
 async function loadDpa() {
   dpaState.data = await api("/api/dpa");
