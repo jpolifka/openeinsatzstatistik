@@ -1,10 +1,18 @@
 # -*- coding: utf-8 -*-
-"""SQLite-Datenbank der Einsätze (liegt im Docker-Volume /daten) mit schrittweisen Migrationen."""
+"""
+SQLite-Datenbanken mit schrittweisen Migrationen (liegen im Docker-Volume /daten).
+
+  DATA_DIR/app.db                      zentral: Verbandsgemeinden, Wehren, Benutzer, Zuordnungen
+  DATA_DIR/tenants/<slug>/einsaetze.db je Wehr: Einsätze, Kameraden, Fachkonfiguration, Logos
+
+Jede Datei zählt ihre erledigten Schritte über PRAGMA user_version.
+"""
 import contextlib
 import os
 import sqlite3
 
-PATH = os.environ.get("DB_PATH", "")
+# Früher zeigte DB_PATH direkt auf die einzige Datenbank; ihr Ordner ist dann der Datenordner.
+DATA_DIR = os.environ.get("DATA_DIR") or os.path.dirname(os.environ.get("DB_PATH", ""))
 
 # Ursprüngliches Schema (deutsche Bezeichner). Bleibt unverändert, damit bestehende
 # Datenbanken und neue denselben Migrationsweg gehen.
@@ -70,13 +78,45 @@ def _rename_to_english(con):
     con.execute("CREATE UNIQUE INDEX incident_year_number ON incident(year, number) WHERE number IS NOT NULL")
 
 
+def _add_tenant_tables(con):
+    """Fachkonfiguration, Logos, Fahrzeuge mit Dienstzeitraum und Stichwortkatalog der Wehr;
+    Einsatznummer der Leitstelle für gemeinsame Einsätze mehrerer Wehren."""
+    con.execute("CREATE TABLE setting (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+    con.execute("CREATE TABLE asset (name TEXT PRIMARY KEY, content_type TEXT NOT NULL, data BLOB NOT NULL, "
+                "modified TEXT NOT NULL DEFAULT (datetime('now', 'localtime')))")
+    con.execute("CREATE TABLE fleet (call_sign TEXT PRIMARY KEY, label TEXT NOT NULL DEFAULT '', "
+                "sort_order INTEGER NOT NULL, in_service_from TEXT, in_service_until TEXT, replaced_by TEXT, "
+                "in_plan_crew INTEGER NOT NULL DEFAULT 1)")
+    con.execute("CREATE TABLE keyword (code TEXT PRIMARY KEY, name TEXT NOT NULL, terms TEXT NOT NULL DEFAULT '', "
+                "active INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL)")
+    con.execute("ALTER TABLE incident ADD COLUMN dispatch_number TEXT")
+    con.execute("ALTER TABLE incident ADD COLUMN modified_by TEXT")
+    con.execute("CREATE INDEX incident_dispatch_number ON incident(dispatch_number) WHERE dispatch_number IS NOT NULL")
+
+
+def _create_central_schema(con):
+    con.execute("CREATE TABLE vg (id INTEGER PRIMARY KEY, slug TEXT NOT NULL UNIQUE, name TEXT NOT NULL, "
+                "created TEXT NOT NULL DEFAULT (datetime('now', 'localtime')))")
+    con.execute("CREATE TABLE tenant (id INTEGER PRIMARY KEY, slug TEXT NOT NULL UNIQUE, name TEXT NOT NULL, "
+                "vg_id INTEGER NOT NULL REFERENCES vg(id), active INTEGER NOT NULL DEFAULT 1, "
+                "created TEXT NOT NULL DEFAULT (datetime('now', 'localtime')))")
+    con.execute("CREATE TABLE account (email TEXT PRIMARY KEY, last_login TEXT, "
+                "created TEXT NOT NULL DEFAULT (datetime('now', 'localtime')))")
+    # scope 'vg' -> scope_id = vg.id, scope 'tenant' -> scope_id = tenant.id
+    con.execute("CREATE TABLE membership (email TEXT NOT NULL REFERENCES account(email) ON DELETE CASCADE, "
+                "scope TEXT NOT NULL CHECK (scope IN ('vg', 'tenant')), scope_id INTEGER NOT NULL, "
+                "role TEXT NOT NULL, created TEXT NOT NULL DEFAULT (datetime('now', 'localtime')), "
+                "PRIMARY KEY (email, scope, scope_id))")
+
+
 # Neue Schemaänderungen nur hinten anfügen; PRAGMA user_version zählt die erledigten Schritte.
-MIGRATIONS = [_create_legacy_schema, _rename_to_english]
+TENANT_MIGRATIONS = [_create_legacy_schema, _rename_to_english, _add_tenant_tables]
+CENTRAL_MIGRATIONS = [_create_central_schema]
 
 
-def migrate(con):
+def migrate(con, steps=TENANT_MIGRATIONS):
     done = con.execute("PRAGMA user_version").fetchone()[0]
-    for number, step in enumerate(MIGRATIONS[done:], start=done + 1):
+    for number, step in enumerate(steps[done:], start=done + 1):
         # sqlite3 öffnet vor DDL keine Transaktion von selbst – ohne BEGIN wäre ein Schritt nicht atomar
         con.execute("BEGIN")
         try:
@@ -88,8 +128,7 @@ def migrate(con):
             raise
 
 
-def connect(path=None):
-    path = path or PATH
+def connect(path):
     if path != ":memory:":
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     con = sqlite3.connect(path, timeout=30)
@@ -100,9 +139,9 @@ def connect(path=None):
 
 
 @contextlib.contextmanager
-def connection():
+def connection(path):
     """Verbindung mit Transaktion: Commit am Ende, Rollback bei Fehler."""
-    con = connect()
+    con = connect(path)
     try:
         with con:
             yield con
@@ -110,9 +149,9 @@ def connection():
         con.close()
 
 
-def setup():
-    con = connect()
+def setup(path, steps=TENANT_MIGRATIONS):
+    con = connect(path)
     try:
-        migrate(con)
+        migrate(con, steps)
     finally:
         con.close()

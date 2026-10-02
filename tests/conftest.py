@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
-import pytest
+import dataclasses
 
-from app import db
+import pytest
+from fastapi.testclient import TestClient
+
+from app import auth, db, main, tenancy
 from app.legacy import rheinbrohl_config
 
 # Fachkonfiguration für die Tests: die Werte der ersten Wehr (keine personenbezogenen Daten)
@@ -15,6 +18,58 @@ def con():
     db.migrate(connection)
     yield connection
     connection.close()
+
+
+@pytest.fixture
+def data_dir(tmp_path, monkeypatch):
+    """Leerer Datenordner mit migrierter Zentral-DB; Anmeldung aus (jeder ist Superadmin)."""
+    monkeypatch.setattr(db, "DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(tenancy, "ADMIN_EMAILS", set())
+    monkeypatch.delenv("AUTH_EMAILS", raising=False)
+    tenancy.setup()
+    return tmp_path
+
+
+def make_tenant(slug, vg="vg-a", cfg=CFG, name=None):
+    """Wehr (und bei Bedarf ihre VG) anlegen -> (vg_id, tenant_id)."""
+    with tenancy.central() as con:
+        row = con.execute("SELECT id FROM vg WHERE slug = ?", (vg,)).fetchone()
+        vg_id = row["id"] if row else tenancy.create_vg(con, vg, f"VG {vg}")
+        name = name or f"Wehr {slug}"
+        tenant_id = tenancy.create_tenant(con, slug, name, vg_id, dataclasses.replace(cfg, name=name))
+    return vg_id, tenant_id
+
+
+def grant(email, role, scope_id):
+    with tenancy.central() as con:
+        tenancy.grant(con, email, role, scope_id)
+
+
+@pytest.fixture
+def make_client(data_dir, monkeypatch):
+    """TestClient-Fabrik; mit login=True ist die Anmeldung an (Superadmin admin@example.org)."""
+    clients = []
+
+    def factory(login=False):
+        if login:
+            monkeypatch.setattr(tenancy, "ADMIN_EMAILS", {"admin@example.org"})
+            monkeypatch.setattr(auth, "BASE_URL", "http://testserver")
+            monkeypatch.setattr(auth, "RESEND_API_KEY", "")
+            monkeypatch.setattr(auth, "_key", None)
+        client = TestClient(main.app)
+        client.__enter__()
+        clients.append(client)
+        return client
+
+    yield factory
+    for client in clients:
+        client.__exit__(None, None, None)
+
+
+def login(client, email):
+    """Sitzungs-Cookie setzen, ohne Mail."""
+    client.cookies.set(auth.COOKIE, auth._sign("session", email, 600))
+    return client
 
 
 def make_incident(**overrides):

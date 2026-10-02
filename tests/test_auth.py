@@ -2,22 +2,18 @@
 import re
 
 import pytest
-from fastapi.testclient import TestClient
 
-from app import auth, db, main
+from app import auth, tenancy
+from conftest import grant, make_tenant
 
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
-    monkeypatch.setattr(db, "PATH", str(tmp_path / "test.db"))
-    monkeypatch.setattr(auth, "EMAILS", {"m.muster@example.org"})
-    monkeypatch.setattr(auth, "BASE_URL", "http://testserver")
-    monkeypatch.setattr(auth, "RESEND_API_KEY", "")
-    monkeypatch.setattr(auth, "_key", None)
+def client(make_client, monkeypatch):
+    _, tenant_id = make_tenant("wehr-a1")
+    grant("m.muster@example.org", "lead", tenant_id)
     monkeypatch.setattr(auth, "_used_links", {})
     monkeypatch.setattr(auth, "_last_mail", {})
-    with TestClient(main.app) as c:
-        yield c
+    return make_client(login=True)
 
 
 def _link_token(caplog, client, email="m.muster@example.org"):
@@ -53,11 +49,24 @@ def test_unknown_address_gets_no_link(client, caplog):
     assert _link_token(caplog, client, "fremd@example.org") is None
 
 
-def test_removed_address_loses_session(client, caplog, monkeypatch):
+def test_removed_address_loses_session(client, caplog):
     client.post("/auth/verify", data={"token": _link_token(caplog, client)})
     assert client.get("/api/years").status_code == 200
-    monkeypatch.setattr(auth, "EMAILS", {"e.beispiel@example.org"})
+    with tenancy.central() as con:
+        con.execute("DELETE FROM membership WHERE email = 'm.muster@example.org'")
     assert client.get("/api/years").status_code == 401
+
+
+def test_deactivated_tenant_closes_access(client, caplog):
+    client.post("/auth/verify", data={"token": _link_token(caplog, client)})
+    with tenancy.central() as con:
+        con.execute("UPDATE tenant SET active = 0")
+    assert client.get("/api/years").status_code == 401
+
+
+def test_superadmin_logs_in_without_membership(client, caplog):
+    client.post("/auth/verify", data={"token": _link_token(caplog, client, "admin@example.org")})
+    assert client.get("/api/config").json()["superadmin"] is True
 
 
 def test_tampered_or_wrong_purpose_token_is_rejected(client, caplog):
@@ -106,7 +115,7 @@ def test_resend_key_without_sender_stops_start(monkeypatch):
 
 
 def test_login_without_base_url_stops_start(monkeypatch):
-    monkeypatch.setattr(auth, "EMAILS", {"m.muster@example.org"})
+    monkeypatch.setattr(tenancy, "ADMIN_EMAILS", {"admin@example.org"})
     monkeypatch.setattr(auth, "BASE_URL", "")
     with pytest.raises(RuntimeError):
         auth.check_config()

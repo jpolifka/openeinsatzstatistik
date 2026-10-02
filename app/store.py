@@ -12,9 +12,9 @@ FULL_KEYWORD = re.compile(r"([A-Za-z]\d)\s*[.\s]?\s*(\d{0,2})")
 
 # Bearbeitbare Felder eines Einsatzes – Grundlage für Formular, Speichern und Abgleich
 FIELDS = ("number", "started_at", "ended_at", "keyword", "subcode", "description", "place",
-          "unit_leader", "station_staff")
+          "unit_leader", "station_staff", "dispatch_number")
 INT_FIELDS = ("number", "station_staff")
-TEXT_FIELDS = tuple(name for name in FIELDS if name not in INT_FIELDS + ("started_at", "ended_at"))
+TEXT_FIELDS = tuple(name for name in FIELDS if name not in INT_FIELDS + ("started_at", "ended_at", "dispatch_number"))
 
 
 class DuplicateIncident(ValueError):
@@ -47,6 +47,8 @@ def normalize_fields(fields, weekend_or_holiday=None):
     for name in TEXT_FIELDS:
         f[name] = (f[name] or "").strip()
     f["keyword"], f["subcode"] = split_keyword(f["keyword"], f["subcode"])
+    # Einsatznummer der Leitstelle: leer heißt unbekannt (Altdaten aus Excel)
+    f["dispatch_number"] = str(f["dispatch_number"] or "").strip() or None
     start = parse_iso(f["started_at"])
     f["year"] = year_of(start)
     if weekend_or_holiday is None:
@@ -201,14 +203,15 @@ def _insert(con, table, row):
                        list(row.values())).lastrowid
 
 
-def create_incident(con, fields, source, filename=None, warnings=(), replace_id=None, weekend_or_holiday=None):
+def create_incident(con, fields, source, filename=None, warnings=(), replace_id=None, weekend_or_holiday=None,
+                    modified_by=None):
     """Einsatz anlegen (oder einen vorhandenen ersetzen) und die ID zurückgeben."""
     f = normalize_fields(fields, weekend_or_holiday)
     if replace_id:
         delete_incident(con, replace_id)
     elif find_incident(con, f["year"], f["number"]):
         raise DuplicateIncident(f["number"], f["year"])
-    return _insert(con, "incident", {**f, "source": source, "filename": filename,
+    return _insert(con, "incident", {**f, "source": source, "filename": filename, "modified_by": modified_by,
                                      "warnings": json.dumps(list(warnings), ensure_ascii=False)})
 
 
@@ -222,7 +225,7 @@ def add_attendance(con, incident_id, member_id, role=None, vehicle=None):
                 (incident_id, member_id, role, vehicle))
 
 
-def update_incident(con, incident_id, changes):
+def update_incident(con, incident_id, changes, modified_by=None):
     """Felder ändern; Jahr und Wochenende/Feiertag werden neu abgeleitet."""
     current = con.execute("SELECT * FROM incident WHERE id = ?", (incident_id,)).fetchone()
     if not current:
@@ -232,8 +235,8 @@ def update_incident(con, incident_id, changes):
     if other and other != incident_id:
         raise DuplicateIncident(f["number"], f["year"])
     assignments = ", ".join(f"{name} = ?" for name in f)
-    con.execute(f"UPDATE incident SET {assignments}, modified = datetime('now', 'localtime') WHERE id = ?",
-                [*f.values(), incident_id])
+    con.execute(f"UPDATE incident SET {assignments}, modified = datetime('now', 'localtime'), modified_by = ? "
+                "WHERE id = ?", [*f.values(), modified_by, incident_id])
 
 
 def delete_incident(con, incident_id):
