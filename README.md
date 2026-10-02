@@ -110,18 +110,17 @@ gibt es oben eine Auswahl.
 
 | Rolle | Bereich | Statistik | Einsätze | Anwesenheit und Kameraden | Berichte einlesen, bearbeiten | Verwaltung der Wehr |
 |---|---|:-:|:-:|:-:|:-:|:-:|
-| Superadmin (`ADMIN_EMAILS`) | alle | ✓ | ✓ | – | ✓ | ✓ |
+| Superadmin (`ADMIN_EMAILS`) | alle | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Wehrleiter | alle Wehren einer VG | ✓ | ✓ | – | ✓ | ✓ |
 | Statistik VG (z. B. Bürgermeister) | alle Wehren einer VG | ✓ | – | – | – | – |
 | Wehrführer | eine Wehr | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Erfasser | eine Wehr | ✓ | ✓ | ✓ | ✓ | – |
 | Benutzer | eine Wehr | ✓ | – | – | – | – |
 
-Die Anwesenheit (Namen der Kameraden) sehen nur Wehrführer und Erfasser der Wehr – auch nicht
-Wehrleiter oder Superadmin. Sie sehen bei einem Einsatz nur die Anzahl der Anwesenden; der
-Excel-Export enthält für sie kein Blatt Anwesenheit, Kameraden und die Anwesenheitsübersicht der
-Auswertung fehlen. Rollen mit Anwesenheit kann man sich nicht selbst geben. Ohne `ADMIN_EMAILS`
-(lokal, ohne Anmeldung) gelten alle Rechte. Rollen nur mit Statistik sehen keine Namen:
+Die Anwesenheit (Namen der Kameraden) sehen nur Wehrführer, Erfasser und der Superadmin – nicht
+der Wehrleiter. Er sieht bei einem Einsatz nur die Anzahl der Anwesenden; der Excel-Export enthält
+für ihn kein Blatt Anwesenheit, Kameraden und die Anwesenheitsübersicht der Auswertung fehlen.
+Rollen mit Anwesenheit kann man sich (außer als Superadmin) nicht selbst geben. Rollen nur mit Statistik sehen keine Namen:
 Einsatzliste und Excel-Export sind für sie ebenfalls gesperrt. Geprüft wird im Backend, die
 Oberfläche blendet nur aus.
 
@@ -131,8 +130,8 @@ Oberfläche blendet nur aus.
   BKS-Portal bzw. die Einsatznummer der Leitstelle nur einmal. Der Bedarfsplan wertet jede Wehr
   mit ihren eigenen Orten aus.
 - Einsatzliste aller Wehren mit Markierung der Wehr; Kameraden gibt es nur je Wehr.
-- Excel-Export als eine Mappe mit Übersicht und je Wehr Einsatzübersicht (Anwesenheit nur, wo man
-  Wehrführer oder Erfasser ist).
+- Excel-Export als eine Mappe mit Übersicht und je Wehr Einsatzübersicht (Anwesenheit nicht für
+  den Wehrleiter).
   „Kennzahlen (Excel)“ enthält nur die Zahlen je Wehr, ohne Namen.
 - „Drucken / PDF“ öffnet die Druckansicht der Auswertung (im Druckdialog als PDF sichern).
 - Bericht einlesen verteilt die Berichte auf die passende Wehr (über die berichtende Einheit; die

@@ -674,7 +674,7 @@ def grant_membership(m: MembershipIn, a: tenancy.Access = Depends(access)):
         grantable = _grantable(a, m.scope, scope_id, vg_id)
         if m.role not in grantable or (existing and existing["role"] not in grantable):
             raise tenancy.Forbidden("Diese Rolle darfst du hier nicht vergeben.")
-        if email == a.email and tenancy.PEOPLE in ROLES[m.role][2]:
+        if email == a.email and not a.superadmin and tenancy.PEOPLE in ROLES[m.role][2]:
             raise tenancy.Forbidden("Rollen mit Zugriff auf die Anwesenheit vergibt jemand anderes – nicht man selbst.")
         if existing and existing["role"] == "vg_lead" and m.role != "vg_lead":
             _check_last_vg_lead(con, a, scope_id, email)
