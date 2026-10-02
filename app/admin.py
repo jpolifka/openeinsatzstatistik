@@ -101,12 +101,19 @@ def _settings_json(tenant, cfg):
         used = store.vehicles_with_data(con)
         assets = {r["name"]: f"/api/branding/{tenant.slug}/{r['name']}?v={r['modified'].replace(' ', 'T')}"
                   for r in con.execute("SELECT name, modified FROM asset")}
+    with tenancy.central() as con:
+        fee_types = fees.vehicle_types(con, tenant.vg_id)
+
+    def types(name):
+        return domain.describe_call_sign(name).get("types", [])
+
     return {
         "assets": {name: assets.get(name) for name in theme.ASSETS},
         "slug": tenant.slug, "name": cfg.name, "colors": cfg.colors,
         "palette": theme.palette(cfg.colors) if cfg.colors else None,
         "fleet": [{"call_sign": v.call_sign, "name": v.name, "description": domain.call_sign_text(v.name),
                    "suggested_name": "" if v.name else _suggested_name(v.call_sign, cfg) or "",
+                   "types": types(v.name or _suggested_name(v.call_sign, cfg) or v.call_sign),
                    "label": v.label, "in_service_from": v.in_service_from,
                    "in_service_until": v.in_service_until, "replaced_by": v.replaced_by,
                    "in_plan_crew": v.in_plan_crew, "incidents": used.get(v.call_sign, 0)} for v in cfg.fleet],
@@ -116,8 +123,9 @@ def _settings_json(tenant, cfg):
                                                "plan_places", "plan_min_level", "response_limits", "default_limit",
                                                "second_limit", "day_hours", "numbering", "response_plan_public")},
         "places": [{"name": n, "prefix": p} for n, p in cfg.places],
-        "known_vehicles": [{"name": n, "description": domain.call_sign_text(n),
-                            "label": domain.describe_call_sign(n)["label"]} for n in _known_vehicles(tenant, cfg)],
+        "known_vehicles": [{"name": n, "description": domain.call_sign_text(n), "types": types(n),
+                            "label": fees.suggest_type(types(n), fee_types)} for n in _known_vehicles(tenant, cfg)],
+        "fee_types": fee_types,
         "call_sign_directory": domain.CALL_SIGN_DIRECTORY_URL,
     }
 
@@ -169,6 +177,12 @@ def _check_fleet(s: SettingsIn):
         if v.in_service_from and v.in_service_until and v.in_service_until < v.in_service_from:
             _invalid(f"{label}: „außer Dienst ab“ liegt vor „im Dienst ab“.")
         result.append((v, name, call_sign))
+    unnamed = {call_sign for _, name, call_sign in result if not name}
+    for v, name, _ in result:
+        legacy = derive.block_of(name) if name and not v.call_sign.strip() else None
+        if legacy in unnamed:
+            _invalid(f"„{name}“ ist das Fahrzeug {legacy}, das schon in der Liste steht – "
+                     f"bitte den Funkrufnamen dort eintragen statt es neu hinzuzufügen.")
     call_signs = [call_sign for _, _, call_sign in result]
     if len(set(call_signs)) != len(call_signs):
         _invalid("Ein Kurzname steht doppelt in der Fahrzeugliste.")

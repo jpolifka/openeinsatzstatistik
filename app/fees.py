@@ -14,6 +14,7 @@ nur zur Anzeige und zum Drucken, gespeichert wird nichts. Regeln der Satzung (§
   - Auslagen mit Verwaltungszuschlag (Prozent), Umsatzsteuer nur wenn sie anfällt (§ 8)
 Den Fahrzeugtyp liefert die Bezeichnung in der Fahrzeugliste der Wehr (z. B. „HLF 20“).
 """
+import datetime as dt
 import json
 import math
 import re
@@ -37,6 +38,22 @@ def schedule_for(con, vg_id, day, schedule_id=None):
     if schedule_id is not None:
         return next((s for s in found if s["id"] == schedule_id), None)
     return next((s for s in found if s["valid_from"] <= day), found[-1] if found else None)
+
+
+def vehicle_types(con, vg_id, day=None):
+    """Fahrzeugtypen der zum Tag (Standard: heute) gültigen Gebührenordnung der VG."""
+    schedule = schedule_for(con, vg_id, day or dt.date.today().isoformat())
+    return [v["code"] for v in schedule["rates"]["vehicles"]] if schedule else []
+
+
+def suggest_type(types, fee_types):
+    """Fahrzeugtyp zum Vorbelegen: der eine Typ der Kennzahl, der in der Gebührenordnung steht (in deren
+    Schreibweise), sonst der einzige Typ der Kennzahl; bei mehreren Möglichkeiten keiner."""
+    by_key = {_type_key(t): t for t in fee_types}
+    listed = [by_key[_type_key(t)] for t in types if _type_key(t) in by_key]
+    if len(listed) == 1:
+        return listed[0]
+    return types[0] if len(types) == 1 else ""
 
 
 def check_rates(rates):
