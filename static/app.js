@@ -281,10 +281,10 @@ function renderEvaluation() {
     ${kpi(`Ø Einsatzdauer${helpButton("duration")}`, formatDuration(s.duration_avg_min), "Alarm bis Einsatzende")}
     ${kpi(`Einsatzstunden${helpButton("operation_hours")}`, formatHours(s.duration_total_min), "Summe aller Einsätze")}
     ${kpi(`Personalstunden${helpButton("staff_hours")}`, `${num(s.staff_hours, 0)}<small>h</small>`, `Ø ${num(s.attendees_avg, 1)} Kameraden je Einsatz`)}
-    ${kpi(`Eintreffen ≤ ${plan.limit} Min.${helpButton("on_time")}`, percent(plan.total.rate), `${plan.total.on_time} von ${plan.total.count} (Bedarfsplan)`)}
+    ${plan ? kpi(`Eintreffen ≤ ${plan.limit} Min.${helpButton("on_time")}`, percent(plan.total.rate), `${plan.total.on_time} von ${plan.total.count} (Bedarfsplan)`) : ""}
   </div>`;
 
-  $("#view-evaluation").innerHTML = evaluationToolbar() + kpis + responsePlanCard(plan, previousPlan) + (vg ? tenantsCard(vg) : "") + `
+  $("#view-evaluation").innerHTML = evaluationToolbar() + kpis + (plan ? responsePlanCard(plan, previousPlan) : "") + (vg ? tenantsCard(vg) : "") + `
     <div class="grid grid-3">${categoriesCard(s)}${levelsCard(s)}${areasCard(s)}</div>
     <div class="grid">${monthsCard(s)}</div>
     <div class="grid">${historyCard(state.evaluation.history)}</div>
@@ -344,10 +344,15 @@ function responsePlanCard(plan, previousPlan) {
   const limitSwitch = config.limits.length > 1 ? `<div class="segments" role="group" aria-label="Zeitgrenze">
     ${config.limits.map((m) => `<button type="button" data-limit="${m}" class="${m === limit ? "active" : ""}">${m} Min.</button>`).join("")}
   </div>` : "";
-  const footer = `<p class="plan-footer">Zeiten ab Einsatzbeginn (früheste Alarmierung). Gesamtstärke ohne ${config.plan_excluded_vehicles.join(", ")}, wie in der Einsatzübersicht.
-    ${plan.without_times ? `${plural(plan.without_times, "Einsatz", "Einsätze")} ohne Eintreffzeit nicht berücksichtigt (Excel zählte sie mit 0 min als erreicht).` : ""}</p>`;
+  const e = state.evaluation;
+  // Freigabe: Verwaltungsrollen sehen den Plan immer und geben ihn für die übrigen Rollen frei
+  const release = config.tenant && can("admin") ? `<label class="toggle no-print" data-tip="Ohne Freigabe sehen den Bedarfsplan nur Wehrführer und Wehrleiter">
+      <input type="checkbox" data-plan-release ${e.response_plan_public ? "checked" : ""}> für alle freigegeben</label>` : "";
+  const hidden = e.response_plan_hidden.length ? ` Ohne ${esc(e.response_plan_hidden.join(", "))} (nicht freigegeben).` : "";
+  const footer = `<p class="plan-footer">${!e.response_plan_public && !hidden ? "<b>Nur für die Verwaltung sichtbar.</b> " : ""}Zeiten ab Einsatzbeginn (früheste Alarmierung). Gesamtstärke ohne ${config.plan_excluded_vehicles.join(", ")}, wie in der Einsatzübersicht.
+    ${plan.without_times ? `${plural(plan.without_times, "Einsatz", "Einsätze")} ohne Eintreffzeit nicht berücksichtigt (Excel zählte sie mit 0 min als erreicht).` : ""}${hidden}</p>`;
   return chartCard({
-    id: "plan", heading: "h2", className: "plan grid", chartLabel: "Kacheln", controls: limitSwitch, extra: footer,
+    id: "plan", heading: "h2", className: "plan grid", chartLabel: "Kacheln", controls: release + limitSwitch, extra: footer,
     title: `Feuerwehrbedarfsplan · Pos. 8.4${helpButton("response_plan")}`,
     subtitle: `Einsätze ab Alarmstufe ${config.plan_min_level} in ${plan.places.join(", ")} – Eintreffen des ersten Fahrzeugs innerhalb von ${limit} Minuten nach Alarmierung.`,
     chart: `<div class="plan-windows">${plan.windows.map((w) => windowTile(w, false)).join("")}${windowTile(plan.total, true)}</div>`,
@@ -624,7 +629,9 @@ function formFields(e) {
   return `<div class="form-grid">${FORM_FIELDS.map(([name, title, type, span, attributes]) => {
     const value = type === "datetime-local" ? (e[name] || "").slice(0, 19) : e[name];
     const missing = name === "unit_leader" && !value;
-    return `<label class="field ${span}"><span>${title}${helpButton(name)}</span><input name="${name}" type="${type}" value="${esc(value ?? "")}" ${attributes}
+    // Nummerierung nach Datum: die Nr. vergibt die App
+    const extra = name === "number" && config.numbering === "by_date" ? ' readonly data-tip="Wird nach dem Einsatzbeginn vergeben"' : "";
+    return `<label class="field ${span}"><span>${title}${helpButton(name)}</span><input name="${name}" type="${type}" value="${esc(value ?? "")}" ${attributes}${extra}
       class="${missing ? "missing" : ""}"></label>`;
   }).join("")}</div>`;
 }
@@ -1023,6 +1030,18 @@ $("#year").addEventListener("change", (e) => {
   showView();
 });
 
+$("#view-evaluation").addEventListener("change", async (e) => {
+  if (!e.target.matches("[data-plan-release]")) return;
+  try {
+    await apiJson(`/api/admin/${encodeURIComponent(config.tenant.slug)}/response-plan`, "PUT", { public: e.target.checked });
+    state.evaluation = null;
+    toast(e.target.checked ? "Bedarfsplan für alle freigegeben" : "Bedarfsplan nur noch für die Verwaltung sichtbar");
+    await showView();
+  } catch (err) {
+    e.target.checked = !e.target.checked;
+    alert(err.message);
+  }
+});
 $("#view-evaluation").addEventListener("click", (e) => {
   const toggle = e.target.closest("[data-toggle-table]");
   if (toggle) {

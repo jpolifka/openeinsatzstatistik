@@ -212,6 +212,23 @@ def _check_unique(con, f, incident_id=None):
                                     f"Einsatz Nr. {row['number']}/{row['year']} erfasst.")
 
 
+def next_number(con, year):
+    """Nächste freie Einsatznummer des Jahres."""
+    return con.execute("SELECT COALESCE(MAX(number), 0) + 1 FROM incident WHERE year = ?", (year,)).fetchone()[0]
+
+
+def renumber(con, year):
+    """Einsätze eines Jahres nach Beginn durchnummerieren (Nummerierung "by_date").
+
+    Zwei Schritte über negative Nummern, damit der eindeutige Index (Jahr, Nr.) unterwegs nicht anschlägt.
+    """
+    if year is None:
+        return
+    ids = [r[0] for r in con.execute("SELECT id FROM incident WHERE year = ? ORDER BY started_at, id", (year,))]
+    con.executemany("UPDATE incident SET number = ? WHERE id = ?", [(-n, i) for n, i in enumerate(ids, start=1)])
+    con.executemany("UPDATE incident SET number = ? WHERE id = ?", [(n, i) for n, i in enumerate(ids, start=1)])
+
+
 def is_empty(con):
     return not con.execute("SELECT 1 FROM incident LIMIT 1").fetchone()
 

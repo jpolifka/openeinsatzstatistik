@@ -29,7 +29,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, create_model
 
 from app import admin, auth, db, domain, dpa, mail, excel_export, legacy, metrics, pdf_report, records, report, store, tenancy, tenant_config, theme
-from app.tenancy import INCIDENTS, STATS, WRITE
+from app.tenancy import ADMIN, INCIDENTS, STATS, WRITE
 from app.timeutil import year_of
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -320,6 +320,19 @@ def _evaluate(tenants, year, limit):
     return parts, months
 
 
+PLAN_KEYS = ("plan_count", "on_time", "rate", "arrival_min")
+
+
+def _plan_visible(tenant):
+    """Bedarfsplan einer Wehr: freigegeben oder für Rollen mit Verwaltungsrecht."""
+    return tenant.config.response_plan_public or tenant.can(ADMIN)
+
+
+def _without_plan(row, visible=False):
+    """Kennzahlzeile ohne Bedarfsplan-Werte, solange er nicht sichtbar ist."""
+    return row if visible else {**row, **dict.fromkeys(PLAN_KEYS)}
+
+
 @app.get("/api/evaluation")
 def api_evaluation(year: Optional[int] = None, limit: Optional[int] = None, tenants: Optional[str] = None,
                    a: tenancy.Access = Depends(access)):
@@ -340,19 +353,27 @@ def api_evaluation(year: Optional[int] = None, limit: Optional[int] = None, tena
     previous = [i for _, _, prev in parts for i in prev]
     previous_evaluated = [e for t, _, prev in parts for e in metrics.evaluate(prev, t.config, limit)]
     single = len(selection) == 1 and not a.vg
+    # Bedarfsplan nur aus Wehren, für die er sichtbar ist (Freigabe oder Verwaltungsrecht)
+    plan_parts = [(t, evaluated, prev) for t, evaluated, prev in parts if _plan_visible(t)]
+    plan_cfg = _selection_config([t for t, _, _ in plan_parts], a) if plan_parts else None
+    plan_current = [e for _, evaluated, _ in plan_parts for e in evaluated]
+    plan_previous = [e for t, _, prev in plan_parts for e in metrics.evaluate(prev, t.config, limit)]
     result = {"year": year,
               "history": metrics.monthly_history(months),
               "statistics": metrics.statistics(current, year, cfg, previous or None),
-              "response_plan": metrics.response_plan(current, limit, cfg),
-              "response_plan_previous": metrics.response_plan(previous_evaluated, limit, cfg) if previous else None,
+              "response_plan": metrics.response_plan(plan_current, limit, plan_cfg) if plan_parts else None,
+              "response_plan_previous": metrics.response_plan(plan_previous, limit, plan_cfg)
+              if plan_parts and any(prev for _, _, prev in plan_parts) else None,
+              "response_plan_public": all(t.config.response_plan_public for t in selection),
+              "response_plan_hidden": [t.name for t in selection if not _plan_visible(t)],
               "attendance": metrics.attendance_overview(current) if single and selection[0].can(INCIDENTS) else None,
               "tenants": None}
     if not single:
         unique, without = metrics.unique_incidents([i for i, _ in current])
         result["tenants"] = {
             "participations": len(current), "unique": unique, "without_dispatch_number": without,
-            "rows": [{"slug": t.slug, "name": t.name, **metrics.summary(evaluated, limit, t.config)}
-                     for t, evaluated, _ in parts]}
+            "rows": [_without_plan({"slug": t.slug, "name": t.name, **metrics.summary(evaluated, limit, t.config)},
+                                   _plan_visible(t)) for t, evaluated, _ in parts]}
     return result
 
 
@@ -402,11 +423,18 @@ def api_update_incident(key: str, update: IncidentUpdate, a: tenancy.Access = De
     tenant = a.tenant(slug, WRITE)
     changes = update.model_dump(exclude_unset=True)
     vehicles, people = changes.pop("vehicles", None), changes.pop("people", None)
+    by_date = tenant.config.numbering == "by_date"
+    if by_date:
+        changes.pop("number", None)          # ergibt sich aus dem Beginn
     if vehicles is not None and any(v["call_sign"] not in tenant.config.vehicles for v in vehicles):
         raise HTTPException(422, "Unbekanntes Fahrzeug – Fahrzeuge der Wehr in der Verwaltung pflegen.")
     with tenant.connection() as con:
         try:
+            old_year = (store.load_incident(con, incident_id) or {}).get("year")
             store.update_incident(con, incident_id, changes, modified_by=a.email)
+            if by_date:
+                for y in {old_year, store.load_incident(con, incident_id)["year"]} - {None}:
+                    store.renumber(con, y)
             if vehicles is not None:
                 store.replace_vehicles(con, incident_id, vehicles)
             if people is not None:
@@ -430,8 +458,12 @@ def api_members(tenant: str, a: tenancy.Access = Depends(access)):
 @app.delete("/api/incidents/{key}")
 def api_delete_incident(key: str, a: tenancy.Access = Depends(access)):
     slug, incident_id = parse_incident_key(key)
-    with a.tenant(slug, WRITE).connection() as con:
+    tenant = a.tenant(slug, WRITE)
+    with tenant.connection() as con:
+        year = (store.load_incident(con, incident_id) or {}).get("year")
         store.delete_incident(con, incident_id)
+        if tenant.config.numbering == "by_date":
+            store.renumber(con, year)
     log.info("Einsatz %s gelöscht von %s", key, a.email or "lokal")
     return {"ok": True}
 
@@ -677,13 +709,26 @@ def api_accept_report(acceptance: Acceptance, a: tenancy.Access = Depends(access
         raise HTTPException(410, "Die Vorschau ist abgelaufen – bitte die PDF erneut einlesen.")
     tenant = a.tenant(slug, WRITE)
     fields = {**report.to_fields(r), **acceptance.fields.model_dump(exclude_unset=True)}
+    by_date = tenant.config.numbering == "by_date"
+    year = year_of(fields.get("started_at"))
     with tenant.connection() as con:
-        update_id = store.find_existing(con, fields.get("bks_report_id"), year_of(fields.get("started_at")),
-                                        store.to_int(fields.get("number"))) if acceptance.replace else None
+        update_id = store.find_existing(con, fields.get("bks_report_id"), year,
+                                        None if by_date else store.to_int(fields.get("number"))) \
+            if acceptance.replace else None
+        old_year = store.load_incident(con, update_id)["year"] if update_id else None
+        if by_date:
+            # Vorläufig ans Ende, die richtige Stelle ergibt sich nach dem Speichern
+            fields["number"] = store.next_number(con, year) if year else None
+        elif store.to_int(fields.get("number")) is None and year:
+            fields["number"] = store.next_number(con, year)
+            r["warnings"].append(f"Einsatzbericht-Nr. fehlt – nächste freie Nr. {fields['number']} vergeben")
         try:
             incident_id = report.save(con, r, fields, update_id, modified_by=a.email)
         except store.DuplicateIncident as e:
             raise HTTPException(409, str(e))
+        if by_date:
+            for y in {year, old_year} - {None}:
+                store.renumber(con, y)
         store.delete_pending(con, r.get("pending_id"), r.get("bks_report_id"))
     _after_import(a, tenant, r, incident_id, bool(update_id))
     if r.get("new_vehicles"):
@@ -806,10 +851,18 @@ def _xlsx(write, name):
 def _summary(tenants, year, limit):
     """Kennzahlzeilen je Wehr, Summenzeile und Hinweise für die Excel-Übersicht."""
     parts, _ = _evaluate(tenants, year, limit)
-    rows = [{"name": t.name, **metrics.summary(evaluated, limit, t.config)} for t, evaluated, _ in parts]
+    rows = [_without_plan({"name": t.name, **metrics.summary(evaluated, limit, t.config)}, _plan_visible(t))
+            for t, evaluated, _ in parts]
     everything = [e for _, evaluated, _ in parts for e in evaluated]
     combined = tenant_config.combine("Summe", [t.config for t in tenants])
     total = {**metrics.summary(everything, limit, combined), "name": "Summe (Beteiligungen)"}
+    # Bedarfsplan in der Summe nur über die Wehren, für die er sichtbar ist
+    visible = [t for t in tenants if _plan_visible(t)]
+    if len(visible) < len(tenants):
+        shown = [e for t, evaluated, _ in parts if _plan_visible(t) for e in evaluated]
+        plan = metrics.summary(shown, limit, tenant_config.combine("Summe", [t.config for t in visible])) \
+            if visible else {}
+        total.update({key: plan.get(key) for key in PLAN_KEYS})
     notes = []
     if len(tenants) > 1:
         unique, without = metrics.unique_incidents([i for i, _ in everything])

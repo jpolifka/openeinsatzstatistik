@@ -239,6 +239,15 @@ Ausrücken, Eintreffen) und Anwesenheit (Person entfernen, vorhandenen Kameraden
 „Nachname, Vorname“ hinzufügen). Manuell ergänzte Fahrzeuge und Personen bleiben erhalten, wenn der
 Bericht später erneut eingelesen wird; Werte von Fahrzeugen aus der PDF ersetzt der neue Bericht.
 
+**Einsatznummern** (Verwaltung → BKS-Kennung): „aus dem Bericht“ übernimmt die Einsatzbericht-Nr.;
+fehlt sie (z. B. bei selbst angelegten Brandsicherheitswachen), vergibt die App die nächste freie.
+„nach Datum durchnummerieren“ vergibt alle Nummern nach dem Einsatzbeginn – ein später eingelesener
+Einsatz rückt an seine Stelle, die folgenden Nummern verschieben sich.
+
+**Bedarfsplan:** Wehrführer und Wehrleiter sehen ihn immer und geben ihn mit „für alle freigegeben“
+(Karte in der Auswertung oder Verwaltung → Orte & Bedarfsplan) für die übrigen Rollen frei. Ohne
+Freigabe fehlt er für diese auch in der Gesamtansicht und im Kennzahlen-Export.
+
 **Kameraden:** Ein Klick auf eine Person zeigt ihre Einsätze im Jahr, ein Klick auf einen Einsatz
 öffnet ihn in der Einsatzliste.
 

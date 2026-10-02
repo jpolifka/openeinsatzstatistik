@@ -17,7 +17,7 @@ const HELP_SECTIONS = [
       number: {
         title: "Nr.",
         short: "Laufende Einsatznummer im Jahr (z. B. 54 für 54-26).",
-        text: "Laufende Einsatznummer innerhalb des Jahres, wie im Dateinamen des Berichts (<i>54-26_B2_…pdf</i> → 54). Ob ein Einsatz schon erfasst ist, erkennt die App an der Nummer des Berichts im BKS-Portal, bei älteren Einsätzen an Nr. und Jahr. Ein erneut eingelesener Bericht aktualisiert dann den erfassten Einsatz.",
+        text: "Laufende Einsatznummer innerhalb des Jahres, wie im Dateinamen des Berichts (<i>54-26_B2_…pdf</i> → 54). Ob ein Einsatz schon erfasst ist, erkennt die App an der Nummer des Berichts im BKS-Portal, bei älteren Einsätzen an Nr. und Jahr. Ein erneut eingelesener Bericht aktualisiert dann den erfassten Einsatz. Fehlt die Nr. im Bericht, vergibt die App die nächste freie. Ist in der Verwaltung „nach Datum durchnummerieren“ eingestellt, vergibt die App alle Nummern selbst nach dem Einsatzbeginn – ein später eingelesener Einsatz rückt an seine Stelle.",
       },
       started_at: {
         title: "Beginn",
@@ -159,7 +159,7 @@ const HELP_SECTIONS = [
       response_plan: {
         title: "Feuerwehrbedarfsplan Pos. 8.4",
         short: "Anteil der Einsätze, bei denen das erste Fahrzeug rechtzeitig eintraf.",
-        text: () => `Berücksichtigt werden Einsätze ab Alarmstufe ${config.plan_min_level} (Stichwort x${config.plan_min_level}–x4) in ${helpList(config.plan_places)} mit Eintreffzeit. Erreichungsgrad = Anteil der Einsätze, bei denen das erste Fahrzeug innerhalb der Zeitgrenze (${helpLimits()} Minuten, umschaltbar) eingetroffen ist – getrennt nach den vier Zeitfenstern Werktag/Wochenende × Tag/Nacht. Die Stärken sind Mittelwerte je Einsatz.`,
+        text: () => `Berücksichtigt werden Einsätze ab Alarmstufe ${config.plan_min_level} (Stichwort x${config.plan_min_level}–x4) in ${helpList(config.plan_places)} mit Eintreffzeit. Erreichungsgrad = Anteil der Einsätze, bei denen das erste Fahrzeug innerhalb der Zeitgrenze (${helpLimits()} Minuten) eingetroffen ist – getrennt nach den vier Zeitfenstern Werktag/Wochenende × Tag/Nacht. Die Stärken sind Mittelwerte je Einsatz. Den Bedarfsplan sehen zunächst nur Wehrführer und Wehrleiter; mit „für alle freigegeben“ (oder in der Verwaltung unter „Orte & Bedarfsplan“) sehen ihn alle Rollen der Wehr.`,
       },
       alarm_level: {
         title: "Alarmstufen",
