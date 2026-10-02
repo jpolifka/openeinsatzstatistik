@@ -92,9 +92,11 @@ def load_config(con, name):
     fleet = tuple(Vehicle(r["call_sign"], r["label"], r["in_service_from"], r["in_service_until"], r["replaced_by"],
                           bool(r["in_plan_crew"]))
                   for r in con.execute("SELECT * FROM fleet ORDER BY sort_order, call_sign"))
-    keywords = tuple((r["code"], r["name"], r["terms"]) for r in con.execute(
-        "SELECT code, name, terms FROM keyword WHERE active ORDER BY sort_order, code"))
-    return TenantConfig(name=name, fleet=fleet, keywords=keywords or domain.KEYWORD_CATALOG, **kwargs)
+    rows = con.execute("SELECT code, name, terms, active FROM keyword ORDER BY sort_order, code").fetchall()
+    keywords = tuple((r["code"], r["name"], r["terms"]) for r in rows if r["active"])
+    inactive = tuple((r["code"], r["name"], r["terms"]) for r in rows if not r["active"])
+    return TenantConfig(name=name, fleet=fleet, keywords=keywords if rows else domain.KEYWORD_CATALOG,
+                        inactive_keywords=inactive, **kwargs)
 
 
 def save_config(con, cfg, keywords=False):
@@ -113,6 +115,49 @@ def save_config(con, cfg, keywords=False):
         con.execute("DELETE FROM keyword")
         con.executemany("INSERT INTO keyword (code, name, terms, sort_order) VALUES (?, ?, ?, ?)",
                         [(code, name, terms, order) for order, (code, name, terms) in enumerate(cfg.keywords, 1)])
+
+
+# ---------------------------------------------------------------- Stichwortkatalog der Wehr
+def keywords(con):
+    """Eigener Katalog [{code, name, terms, active}] oder None, solange die Vorlage gilt."""
+    rows = con.execute("SELECT code, name, terms, active FROM keyword ORDER BY sort_order, code").fetchall()
+    return [{**dict(r), "active": bool(r["active"])} for r in rows] or None
+
+
+def _own_keywords(con):
+    """Vor der ersten Änderung die Vorlage als eigenen Katalog übernehmen."""
+    if not con.execute("SELECT 1 FROM keyword LIMIT 1").fetchone():
+        add_template_keywords(con)
+
+
+def add_template_keywords(con):
+    """Stichworte der Vorlage ergänzen, die im eigenen Katalog fehlen -> Anzahl."""
+    known = {r[0] for r in con.execute("SELECT code FROM keyword")}
+    order = con.execute("SELECT COALESCE(MAX(sort_order), 0) FROM keyword").fetchone()[0]
+    missing = [k for k in domain.KEYWORD_CATALOG if k[0] not in known]
+    con.executemany("INSERT INTO keyword (code, name, terms, sort_order) VALUES (?, ?, ?, ?)",
+                    [(code, name, terms, order + i) for i, (code, name, terms) in enumerate(missing, 1)])
+    return len(missing)
+
+
+def save_keyword(con, code, name, terms="", active=True):
+    _own_keywords(con)
+    order = con.execute("SELECT COALESCE(MAX(sort_order), 0) + 1 FROM keyword").fetchone()[0]
+    con.execute("INSERT INTO keyword (code, name, terms, active, sort_order) VALUES (?, ?, ?, ?, ?) "
+                "ON CONFLICT(code) DO UPDATE SET name = excluded.name, terms = excluded.terms, active = excluded.active",
+                (code, name, terms, int(active), order))
+
+
+def delete_keyword(con, code):
+    _own_keywords(con)
+    con.execute("DELETE FROM keyword WHERE code = ?", (code,))
+
+
+def replace_keywords(con, entries):
+    """Katalog durch [(code, name, terms)] ersetzen; leer = zurück zur Vorlage."""
+    con.execute("DELETE FROM keyword")
+    con.executemany("INSERT INTO keyword (code, name, terms, sort_order) VALUES (?, ?, ?, ?)",
+                    [(code, name, terms, i) for i, (code, name, terms) in enumerate(entries, 1)])
 
 
 def forget_config(slug):

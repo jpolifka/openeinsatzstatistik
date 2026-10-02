@@ -239,5 +239,18 @@ def update_incident(con, incident_id, changes, modified_by=None):
                 "WHERE id = ?", [*f.values(), modified_by, incident_id])
 
 
+def add_fleet_vehicles(con, call_signs, day):
+    """Beim Import entdeckte eigene Fahrzeuge hinten an die Fahrzeugliste der Wehr anfügen."""
+    order = con.execute("SELECT COALESCE(MAX(sort_order), 0) FROM fleet").fetchone()[0]
+    for i, call_sign in enumerate(call_signs, start=1):
+        con.execute("INSERT OR IGNORE INTO fleet (call_sign, sort_order, in_service_from) VALUES (?, ?, ?)",
+                    (call_sign, order + i, day.isoformat() if day else None))
+
+
+def vehicles_with_data(con):
+    """{Funkrufname: Anzahl Einsätze} – für den Hinweis beim Entfernen aus der Fahrzeugliste."""
+    return {r[0]: r[1] for r in con.execute("SELECT call_sign, COUNT(*) FROM vehicle GROUP BY call_sign")}
+
+
 def delete_incident(con, incident_id):
     con.execute("DELETE FROM incident WHERE id = ?", (incident_id,))

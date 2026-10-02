@@ -138,13 +138,18 @@ function chartCard({ id, title, subtitle = "", chart, table, extra = "", heading
 }
 
 // ------------------------------------------------------------ Ansichten & Laden
-const VIEWS = {   // permission: nötiges Recht, sonst fehlt der Reiter
+// permission: nötiges Recht, sonst fehlt der Reiter; visible(): eigene Regel; noYear: Titel ohne Jahr.
+// Weitere Ansichten tragen sich selbst ein (admin.js).
+const VIEWS = {
   evaluation: { label: "Auswertung", load: loadEvaluation, render: renderEvaluation, permission: "stats" },
   incidents: { label: "Einsätze", load: loadIncidents, render: renderIncidents, permission: "incidents" },
   // Kameraden gehören zu einer Wehr – nicht in der Gesamtansicht einer VG
   members: { label: "Kameraden", load: loadEvaluation, render: renderMembers, permission: "incidents", single: true },
 };
-const allowedViews = () => Object.keys(VIEWS).filter((key) => can(VIEWS[key].permission) && !(VIEWS[key].single && config.vg));
+const allowedViews = () => Object.keys(VIEWS).filter((key) => {
+  const view = VIEWS[key];
+  return (view.visible ? view.visible() : can(view.permission)) && !(view.single && config.vg);
+});
 
 function renderTabs() {
   $("#tabs").innerHTML = allowedViews().map((key) => `<a href="#${key}" data-view="${key}">${VIEWS[key].label}</a>`).join("");
@@ -199,7 +204,7 @@ async function showView() {
   const view = VIEWS[state.view];
   for (const a of $$("#tabs a")) a.classList.toggle("active", a.dataset.view === state.view);
   for (const k of Object.keys(VIEWS)) $(`#view-${k}`).hidden = k !== state.view;
-  $("#page-title").textContent = `${view.label} ${state.year}`;
+  $("#page-title").textContent = view.noYear ? view.label : `${view.label} ${state.year}`;
   const section = $(`#view-${state.view}`);
   section.classList.add("loading");
   try {
@@ -949,6 +954,7 @@ function searchKeywords(query) {
   const matches = (text) => words.every((w) => fold(text).includes(w));
   const direct = [], viaTerm = [];
   for (const k of config.keyword_catalog) {
+    if (k.active === false) continue;          // deaktiviert: nur noch Bezeichnung für alte Einsätze
     if (matches(`${k.code} ${k.code.replace(".", "")} ${k.name}`)) { direct.push(k); continue; }
     const term = k.terms.split(", ").find(matches) || (matches(k.terms) && k.terms);
     if (term) viaTerm.push({ ...k, hint: term });
@@ -1085,11 +1091,17 @@ $("#scope").addEventListener("change", async (e) => {
     $("#logout").hidden = false;
     $("#logout button").dataset.tip = `Abmelden (${config.user})`;
   }
-  if (!config.tenants.length) {
-    fail(config.superadmin ? "Es ist noch keine Wehr angelegt." : "Dir ist keine Wehr zugeordnet.");
+  if (!config.tenants.length && !config.superadmin) {
+    fail("Dir ist keine Wehr zugeordnet.");
     return;
   }
   renderTabs();
+  if (!config.tenants.length) {               // Superadmin ohne Wehr: nur die Verwaltung
+    $("#btn-pdf").hidden = true;
+    $(".year-select:not(#scope-select)").hidden = true;
+    await showView();
+    return;
+  }
   renderScopes();
   addHelpButtons();
   $("#btn-pdf").hidden = !can("write");

@@ -107,6 +107,20 @@ Excel-Export sind für sie gesperrt. Geprüft wird im Backend, die Oberfläche b
   ersatzweise die eigenen Fahrzeuge im Bericht). Haben andere Wehren denselben Einsatz schon
   erfasst, zeigt die Vorschau „gemeinsamer Einsatz mit …“.
 
+**Verwaltung** (Reiter „Verwaltung“ für Wehrführer, Wehrleiter und Superadmin):
+- *Wehr*: Name, Farben (Farbwähler, Hex oder RGB, mit Vorschau und Kontrastprüfung), Logos.
+- *Fahrzeuge*: Reihenfolge, Bezeichnung, Dienstzeitraum („im Dienst ab“, „außer Dienst ab“), Nachfolger,
+  Zählung im Bedarfsplan, Ersatzfahrzeuge. Neue eigene Fahrzeuge aus BKS-Berichten nimmt die App beim
+  Übernehmen automatisch auf.
+- *BKS-Kennung*: Präfixe und Einheit, an denen die App eigene Fahrzeuge und Berichte erkennt, mit Testfeld.
+- *Orte & Bedarfsplan*: Orte mit Namensanfang, Ausrückebereich, Alarmstufe, Zeitgrenzen, Tagesstunden.
+- *Stichworte*: Vorlage der AAO oder eigener Katalog – einzelne Stichworte anlegen, ändern, deaktivieren;
+  Import aus CSV/Excel mit Vorschau.
+- *Benutzer*: E-Mail-Adressen Rollen zuordnen (Wehrführer vergeben Erfasser und Benutzer, Wehrleiter alle
+  Rollen ihrer VG). Den letzten Wehrleiter einer VG entfernt nur der Superadmin.
+- *Wehren & VGs* (Superadmin): VGs und Wehren anlegen, umbenennen, einer VG zuordnen, deaktivieren und
+  entfernen (die Daten wandern nach `daten/deleted/`, gelöscht wird nichts).
+
 **Aussehen je Wehr:** Name, Logos (hell für die Kopfzeile, dunkel für die Fußzeile, Symbol für den
 Browser-Tab; PNG, JPEG oder WebP bis 512 KB) und Farben. Aus der Hauptfarbe (und optional einer dunklen
 Variante) leitet die App alle Farbtöne ab und hält die Kontraste lesbar; zu helle Farben für weiße
@@ -185,10 +199,12 @@ app/
   excel_layout.py  Spaltenaufbau der Einsatzübersicht, aus der Fahrzeugliste der Wehr
   excel_export.py  Excel-Export im Format der Einsatzübersicht, Gesamtmappe, Kennzahlen
   theme.py         Farben (abgeleitete Töne, Kontrastprüfung) und Logos einer Wehr
+  admin.py         Verwaltung: Einstellungen, Logos, Stichworte, Rollen, VGs und Wehren
   names.py, timeutil.py, holidays.py   Namensvergleich, Zeiten, Feiertage RLP
 static/
   index.html       Oberfläche
   app.js           Ansichten und Bedienung
+  admin.js         Ansicht Verwaltung
   help.js          Texte und Logik der Online-Hilfe
   app.css          Gestaltung
   fonts/, img/     Schrift Sansation (SIL OFL), neutrales Signet

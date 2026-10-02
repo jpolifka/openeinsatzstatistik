@@ -83,21 +83,38 @@ def _is_own(vehicle, cfg):
     return vehicle["name"].startswith(cfg.own_vehicle_prefix)
 
 
+def _report_day(report):
+    """Einsatztag für den Dienstzeitraum der Fahrzeuge: früheste Alarmierung im Bericht."""
+    alarms = [v["alerted"] for v in report["vehicles"] if v["alerted"]]
+    first = min(alarms) if alarms else report.get("first_alarm")
+    return first.date() if first else None
+
+
 def assign_vehicles(report, cfg):
-    """Fahrzeuge den Blöcken der Einsatzübersicht zuordnen (inkl. Ersatzfahrzeuge)."""
-    slots = {}
+    """Fahrzeuge den Blöcken der Einsatzübersicht zuordnen (inkl. Ersatzfahrzeuge).
+
+    Eigene Fahrzeuge, die noch nicht in der Fahrzeugliste stehen, bekommen einen eigenen Block und
+    stehen in report["new_vehicles"] (beim Speichern werden sie in die Liste aufgenommen).
+    """
+    slots, day = {}, _report_day(report)
+    report["new_vehicles"] = []
+    in_service = set(cfg.vehicles_on(day)) if day else set(cfg.vehicles)
     crewed = {p["vehicle"] for p in report["people"] if p["vehicle"]}
     for v in report["vehicles"]:
         if v["call_sign"] in cfg.vehicles:
             slots[v["call_sign"]] = v
+            if v["call_sign"] not in in_service:
+                report["warnings"].append(f"{v['call_sign']} ist laut Fahrzeugliste an diesem Tag außer Dienst")
     for v in report["vehicles"]:
         target = cfg.substitutes.get(v["call_sign"])
         if target and target not in slots and v["call_sign"] in crewed:
             slots[target] = v
             report["warnings"].append(f"{v['name']} als Ersatz für {target} eingetragen")
-    unassigned = [v["name"] for v in report["vehicles"] if _is_own(v, cfg) and v not in slots.values()]
-    if unassigned:
-        report["warnings"].append("Nicht in Liste abgebildete Fahrzeuge: " + ", ".join(unassigned))
+    for v in report["vehicles"]:
+        if _is_own(v, cfg) and v["call_sign"] and v not in slots.values() and v["call_sign"] not in slots:
+            slots[v["call_sign"]] = v
+            report["new_vehicles"].append(v["call_sign"])
+    report["day"] = day
     return slots
 
 
@@ -220,6 +237,7 @@ def save(con, report, fields, replace_id=None, modified_by=None):
     """Bericht mit den (ggf. korrigierten) Feldern als Einsatz speichern; unbekannte Personen anlegen."""
     incident_id = store.create_incident(con, fields, source="pdf", filename=report["filename"],
                                         warnings=report["warnings"], replace_id=replace_id, modified_by=modified_by)
+    store.add_fleet_vehicles(con, report.get("new_vehicles", ()), report.get("day"))
     for row in vehicle_rows(report).values():
         store.add_vehicle(con, incident_id, **row)
     members = store.MemberDirectory(con)

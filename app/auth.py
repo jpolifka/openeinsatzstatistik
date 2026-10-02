@@ -104,6 +104,13 @@ def current_user(request: Request):
     return _verify("session", request.cookies.get(COOKIE))
 
 
+def access(request: Request) -> tenancy.Access:
+    """Rechte des angemeldeten Benutzers und ausgewählte Wehr bzw. VG (ohne Anmeldung: Superadmin).
+    Als FastAPI-Dependency für alle Endpunkte mit Einsatzdaten oder Verwaltung."""
+    email = current_user(request) if enabled() else None
+    return tenancy.access_for(email, request.cookies.get(SCOPE_COOKIE))
+
+
 def _use_link(token):
     """Prüft den Link und entwertet ihn. Liefert die Adresse oder None."""
     email = _verify("link", token)

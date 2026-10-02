@@ -28,7 +28,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Stre
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, create_model
 
-from app import auth, db, excel_export, legacy, metrics, pdf_report, report, store, tenancy, tenant_config, theme
+from app import admin, auth, db, excel_export, legacy, metrics, pdf_report, report, store, tenancy, tenant_config, theme
 from app.tenancy import INCIDENTS, STATS, WRITE
 from app.timeutil import year_of
 
@@ -65,6 +65,7 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 app.include_router(auth.router)
+app.include_router(admin.router)
 
 # Ohne Anmeldung erreichbar: Health-Check, Anmeldeseiten und Logos/CSS/JS (keine Einsatzdaten)
 PUBLIC_PATHS = ("/health", "/login", "/logout", "/auth/", "/static/")
@@ -97,10 +98,7 @@ async def forbidden(_request, exc):
     return JSONResponse({"detail": str(exc)}, status_code=403)
 
 
-def access(request: Request) -> tenancy.Access:
-    """Rechte des angemeldeten Benutzers und ausgewählte Wehr (ohne Anmeldung: Superadmin)."""
-    email = auth.current_user(request) if auth.enabled() else None
-    return tenancy.access_for(email, request.cookies.get(auth.SCOPE_COOKIE))
+access = auth.access
 
 
 # ---------------------------------------------------------------- PDF-Vorschau im Speicher
@@ -162,12 +160,13 @@ def parse_incident_key(key):
     return slug, int(number)
 
 
-def incident_json(incident, leaders, tenant, limit=None):
-    """Einsatz mit Kennzahlen für die Oberfläche. leaders: store.LeaderNames für die EHF-Auswahl."""
-    cfg = tenant.config
+def incident_json(incident, leaders, tenant, limit=None, cfg=None):
+    """Einsatz mit Kennzahlen für die Oberfläche. leaders: store.LeaderNames für die EHF-Auswahl.
+    cfg: abweichende Konfiguration (Vorschau mit neu entdeckten Fahrzeugen), sonst die der Wehr."""
+    cfg = cfg or tenant.config
     m = metrics.incident_metrics(incident, cfg, limit)
     vehicles = []
-    for call_sign in cfg.vehicles:
+    for call_sign in cfg.vehicles_for(incident):
         v, vm = incident["vehicles"].get(call_sign) or {}, m["vehicles"].get(call_sign) or {}
         vehicles.append({"call_sign": call_sign, "substitute": cfg.substitute_label(v.get("name"), call_sign),
                          "crew": v.get("crew"), "departed": v.get("departed"), "arrived": v.get("arrived"),
@@ -489,10 +488,12 @@ def _shared_with(r, tenant, a):
 
 
 def _preview_json(r, tenant, a):
+    cfg = tenant.config.with_new_vehicles(r.get("new_vehicles", ()), r.get("day"))
     with tenant.connection() as con:
         incident, existing = report.preview(con, r)
-        result = incident_json(incident, store.LeaderNames(con), tenant)
+        result = incident_json(incident, store.LeaderNames(con), tenant, cfg=cfg)
     result["tenant_name"] = tenant.name
+    result["new_vehicles"] = r.get("new_vehicles", [])
     result["reported_as"] = r["reported_as"]
     result["incident_commander"] = r["incident_commander"]
     result["existing"] = {"id": incident_key(tenant, existing["id"]), "source": existing["source"],
@@ -536,6 +537,10 @@ def api_accept_report(acceptance: Acceptance, a: tenancy.Access = Depends(access
             incident_id = report.save(con, r, fields, replace_id, modified_by=a.email)
         except store.DuplicateIncident as e:
             raise HTTPException(409, str(e))
+    if r.get("new_vehicles"):
+        tenancy.forget_config(tenant.slug)
+        log.info("Fahrzeuge %s in die Liste von %s aufgenommen", ", ".join(r["new_vehicles"]), tenant.slug)
+    with tenant.connection() as con:
         return incident_json(store.load_incident(con, incident_id), store.LeaderNames(con), tenant)
 
 
