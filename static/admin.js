@@ -15,6 +15,7 @@ const admin = {
   overview: null, slug: null, section: null, settings: null, keywords: null, memberships: null, superOverview: null,
   check: null, importFile: null, importPreview: null, keywordQuery: "", keywordEdit: null, parseResult: null, error: "",
   fees: null, feeVg: null, feeDraft: null,
+  savedSettings: null,        // Stand der Einstellungen beim Laden/Speichern – Vergleich für „ungespeichert“
 };
 
 VIEWS.admin = { label: "Verwaltung", load: loadAdmin, render: renderAdmin, noYear: true,
@@ -24,14 +25,16 @@ VIEWS.admin = { label: "Verwaltung", load: loadAdmin, render: renderAdmin, noYea
 async function loadAdmin() {
   if (!admin.overview) {
     admin.overview = await api("/api/admin");
-    const own = admin.overview.tenants.find((t) => t.slug === config.tenant?.slug);
-    admin.slug = (own || admin.overview.tenants[0])?.slug || null;
+    // Gewählte Wehr behalten (z. B. nach dem Speichern), sonst die oben ausgewählte, sonst die erste
+    const pick = (slug) => admin.overview.tenants.find((t) => t.slug === slug);
+    admin.slug = (pick(admin.slug) || pick(config.tenant?.slug) || admin.overview.tenants[0])?.slug || null;
   }
   const sections = adminSections();
   if (!sections.some(([key]) => key === admin.section)) admin.section = sections[0][0];
   const s = admin.section;
   if (SETTINGS_SECTIONS.includes(s) && admin.settings?.slug !== admin.slug) {
     admin.settings = await api(`/api/admin/${admin.slug}/settings`);
+    admin.savedSettings = JSON.stringify(settingsPayload());
     admin.check = null;
   }
   if (s === "keywords" && admin.keywords?.slug !== admin.slug) {
@@ -78,14 +81,32 @@ function renderAdmin() {
     <div class="admin-body">${body}</div>
   </div>`;
   if (admin.section === "unit") updateThemePreview();
+  updateDirty();
 }
 
 const adminField = (label, input, span = "", help = "") =>
   `<label class="field ${span}"><span>${label}${help ? helpButton(help) : ""}</span>${input}</label>`;
 const textInput = (path, value, attributes = "") =>
   `<input type="text" data-bind="${path}" value="${esc(value ?? "")}" ${attributes}>`;
+// Speichern-Leiste der Einstellungen; bei ungespeicherten Änderungen klebt sie unten am Fenster
 const saveButton = (label = "Speichern") =>
-  `<div class="admin-actions"><button type="button" class="btn btn-primary" data-admin-action="save-settings">${label}</button></div>`;
+  `<div class="admin-actions" id="admin-savebar"><span class="unsaved-note">Ungespeicherte Änderungen</span>
+    <button type="button" class="btn btn-primary" data-admin-action="save-settings">${label}</button></div>`;
+
+// Ungespeicherte Änderungen an den Einstellungen der Wehr (Name, Farben, Fahrzeuge, Orte …)
+const settingsDirty = () => Boolean(admin.settings && admin.savedSettings !== JSON.stringify(settingsPayload()));
+
+function updateDirty() {
+  $("#admin-savebar")?.classList.toggle("dirty", settingsDirty());
+}
+
+// Vor dem Wechsel der Wehr: ungespeicherte Änderungen nur nach Rückfrage verwerfen
+function confirmDiscard() {
+  if (!settingsDirty()) return true;
+  if (!confirm("Die Änderungen an den Einstellungen sind noch nicht gespeichert. Verwerfen?")) return false;
+  admin.settings = admin.savedSettings = null;
+  return true;
+}
 
 // Wert in admin.settings über einen Pfad wie "fleet.0.label" setzen
 function setPath(path, value) {
@@ -134,7 +155,12 @@ function unitSection() {
         ${url ? `<button type="button" class="btn btn-outline btn-small" data-admin-action="delete-asset" data-name="${name}">Entfernen</button>` : ""}</div>
     </div>`;
   }).join("");
-  return `<div class="form-grid">${adminField("Name der Wehr", textInput("name", s.name, 'maxlength="80"'), "span-4")}</div>
+  // Farben und Logos zeigt die Seite nur, wenn oben genau diese Wehr gewählt ist (Gesamtansicht: neutral)
+  const elsewhere = config.tenant?.slug !== admin.slug ? `<div class="message message-info">
+      Oben ist ${config.vg ? "die Gesamtansicht der VG gewählt – sie ist immer neutral gestaltet" : "eine andere Wehr gewählt"}.
+      Farben und Logos von ${esc(s.name)} erscheinen, wenn diese Wehr ausgewählt ist.
+      <button type="button" class="btn btn-light btn-small" data-admin-action="select-tenant">${esc(s.name)} auswählen</button></div>` : "";
+  return `${elsewhere}<div class="form-grid">${adminField("Name der Wehr", textInput("name", s.name, 'maxlength="80"'), "span-4")}</div>
     <h3 class="section-gap">Farben${helpButton("admin_colors")}</h3>
     <div class="admin-colors">
       <div>${colorField("brand", "Hauptfarbe", "Kopfzeile, Knöpfe, Überschriften und Diagramme. Weiße Schrift muss darauf lesbar sein.")}
@@ -414,6 +440,7 @@ async function runAdminAction(button) {
   switch (action) {
     case "save-settings": {
       admin.settings = await apiJson(`/api/admin/${admin.slug}/settings`, "PUT", settingsPayload());
+      admin.savedSettings = JSON.stringify(settingsPayload());
       admin.check = null;
       admin.overview = null;                 // Name der Wehr kann sich geändert haben
       if (admin.slug === config.tenant?.slug) await refreshCurrentTenant();
@@ -421,6 +448,12 @@ async function runAdminAction(button) {
       await loadAdmin();
       return rerender();
     }
+    case "select-tenant":
+      if (settingsDirty() && !confirm("Die Änderungen sind noch nicht gespeichert. Trotzdem wechseln?")) return;
+      await apiJson("/api/scope", "POST", { key: `t:${admin.slug}` });
+      admin.settings = admin.savedSettings = null;    // kein Rückfrage-Dialog beim Neuladen
+      location.reload();
+      return;
     case "clear-color":
       s.colors[key] = "";
       if (key === "brand") s.colors.brand_dark = "";
@@ -544,8 +577,9 @@ async function superChanged(message) {
   await showView();
 }
 
+// Logos sind sofort gespeichert; nur deren Adressen neu holen – ungespeicherte Eingaben (z. B. Farben) bleiben
 async function afterAssetChange() {
-  admin.settings = await api(`/api/admin/${admin.slug}/settings`);
+  admin.settings.assets = (await api(`/api/admin/${admin.slug}/settings`)).assets;
   if (admin.slug === config.tenant?.slug) await refreshCurrentTenant();
   renderAdmin();
 }
@@ -648,6 +682,17 @@ $("#view-admin").addEventListener("click", async (e) => {
 });
 
 $("#view-admin").addEventListener("input", (e) => {
+  handleAdminInput(e);
+  updateDirty();
+});
+$("#view-admin").addEventListener("change", () => setTimeout(updateDirty));   // nach dem Handler unten
+
+// Neuladen, Schließen oder Wechsel oben in der Kopfzeile (lädt neu): Rückfrage des Browsers
+window.addEventListener("beforeunload", (e) => {
+  if (settingsDirty()) e.preventDefault();
+});
+
+function handleAdminInput(e) {
   const t = e.target;
   if (t.dataset.bind) { setPath(t.dataset.bind, t.dataset.number !== undefined ? Number(t.value) : inputValue(t)); return; }
   if (t.dataset.fee) { setFeePath(t.dataset.fee, t.type === "number" ? Number(t.value || 0) : t.value); return; }
@@ -671,12 +716,16 @@ $("#view-admin").addEventListener("input", (e) => {
     search.focus();
     search.setSelectionRange(position, position);
   }
-});
+}
 
 $("#view-admin").addEventListener("change", async (e) => {
   const t = e.target;
   try {
-    if (t.dataset.adminTenant !== undefined) { await adminGo({ slug: t.value, parseResult: null, keywordEdit: null }); return; }
+    if (t.dataset.adminTenant !== undefined) {
+      if (!confirmDiscard()) { t.value = admin.slug; return; }
+      await adminGo({ slug: t.value, parseResult: null, keywordEdit: null });
+      return;
+    }
     if (t.dataset.feeVg !== undefined) { await adminGo({ feeVg: t.value }); return; }
     if (t.dataset.limits !== undefined) { renderAdmin(); return; }     // Auswahl der Standardgrenze aktualisieren
     if (t.dataset.bind?.startsWith("places.") && t.dataset.bind.endsWith(".name")) { renderAdmin(); return; }
