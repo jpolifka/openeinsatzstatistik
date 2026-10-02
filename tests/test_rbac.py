@@ -223,3 +223,16 @@ def test_own_permissions_exclude_inherited(world):
     group = _roles(world)["gruppenfuehrer"]
     assert set(group["permissions"]) == {rbac.WRITE, rbac.INCIDENTS}
     assert rbac.DELETE not in group["effective"]
+
+
+def test_inheriting_role_keeps_prerequisites_when_parent_shrinks(world):
+    """Kind setzt people.edit voraus: verliert die Elternrolle Anwesenheit sehen bzw. bearbeiten, bleibt das
+    Kind trotzdem vollständig (keine Rechte ohne ihre Voraussetzungen)."""
+    _as(world, "vglead@example.org")
+    _role(world, label="Basis", permissions=[rbac.PEOPLE, rbac.WRITE])
+    base = _roles(world)["basis"]
+    _role(world, label="Kind", parent=base["id"], permissions=[rbac.PEOPLE_EDIT, rbac.PEOPLE, rbac.WRITE])
+    assert world.put(f"/api/admin/roles/{base['id']}", json={"label": "Basis", "scope": "tenant", "vg": "vg-a",
+                                                               "permissions": [rbac.STATS]}).status_code == 200
+    child = set(_roles(world)["kind"]["effective"])
+    assert {rbac.PEOPLE_EDIT, rbac.PEOPLE, rbac.WRITE, rbac.INCIDENTS, rbac.STATS} <= child
