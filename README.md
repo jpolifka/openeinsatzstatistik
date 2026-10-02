@@ -107,6 +107,12 @@ Excel-Export sind für sie gesperrt. Geprüft wird im Backend, die Oberfläche b
   ersatzweise die eigenen Fahrzeuge im Bericht). Haben andere Wehren denselben Einsatz schon
   erfasst, zeigt die Vorschau „gemeinsamer Einsatz mit …“.
 
+**Aussehen je Wehr:** Name, Logos (hell für die Kopfzeile, dunkel für die Fußzeile, Symbol für den
+Browser-Tab; PNG, JPEG oder WebP bis 512 KB) und Farben. Aus der Hauptfarbe (und optional einer dunklen
+Variante) leitet die App alle Farbtöne ab und hält die Kontraste lesbar; zu helle Farben für weiße
+Schrift werden abgelehnt. Ohne eigene Farben gilt das bisherige Rot. Anmeldung und Gesamtansicht
+einer VG sind neutral gestaltet.
+
 **Umstellung einer bestehenden Installation:** Liegt beim Start noch `daten/einsaetze.db` (ohne
 `daten/app.db`), übernimmt die App sie einmalig als Wehr „Rheinbrohl“ in der „VG Bad Hönningen“
 (`daten/tenants/rheinbrohl/einsaetze.db`), samt den bisherigen Fahrzeugen, Orten und Logos. Die
@@ -177,14 +183,15 @@ app/
   store.py         Datenbankzugriff, Namensabgleich Kameraden
   db.py            SQLite-Verbindungen und Migrationen (zentral und je Wehr)
   excel_layout.py  Spaltenaufbau der Einsatzübersicht, aus der Fahrzeugliste der Wehr
-  excel_export.py  Excel-Export im Format der Einsatzübersicht
+  excel_export.py  Excel-Export im Format der Einsatzübersicht, Gesamtmappe, Kennzahlen
+  theme.py         Farben (abgeleitete Töne, Kontrastprüfung) und Logos einer Wehr
   names.py, timeutil.py, holidays.py   Namensvergleich, Zeiten, Feiertage RLP
 static/
   index.html       Oberfläche
   app.js           Ansichten und Bedienung
   help.js          Texte und Logik der Online-Hilfe
   app.css          Gestaltung
-  fonts/, img/     Schrift Sansation (SIL OFL), Logos
+  fonts/, img/     Schrift Sansation (SIL OFL), neutrales Signet
 tests/             pytest (nur erfundene Daten)
 Dockerfile, docker-compose.yml, requirements.txt, requirements-dev.txt
 ```

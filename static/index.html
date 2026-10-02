@@ -3,15 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Einsatzstatistik · FF Rheinbrohl</title>
-  <link rel="icon" href="/static/img/logo.svg">
+  <title>Einsatzstatistik</title>
+  <link rel="icon" href="/static/img/app-icon.svg" id="favicon">
   <link rel="stylesheet" href="/static/fonts/sansation.css">
   <link rel="stylesheet" href="/static/app.css">
+  <!-- Farben der ausgewählten Wehr (leer = Standard aus app.css) -->
+  <link rel="stylesheet" href="/api/theme.css">
 </head>
 <body>
   <header class="topbar">
     <div class="topbar-inner">
-      <img class="topbar-logo" src="/static/img/logo-weiss.png" alt="Feuerwehr Rheinbrohl">
+      <img class="topbar-logo" id="logo-light" src="/static/img/app-icon-light.svg" alt="">
       <div class="topbar-title">
         <span class="topbar-kicker">Einsatzstatistik</span>
         <h1 id="page-title">Einsätze</h1>
@@ -119,8 +121,8 @@
   <div class="toast" id="toast" role="status" hidden></div>
 
   <footer class="footer">
-    <img src="/static/img/logo-schwarz.png" alt="" class="footer-logo">
-    <span>Freiwillige Feuerwehr Rheinbrohl · Einsatzstatistik</span>
+    <img src="/static/img/app-icon.svg" alt="" class="footer-logo" id="logo-dark">
+    <span id="footer-name">Einsatzstatistik</span>
   </footer>
 
   <script src="/static/help.js"></script>

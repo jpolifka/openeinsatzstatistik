@@ -27,7 +27,7 @@ import urllib.request
 from fastapi import APIRouter, BackgroundTasks, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from app import db, tenancy
+from app import db, tenancy, theme
 
 log = logging.getLogger("pdf2einsatz")
 
@@ -159,10 +159,11 @@ def send_link(email):
 def _page(content, status_code=200):
     return HTMLResponse(f"""<!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Anmeldung · Einsatzstatistik</title><link rel="icon" href="/static/img/logo.svg">
-<link rel="stylesheet" href="/static/fonts/sansation.css"><link rel="stylesheet" href="/static/app.css"></head>
+<title>Anmeldung · Einsatzstatistik</title><link rel="icon" href="/static/img/app-icon.svg">
+<link rel="stylesheet" href="/static/fonts/sansation.css"><link rel="stylesheet" href="/static/app.css">
+<style>{theme.css(theme.NEUTRAL)}</style></head>
 <body><header class="topbar"><div class="topbar-inner">
-<img class="topbar-logo" src="/static/img/logo-weiss.png" alt="Feuerwehr Rheinbrohl">
+<img class="topbar-logo" src="/static/img/app-icon-light.svg" alt="">
 <div class="topbar-title"><span class="topbar-kicker">Einsatzstatistik</span><h1>Anmeldung</h1></div>
 </div></header>
 <main class="page"><div class="card login-card">{content}</div></main></body></html>""", status_code)

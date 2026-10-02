@@ -50,6 +50,7 @@ class TenantConfig:
     second_limit: int = domain.SECOND_LIMIT
     day_hours: tuple = (domain.DAY_START_HOUR, domain.DAY_END_HOUR)
     keywords: tuple = domain.KEYWORD_CATALOG  # (Stichwort.Stufe, Bezeichnung, Suchbegriffe)
+    colors: dict = dataclasses.field(default_factory=dict)   # {"brand": "#RRGGBB", "brand_dark": …}, siehe theme.py
 
     # ------------------------------------------------------------ Fahrzeuge
     @property
@@ -97,6 +98,8 @@ class TenantConfig:
         """Fachkonstanten für die Oberfläche."""
         return {
             "vehicles": list(self.vehicles),
+            "own_prefix": self.own_prefix,
+            "substitutes": dict(self.substitutes),
             "categories": [{"code": code, "name": name} for code, name in domain.CATEGORIES],
             "places": list(self.place_names),
             "plan_places": list(self.plan_places),
