@@ -505,10 +505,24 @@ a.tenant-badge { text-decoration: none; }
 }
 .btn-help-header:hover { background: rgba(255,255,255,.26); }
 .btn-help-header svg { width: 18px; height: 18px; display: block; margin: auto; }
+/* Ungelesene Neuigkeiten: Punkt am ?-Symbol im Kopf und am Reiter */
+.btn-help-header.has-news { position: relative; }
+.btn-help-header.has-news::after, .help-tabs .has-news::after {
+  content: ""; position: absolute; top: 0; right: 0; width: 10px; height: 10px; border-radius: 50%;
+  background: var(--white); box-shadow: 0 0 0 2px var(--brand);
+}
+.help-tabs button { position: relative; }
+.help-tabs .has-news::after { top: 3px; right: 3px; width: 7px; height: 7px; background: var(--brand); box-shadow: none; }
 .login-card { max-width: 440px; margin: 40px auto 0; }
 .login-form { display: grid; gap: 16px; margin-top: 4px; }
 .login-card p + .login-form { margin-top: 16px; }
 .dialog-help { width: min(760px, calc(100vw - 32px)); }
+.help-tabs { margin-top: 10px; }
+.changelog { margin: 0; padding-left: 20px; }
+.changelog li { margin: 6px 0; font-size: .92rem; }
+.feedback-form { display: grid; gap: 12px; }
+.feedback-form p { margin: 0; }
+.feedback-form .message { margin-top: 0; }
 .help-section + .help-section { margin-top: 26px; }
 .help-section > p { margin-bottom: 10px; font-size: .9rem; }
 .help-list { margin: 0; }

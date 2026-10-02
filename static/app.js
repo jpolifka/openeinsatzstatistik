@@ -139,13 +139,17 @@ function chartCard({ id, title, subtitle = "", chart, table, extra = "", heading
 }
 
 // ------------------------------------------------------------ Ansichten & Laden
-// permission: nötiges Recht, sonst fehlt der Reiter; visible(): eigene Regel; noYear: Titel ohne Jahr.
+// permission: nötiges Recht, sonst fehlt der Reiter; visible(): eigene Regel; noYear: Titel ohne Jahr;
+// help: Abschnitt (sec_…) oder Feld der Hilfe, das das ?-Symbol im Kopf in dieser Ansicht öffnet.
 // Weitere Ansichten tragen sich selbst ein (admin.js).
 const VIEWS = {
-  evaluation: { label: "Auswertung", load: loadEvaluation, render: renderEvaluation, permission: "stats" },
-  incidents: { label: "Einsätze", load: loadIncidents, render: renderIncidents, permission: "incidents" },
+  evaluation: { label: "Auswertung", load: loadEvaluation, render: renderEvaluation, permission: "stats",
+    help: () => config.vg ? "sec_vg" : "sec_evaluation" },
+  incidents: { label: "Einsätze", load: loadIncidents, render: renderIncidents, permission: "incidents",
+    help: () => state.editing != null ? "sec_capture" : "sec_metrics" },
   // Kameraden gehören zu einer Wehr – nicht in der Gesamtansicht einer VG
-  members: { label: "Kameraden", load: loadMembers, render: renderMembers, permission: "people", single: true },
+  members: { label: "Kameraden", load: loadMembers, render: renderMembers, permission: "people", single: true,
+    help: "sec_members" },
 };
 const allowedViews = () => Object.keys(VIEWS).filter((key) => {
   const view = VIEWS[key];
@@ -1307,6 +1311,7 @@ $("#scope").addEventListener("change", async (e) => {
     return;
   }
   applyBranding();
+  setupHelp();
   if (config.user) {
     $("#logout").hidden = false;
     $("#logout button").dataset.tip = `Abmelden (${config.user})`;
@@ -1323,7 +1328,6 @@ $("#scope").addEventListener("change", async (e) => {
     return;
   }
   renderScopes();
-  addHelpButtons();
   $("#btn-pdf").hidden = !can("write");
   try {
     await loadYears();

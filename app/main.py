@@ -28,7 +28,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Stre
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, create_model
 
-from app import admin, auth, db, domain, dpa, fees, mail, excel_export, legacy, metrics, pdf_report, records, report, store, tenancy, tenant_config, theme
+from app import admin, auth, db, domain, dpa, feedback, fees, mail, excel_export, legacy, metrics, pdf_report, records, report, store, tenancy, tenant_config, theme
 from app.tenancy import ADMIN, INCIDENTS, PEOPLE, STATS, WRITE
 from app.timeutil import year_of
 
@@ -68,6 +68,7 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 app.include_router(auth.router)
 app.include_router(admin.router)
 app.include_router(dpa.router)
+app.include_router(feedback.router)
 
 # Ohne Anmeldung erreichbar: Health-Check, Anmeldeseiten und Logos/CSS/JS (keine Einsatzdaten)
 PUBLIC_PATHS = ("/health", "/login", "/logout", "/auth/", "/static/")
@@ -260,6 +261,7 @@ def api_config(a: tenancy.Access = Depends(access)):
             "scope": a.scope_key, "vg": {"slug": a.vg, "name": a.vgs[a.vg]} if a.vg else None,
             "tenant": a.selected.json() if a.selected else None, "tenants": [t.json() for t in tenants],
             "branding": _branding(a.selected), "dpa_blocked": a.blocked,
+            "feedback": feedback.enabled() and bool(a.email),
             "manages_vg": bool(a.vg and tenants and a.manages_vg(tenants[0].vg_id)),
             "permissions": sorted(set().union(*(t.permissions for t in tenants))), "scopes": a.scopes()}
 

@@ -31,7 +31,7 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0-4.5 4.5M12 4l4.5 4.5M5 20h14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <span>Bericht einlesen</span>
         </button>
-        <button type="button" class="btn-help-header" id="btn-help" data-help="" aria-label="Hilfe öffnen" title="Hilfe">?</button>
+        <button type="button" class="btn-help-header" id="btn-help" aria-label="Hilfe öffnen" title="Hilfe">?</button>
         <form method="post" action="/logout" id="logout" hidden>
           <button type="submit" class="btn-help-header" aria-label="Abmelden">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 12H4m0 0 4-4m-4 4 4 4M13 4h5a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -125,16 +125,32 @@
     <div class="dialog-body" id="fees-body"></div>
   </dialog>
 
-  <!-- Online-Hilfe -->
+  <!-- Online-Hilfe, Neuigkeiten und Feedback (help.js, changelog.js) -->
   <dialog id="help-dialog" class="dialog dialog-help" aria-labelledby="help-title">
     <div class="dialog-header">
       <div>
         <h2 id="help-title">Hilfe</h2>
-        <p class="muted">Bedeutung der Felder und Kennzahlen. Das <span class="help-btn help-sample" aria-hidden="true">?</span> neben einem Feld springt direkt zur passenden Erklärung.</p>
+        <p class="muted" id="help-intro">Bedeutung der Felder und Kennzahlen. Das <span class="help-btn help-sample" aria-hidden="true">?</span> neben einem Feld springt direkt zur passenden Erklärung.</p>
+        <div class="segments help-tabs" id="help-tabs">
+          <button type="button" data-help-tab="help" class="active">Hilfe</button>
+          <button type="button" data-help-tab="news">Neuigkeiten</button>
+          <button type="button" data-help-tab="feedback" hidden>Feedback</button>
+        </div>
       </div>
       <button type="button" class="btn-close" data-close="help-dialog" aria-label="Schließen"></button>
     </div>
     <div class="dialog-body" id="help-body"></div>
+    <div class="dialog-body" id="help-news" hidden></div>
+    <div class="dialog-body" id="help-feedback" hidden>
+      <form id="feedback-form" class="feedback-form">
+        <p>Frage, Fehler oder Wunsch? Die Nachricht geht per E-Mail an den Betreiber der App. Die Antwort kommt an deine Anmeldeadresse.</p>
+        <label class="field"><span>Nachricht</span>
+          <textarea name="message" rows="8" maxlength="5000" required></textarea></label>
+        <p class="muted small">Mitgeschickt werden deine Adresse, die ausgewählte Wehr und die aktuelle Ansicht. Bitte keine Namen von Kameraden oder anderen Personen eintragen.</p>
+        <div><button type="submit" class="btn btn-primary">Senden</button></div>
+        <div class="message" id="feedback-status" role="status" hidden></div>
+      </form>
+    </div>
   </dialog>
 
   <div class="tooltip" id="tooltip" role="tooltip" hidden></div>
@@ -145,6 +161,7 @@
     <span id="footer-name">Einsatzstatistik</span>
   </footer>
 
+  <script src="/static/changelog.js"></script>
   <script src="/static/help.js"></script>
   <script src="/static/app.js"></script>
   <script src="/static/records.js"></script>

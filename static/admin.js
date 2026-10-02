@@ -23,8 +23,12 @@ const admin = {
   savedSettings: null,        // Stand der Einstellungen beim Laden/Speichern – Vergleich für „ungespeichert“
 };
 
+// Hilfe zum gerade offenen Bereich der Verwaltung
+const ADMIN_HELP = { unit: "admin_colors", fleet: "admin_fleet", bks: "admin_bks", places: "admin_places",
+  keywords: "admin_keywords", vehicles: "admin_vg_vehicles", fees: "fees", users: "admin_roles" };
+
 VIEWS.admin = { label: "Verwaltung", load: loadAdmin, render: renderAdmin, noYear: true,
-  visible: () => can("admin") || config.superadmin };
+  visible: () => can("admin") || config.superadmin, help: () => ADMIN_HELP[admin.section] || "sec_admin" };
 
 // ------------------------------------------------------------ Laden
 async function loadAdmin() {

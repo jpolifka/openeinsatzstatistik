@@ -11,6 +11,7 @@ const helpValue = (v) => typeof v === "function" ? v() : v;
 
 const HELP_SECTIONS = [
   {
+    id: "sec_capture",
     title: "Einsatz erfassen",
     intro: "Diese Felder stehen in der Vorschau und unter „Einsätze → Bearbeiten“. Sie werden aus dem Einsatzbericht des BKS-Portals (PDF oder Excel-Export) vorbelegt und können vor dem Übernehmen korrigiert werden.",
     entries: {
@@ -67,6 +68,7 @@ const HELP_SECTIONS = [
     },
   },
   {
+    id: "sec_metrics",
     title: "Kennzahlen je Einsatz",
     intro: "Werden aus den Fahrzeugzeiten berechnet und sind nicht direkt änderbar – korrigieren Sie bei Bedarf Beginn oder Ende.",
     entries: {
@@ -133,6 +135,7 @@ const HELP_SECTIONS = [
     },
   },
   {
+    id: "sec_evaluation",
     title: "Auswertung",
     intro: "Alle Werte beziehen sich auf das oben rechts gewählte Jahr. Jedes Diagramm lässt sich über „Tabelle“ als Zahlentabelle anzeigen.",
     entries: {
@@ -179,6 +182,7 @@ const HELP_SECTIONS = [
     },
   },
   {
+    id: "sec_vg",
     title: "Einsätze mehrerer Wehren",
     intro: "Im BKS-Portal hat ein Einsatz einen Stammdatensatz (alle Fahrzeuge mit den Zeiten der Leitstelle) und je beteiligter Einheit einen Haupt- oder Nebenbericht. Die Wehren korrigieren in ihren Berichten oft Stärke und Zeiten – daraus entstehen Abweichungen.",
     entries: {
@@ -205,6 +209,7 @@ const HELP_SECTIONS = [
     },
   },
   {
+    id: "sec_members",
     title: "Kameraden",
     intro: "Anwesenheit je Kamerad im gewählten Jahr. Spaltenköpfe anklicken zum Sortieren.",
     entries: {
@@ -226,6 +231,7 @@ const HELP_SECTIONS = [
     },
   },
   {
+    id: "sec_admin",
     title: "Verwaltung",
     intro: "Nur für Wehrführer, Wehrleiter und Superadmins. Änderungen gelten sofort für alle Benutzer der Wehr.",
     entries: {
@@ -288,25 +294,96 @@ function helpButton(key) {
 }
 
 function helpContent() {
-  return HELP_SECTIONS.map((s) => `<section class="help-section">
+  return HELP_SECTIONS.map((s) => `<section class="help-section" id="help-${s.id}">
     <h3>${s.title}</h3>${s.intro ? `<p class="muted">${s.intro}</p>` : ""}
     <dl class="help-list">${Object.entries(s.entries).map(([k, e]) =>
       `<div id="help-${k}"><dt>${helpValue(e.title)}</dt><dd>${helpValue(e.text)}</dd></div>`).join("")}</dl>
   </section>`).join("");
 }
 
-function openHelp(key) {
+/** Hilfe zur aktuellen Stelle: offener Dialog, sonst die Ansicht (VIEWS[…].help, Abschnitt- oder Feldschlüssel). */
+function helpContext() {
+  if ($("#pdf-dialog").open) return "sec_capture";
+  if ($("#fees-dialog").open) return "fees";
+  return helpValue(VIEWS[state.view]?.help) || null;
+}
+
+/** Hilfefenster öffnen: key = Feld (hervorgehoben) oder Abschnitt (sec_…); tab = help, news oder feedback. */
+function openHelp(key, tab = "help") {
   const dialog = $("#help-dialog");
   const body = $("#help-body");
   if (!body.innerHTML) body.innerHTML = helpContent();
   for (const el of body.querySelectorAll(".highlight")) el.classList.remove("highlight");
+  showHelpTab(tab);
   if (!dialog.open) dialog.showModal();
   const target = key && $(`#help-${key}`);
-  if (target) {
-    target.classList.add("highlight");
-    target.scrollIntoView({ block: "center" });
+  if (target && tab === "help") {
+    // Abschnitt an den Anfang, Feld hervorgehoben in die Mitte
+    const section = key.startsWith("sec_");
+    if (!section) target.classList.add("highlight");
+    target.scrollIntoView({ block: section ? "start" : "center" });
   } else {
-    body.scrollTop = 0;
+    $("#help-dialog .dialog-body:not([hidden])").scrollTop = 0;
+  }
+}
+
+function showHelpTab(tab) {
+  if (tab === "feedback" && !config?.feedback) tab = "help";
+  for (const b of $$("#help-tabs button")) b.classList.toggle("active", b.dataset.helpTab === tab);
+  $("#help-tabs [data-help-tab=feedback]").hidden = !config?.feedback;
+  $("#help-body").hidden = tab !== "help";
+  $("#help-news").hidden = tab !== "news";
+  $("#help-feedback").hidden = tab !== "feedback";
+  $("#help-intro").hidden = tab !== "help";
+  if (tab === "news") {
+    if (!$("#help-news").innerHTML) $("#help-news").innerHTML = changelogContent();
+    remember("changelog_seen", CHANGELOG[0].date);
+    markNews();
+  }
+  if (tab === "feedback") $("#feedback-form textarea").focus();
+}
+
+// ------------------------------------------------------------ Neuigkeiten
+function changelogContent() {
+  return CHANGELOG.map((v) => `<section class="help-section">
+    <h3>${formatDate(v.date)}</h3>
+    <ul class="changelog">${v.items.map((i) => `<li>${i}</li>`).join("")}</ul>
+  </section>`).join("");
+}
+
+/** Punkt am ?-Symbol im Kopf, solange es ungelesene Neuigkeiten gibt. */
+function markNews() {
+  const unseen = CHANGELOG[0].date > (recall("changelog_seen") || "");
+  const button = $("#btn-help");
+  button.classList.toggle("has-news", unseen);
+  button.title = unseen ? "Hilfe · Neuigkeiten" : "Hilfe";
+  $("#help-tabs [data-help-tab=news]").classList.toggle("has-news", unseen);
+}
+
+// ------------------------------------------------------------ Feedback (per Mail an die Superadmins)
+function feedbackView() {
+  const view = VIEWS[state.view];
+  const section = state.view === "admin" ? ADMIN_SECTIONS.find(([key]) => key === admin.section)?.[1] : "";
+  return [view?.label, section, $("#pdf-dialog").open && "Bericht einlesen"].filter(Boolean).join(" · ");
+}
+
+async function sendFeedback(form) {
+  const message = form.elements.message.value.trim();
+  const status = $("#feedback-status");
+  if (!message) return;
+  const button = form.querySelector("button[type=submit]");
+  button.disabled = true;
+  try {
+    await apiJson("/api/feedback", "POST", { message, view: feedbackView() });
+    form.reset();
+    status.className = "message message-info";
+    status.textContent = "Danke! Dein Feedback ist verschickt.";
+  } catch (e) {
+    status.className = "message message-error";
+    status.textContent = e.message;
+  } finally {
+    status.hidden = false;
+    button.disabled = false;
   }
 }
 
@@ -318,7 +395,16 @@ document.addEventListener("click", (e) => {
   openHelp(button.dataset.help);
 }, true);
 
-/** Fest in index.html stehende Elemente mit data-help-key bekommen ihr ?-Symbol aus derselben Quelle. */
-function addHelpButtons() {
-  for (const el of document.querySelectorAll("[data-help-key]")) el.insertAdjacentHTML("beforeend", helpButton(el.dataset.helpKey));
+/** Start (aus app.js, sobald $ und config da sind): ?-Symbole der festen Elemente, Kopf-Symbol, Reiter, Feedback. */
+function setupHelp() {
+  // Fest in index.html stehende Elemente mit data-help-key bekommen ihr ?-Symbol aus derselben Quelle
+  for (const el of $$("[data-help-key]")) el.insertAdjacentHTML("beforeend", helpButton(el.dataset.helpKey));
+  markNews();
+  $("#btn-help").addEventListener("click", () => openHelp(helpContext()));
+  $("#help-tabs").addEventListener("click", (e) => {
+    const button = e.target.closest("[data-help-tab]");
+    if (button) showHelpTab(button.dataset.helpTab);
+  });
+  $("#feedback-form").addEventListener("submit", (e) => { e.preventDefault(); sendFeedback(e.target); });
+  $("#feedback-form").addEventListener("input", () => { $("#feedback-status").hidden = true; });
 }

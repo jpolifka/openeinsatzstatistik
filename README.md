@@ -34,8 +34,11 @@ Feuerwehrbedarfsplan, Anwesenheit) rechnet die App direkt im Browser nach.
 - **Einsätze** – Liste mit Suche und Filter, Details, Bearbeiten, Löschen sowie
   Excel-Export im Spaltenformat der Einsatzübersicht (A:AV + Anwesenheit).
 - **Kameraden** – Einsätze, Beteiligung, Stunden, Nacht- und Wochenendeinsätze je Kamerad.
-- **Online-Hilfe** – `?` im Kopf öffnet die Hilfe; das `?` neben Feldern und Kennzahlen
-  erklärt den jeweiligen Wert und springt zur passenden Stelle.
+- **Online-Hilfe** – `?` im Kopf öffnet die Hilfe beim Thema der aktuellen Ansicht bzw. des offenen
+  Fensters; das `?` neben Feldern und Kennzahlen erklärt den jeweiligen Wert und springt zur passenden Stelle.
+  Im Hilfefenster stehen außerdem die **Neuigkeiten** (Änderungen für Anwender, ein Punkt am `?` zeigt
+  ungelesene) und ein **Feedback**-Formular, das per Mail an die Superadmins (`ADMIN_EMAILS`) geht
+  (nur mit Anmeldung und eingerichtetem Mailversand).
 
 ## Schnellstart
 
