@@ -109,6 +109,13 @@ def _add_bks_ids(con):
     con.execute("UPDATE setting SET value = '10' WHERE key = 'default_limit'")
 
 
+def _add_pending_reports(con):
+    """Berichte, die jemand aus einer anderen Wehr eingelesen hat, bis zur Übernahme durch diese Wehr."""
+    con.execute("CREATE TABLE pending_report (id INTEGER PRIMARY KEY, bks_report_id TEXT UNIQUE, bks_record_id TEXT, "
+                "number_text TEXT, first_alarm TEXT, keyword TEXT, reported_as TEXT, filename TEXT NOT NULL, "
+                "pdf BLOB NOT NULL, uploaded_by TEXT, uploaded TEXT NOT NULL DEFAULT (datetime('now', 'localtime')))")
+
+
 def _create_central_schema(con):
     con.execute("CREATE TABLE vg (id INTEGER PRIMARY KEY, slug TEXT NOT NULL UNIQUE, name TEXT NOT NULL, "
                 "created TEXT NOT NULL DEFAULT (datetime('now', 'localtime')))")
@@ -155,9 +162,23 @@ def _add_records(con):
     con.execute("CREATE INDEX record_report_record ON record_report(bks_record_id)")
 
 
+def _add_notices(con):
+    """Hinweise an Wehren (Import durch andere, Abweichungen, weitergegebene Berichte) und
+    Prüfvermerke des Wehrleiters je Stammdatensatz. Texte ohne Personennamen."""
+    con.execute("CREATE TABLE notice (id INTEGER PRIMARY KEY, "
+                "tenant_id INTEGER NOT NULL REFERENCES tenant(id) ON DELETE CASCADE, kind TEXT NOT NULL, "
+                "bks_record_id TEXT, incident_key TEXT, year INTEGER, text TEXT NOT NULL, created_by TEXT, "
+                "created TEXT NOT NULL DEFAULT (datetime('now', 'localtime')), done_by TEXT, done TEXT)")
+    con.execute("CREATE INDEX notice_open ON notice(tenant_id) WHERE done IS NULL")
+    con.execute("CREATE TABLE record_review (bks_record_id TEXT PRIMARY KEY, "
+                "vg_id INTEGER NOT NULL REFERENCES vg(id) ON DELETE CASCADE, findings_hash TEXT NOT NULL, "
+                "reviewed_by TEXT, reviewed TEXT NOT NULL DEFAULT (datetime('now', 'localtime')))")
+
+
 # Neue Schemaänderungen nur hinten anfügen; PRAGMA user_version zählt die erledigten Schritte.
-TENANT_MIGRATIONS = [_create_legacy_schema, _rename_to_english, _add_tenant_tables, _add_bks_ids]
-CENTRAL_MIGRATIONS = [_create_central_schema, _add_dpa, _add_records]
+TENANT_MIGRATIONS = [_create_legacy_schema, _rename_to_english, _add_tenant_tables, _add_bks_ids,
+                     _add_pending_reports]
+CENTRAL_MIGRATIONS = [_create_central_schema, _add_dpa, _add_records, _add_notices]
 
 
 def migrate(con, steps=TENANT_MIGRATIONS):

@@ -256,6 +256,7 @@ def api_config(a: tenancy.Access = Depends(access)):
             "scope": a.scope_key, "vg": {"slug": a.vg, "name": a.vgs[a.vg]} if a.vg else None,
             "tenant": a.selected.json() if a.selected else None, "tenants": [t.json() for t in tenants],
             "branding": _branding(a.selected), "dpa_blocked": a.blocked,
+            "manages_vg": bool(a.vg and tenants and a.manages_vg(tenants[0].vg_id)),
             "permissions": sorted(set().union(*(t.permissions for t in tenants))), "scopes": a.scopes()}
 
 
@@ -449,6 +450,21 @@ class Skipped(Exception):
     """Bericht wird nicht eingelesen (Meldung als Info, nicht als Fehler)."""
 
 
+class Forward(Exception):
+    """Bericht gehört zu einer anderen Wehr der VG: wird ihr zur Übernahme weitergegeben."""
+
+    def __init__(self, tenant, head):
+        super().__init__(tenant.name)
+        self.tenant, self.head = tenant, head
+
+
+def _owner(head, tenants):
+    """Wehr der VG, deren BKS-Kennung zur berichtenden Einheit passt (auch ohne Rechte des Benutzers)."""
+    if not head["unit"] or not tenants:
+        return None
+    return next((t for t in tenancy.vg_tenants(tenants[0].vg_id) if t.config.unit_marker == head["unit"]), None)
+
+
 def _read_pdf(path, filename, tenants):
     """Bericht lesen -> (bericht, wehr); wehr=None beim Stammdatensatz.
 
@@ -461,12 +477,18 @@ def _read_pdf(path, filename, tenants):
     if len(tenants) == 1:
         cfg = tenants[0].config
         if head["unit"] and cfg.unit_marker and head["unit"] != cfg.unit_marker:
+            owner = _owner(head, tenants)
+            if owner:
+                raise Forward(owner, head)
             raise Skipped(f"Bericht der Einheit {report.unit_label(head)} – gehört nicht zu {tenants[0].name}, "
                           "übersprungen.")
         return report.read_text(texts, filename, cfg), tenants[0]
     by_slug = {t.slug: t for t in tenants}
     slug, how = report.match_tenant(texts, filename, [(t.slug, t.config) for t in tenants])
     if not slug:
+        owner = _owner(head, tenants)
+        if owner:
+            raise Forward(owner, head)
         if head["unit"]:
             raise Skipped(f"Bericht der Einheit {report.unit_label(head)} – gehört zu keiner der ausgewählten "
                           "Wehren, übersprungen.")
@@ -478,12 +500,19 @@ def _read_pdf(path, filename, tenants):
 
 
 def _read_uploads(uploads, tenants, email=None):
-    """Hochgeladene PDFs und ZIP-Dateien lesen -> ([(bericht, wehr)], fehler, hinweise).
-    Stammdatensätze werden gleich bei der VG gespeichert."""
-    reports, errors, notes, files = [], [], [], []
+    """Hochgeladene PDFs und ZIP-Dateien lesen -> ([(bericht, wehr)], fehler, hinweise)."""
+    errors, files = [], []
     for upload in uploads:
         filename, data = _safe_filename(upload.filename), upload.file.read()
         files += _unpack_zip(data, filename, errors) if filename.lower().endswith(".zip") else [(filename, data)]
+    reports, more_errors, notes = _read_files(files, tenants, email)
+    return reports, errors + more_errors, notes
+
+
+def _read_files(files, tenants, email=None):
+    """PDFs [(dateiname, inhalt)] lesen -> ([(bericht, wehr)], fehler, hinweise). Stammdatensätze werden
+    gleich bei der VG gespeichert, Berichte anderer Wehren der VG an diese weitergegeben."""
+    reports, errors, notes = [], [], []
     taken = set()
     with tempfile.TemporaryDirectory() as tmp:
         for filename, data in files:
@@ -496,6 +525,9 @@ def _read_uploads(uploads, tenants, email=None):
             except Skipped as e:
                 notes.append({"file": filename, "message": str(e)})
                 continue
+            except Forward as f:
+                notes.append({"file": filename, "message": _forward(f.tenant, f.head, filename, data, email)})
+                continue
             except Exception as e:  # defekte oder fremde PDF: melden, Rest weiter lesen
                 log.exception("PDF %s", filename)
                 errors.append({"file": filename, "message": str(e) or type(e).__name__})
@@ -503,10 +535,51 @@ def _read_uploads(uploads, tenants, email=None):
             if tenant:
                 reports.append((r, tenant))
                 continue
-            with tenancy.central() as con:
-                records.save_master(con, tenants[0].vg_id, r, email)
+            _save_master(r, tenants[0].vg_id, email)
             notes.append({"file": filename, "message": f"Stammdatensatz {r['bks_record_id']} gespeichert."})
     return reports, errors, notes
+
+
+def _save_master(r, vg_id, email):
+    """Stammdatensatz speichern; Wehren mit ausgerückten Fahrzeugen, aber ohne Bericht bekommen einen Hinweis."""
+    with tenancy.central() as con:
+        records.save_master(con, vg_id, r, email)
+        records.notify_others(con, r, r["vehicles"], "Stammdatensatz", tenancy.vg_tenants(vg_id),
+                              deviations=False, email=email)
+
+
+def _forward(tenant, head, filename, data, email):
+    """Bericht einer anderen Wehr der VG dort zur Übernahme ablegen -> Meldung für den Hochladenden."""
+    with tenant.connection() as con:
+        if head["bks_report_id"] and store.find_existing(con, head["bks_report_id"], None, None):
+            return f"Bericht der Einheit {report.unit_label(head)} – bei {tenant.name} bereits erfasst, übersprungen."
+        store.add_pending(con, head, filename, data, email)
+    when = records.format_date(head.get("first_alarm"))
+    with tenancy.central() as con:
+        records.notify(con, tenant.id, "pending",
+                       f"Bericht {head.get('number_text') or filename} vom {when} ({head.get('reported_as') or '–'}) "
+                       f"von {email or 'lokal'} eingelesen – liegt zur Übernahme bereit.",
+                       head.get("bks_record_id"), email=email)
+        records.close_notices(con, tenant.id, head.get("bks_record_id"), ("missing",))
+    return f"Bericht der Einheit {report.unit_label(head)} an {tenant.name} zur Übernahme weitergegeben."
+
+
+def _after_import(a, tenant, r, incident_id, updated):
+    """Nach dem Speichern: Bericht im Verzeichnis vermerken, Hinweise an die eigene Wehr (eingelesen
+    durch jemanden ohne eigene Rolle dort) und an andere Wehren (Abweichungen, fehlende Berichte)."""
+    with tenancy.central() as con:
+        records.register_report(con, tenant.id, r, a.email)
+        records.close_notices(con, tenant.id, r.get("bks_record_id"), ("missing", "pending"))
+        if a.email and not a.is_member(tenant):
+            started = records.format_date(r.get("started_at"))
+            number = f"{r['number']}/{r['started_at']:%y}" if r.get("number") and r.get("started_at") else "ohne Nr."
+            records.notify(con, tenant.id, "import",
+                           f"Einsatz {number} vom {started} ({r.get('reported_as') or '–'}) von {a.email} "
+                           f"{'aktualisiert' if updated else 'eingelesen'}.",
+                           r.get("bks_record_id"), incident_key(tenant, incident_id),
+                           r["started_at"].year if r.get("started_at") else None, a.email)
+        records.notify_others(con, r, r["vehicles"], f"Bericht von {tenant.name}", tenancy.vg_tenants(tenant.vg_id),
+                              exclude=tenant.id, email=a.email)
 
 
 def _shared_with(r, tenant, a):
@@ -575,13 +648,114 @@ def api_accept_report(acceptance: Acceptance, a: tenancy.Access = Depends(access
             incident_id = report.save(con, r, fields, update_id, modified_by=a.email)
         except store.DuplicateIncident as e:
             raise HTTPException(409, str(e))
-    with tenancy.central() as con:
-        records.register_report(con, tenant.id, r, a.email)
+        store.delete_pending(con, r.get("pending_id"), r.get("bks_report_id"))
+    _after_import(a, tenant, r, incident_id, bool(update_id))
     if r.get("new_vehicles"):
         tenancy.forget_config(tenant.slug)
         log.info("Fahrzeuge %s in die Liste von %s aufgenommen", ", ".join(r["new_vehicles"]), tenant.slug)
     with tenant.connection() as con:
         return incident_json(store.load_incident(con, incident_id), store.LeaderNames(con), tenant)
+
+
+# ---------------------------------------------------------------- Weitergegebene Berichte
+@app.get("/api/pending")
+def api_pending(a: tenancy.Access = Depends(access)):
+    """Berichte, die jemand aus einer anderen Wehr für die ausgewählten Wehren eingelesen hat."""
+    result = []
+    for tenant in a.selection_with(WRITE):
+        with tenant.connection() as con:
+            result += [{**p, "id": incident_key(tenant, p["id"]), "tenant": tenant.slug, "tenant_name": tenant.name}
+                       for p in store.pending_reports(con)]
+    return {"reports": result}
+
+
+class PendingSelection(BaseModel):
+    ids: List[str]
+
+
+@app.post("/api/pending/read")
+def api_read_pending(selection: PendingSelection, a: tenancy.Access = Depends(access)):
+    """Abgelegte Berichte wie hochgeladene PDFs lesen (Vorschau, Übernahme wie bei /api/reports)."""
+    reports, errors, notes = [], [], []
+    for key in selection.ids:
+        slug, pending_id = parse_incident_key(key)
+        tenant = a.tenant(slug, WRITE)
+        with tenant.connection() as con:
+            filename, data = store.pending_pdf(con, pending_id)
+        if not filename:
+            errors.append({"file": key, "message": "Der Bericht liegt nicht mehr bereit."})
+            continue
+        read, more_errors, more_notes = _read_files([(filename, data)], [tenant], a.email)
+        for r, _ in read:
+            r["pending_id"] = pending_id
+        reports += read
+        errors += more_errors
+        notes += more_notes
+    previews_json = [_preview_json(r, tenant, a) for r, tenant in reports]
+    token = previews.add([(r, tenant.slug) for r, tenant in reports], a.email)
+    return {"token": token, "reports": previews_json, "errors": errors, "notes": notes}
+
+
+@app.delete("/api/pending/{key}")
+def api_discard_pending(key: str, a: tenancy.Access = Depends(access)):
+    slug, pending_id = parse_incident_key(key)
+    with a.tenant(slug, WRITE).connection() as con:
+        store.delete_pending(con, pending_id)
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------- Hinweise
+@app.get("/api/notices")
+def api_notices(a: tenancy.Access = Depends(access)):
+    """Offene Hinweise der Wehren, deren Einsätze der Benutzer sehen darf."""
+    ids = [t.id for t in a.tenants.values() if t.can(INCIDENTS)]
+    with tenancy.central() as con:
+        notices = records.open_notices(con, ids)
+    writable = {t.slug for t in a.tenants.values() if t.can(WRITE)}
+    return {"notices": [{**n, "can_close": n["tenant"] in writable} for n in notices]}
+
+
+@app.post("/api/notices/{notice_id}/done")
+def api_close_notice(notice_id: int, a: tenancy.Access = Depends(access)):
+    with tenancy.central() as con:
+        row = con.execute("SELECT t.slug FROM notice n JOIN tenant t ON t.id = n.tenant_id WHERE n.id = ?",
+                          (notice_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "Hinweis nicht gefunden.")
+        a.tenant(row["slug"], WRITE)
+        records.close_notice(con, notice_id, a.email)
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------- Prüfprotokoll (Wehrleiter)
+def _managed_vg(a):
+    """VG der Gesamtansicht, wenn der Benutzer sie leitet -> (vg_id, alle Wehren der VG)."""
+    tenants = a.selection if a.vg else []
+    if not tenants or not a.manages_vg(tenants[0].vg_id):
+        raise tenancy.Forbidden("Das Prüfprotokoll gibt es für Wehrleiter in der Gesamtansicht der VG.")
+    vg_id = tenants[0].vg_id
+    return vg_id, tenancy.vg_tenants(vg_id)
+
+
+@app.get("/api/records")
+def api_records(year: Optional[int] = None, a: tenancy.Access = Depends(access)):
+    vg_id, tenants = _managed_vg(a)
+    year = year or _latest_year(tenants) or dt.date.today().year
+    with tenancy.central() as con:
+        return {"year": year, "records": records.protocol(con, vg_id, year, tenants)}
+
+
+class Review(BaseModel):
+    done: bool = True
+
+
+@app.post("/api/records/{bks_record_id}/review")
+def api_review_record(bks_record_id: str, review: Review, a: tenancy.Access = Depends(access)):
+    vg_id, tenants = _managed_vg(a)
+    with tenancy.central() as con:
+        records.review(con, vg_id, bks_record_id, tenants, a.email, review.done)
+        entry = records.check(con, bks_record_id, tenants)
+    return {"ok": True, "findings": len(entry["findings"])}
 
 
 # ---------------------------------------------------------------- Export

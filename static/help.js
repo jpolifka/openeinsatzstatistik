@@ -179,6 +179,27 @@ const HELP_SECTIONS = [
     },
   },
   {
+    title: "Einsätze mehrerer Wehren",
+    intro: "Im BKS-Portal hat ein Einsatz einen Stammdatensatz (alle Fahrzeuge mit den Zeiten der Leitstelle) und je beteiligter Einheit einen Haupt- oder Nebenbericht. Die Wehren korrigieren in ihren Berichten oft Stärke und Zeiten – daraus entstehen Abweichungen.",
+    entries: {
+      notices: {
+        title: "Hinweise",
+        short: "Was andere für eure Wehr eingelesen haben, Abweichungen und fehlende Berichte.",
+        text: "Hinweise entstehen, wenn jemand ohne eigene Rolle in der Wehr (z. B. der Wehrleiter) einen Einsatz der Wehr einliest, wenn der Bericht einer anderen Wehr für eure Fahrzeuge andere Werte nennt, wenn laut Stammdatensatz oder fremdem Bericht eure Fahrzeuge ausgerückt sind, aber noch kein eigener Bericht erfasst ist, und wenn eine andere Wehr euren Bericht hochgeladen hat – er liegt dann zur Übernahme bereit („Übernehmen“). Erledigt markieren kann, wer Einsätze der Wehr bearbeiten darf.",
+      },
+      records: {
+        title: "Prüfprotokoll",
+        short: "Abgleich je Einsatz über alle Wehren der VG (nur Wehrleiter).",
+        text: "Für jeden Einsatz mit Stammdatensatz vergleicht das Protokoll die Zeiten der Leitstelle mit den Berichten der Wehren. „Als geprüft markieren“ gilt für den jetzigen Stand: Kommt ein neuer Befund hinzu (z. B. ein geänderter Bericht), ist der Einsatz wieder offen. „Drucken / PDF“ druckt die angezeigten Einsätze mit ihren Befunden.",
+      },
+      findings: {
+        title: "Befunde",
+        short: "Abweichungen, fehlende und unbearbeitete Berichte.",
+        text: "<b>Abweichung</b>: Stärke, Alarmierung, Ausrücken, Eintreffen oder Ende eines Fahrzeugs weichen im Bericht der Wehr vom Stammdatensatz ab (minutengenau), oder ein ausgerücktes Fahrzeug fehlt im Bericht. <b>Stichwort</b>: anderes Stichwort als im Stammdatensatz. <b>Bericht fehlt</b>: Fahrzeuge der Wehr sind laut Stammdatensatz ausgerückt, die Wehr hat aber keinen Bericht erfasst. <b>unbearbeitet</b>: Bericht ohne Anwesenheit. <b>ohne Nr.</b>: Bericht ohne Einsatzbericht-Nr.",
+      },
+    },
+  },
+  {
     title: "Kameraden",
     intro: "Anwesenheit je Kamerad im gewählten Jahr. Spaltenköpfe anklicken zum Sortieren.",
     entries: {

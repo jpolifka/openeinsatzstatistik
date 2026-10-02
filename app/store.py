@@ -5,7 +5,7 @@ import re
 
 from app.holidays import is_weekend_or_holiday
 from app.names import NameMatcher, leader_spelling, matches_leader, normalize, split_name
-from app.timeutil import normalize_iso, parse_iso, year_of
+from app.timeutil import normalize_iso, parse_iso, to_iso, year_of
 
 # Ganzes Stichwort mit oder ohne Punkt: B2.07, B207, b2 07, S1.00, B2.
 FULL_KEYWORD = re.compile(r"([A-Za-z]\d)\s*[.\s]?\s*(\d{0,2})")
@@ -295,3 +295,31 @@ def vehicles_with_data(con):
 
 def delete_incident(con, incident_id):
     con.execute("DELETE FROM incident WHERE id = ?", (incident_id,))
+
+
+# ---------------------------------------------------------------- Weitergegebene Berichte
+def add_pending(con, report, filename, pdf, email=None):
+    """Bericht, den jemand aus einer anderen Wehr eingelesen hat, zur Übernahme ablegen (neuer Stand ersetzt alten)."""
+    if report.get("bks_report_id"):
+        con.execute("DELETE FROM pending_report WHERE bks_report_id = ?", (report["bks_report_id"],))
+    keyword = f"{report.get('keyword') or ''}.{report.get('subcode') or ''}".strip(".")
+    return _insert(con, "pending_report", {
+        "bks_report_id": report.get("bks_report_id"), "bks_record_id": report.get("bks_record_id"),
+        "number_text": report.get("number_text"), "first_alarm": to_iso(report.get("first_alarm")),
+        "keyword": keyword, "reported_as": report.get("reported_as"), "filename": filename, "pdf": pdf,
+        "uploaded_by": email})
+
+
+def pending_reports(con):
+    return [dict(r) for r in con.execute("SELECT id, bks_report_id, bks_record_id, number_text, first_alarm, keyword, "
+                                         "reported_as, filename, uploaded_by, uploaded FROM pending_report ORDER BY uploaded")]
+
+
+def pending_pdf(con, pending_id):
+    row = con.execute("SELECT filename, pdf FROM pending_report WHERE id = ?", (pending_id,)).fetchone()
+    return (row["filename"], row["pdf"]) if row else (None, None)
+
+
+def delete_pending(con, pending_id, bks_report_id=None):
+    """Abgelegten Bericht entfernen – nach Übernahme auch denselben Bericht aus einem anderen Upload."""
+    con.execute("DELETE FROM pending_report WHERE id = ? OR bks_report_id = ?", (pending_id, bks_report_id))

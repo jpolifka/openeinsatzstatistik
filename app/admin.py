@@ -368,8 +368,7 @@ def import_keywords(slug: str, mode: str = "preview", file: UploadFile = File(..
 # ---------------------------------------------------------------- Benutzer und Rollen
 def _manages_vg(a, vg_id):
     """Superadmin oder Wehrleiter dieser VG."""
-    return a.superadmin or any(r["role"] == "vg_lead" and r["scope"] == "vg" and r["scope_id"] == vg_id
-                               for r in a.roles)
+    return a.manages_vg(vg_id)
 
 
 def _grantable(a, scope, scope_id, vg_id):
