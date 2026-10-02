@@ -6,6 +6,7 @@ import pytest
 
 from app import db, main, store, tenancy
 from conftest import CFG, make_tenant
+from test_xlsx_report import make_workbook
 
 
 @pytest.fixture
@@ -85,6 +86,23 @@ def test_zip_upload_unpacks_pdfs(client, monkeypatch):
     assert response.status_code == 200
     assert read == ["01-25.pdf", "01-25 (2).pdf", "02-25.PDF", "03-25.pdf"]
     assert [e["file"] for e in response.json()["errors"]] == read
+
+
+def test_xlsx_upload_preview_and_accept(client):
+    """Excel-Export des BKS-Portals: einzeln und aus einer ZIP, Übernahme mit Quelle bks_xlsx."""
+    workbook = make_workbook()
+    xlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    data = client.post("/api/reports", files=[("pdfs", ("17-25.xlsx", workbook, xlsx))]).json()
+    assert data["errors"] == []
+    preview = data["reports"][0]
+    assert (preview["number"], preview["source"], preview["unit_leader"]) == (17, "bks_xlsx", "M. Muster")
+    saved = client.post("/api/reports/accept", json={"token": data["token"], "filename": "17-25.xlsx",
+                                                     "fields": {}}).json()
+    assert (saved["source"], saved["filename"], len(saved["people"])) == ("bks_xlsx", "17-25.xlsx", 3)
+    data = client.post("/api/reports", files=[("pdfs", ("b.zip", _zip({"x/17-25.xlsx": workbook}), "application/zip"))]
+                       ).json()
+    assert data["reports"][0]["existing"]["source"] == "bks_xlsx"
+    assert data["reports"][0]["existing"]["differences"] == []
 
 
 def test_zip_upload_errors(client):

@@ -181,7 +181,7 @@ function themePreview() {
       <div class="preview-kpi"><small>Einsätze</small><b>55</b></div>
       <div class="preview-chart"><span class="day" style="height:70%"></span><span class="night" style="height:45%"></span>
         <span class="day" style="height:90%"></span><span class="night" style="height:30%"></span><span class="day" style="height:55%"></span></div>
-      <div class="preview-buttons"><span class="btn btn-primary btn-small">PDF einlesen</span><span class="btn btn-light btn-small">Tabelle</span></div>
+      <div class="preview-buttons"><span class="btn btn-primary btn-small">Bericht einlesen</span><span class="btn btn-light btn-small">Tabelle</span></div>
       <div class="preview-head">Tabellenkopf</div>
     </div>
   </div>`;

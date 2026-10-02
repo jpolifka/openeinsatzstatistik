@@ -4,7 +4,8 @@ Vom gelesenen Einsatzbericht zum Einsatz: Ableitungsregeln, Prüfhinweise und di
 Umwandlung in die Form der Datenbank. cfg ist die TenantConfig der Wehr, für die der
 Bericht eingelesen wird.
 
-  read_pdf()          PDF lesen, Nr. ergänzen, Felder ableiten, Plausibilität prüfen
+  parser()            Leser für eine Datei (PDF oder Excel-Export des BKS-Portals)
+  read()              Bericht lesen, Nr. ergänzen, Felder ableiten, Plausibilität prüfen
   to_fields()         abgeleitete Felder -> Datenbankfelder (store.FIELDS)
   to_incident()       Bericht -> Einsatz wie aus store.load_incidents
   preview()           Einsatz für die Vorschau mit Namensabgleich und bereits erfasstem Einsatz
@@ -14,7 +15,7 @@ Bericht eingelesen wird.
 import datetime as dt
 import re
 
-from app import domain, pdf_report, store
+from app import domain, pdf_report, store, xlsx_report
 from app.holidays import is_weekend_or_holiday
 from app.names import normalize, short_name
 from app.timeutil import parse_iso, time_text, to_iso, year_of
@@ -22,29 +23,42 @@ from app.timeutil import parse_iso, time_text, to_iso, year_of
 MAX_DURATION_HOURS = 24
 
 
-def read_pdf(path, filename, cfg):
-    return read_text(pdf_report.extract_text(path), filename, cfg)
+def pdf_parser(texts, filename):
+    """Leser für den Text einer PDF (pdf_report.extract_text): parse(unit_prefix) -> Bericht."""
+    return lambda unit_prefix: pdf_report.parse_report(*texts, filename, unit_prefix)
 
 
-def read_text(texts, filename, cfg):
-    """Ablauf ab dem Text der PDF (pdf_report.extract_text): auswerten, ableiten, prüfen."""
-    report = pdf_report.parse_report(*texts, filename, cfg.unit_prefix)
+def parser(path, filename):
+    """Leser für eine Datei nach ihrer Endung: Excel-Export (.xlsx) oder PDF."""
+    if filename.lower().endswith(".xlsx"):
+        sheets = xlsx_report.read_workbook(path)
+        return lambda unit_prefix: xlsx_report.parse_report(sheets, filename, unit_prefix)
+    return pdf_parser(pdf_report.extract_text(path), filename)
+
+
+def read(parse, cfg):
+    """Ablauf ab dem Leser (parser, pdf_parser): auswerten, ableiten, prüfen."""
+    report = parse(cfg.unit_prefix)
     complete_number(report)
     derive(report, cfg)
     check_plausibility(report, cfg)
     return report
 
 
-def match_tenant(texts, filename, candidates):
+def read_text(texts, filename, cfg):
+    return read(pdf_parser(texts, filename), cfg)
+
+
+def match_tenant(parse, candidates):
     """Wehr, zu der ein Bericht gehört -> (schlüssel, "unit" | "vehicles") oder (None, None).
 
     Zuerst über die berichtende Einheit (unit_marker). Über die meisten eigenen Fahrzeuge im Bericht nur
     bei Wehren ohne unit_marker – sonst landete z. B. der Bericht der FEZ über mitalarmierte Fahrzeuge
-    bei einer Wehr. candidates: [(schlüssel, cfg)].
+    bei einer Wehr. parse: Leser wie bei read(); candidates: [(schlüssel, cfg)].
     """
     best, best_score = None, 0
     for key, cfg in candidates:
-        report = pdf_report.parse_report(*texts, filename, cfg.unit_prefix)
+        report = parse(cfg.unit_prefix)
         if cfg.unit_marker and report["unit"] == cfg.unit_marker:
             return key, "unit"
         if cfg.unit_marker and report["unit"]:
@@ -235,9 +249,14 @@ def vehicle_rows(report):
             for call_sign, v in report["slots"].items()}
 
 
+def _source(report):
+    """Herkunft des Einsatzes: "pdf" oder "bks_xlsx" (Excel-Export des BKS-Portals)."""
+    return report.get("source", "pdf")
+
+
 def to_incident(report, fields, people):
     """Bericht (mit ggf. korrigierten Feldern) als Einsatz wie aus store.load_incidents."""
-    return {**fields, "id": None, "year": year_of(fields.get("started_at")), "source": "pdf",
+    return {**fields, "id": None, "year": year_of(fields.get("started_at")), "source": _source(report),
             "filename": report["filename"], "warnings": report["warnings"],
             "weekend_or_holiday": report["weekend_or_holiday"], "vehicles": vehicle_rows(report), "people": people}
 
@@ -264,10 +283,11 @@ def save(con, report, fields, update_id=None, modified_by=None):
     """
     if update_id:
         store.update_incident(con, update_id, fields, modified_by=modified_by,
-                              source={"source": "pdf", "filename": report["filename"], "warnings": report["warnings"]})
+                              source={"source": _source(report), "filename": report["filename"],
+                                      "warnings": report["warnings"]})
         incident_id = update_id
     else:
-        incident_id = store.create_incident(con, fields, source="pdf", filename=report["filename"],
+        incident_id = store.create_incident(con, fields, source=_source(report), filename=report["filename"],
                                             warnings=report["warnings"], modified_by=modified_by)
     store.add_fleet_vehicles(con, new_fleet_vehicles(report), report.get("day"))
     members = store.MemberDirectory(con)

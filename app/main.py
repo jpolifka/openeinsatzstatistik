@@ -468,13 +468,14 @@ def api_delete_incident(key: str, a: tenancy.Access = Depends(access)):
     return {"ok": True}
 
 
-# ---------------------------------------------------------------- PDF einlesen
+# ---------------------------------------------------------------- Berichte einlesen (PDF, Excel-Export)
 ZIP_MAX_PDFS = 500
-ZIP_MAX_BYTES = 50 * 1024 * 1024  # je entpackter PDF
+ZIP_MAX_BYTES = 50 * 1024 * 1024  # je entpacktem Bericht
+REPORT_TYPES = (".pdf", ".xlsx")
 
 
 def _is_upload(filename):
-    return (filename or "").lower().endswith((".pdf", ".zip"))
+    return (filename or "").lower().endswith((*REPORT_TYPES, ".zip"))
 
 
 def _unique_filename(filename, taken):
@@ -488,24 +489,24 @@ def _unique_filename(filename, taken):
 
 
 def _unpack_zip(data, zip_name, errors):
-    """PDFs aus einer ZIP-Datei holen -> [(dateiname, inhalt)]. Andere Dateien werden übergangen."""
+    """Berichte (PDF, xlsx) aus einer ZIP-Datei holen -> [(dateiname, inhalt)]. Andere Dateien werden übergangen."""
     try:
         archive = zipfile.ZipFile(io.BytesIO(data))
     except zipfile.BadZipFile:
         errors.append({"file": zip_name, "message": "Keine gültige ZIP-Datei."})
         return []
-    entries = [i for i in archive.infolist() if not i.is_dir() and i.filename.lower().endswith(".pdf")
+    entries = [i for i in archive.infolist() if not i.is_dir() and i.filename.lower().endswith(REPORT_TYPES)
                and not i.filename.startswith("__MACOSX/") and not os.path.basename(i.filename).startswith("._")]
     if not entries:
-        errors.append({"file": zip_name, "message": "Die ZIP-Datei enthält keine PDF."})
+        errors.append({"file": zip_name, "message": "Die ZIP-Datei enthält keinen Bericht (PDF oder Excel-Export)."})
     if len(entries) > ZIP_MAX_PDFS:
-        errors.append({"file": zip_name, "message": f"Mehr als {ZIP_MAX_PDFS} PDFs, nur die ersten werden gelesen."})
+        errors.append({"file": zip_name, "message": f"Mehr als {ZIP_MAX_PDFS} Berichte, nur die ersten werden gelesen."})
         entries = entries[:ZIP_MAX_PDFS]
     files = []
     for info in entries:
         name = _safe_filename(info.filename)
         if info.file_size > ZIP_MAX_BYTES:
-            errors.append({"file": name, "message": "PDF in der ZIP-Datei ist zu groß."})
+            errors.append({"file": name, "message": "Bericht in der ZIP-Datei ist zu groß."})
             continue
         try:
             files.append((name, archive.read(info)))
@@ -533,13 +534,13 @@ def _owner(head, tenants):
     return next((t for t in tenancy.vg_tenants(tenants[0].vg_id) if t.config.unit_marker == head["unit"]), None)
 
 
-def _read_pdf(path, filename, tenants):
-    """Bericht lesen -> (bericht, wehr); wehr=None beim Stammdatensatz.
+def _read_report(path, filename, tenants):
+    """Bericht (PDF oder Excel-Export) lesen -> (bericht, wehr); wehr=None beim Stammdatensatz.
 
     Bei mehreren Wehren wird die passende über die Einheit bzw. die eigenen Fahrzeuge im Bericht
     gesucht. Berichte anderer Einheiten (z. B. FEZ) werden übersprungen (Skipped)."""
-    texts = pdf_report.extract_text(path)
-    head = pdf_report.parse_report(*texts, filename, "")
+    parse = report.parser(path, filename)
+    head = parse("")
     if head["report_kind"] == "master":
         return head, None
     if len(tenants) == 1:
@@ -550,9 +551,9 @@ def _read_pdf(path, filename, tenants):
                 raise Forward(owner, head)
             raise Skipped(f"Bericht der Einheit {report.unit_label(head)} – gehört nicht zu {tenants[0].name}, "
                           "übersprungen.")
-        return report.read_text(texts, filename, cfg), tenants[0]
+        return report.read(parse, cfg), tenants[0]
     by_slug = {t.slug: t for t in tenants}
-    slug, how = report.match_tenant(texts, filename, [(t.slug, t.config) for t in tenants])
+    slug, how = report.match_tenant(parse, [(t.slug, t.config) for t in tenants])
     if not slug:
         owner = _owner(head, tenants)
         if owner:
@@ -561,14 +562,14 @@ def _read_pdf(path, filename, tenants):
             raise Skipped(f"Bericht der Einheit {report.unit_label(head)} – gehört zu keiner der ausgewählten "
                           "Wehren, übersprungen.")
         raise ValueError("Der Bericht passt zu keiner der ausgewählten Wehren (Einheit und Fahrzeuge unbekannt).")
-    r = report.read_text(texts, filename, by_slug[slug].config)
+    r = report.read(parse, by_slug[slug].config)
     if how == "vehicles":
         r["warnings"].append(f"{by_slug[slug].name} über die Fahrzeuge im Bericht zugeordnet – bitte prüfen")
     return r, by_slug[slug]
 
 
 def _read_uploads(uploads, tenants, email=None):
-    """Hochgeladene PDFs und ZIP-Dateien lesen -> ([(bericht, wehr)], fehler, hinweise)."""
+    """Hochgeladene Berichte (PDF, xlsx) und ZIP-Dateien lesen -> ([(bericht, wehr)], fehler, hinweise)."""
     errors, files = [], []
     for upload in uploads:
         filename, data = _safe_filename(upload.filename), upload.file.read()
@@ -578,7 +579,7 @@ def _read_uploads(uploads, tenants, email=None):
 
 
 def _read_files(files, tenants, email=None):
-    """PDFs [(dateiname, inhalt)] lesen -> ([(bericht, wehr)], fehler, hinweise). Stammdatensätze werden
+    """Berichte [(dateiname, inhalt)] lesen -> ([(bericht, wehr)], fehler, hinweise). Stammdatensätze werden
     gleich bei der VG gespeichert, Berichte anderer Wehren der VG an diese weitergegeben."""
     reports, errors, notes = [], [], []
     taken = set()
@@ -589,15 +590,15 @@ def _read_files(files, tenants, email=None):
             with open(path, "wb") as fh:
                 fh.write(data)
             try:
-                r, tenant = _read_pdf(path, filename, tenants)
+                r, tenant = _read_report(path, filename, tenants)
             except Skipped as e:
                 notes.append({"file": filename, "message": str(e)})
                 continue
             except Forward as f:
                 notes.append({"file": filename, "message": _forward(f.tenant, f.head, filename, data, email)})
                 continue
-            except Exception as e:  # defekte oder fremde PDF: melden, Rest weiter lesen
-                log.exception("PDF %s", filename)
+            except Exception as e:  # defekte oder fremde Datei: melden, Rest weiter lesen
+                log.exception("Bericht %s", filename)
                 errors.append({"file": filename, "message": str(e) or type(e).__name__})
                 continue
             if tenant:
@@ -688,7 +689,7 @@ def api_read_reports(pdfs: List[UploadFile] = File(...), a: tenancy.Access = Dep
     tenants = a.selection_with(WRITE) if a.vg else [a.current(WRITE)]
     pdfs = [p for p in pdfs if _is_upload(p.filename)]
     if not pdfs:
-        raise HTTPException(400, "Bitte eine PDF- oder ZIP-Datei (Einsatzberichte aus dem BKS-Portal) auswählen.")
+        raise HTTPException(400, "Bitte eine PDF-, Excel- oder ZIP-Datei (Einsatzberichte aus dem BKS-Portal) auswählen.")
     reports, errors, notes = _read_uploads(pdfs, tenants, a.email)
     previews_json = [_preview_json(r, tenant, a) for r, tenant in reports]
     token = previews.add([(r, tenant.slug) for r, tenant in reports], a.email)
@@ -706,7 +707,7 @@ class Acceptance(BaseModel):
 def api_accept_report(acceptance: Acceptance, a: tenancy.Access = Depends(access)):
     r, slug = previews.get(acceptance.token, acceptance.filename, a.email)
     if not r:
-        raise HTTPException(410, "Die Vorschau ist abgelaufen – bitte die PDF erneut einlesen.")
+        raise HTTPException(410, "Die Vorschau ist abgelaufen – bitte den Bericht erneut einlesen.")
     tenant = a.tenant(slug, WRITE)
     fields = {**report.to_fields(r), **acceptance.fields.model_dump(exclude_unset=True)}
     by_date = tenant.config.numbering == "by_date"
@@ -756,7 +757,7 @@ class PendingSelection(BaseModel):
 
 @app.post("/api/pending/read")
 def api_read_pending(selection: PendingSelection, a: tenancy.Access = Depends(access)):
-    """Abgelegte Berichte wie hochgeladene PDFs lesen (Vorschau, Übernahme wie bei /api/reports)."""
+    """Abgelegte Berichte wie hochgeladene Dateien lesen (Vorschau, Übernahme wie bei /api/reports)."""
     reports, errors, notes = [], [], []
     for key in selection.ids:
         slug, pending_id = parse_incident_key(key)

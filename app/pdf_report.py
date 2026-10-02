@@ -77,6 +77,12 @@ def _parse_keyword(text, report):
     return text, ""
 
 
+def parse_number(text):
+    """Laufende Nr. aus der Einsatzbericht-Nr. "34/26", auch mit Kürzel davor wie "B67/2026" oder "FEZ 36/2026"."""
+    m = re.match(r"[A-Za-zÄÖÜäöü]*\s*(\d+)\s*/\s*(\d+)", text)
+    return int(m.group(1)) if m else None
+
+
 def _parse_vehicles(text, report, unit_prefix):
     own_call_sign = _call_sign_pattern(unit_prefix)
     vehicles = []
@@ -122,11 +128,9 @@ def parse_report(full, left, right, filename, unit_prefix):
     unit_prefix: Anfang der Fahrzeugnamen der Einheit (TenantConfig.unit_prefix); nur deren Fahrzeuge
     bekommen einen Funkrufnamen (call_sign).
     """
-    report = {"filename": filename, "warnings": []}
+    report = {"filename": filename, "source": "pdf", "warnings": []}
     number_text = _field(full, "Einsatzbericht-Nr.")
-    # "34/26", auch mit Kürzel davor wie "B67/2026" oder "FEZ 36/2026"
-    m = re.match(r"[A-Za-zÄÖÜäöü]*\s*(\d+)\s*/\s*(\d+)", number_text)
-    report["number"] = int(m.group(1)) if m else None
+    report["number"] = parse_number(number_text)
     report["number_text"] = number_text
     m = DISPATCH_NUMBER.search(full)
     report["dispatch_number"] = m.group(1) if m else None
