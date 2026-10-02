@@ -277,11 +277,12 @@ class Access:
     (selected) oder alle sichtbaren Wehren einer VG (vg, für Wehrleiter, Statistik VG, Superadmin)."""
     email: str
     superadmin: bool
-    tenants: dict              # slug -> Tenant, nur aktive Wehren mit mindestens einem Recht
+    tenants: dict              # slug -> Tenant, nur aktive Wehren mit mindestens einem Recht (und AVV)
     roles: list                # [{role, scope, scope_id, label}] für die Anzeige
     vgs: dict = dataclasses.field(default_factory=dict)   # slug -> Name der VGs mit Gesamtansicht
     selected: Tenant = None
     vg: str = None             # Slug der ausgewählten VG
+    blocked: list = dataclasses.field(default_factory=list)   # [{slug, name}] VGs, deren Wehren der AVV fehlt
 
     @property
     def selection(self):
@@ -338,6 +339,8 @@ def access_for(email, scope=None):
     with central() as con:
         rows = con.execute("SELECT t.id, t.slug, t.name, t.vg_id, v.slug AS vg_slug, v.name AS vg_name "
                            "FROM tenant t JOIN vg v ON v.id = t.vg_id WHERE t.active ORDER BY v.name, t.name").fetchall()
+        # Ohne AVV (fehlende Zeile = ausstehend) sind die Wehren einer VG gesperrt – außer für Superadmins
+        signed = {r[0] for r in con.execute("SELECT vg_id FROM dpa WHERE status IN ('signed', 'not_required')")}
         memberships = con.execute("SELECT scope, scope_id, role FROM membership WHERE email = ?",
                                   (email,)).fetchall() if email else []
     permissions = {r["slug"]: set(ALL_PERMISSIONS) if superadmin else set() for r in rows}
@@ -347,8 +350,11 @@ def access_for(email, scope=None):
         for r in rows:
             if (m["scope"] == "tenant" and r["id"] == m["scope_id"]) or (m["scope"] == "vg" and r["vg_id"] == m["scope_id"]):
                 permissions[r["slug"]] |= ROLES[m["role"]][2]
+    blocked = {} if superadmin else {r["vg_slug"]: r["vg_name"] for r in rows
+                                     if permissions[r["slug"]] and r["vg_id"] not in signed}
     tenants = {r["slug"]: Tenant(r["id"], r["slug"], r["name"], r["vg_id"], r["vg_slug"], r["vg_name"],
-                                 frozenset(permissions[r["slug"]])) for r in rows if permissions[r["slug"]]}
+                                 frozenset(permissions[r["slug"]]))
+               for r in rows if permissions[r["slug"]] and r["vg_slug"] not in blocked}
     roles = [{"role": m["role"], "scope": m["scope"], "scope_id": m["scope_id"], "label": ROLES[m["role"]][1]}
              for m in memberships if m["role"] in ROLES]
     vg_role_ids = {m["scope_id"] for m in memberships if m["scope"] == "vg" and m["role"] in ROLES}
@@ -356,7 +362,8 @@ def access_for(email, scope=None):
     for r in rows:
         if r["slug"] in tenants and (superadmin or r["vg_id"] in vg_role_ids):
             vgs.setdefault(r["vg_slug"], r["vg_name"])
-    access = Access(email, superadmin, tenants, roles, vgs)
+    access = Access(email, superadmin, tenants, roles, vgs,
+                    blocked=[{"slug": slug, "name": name} for slug, name in blocked.items()])
     kind, _, wanted = (scope or "").partition(":")
     if kind == "t" and wanted in tenants:
         access.selected = tenants[wanted]

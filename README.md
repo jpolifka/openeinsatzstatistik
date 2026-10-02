@@ -17,6 +17,7 @@ Feuerwehrbedarfsplan, Anwesenheit) rechnet die App direkt im Browser nach.
 - [Konfiguration](#konfiguration)
 - [Mandanten und Rollen](#mandanten-und-rollen)
 - [Daten](#daten)
+- [Datenschutz](#datenschutz)
 - [Bedienung](#bedienung)
 - [Entwicklung](#entwicklung)
 - [Projektstruktur](#projektstruktur)
@@ -137,7 +138,7 @@ Adressen aus `AUTH_EMAILS` werden dort Wehrführer. Die alte Datei bleibt als
 
 | Pfad               | Inhalt                                               | Im Git |
 |--------------------|------------------------------------------------------|:------:|
-| `daten/`           | `app.db` (VGs, Wehren, Benutzer, Rollen) und `tenants/<wehr>/einsaetze.db` je Wehr – der Datenbestand | nein |
+| `daten/`           | `app.db` (VGs, Wehren, Benutzer, Rollen, AVV), `tenants/<wehr>/einsaetze.db` je Wehr, `avv/` unterschriebene Verträge – der Datenbestand | nein |
 | `Einsatzberichte/` | Berichts-PDFs und frühere `Einsatzübersicht_JJJJ.xlsx` (nur Ablage) | nein |
 
 Die Datenbank ist maßgeblich. Einen Erstimport aus den Excel-Dateien gibt es nicht mehr: Eine neue
@@ -149,6 +150,34 @@ aktuellen Stand (Migrationen in `app/db.py`). Vor einem Update `daten/` sichern.
 **Sicherung:** den ganzen Ordner `daten/` sichern, bei gestopptem Container oder je Datei mit
 `sqlite3 <datei> ".backup <ziel>"` (die Datenbanken laufen im WAL-Modus, eine einfache Kopie im
 laufenden Betrieb kann unvollständig sein). Zusätzlich gibt es „Einsätze → Excel-Export“.
+
+## Datenschutz
+
+Wer die App für andere Wehren betreibt, verarbeitet deren Daten im Auftrag (Art. 28 DSGVO).
+Verantwortlich ist die Verbandsgemeinde als Träger der Feuerwehr, deshalb gilt ein
+**Vertrag zur Auftragsverarbeitung (AVV) je VG**; er deckt alle ihre Wehren ab.
+
+- **Sperre bis zum AVV:** Eine neue VG startet mit „AVV ausstehend“. Ihre Wehren sind für alle außer
+  Superadmins gesperrt; Zugeordnete sehen nach der Anmeldung nur „Auftragsverarbeitung“.
+- **Ablauf:** Wehrleitung, Statistik VG oder Wehrführer füllen die Angaben des Auftraggebers aus, die App
+  erzeugt daraus den Vertrag (Vorlage `app/templates/avv_v1.html`, Prüfsumme des Textes wird gespeichert).
+  Nach der Unterschrift wird das PDF hochgeladen (`daten/avv/<vg>/`, nie überschrieben, mit Prüfsumme)
+  und/oder ein Link zur Ablage der VG hinterlegt. Der Superadmin bestätigt mit dem Datum der Unterschrift;
+  erst dann sind die Wehren frei. Zurücknehmen (z. B. bei Kündigung) sperrt wieder. Jeder Schritt steht in
+  einem Protokoll, an das nur angehängt werden kann.
+- **Form:** Die DSGVO lässt ein elektronisches Format zu. Für Verpflichtungserklärungen einer Gemeinde kann
+  die Gemeindeordnung aber eine handschriftliche Unterschrift (ggf. mit Dienstsiegel) verlangen – im
+  Zweifel unterschriebenes Papier scannen oder eine qualifizierte elektronische Signatur nutzen und mit
+  dem Datenschutzbeauftragten der VG abstimmen.
+- **Eigenbetrieb:** Die bei der Umstellung übernommene VG Bad Hönningen steht auf „nicht erforderlich
+  (Eigenbetrieb)“. Diesen Status setzt nur der Superadmin.
+- **Angaben zum Auftragnehmer** (Anschrift, Vertretung, Hosting, Datensicherung) kommen aus `.env`
+  (`DPA_*`, siehe [`.env.example`](.env.example)).
+- **Löschung:** Entfernte Wehren liegen unter `daten/deleted/` und werden nach Vertragsende
+  (spätestens drei Monate) von Hand gelöscht; unterschriebene Verträge unter `daten/avv/` bleiben für
+  die Dauer der Aufbewahrungspflicht erhalten.
+
+Die Vorlage ist ein Muster und keine Rechtsberatung.
 
 ## Bedienung
 
@@ -200,11 +229,13 @@ app/
   excel_export.py  Excel-Export im Format der Einsatzübersicht, Gesamtmappe, Kennzahlen
   theme.py         Farben (abgeleitete Töne, Kontrastprüfung) und Logos einer Wehr
   admin.py         Verwaltung: Einstellungen, Logos, Stichworte, Rollen, VGs und Wehren
+  dpa.py           Auftragsverarbeitungsvertrag je VG (Vorlage in templates/)
   names.py, timeutil.py, holidays.py   Namensvergleich, Zeiten, Feiertage RLP
 static/
   index.html       Oberfläche
   app.js           Ansichten und Bedienung
   admin.js         Ansicht Verwaltung
+  dpa.js           Ansicht Auftragsverarbeitung
   help.js          Texte und Logik der Online-Hilfe
   app.css          Gestaltung
   fonts/, img/     Schrift Sansation (SIL OFL), neutrales Signet

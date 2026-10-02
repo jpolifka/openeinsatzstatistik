@@ -25,6 +25,8 @@
   --gridline: #ECECEC;
   --track: #F3E4E5;
 
+  --ok-bg: #E3F1E6;        /* Status „erledigt“ (unabhängig von den Farben der Wehr) */
+  --ok-text: #1E5A2C;
   --line: #E4E4E4;
   --radius: 14px;
   --shadow: 0 1px 2px rgba(51, 0, 0, .06), 0 6px 20px rgba(122, 0, 0, .06);
@@ -456,8 +458,16 @@ h2 .help-btn, h3 .help-btn { color: var(--brand); }
   .admin-colors, .logo-slots { grid-template-columns: 1fr; }
 }
 
+/* ------------------------------------------------------------ Auftragsverarbeitung */
+.dpa-steps { margin: 10px 0; padding-left: 0; list-style: none; display: grid; gap: 4px; }
+.dpa-steps li { color: var(--gray); } .dpa-steps li.done { color: var(--text); font-weight: 700; }
+.tenant-badge.dpa-signed, .tenant-badge.dpa-not_required { background: var(--ok-bg); color: var(--ok-text); }
+.inline-row input.wide { flex: 1; min-width: 200px; width: auto; }
+#view-dpa details summary { cursor: pointer; color: var(--gray); }
+
 /* ------------------------------------------------------------ Gesamtansicht und Druck */
 .evaluation-toolbar { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 14px; }
+a.tenant-badge { text-decoration: none; }
 .tenant-badge { display: inline-block; margin-right: 8px; padding: 1px 8px; border-radius: 999px; background: var(--brand-light); color: var(--brand-dark); font-size: .78rem; font-weight: 700; }
 .print-only { display: none; }
 @media print {

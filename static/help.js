@@ -228,6 +228,11 @@ const HELP_SECTIONS = [
         short: "Stichworte der AAO für die Suche im Feld Stichwort.",
         text: "Standard ist die Vorlage der AAO. Sobald ein Stichwort ergänzt, geändert oder gelöscht wird, hat die Wehr ihren eigenen Katalog. <b>Deaktivierte</b> Stichworte erscheinen nicht mehr in der Suche, alte Einsätze behalten aber ihre Bezeichnung. Ein ganzer Katalog lässt sich als CSV oder Excel (Stichwort, Bezeichnung, Suchbegriffe) einlesen – vorher zeigt die App, was neu ist oder sich ändert.",
       },
+      dpa: {
+        title: "Auftragsverarbeitung (AVV)",
+        short: "Vertrag nach Art. 28 DSGVO zwischen VG und Betreiber.",
+        text: "Die Verbandsgemeinde ist als Träger der Feuerwehr für die Daten verantwortlich, der Betreiber der App verarbeitet sie in ihrem Auftrag. Ablauf: Angaben des Auftraggebers ausfüllen → der Vertrag wird aus der Vorlage erzeugt (mit Prüfsumme des Textes) → drucken und unterschreiben lassen → unterschriebenes PDF hochladen und/oder einen Link zur Ablage der VG eintragen → der Betreiber bestätigt. Bis dahin sind die Einsatzdaten der Wehren dieser VG gesperrt. Ausfüllen dürfen Wehrleitung, Statistik VG und Wehrführer; hochgeladene Dateien werden nie überschrieben, alle Schritte werden protokolliert.",
+      },
       admin_roles: {
         title: "Rollen",
         short: "Wer was sehen und ändern darf.",
