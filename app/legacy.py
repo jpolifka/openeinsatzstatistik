@@ -100,6 +100,10 @@ def migrate_single_install(data_dir):
         emails = legacy_emails()
         for email in emails:
             tenancy.grant(con, email, "lead", tenant_id)
+        # Eigenbetrieb der eigenen Wehr: kein AVV nötig (siehe dpa.py)
+        con.execute("INSERT INTO dpa (vg_id, status) VALUES (?, 'not_required')", (vg_id,))
+        con.execute("INSERT INTO dpa_event (vg_id, email, action, detail) VALUES (?, 'System', ?, ?)",
+                    (vg_id, "Status: nicht erforderlich (Eigenbetrieb)", "Übernahme der Einzel-Installation"))
     con = sqlite3.connect(staging)
     con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
     con.close()

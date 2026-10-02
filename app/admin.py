@@ -479,7 +479,9 @@ def _superadmin(a):
 def super_overview(a: tenancy.Access = Depends(access)):
     _superadmin(a)
     with tenancy.central() as con:
-        vgs = [dict(r) for r in con.execute("SELECT id, slug, name FROM vg ORDER BY name")]
+        vgs = [dict(r) for r in con.execute(
+            "SELECT v.id, v.slug, v.name, COALESCE(d.status, 'pending') AS dpa FROM vg v "
+            "LEFT JOIN dpa d ON d.vg_id = v.id ORDER BY v.name")]
         tenants = [dict(r) for r in con.execute(
             "SELECT t.slug, t.name, t.active, t.created, v.slug AS vg FROM tenant t JOIN vg v ON v.id = t.vg_id "
             "ORDER BY v.name, t.name")]

@@ -109,9 +109,27 @@ def _create_central_schema(con):
                 "PRIMARY KEY (email, scope, scope_id))")
 
 
+def _add_dpa(con):
+    """Auftragsverarbeitungsvertrag je VG (siehe dpa.py) und sein Protokoll, an das nur angehängt wird.
+    Die VG der früheren Einzel-Installation (Eigenbetrieb) braucht keinen AVV."""
+    con.execute("CREATE TABLE dpa (vg_id INTEGER PRIMARY KEY REFERENCES vg(id) ON DELETE CASCADE, "
+                "status TEXT NOT NULL DEFAULT 'pending', template_version INTEGER, client_data TEXT NOT NULL DEFAULT '{}', "
+                "generated_hash TEXT, signed_on TEXT, document_link TEXT, document_file TEXT, document_hash TEXT, "
+                "confirmed_by TEXT, confirmed_at TEXT, updated TEXT NOT NULL DEFAULT (datetime('now', 'localtime')))")
+    con.execute("CREATE TABLE dpa_event (id INTEGER PRIMARY KEY, vg_id INTEGER NOT NULL, "
+                "at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')), email TEXT, action TEXT NOT NULL, detail TEXT)")
+    for change in ("UPDATE", "DELETE"):
+        con.execute(f"CREATE TRIGGER dpa_event_no_{change.lower()} BEFORE {change} ON dpa_event "
+                    "BEGIN SELECT RAISE(ABORT, 'Das AVV-Protokoll wird nur ergänzt.'); END")
+    for (vg_id,) in con.execute("SELECT id FROM vg WHERE slug = 'bad-hoenningen'").fetchall():
+        con.execute("INSERT INTO dpa (vg_id, status) VALUES (?, 'not_required')", (vg_id,))
+        con.execute("INSERT INTO dpa_event (vg_id, email, action, detail) VALUES (?, 'System', ?, ?)",
+                    (vg_id, "Status: nicht erforderlich (Eigenbetrieb)", "Bestand der früheren Einzel-Installation"))
+
+
 # Neue Schemaänderungen nur hinten anfügen; PRAGMA user_version zählt die erledigten Schritte.
 TENANT_MIGRATIONS = [_create_legacy_schema, _rename_to_english, _add_tenant_tables]
-CENTRAL_MIGRATIONS = [_create_central_schema]
+CENTRAL_MIGRATIONS = [_create_central_schema, _add_dpa]
 
 
 def migrate(con, steps=TENANT_MIGRATIONS):

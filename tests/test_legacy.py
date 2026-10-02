@@ -34,6 +34,9 @@ def test_single_install_becomes_tenant(old_install):
         roles = con.execute("SELECT email, role FROM membership ORDER BY email").fetchall()
     assert tuple(tenant) == ("rheinbrohl", "Feuerwehr Rheinbrohl", "VG Bad Hönningen")
     assert [tuple(r) for r in roles] == [("e.beispiel@example.org", "lead"), ("m.muster@example.org", "lead")]
+    with tenancy.central() as con:                     # Eigenbetrieb: kein AVV nötig, Wehr bleibt nutzbar
+        assert con.execute("SELECT status FROM dpa").fetchone()[0] == "not_required"
+    assert "rheinbrohl" in tenancy.access_for("m.muster@example.org").tenants
     with db.connection(tenancy.tenant_path("rheinbrohl")) as con:
         assert len(store.load_incidents(con)) == 2
         assert tenancy.load_config(con, "Feuerwehr Rheinbrohl") == legacy.rheinbrohl_config()

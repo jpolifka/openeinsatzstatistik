@@ -342,8 +342,9 @@ function superSection() {
   const { vgs, tenants } = admin.superOverview;
   const vgOptions = (current) => vgs.map((v) => `<option value="${esc(v.slug)}" ${v.slug === current ? "selected" : ""}>${esc(v.name)}</option>`).join("");
   return `<h3>Verbandsgemeinden</h3>
-    <div class="table-wrap"><table class="mini-table admin-table"><thead><tr><th>Kurzname</th><th>Name</th><th></th></tr></thead><tbody>
+    <div class="table-wrap"><table class="mini-table admin-table"><thead><tr><th>Kurzname</th><th>Name</th><th>AVV</th><th></th></tr></thead><tbody>
       ${vgs.map((v) => `<tr><td>${esc(v.slug)}</td><td><input type="text" data-vg-name="${esc(v.slug)}" value="${esc(v.name)}"></td>
+        <td><a href="#dpa" class="tenant-badge dpa-${v.dpa}">${{ pending: "ausstehend", draft: "ausgefüllt", signed: "liegt vor", revoked: "zurückgenommen", not_required: "nicht erforderlich" }[v.dpa]}</a></td>
         <td><button type="button" class="btn btn-outline btn-small" data-admin-action="rename-vg" data-slug="${esc(v.slug)}">Umbenennen</button></td></tr>`).join("")}
     </tbody></table></div>
     <div class="form-grid section-gap">
@@ -365,7 +366,8 @@ function superSection() {
       ${adminField("Erster Wehrführer (E-Mail, optional)", `<input type="email" id="tenant-email">`, "span-2")}
     </div>
     <div class="admin-actions left"><button type="button" class="btn btn-primary" data-admin-action="create-tenant" ${vgs.length ? "" : "disabled"}>Wehr anlegen</button></div>
-    <p class="small muted">Kurznamen: Kleinbuchstaben, Ziffern und Bindestrich; sie lassen sich später nicht ändern. Entfernte Wehren werden nicht gelöscht, sondern im Datenordner unter <code>deleted/</code> abgelegt.</p>`;
+    <p class="small muted">Neue VGs starten mit „AVV ausstehend“: Ihre Wehren sind gesperrt, bis der Vertrag unter „Auftragsverarbeitung“ bestätigt ist.
+    Kurznamen: Kleinbuchstaben, Ziffern und Bindestrich; sie lassen sich später nicht ändern. Entfernte Wehren werden nicht gelöscht, sondern im Datenordner unter <code>deleted/</code> abgelegt.</p>`;
 }
 
 // ------------------------------------------------------------ Aktionen

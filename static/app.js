@@ -158,9 +158,10 @@ function renderTabs() {
 // Name und Logos der Wehr; ohne eigene Logos (und in der Gesamtansicht) das neutrale Signet
 function applyBranding() {
   const b = config.branding;
-  document.title = `Einsatzstatistik · ${config.name}`;
-  $(".topbar-kicker").textContent = `Einsatzstatistik · ${config.name}`;
-  $("#footer-name").textContent = `${config.name} · Einsatzstatistik`;
+  const named = config.name !== "Einsatzstatistik";       // ohne Wehr heißt die Auswahl selbst so
+  document.title = named ? `Einsatzstatistik · ${config.name}` : "Einsatzstatistik";
+  $(".topbar-kicker").textContent = document.title;
+  $("#footer-name").textContent = named ? `${config.name} · Einsatzstatistik` : "Einsatzstatistik";
   $("#logo-light").src = b.logo_light || "/static/img/app-icon-light.svg";
   $("#logo-light").alt = b.logo_light ? config.name : "";
   $("#logo-dark").src = b.logo_dark || "/static/img/app-icon.svg";
@@ -1091,12 +1092,12 @@ $("#scope").addEventListener("change", async (e) => {
     $("#logout").hidden = false;
     $("#logout button").dataset.tip = `Abmelden (${config.user})`;
   }
-  if (!config.tenants.length && !config.superadmin) {
+  if (!config.tenants.length && !config.superadmin && !config.dpa_blocked.length) {
     fail("Dir ist keine Wehr zugeordnet.");
     return;
   }
   renderTabs();
-  if (!config.tenants.length) {               // Superadmin ohne Wehr: nur die Verwaltung
+  if (!config.tenants.length) {               // Superadmin ohne Wehr bzw. nur Wehren ohne AVV: Verwaltung, AVV
     $("#btn-pdf").hidden = true;
     $(".year-select:not(#scope-select)").hidden = true;
     await showView();
