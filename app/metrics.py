@@ -7,8 +7,8 @@ Auswertungen – dieselben Regeln wie die Formeln der Einsatzübersicht:
   Blatt Auswertung   Feuerwehrbedarfsplan Pos. 8.4   -> response_plan()
   Blatt Anwesenheit  Stärke, Gesamtstunden           -> attendance_overview()
 
-Die drei Blatt-Auswertungen bekommen evaluate(einsätze), damit die Kennzahlen je
-Einsatz nur einmal berechnet werden.
+Die drei Blatt-Auswertungen bekommen evaluate(einsätze, cfg), damit die Kennzahlen je
+Einsatz nur einmal berechnet werden. cfg ist die TenantConfig der Wehr, zu der die Einsätze gehören.
 """
 import datetime as dt
 
@@ -17,15 +17,18 @@ from app.timeutil import parse_iso, seconds_of_day
 
 WEEKDAYS = ("Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag")
 MONTHS = ("Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez")
-_DAY_HOURS = f"{domain.DAY_START_HOUR:02d}:00 – {domain.DAY_END_HOUR:02d}:00 Uhr"
-_NIGHT_HOURS = f"{domain.DAY_END_HOUR:02d}:00 – {domain.DAY_START_HOUR:02d}:00 Uhr"
-# (Schlüssel, Tagart, Uhrzeit, Wochenende/Feiertag, Tag)
-TIME_WINDOWS = (
-    ("weekday_day", "Werktag", _DAY_HOURS, False, True),
-    ("weekday_night", "Werktag", _NIGHT_HOURS, False, False),
-    ("weekend_day", "Sa, So, Feiertag", _DAY_HOURS, True, True),
-    ("weekend_night", "Sa, So, Feiertag", _NIGHT_HOURS, True, False),
-)
+
+
+def time_windows(cfg):
+    """Zeitfenster des Bedarfsplans: (Schlüssel, Tagart, Uhrzeit, Wochenende/Feiertag, Tag)."""
+    start, end = cfg.day_hours
+    day, night = f"{start:02d}:00 – {end:02d}:00 Uhr", f"{end:02d}:00 – {start:02d}:00 Uhr"
+    return (("weekday_day", "Werktag", day, False, True),
+            ("weekday_night", "Werktag", night, False, False),
+            ("weekend_day", "Sa, So, Feiertag", day, True, True),
+            ("weekend_night", "Sa, So, Feiertag", night, True, False))
+
+
 # Toleranzen wie in den Excel-Formeln (Gleitkomma-Minuten)
 _ON_TIME_TOLERANCE = 0.0001
 _WINDOW_TOLERANCE = 0.001
@@ -48,14 +51,15 @@ def _minutes_after(start_seconds, time_text):
     return ((seconds_of_day(time_text) - start_seconds) % 86400) / 60
 
 
-def incident_metrics(incident, limit=domain.DEFAULT_LIMIT):
+def incident_metrics(incident, cfg, limit=None):
     """Formeln der Einsatzzeile."""
+    limit = limit or cfg.default_limit
     start, end = parse_iso(incident["started_at"]), parse_iso(incident["ended_at"])
     start_seconds = seconds_of_day(start) if start else None
     duration = (end - start).total_seconds() / 60 if start and end and end >= start else None
 
     vehicles = {}
-    for call_sign in domain.VEHICLES:
+    for call_sign in cfg.vehicles:
         v = incident["vehicles"].get(call_sign)
         if v:
             vehicles[call_sign] = {"crew": v["crew"] or 0,
@@ -73,12 +77,12 @@ def incident_metrics(incident, limit=domain.DEFAULT_LIMIT):
     on_arrival = within_limit = within_second = None
     if first is not None:
         window_end = limit + _WINDOW_TOLERANCE
-        second_end = domain.SECOND_LIMIT + _WINDOW_TOLERANCE
+        second_end = cfg.second_limit + _WINDOW_TOLERANCE
         on_arrival = crew_arriving(lambda m: m == first)                          # AR
         within_limit = crew_arriving(lambda m: first < m <= window_end)           # AS
         within_second = crew_arriving(lambda m: m > first and limit < m <= second_end)  # AT
     return {
-        "daytime": bool(start) and domain.is_daytime(start.time()),              # D
+        "daytime": bool(start) and cfg.is_daytime(start.time()),                 # D
         "duration_min": duration,                                                 # G
         "vehicles": vehicles,
         "turnout_min": turnout,
@@ -88,15 +92,18 @@ def incident_metrics(incident, limit=domain.DEFAULT_LIMIT):
         "crew_within_limit": within_limit,
         "crew_within_second": within_second,
         "crew_plan_total": sum(v["crew"] for cs, v in vehicles.items()
-                               if cs not in domain.EXCLUDED_FROM_PLAN_CREW),            # AU
+                               if cs not in cfg.excluded_from_plan_crew),               # AU
         "crew_total": sum(v["crew"] for v in vehicles.values()) + (incident["station_staff"] or 0),  # AM
         "attendees": len(incident["people"]),
+        # Zuordnungen nach den Regeln der eigenen Wehr – so lassen sich Einsätze mehrerer Wehren zusammenführen
+        "area": cfg.area_of(incident["place"]),
+        "plan_relevant": cfg.is_plan_relevant(incident),
     }
 
 
-def evaluate(incidents, limit=domain.DEFAULT_LIMIT):
+def evaluate(incidents, cfg, limit=None):
     """[(einsatz, kennzahlen)] – Eingabe für die Blatt-Auswertungen."""
-    return [(i, incident_metrics(i, limit)) for i in incidents]
+    return [(i, incident_metrics(i, cfg, limit)) for i in incidents]
 
 
 # ---------------------------------------------------------------- Blatt Statistik
@@ -107,7 +114,7 @@ def _count_by(values, keys):
     return counts
 
 
-def statistics(evaluated, year, previous=None, today=None):
+def statistics(evaluated, year, cfg, previous=None, today=None):
     """previous: Einsätze des Vorjahrs (ohne Kennzahlen) oder None."""
     today = today or dt.date.today()
     incidents = [i for i, _ in evaluated]
@@ -119,7 +126,7 @@ def statistics(evaluated, year, previous=None, today=None):
                    "keywords": {f"{code}{level}": keywords.get(f"{code}{level}", 0) for level in domain.ALARM_LEVELS}}
                   for code, name in domain.CATEGORIES]
     levels = _count_by((domain.alarm_level(i["keyword"]) for i in incidents), domain.ALARM_LEVELS)
-    areas = _count_by((domain.area_of(i["place"]) for i in incidents), domain.PLACE_NAMES + (domain.OTHER_AREA,))
+    areas = _count_by((m["area"] for _, m in evaluated), cfg.place_names + (domain.OTHER_AREA,))
 
     starts = [s for s in (parse_iso(i["started_at"]) for i in incidents) if s]
     weekdays = _count_by((s.weekday() for s in starts), range(7))
@@ -155,7 +162,7 @@ def statistics(evaluated, year, previous=None, today=None):
         "levels": [{"level": level, "count": levels[level]} for level in domain.ALARM_LEVELS],
         "areas": [{"name": name, "count": n} for name, n in areas.items()],
         "weekdays": [{"name": WEEKDAYS[d], "count": weekdays[d]} for d in range(7)],
-        "hours": [{"hour": h, "count": hours[h], "daytime": domain.DAY_START_HOUR <= h < domain.DAY_END_HOUR}
+        "hours": [{"hour": h, "count": hours[h], "daytime": cfg.day_hours[0] <= h < cfg.day_hours[1]}
                   for h in range(24)],
         "daytime_share": _share(sum(1 for _, m in evaluated if m["daytime"]), count),
         "months": [{"name": MONTHS[m - 1], "count": months[m],
@@ -210,16 +217,16 @@ def _summarize(evaluated):
     }
 
 
-def response_plan(evaluated, limit):
+def response_plan(evaluated, limit, cfg):
     """Pos. 8.4: ab Alarmstufe 2 im eigenen Ausrückebereich; evaluated mit derselben Zeitgrenze."""
-    relevant = [(i, m) for i, m in evaluated if domain.is_plan_relevant(i)]
+    relevant = [(i, m) for i, m in evaluated if m["plan_relevant"]]
     # Excel zählt Einsätze ohne Eintreffzeit mit 0 min als "erreicht" – hier ausgenommen
     timed = [(i, m) for i, m in relevant if m["arrival_min"] is not None]
     windows = [{"key": key, "day_type": day_type, "hours": hours,
                 **_summarize([(i, m) for i, m in timed
                               if bool(i["weekend_or_holiday"]) == weekend and m["daytime"] == daytime])}
-               for key, day_type, hours, weekend, daytime in TIME_WINDOWS]
-    return {"limit": limit, "places": domain.PLAN_PLACES, "windows": windows, "total": _summarize(timed),
+               for key, day_type, hours, weekend, daytime in time_windows(cfg)]
+    return {"limit": limit, "places": cfg.plan_places, "windows": windows, "total": _summarize(timed),
             "without_times": len(relevant) - len(timed)}
 
 

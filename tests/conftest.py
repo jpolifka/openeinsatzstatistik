@@ -2,6 +2,10 @@
 import pytest
 
 from app import db
+from app.legacy import rheinbrohl_config
+
+# Fachkonfiguration für die Tests: die Werte der ersten Wehr (keine personenbezogenen Daten)
+CFG = rheinbrohl_config()
 
 
 @pytest.fixture

@@ -72,29 +72,20 @@ Wird `daten/session.key` gelöscht, sind alle abgemeldet. Die frühere Variable 
 wird nicht mehr unterstützt; ist sie ohne `AUTH_EMAILS` gesetzt, startet die App nicht.
 
 Im Container fest eingestellt, weil sie zu den Volumes gehören (siehe [`docker-compose.yml`](docker-compose.yml)):
-`DB_PATH=/daten/einsaetze.db` (Pflicht), `IMPORT_DIR=/import` (Erstimport).
+`DB_PATH=/daten/einsaetze.db` (Pflicht).
 
 ## Daten
 
 | Pfad               | Inhalt                                               | Im Git |
 |--------------------|------------------------------------------------------|:------:|
 | `daten/`           | SQLite-Datenbank `einsaetze.db` – der Datenbestand   | nein   |
-| `Einsatzberichte/` | Berichts-PDFs und `Einsatzübersicht_JJJJ.xlsx` je Jahr | nein |
+| `Einsatzberichte/` | Berichts-PDFs und frühere `Einsatzübersicht_JJJJ.xlsx` (nur Ablage) | nein |
 
-**Erstimport:** Ist die Datenbank beim Start leer, übernimmt die App alle
-`Einsatzübersicht_JJJJ.xlsx` aus `Einsatzberichte/` (Einsätze, Fahrzeuge, Anwesenheit).
-Danach ist die Datenbank maßgeblich; die Excel-Dateien werden nicht mehr gebraucht.
+Die Datenbank ist maßgeblich. Einen Erstimport aus den Excel-Dateien gibt es nicht mehr: Eine neue
+Datenbank startet leer, Einsätze kommen über die Berichts-PDFs hinein.
 
 **Schema-Updates:** Beim Start bringt die App eine bestehende Datenbank automatisch auf den
 aktuellen Stand (Migrationen in `app/db.py`). Vor einem Update `daten/einsaetze.db` sichern.
-
-**Neu importieren:**
-
-```bash
-docker compose down
-rm daten/einsaetze.db*
-docker compose up -d
-```
 
 **Sicherung:** `daten/einsaetze.db` sichern (bei gestopptem Container) oder in der App
 „Einsätze → Excel-Export“ nutzen.
@@ -127,22 +118,23 @@ Lokal ohne Docker (Python 3.12):
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
 pytest
-DB_PATH=daten/einsaetze.db IMPORT_DIR=Einsatzberichte uvicorn app.main:app --reload --port 8112
+DB_PATH=daten/einsaetze.db uvicorn app.main:app --reload --port 8112
 ```
 
 ## Projektstruktur
 
 ```text
 app/
-  main.py          FastAPI: Schnittstellen, Passwortschutz, Erstimport beim Start
-  domain.py        Fachkonstanten (Fahrzeuge, Orte, Zeitgrenzen) – auch für die Oberfläche
+  main.py          FastAPI: Schnittstellen, Passwortschutz
+  domain.py        Fachkonstanten für alle Wehren (Stichworte, Einsatzarten, Standardwerte)
+  tenant_config.py Fachkonfiguration einer Wehr (Fahrzeuge, Orte, Bedarfsplan) – auch für die Oberfläche
+  legacy.py        Werte der bisherigen Einzel-Installation (FF Rheinbrohl)
   pdf_report.py    Einsatzbericht-PDF lesen
   report.py        Felder ableiten, Prüfhinweise, Bericht -> Einsatz
   metrics.py       Formeln der Einsatzübersicht (Kennzahlen, Statistik, Bedarfsplan, Anwesenheit)
   store.py         Datenbankzugriff, Namensabgleich Kameraden
   db.py            SQLite-Verbindung und Migrationen
-  excel_layout.py  Spaltenaufbau der Einsatzübersicht
-  excel_import.py  Erstimport aus Einsatzübersicht_JJJJ.xlsx
+  excel_layout.py  Spaltenaufbau der Einsatzübersicht, aus der Fahrzeugliste der Wehr
   excel_export.py  Excel-Export im Format der Einsatzübersicht
   names.py, timeutil.py, holidays.py   Namensvergleich, Zeiten, Feiertage RLP
 static/

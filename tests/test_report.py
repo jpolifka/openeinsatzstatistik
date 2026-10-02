@@ -4,6 +4,7 @@ import datetime as dt
 
 from app import report, store
 from app.pdf_report import parse_report
+from conftest import CFG
 
 LEFT = """EINSATZBERICHT
 Einsatzbericht-Nr.: 17/25
@@ -31,15 +32,15 @@ FULL = LEFT + "Einsatzleiter: Max Muster\n" + VEHICLES + PEOPLE
 
 
 def read(full=FULL, left=LEFT, right="", filename="17-25_B2_Test.pdf"):
-    r = parse_report(full, left, right, filename)
+    r = parse_report(full, left, right, filename, CFG.unit_prefix)
     report.complete_number(r)
-    report.derive(r)
+    report.derive(r, CFG)
     report.check_plausibility(r)
     return r
 
 
 def test_parse_fields_vehicles_and_people():
-    r = parse_report(FULL, LEFT, "", "17-25_B2_Test.pdf")
+    r = parse_report(FULL, LEFT, "", "17-25_B2_Test.pdf", CFG.unit_prefix)
     assert (r["number"], r["keyword"], r["subcode"]) == (17, "B2", "08")
     assert r["district"] == "Rheinbrohl"
     assert [v["call_sign"] for v in r["vehicles"]] == ["02/45", "02/24", "01/46", None]
@@ -97,11 +98,11 @@ def test_save_and_differences(con):
 
     incident, existing = report.preview(con, r)
     assert existing["id"] == incident_id
-    assert report.differences(existing, incident) == []
+    assert report.differences(existing, incident, CFG) == []
     assert not any(p["new"] for p in incident["people"])
 
     changed = {**incident, "unit_leader": "E. Beispiel"}
-    assert report.differences(existing, changed) == [{"field": "EHF", "stored": "M. Muster", "report": "E. Beispiel"}]
+    assert report.differences(existing, changed, CFG) == [{"field": "EHF", "stored": "M. Muster", "report": "E. Beispiel"}]
 
 
 def test_older_layout_with_incident_site_in_right_column():

@@ -1,0 +1,112 @@
+# -*- coding: utf-8 -*-
+"""
+Fachkonfiguration einer Wehr: Fahrzeuge, Kennungen im BKS-Bericht, Orte, Bedarfsplan.
+
+Jede Wehr hat ihre eigene TenantConfig. Backend und Oberfläche lesen die Werte nur von hier
+(die Oberfläche über /api/config, siehe client_config). Was für alle Wehren gilt, steht in domain.py.
+"""
+import dataclasses
+import datetime as dt
+from typing import Optional
+
+from app import domain
+
+
+@dataclasses.dataclass(frozen=True)
+class Vehicle:
+    """Fahrzeug der Wehr. Ohne Dienstzeitraum ist es unbegrenzt im Dienst."""
+    call_sign: str                            # Funkrufname ohne Einheit, z. B. 02/45
+    label: str = ""                           # Bezeichnung, z. B. HLF 20
+    in_service_from: Optional[str] = None     # ISO-Datum, erster Tag im Dienst
+    in_service_until: Optional[str] = None    # ISO-Datum, letzter Tag im Dienst
+    replaced_by: Optional[str] = None         # Funkrufname des Nachfolgers
+    in_plan_crew: bool = True                 # zählt zur Gesamtstärke des Bedarfsplans (Excel-Spalte AU)
+
+    def in_service_on(self, day: dt.date):
+        day = day.isoformat()
+        return (not self.in_service_from or self.in_service_from <= day) and \
+               (not self.in_service_until or day <= self.in_service_until)
+
+    def in_service_during(self, year):
+        return (not self.in_service_from or self.in_service_from[:4] <= str(year)) and \
+               (not self.in_service_until or str(year) <= self.in_service_until[:4])
+
+
+@dataclasses.dataclass(frozen=True)
+class TenantConfig:
+    name: str                                 # Name der Wehr, z. B. „Feuerwehr Musterstadt“
+    fleet: tuple = ()                         # Vehicle in der Reihenfolge der Einsatzübersicht
+    # Ersatzfahrzeuge, die bei Werkstattaufenthalt im Block eines anderen geführt werden: {ersatz: block}
+    substitutes: dict = dataclasses.field(default_factory=dict)
+    unit_prefix: str = ""                     # Fahrzeuge der Einheit im BKS-Bericht, z. B. „FL NR#.ABC “
+    own_prefix: str = ""                      # Funkrufnamen der eigenen Wehr, z. B. „02/“
+    unit_marker: str = ""                     # Einheit im Bericht, z. B. „FW NR#.ABC 02“
+    control_center: str = domain.CONTROL_CENTER
+    places: tuple = ()                        # (Name, Namensanfang) für die Zuordnung des Einsatzgebiets
+    plan_places: tuple = ()                   # Ausrückebereich laut Feuerwehrbedarfsplan
+    plan_min_level: int = domain.PLAN_MIN_LEVEL
+    response_limits: tuple = domain.RESPONSE_LIMITS
+    default_limit: int = domain.DEFAULT_LIMIT
+    second_limit: int = domain.SECOND_LIMIT
+    day_hours: tuple = (domain.DAY_START_HOUR, domain.DAY_END_HOUR)
+    keywords: tuple = domain.KEYWORD_CATALOG  # (Stichwort.Stufe, Bezeichnung, Suchbegriffe)
+
+    # ------------------------------------------------------------ Fahrzeuge
+    @property
+    def vehicles(self):
+        """Funkrufnamen aller Fahrzeuge in der Reihenfolge der Einsatzübersicht."""
+        return tuple(v.call_sign for v in self.fleet)
+
+    @property
+    def excluded_from_plan_crew(self):
+        return {v.call_sign for v in self.fleet if not v.in_plan_crew}
+
+    @property
+    def own_vehicle_prefix(self):
+        """Anfang der Fahrzeugnamen der eigenen Wehr im Bericht, z. B. „FL NR#.ABC 02/“."""
+        return self.unit_prefix + self.own_prefix
+
+    def substitute_label(self, vehicle_name, call_sign):
+        """Kurzname eines Ersatzfahrzeugs im Block (z. B. '01/23-01'); None, wenn das Stammfahrzeug fuhr."""
+        if not vehicle_name or call_sign in vehicle_name:
+            return None
+        return vehicle_name.replace(self.unit_prefix, "")
+
+    # ------------------------------------------------------------ Orte und Bedarfsplan
+    @property
+    def place_names(self):
+        return tuple(name for name, _ in self.places)
+
+    def area_of(self, place):
+        """Einsatzgebiet anhand des Anfangs des Ortsnamens."""
+        text = (place or "").lower()
+        return next((name for name, prefix in self.places if text.startswith(prefix)), domain.OTHER_AREA)
+
+    def is_plan_relevant(self, incident):
+        """Einsatz zählt für den Bedarfsplan: ab Mindest-Alarmstufe im eigenen Ausrückebereich."""
+        level = domain.alarm_level(incident["keyword"])
+        return level in domain.ALARM_LEVELS and level >= self.plan_min_level and incident["place"] in self.plan_places
+
+    def is_daytime(self, t: dt.time):
+        """Wie Excel =UND(E>0,25;E<0,75): die Grenzen selbst zählen zur Nacht."""
+        start, end = self.day_hours
+        return dt.time(start) < t < dt.time(end)
+
+    # ------------------------------------------------------------ Oberfläche
+    def client_config(self):
+        """Fachkonstanten für die Oberfläche."""
+        return {
+            "vehicles": list(self.vehicles),
+            "categories": [{"code": code, "name": name} for code, name in domain.CATEGORIES],
+            "places": list(self.place_names),
+            "plan_places": list(self.plan_places),
+            "plan_min_level": self.plan_min_level,
+            "plan_excluded_vehicles": sorted(self.excluded_from_plan_crew),
+            "limits": list(self.response_limits),
+            "default_limit": self.default_limit,
+            "second_limit": self.second_limit,
+            "day_hours": list(self.day_hours),
+            "fire_alarm_system": ".".join(domain.FIRE_ALARM_SYSTEM),
+            "fire_watch": ".".join(domain.FIRE_WATCH),
+            "keyword_catalog": [{"code": code, "name": name, "terms": terms} for code, name, terms in self.keywords],
+        }

@@ -6,11 +6,10 @@ extract_text() holt den Text aus der PDF, parse_report() wertet ihn aus. Das Erg
 enthält nur, was im Bericht steht – abgeleitete Werte (Beginn, EHF, …) ergänzt report.py.
 """
 import datetime as dt
+import functools
 import re
 
 import pdfplumber
-
-from app.domain import UNIT_PREFIX
 
 # Seite 1 ist zweispaltig; manche Felder sind nur im linken oder rechten Teil eindeutig
 COLUMN_SPLIT = 0.495
@@ -18,11 +17,19 @@ TIMESTAMP = r"(\d\d\.\d\d\.\d\d \d\d:\d\d:\d\d)"
 VEHICLE_ROW = re.compile(r"^(FL NR#\.\w+(?: \d\d/\d\d-\d\d)?|WW [\d/-]+|KO [\d/-]+|H CH \d+)\s+"
                          r"(\d+) / (\d+) / (\d+) / (\d+) / (\d+)\s+(.*)$")
 VEHICLE_VALUES = re.compile(TIMESTAMP + r"\d?|(?<!\S)(-)(?!\S)|\b(Ja|Nein)\b")
-OWN_CALL_SIGN = re.compile("^" + re.escape(UNIT_PREFIX) + r"(\d\d/\d\d)-\d\d")
+DISPATCH_NUMBER = re.compile(r"Einsatznummer Leitstelle:\s*(\d+)")
+# Kopfzeile mit der berichtenden Einheit, z. B. "FW NR#.ABC 02 Musterstadt Alarmierung: …"
+UNIT = re.compile(r"^(FW NR#\.\S+ \d\d) (.*?) Alarmierung:", re.M)
 PERSON_ROW = re.compile(r"^(\S+) (\S+)(.*?)\s(nein|ja|AGT)\s(\d+)\s*(.*)$")
 PERSON_VEHICLE = re.compile(r"FL NR#\.\w+ (\d\d/\d\d)-\d\d")
 PERSON_NOISE = re.compile(r"FL NR#\.\S+ \S+|\d\d\.\d\d\.\d\d \d\d:\d\d")
 NOT_A_PERSON = ("Name", "FW", "EINSATZBERICHT")
+
+
+@functools.lru_cache(maxsize=32)
+def _call_sign_pattern(unit_prefix):
+    """Funkrufname eines Fahrzeugs der Einheit, z. B. "FL NR#.ABC 02/45-01" -> 02/45."""
+    return re.compile("^" + re.escape(unit_prefix) + r"(\d\d/\d\d)-\d\d")
 
 
 def extract_text(path):
@@ -60,7 +67,8 @@ def _parse_keyword(text, report):
     return text, ""
 
 
-def _parse_vehicles(text, report):
+def _parse_vehicles(text, report, unit_prefix):
+    own_call_sign = _call_sign_pattern(unit_prefix)
     vehicles = []
     for line in text.splitlines():
         m = VEHICLE_ROW.match(line)
@@ -71,7 +79,7 @@ def _parse_vehicles(text, report):
             report["warnings"].append(f"Fahrzeugzeile unvollständig: {line[:60]}")
             values += ["-"] * (6 - len(values))
         alerted, departed, arrived, _deployed, _returned, finished = values[:6]
-        call_sign = OWN_CALL_SIGN.search(m.group(1))
+        call_sign = own_call_sign.search(m.group(1))
         vehicles.append({
             "name": m.group(1), "call_sign": call_sign.group(1) if call_sign else None,
             "crew": int(m.group(5)), "respiratory": int(m.group(6)),
@@ -96,13 +104,21 @@ def _parse_people(text):
     return people
 
 
-def parse_report(full, left, right, filename):
-    """Felder, Fahrzeugtabelle und Anwesenheitsliste aus dem Berichtstext."""
+def parse_report(full, left, right, filename, unit_prefix):
+    """Felder, Fahrzeugtabelle und Anwesenheitsliste aus dem Berichtstext.
+
+    unit_prefix: Anfang der Fahrzeugnamen der Einheit (TenantConfig.unit_prefix); nur deren Fahrzeuge
+    bekommen einen Funkrufnamen (call_sign).
+    """
     report = {"filename": filename, "warnings": []}
     number_text = _field(full, "Einsatzbericht-Nr.")
     m = re.match(r"(\d+)\s*/\s*(\d+)", number_text)
     report["number"] = int(m.group(1)) if m else None
     report["number_text"] = number_text
+    m = DISPATCH_NUMBER.search(full)
+    report["dispatch_number"] = m.group(1) if m else None
+    m = UNIT.search(full)
+    report["unit"], report["unit_name"] = (m.group(1), m.group(2).strip()) if m else (None, None)
 
     keyword_text = _field(left, "Einsatzstichwort") or _field(full, "Einsatzstichwort")
     report["keyword"], report["subcode"] = _parse_keyword(keyword_text, report)
@@ -115,10 +131,10 @@ def parse_report(full, left, right, filename):
     m = re.search(r"Zeitpunkt der Alarmierung der ersten Einheit:\s*(\d\d\.\d\d\.\d{4} \d\d:\d\d)", full)
     report["first_alarm"] = dt.datetime.strptime(m.group(1), "%d.%m.%Y %H:%M") if m else None
 
-    report["vehicles"] = _parse_vehicles(full, report)
+    report["vehicles"] = _parse_vehicles(full, report, unit_prefix)
     report["people"] = _parse_people(full)
     return report
 
 
-def read_report(path, filename):
-    return parse_report(*extract_text(path), filename)
+def read_report(path, filename, unit_prefix):
+    return parse_report(*extract_text(path), filename, unit_prefix)

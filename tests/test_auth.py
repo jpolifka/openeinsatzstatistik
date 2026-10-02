@@ -10,7 +10,6 @@ from app import auth, db, main
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "PATH", str(tmp_path / "test.db"))
-    monkeypatch.setattr(main, "IMPORT_DIR", str(tmp_path / "kein-import"))
     monkeypatch.setattr(auth, "EMAILS", {"m.muster@example.org"})
     monkeypatch.setattr(auth, "BASE_URL", "http://testserver")
     monkeypatch.setattr(auth, "RESEND_API_KEY", "")

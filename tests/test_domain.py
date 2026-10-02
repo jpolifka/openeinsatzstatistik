@@ -24,31 +24,6 @@ def test_keyword_parts():
     assert domain.alarm_level(None) is None
 
 
-def test_daytime_excludes_boundaries_like_excel():
-    assert not domain.is_daytime(dt.time(6, 0, 0))
-    assert domain.is_daytime(dt.time(6, 0, 1))
-    assert domain.is_daytime(dt.time(17, 59, 59))
-    assert not domain.is_daytime(dt.time(18, 0, 0))
-
-
-def test_area_by_name_prefix():
-    assert domain.area_of("Rheinbrohl-Nord") == "Rheinbrohl"
-    assert domain.area_of("Bad Hönningen") == "Bad Hönningen"
-    assert domain.area_of("Linz") == domain.OTHER_AREA
-
-
-def test_plan_relevance():
-    assert domain.is_plan_relevant({"keyword": "B2", "place": "Hammerstein"})
-    assert not domain.is_plan_relevant({"keyword": "B1", "place": "Hammerstein"})
-    assert not domain.is_plan_relevant({"keyword": "B2", "place": "Leutesdorf"})
-
-
-def test_substitute_label():
-    assert domain.substitute_label("FL NR#.BHÖ 01/23-01", "02/45") == "01/23-01"
-    assert domain.substitute_label("FL NR#.BHÖ 02/45-01", "02/45") is None
-    assert domain.substitute_label(None, "02/45") is None
-
-
 def test_keyword_catalog_codes_are_valid():
     codes = [code for code, _, _ in domain.KEYWORD_CATALOG]
     assert len(codes) == len(set(codes))
