@@ -288,6 +288,7 @@ class Access:
     selected: Tenant = None
     vg: str = None             # Slug der ausgewählten VG
     blocked: list = dataclasses.field(default_factory=list)   # [{slug, name}] VGs, deren Wehren der AVV fehlt
+    blocked_ids: frozenset = frozenset()                       # IDs dieser VGs
 
     @property
     def selection(self):
@@ -328,6 +329,8 @@ class Access:
         visible = {r.id for r in roles.visible(vg_id) if r.scope == scope}
         if self.superadmin:
             return visible
+        if vg_id in self.blocked_ids:
+            return set()
         result = set()
         for r in self.roles:
             if (r["scope"] == "vg" and r["scope_id"] == vg_id) or \
@@ -377,6 +380,7 @@ def access_for(email, scope=None):
                            "FROM tenant t JOIN vg v ON v.id = t.vg_id WHERE t.active ORDER BY v.name, t.name").fetchall()
         # Ohne AVV (fehlende Zeile = ausstehend) sind die Wehren einer VG gesperrt – außer für Superadmins
         signed = {r[0] for r in con.execute("SELECT vg_id FROM dpa WHERE status IN ('signed', 'not_required')")}
+        vg_names = {r[0]: (r[1], r[2]) for r in con.execute("SELECT id, slug, name FROM vg")}
         roles = rbac.Roles(con)
         memberships = con.execute(
             "SELECT m.scope, m.scope_id, m.role_id, COALESCE(t.vg_id, m.scope_id) AS vg_id FROM membership m "
@@ -393,6 +397,11 @@ def access_for(email, scope=None):
                 permissions[r["slug"]] |= rbac.allowed(granted, "tenant")     # ohne reine VG-Rechte
     blocked = {} if superadmin else {r["vg_slug"]: r["vg_name"] for r in rows
                                      if permissions[r["slug"]] and r["vg_id"] not in signed}
+    if not superadmin:                         # auch die Rechte auf Ebene der VG ruhen bis zum AVV
+        for vg_id in [vg_id for vg_id in vg_permissions if vg_id not in signed]:
+            del vg_permissions[vg_id]
+            blocked.setdefault(*vg_names[vg_id])
+    blocked_ids = frozenset(vg_id for vg_id, (slug, _) in vg_names.items() if slug in blocked)
     tenants = {r["slug"]: Tenant(r["id"], r["slug"], r["name"], r["vg_id"], r["vg_slug"], r["vg_name"],
                                  frozenset(permissions[r["slug"]]))
                for r in rows if permissions[r["slug"]] and r["vg_slug"] not in blocked}
@@ -404,7 +413,7 @@ def access_for(email, scope=None):
         if r["slug"] in tenants and (superadmin or r["vg_id"] in overview):
             vgs.setdefault(r["vg_slug"], r["vg_name"])
     access = Access(email, superadmin, tenants, own, vgs, {k: frozenset(v) for k, v in vg_permissions.items()},
-                    blocked=[{"slug": slug, "name": name} for slug, name in blocked.items()])
+                    blocked=[{"slug": slug, "name": name} for slug, name in blocked.items()], blocked_ids=blocked_ids)
     kind, _, wanted = (scope or "").partition(":")
     if kind == "t" and wanted in tenants:
         access.selected = tenants[wanted]
