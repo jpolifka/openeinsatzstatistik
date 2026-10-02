@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-Einsatzstatistik – HTTP-Schnittstelle, Passwortschutz und Auslieferung der Oberfläche.
+Einsatzstatistik – HTTP-Schnittstelle, Anmeldung, Zugriff je Wehr und Auslieferung der Oberfläche.
+
+Jeder Endpunkt mit Einsatzdaten holt sich über access() die Rechte des Benutzers und die
+ausgewählte Wehr (tenancy.Access) und arbeitet nur mit deren Datenbank und Fachkonfiguration.
 
 Fachlogik liegt in report.py (PDF -> Einsatz), metrics.py (Auswertungen), store.py
 (Datenbank) und excel_export.py; die Fachkonfiguration der Wehr in tenant_config.py.
@@ -19,13 +22,14 @@ import uuid
 import zipfile
 from typing import List, Optional
 
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, create_model
 
-from app import auth, db, excel_export, legacy, metrics, report, store
+from app import auth, db, excel_export, legacy, metrics, report, store, tenancy
+from app.tenancy import INCIDENTS, STATS, WRITE
 from app.timeutil import year_of
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -38,21 +42,25 @@ XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 @contextlib.asynccontextmanager
 async def lifespan(_app):
+    # Nicht still ungeschützt starten, wenn noch eine alte Zugangs-Konfiguration gesetzt ist
     if os.environ.get("APP_PASSWORD") and not auth.enabled():
-        # Nicht still ungeschützt starten, wenn noch die alte Passwort-Konfiguration gesetzt ist
-        raise RuntimeError("APP_PASSWORD wird nicht mehr unterstützt – AUTH_EMAILS setzen (siehe README)")
-    if not db.PATH:
-        raise RuntimeError("DB_PATH fehlt (siehe README)")
+        raise RuntimeError("APP_PASSWORD wird nicht mehr unterstützt – ADMIN_EMAILS setzen (siehe README)")
+    if legacy.legacy_emails() and not auth.enabled():
+        raise RuntimeError("AUTH_EMAILS wird nicht mehr unterstützt – ADMIN_EMAILS setzen (siehe README)")
+    if not db.DATA_DIR:
+        raise RuntimeError("DATA_DIR fehlt (siehe README)")
     auth.check_config()
-    db.setup()
+    if legacy.needs_migration(db.DATA_DIR):
+        legacy.migrate_single_install(db.DATA_DIR)
+    elif legacy.legacy_emails():
+        log.warning("AUTH_EMAILS wird ignoriert – Benutzer werden in der Verwaltung den Wehren zugeordnet")
+    tenancy.setup()
     yield
 
 
-app = FastAPI(title="Einsatzstatistik – FF Rheinbrohl", lifespan=lifespan)
+app = FastAPI(title="Einsatzstatistik", lifespan=lifespan)
 # JSON der Einsatzliste schrumpft komprimiert auf ca. 1/16
 app.add_middleware(GZipMiddleware, minimum_size=1000)
-# Fachkonfiguration der Wehr
-CONFIG = legacy.rheinbrohl_config()
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
@@ -64,7 +72,7 @@ PUBLIC_PATHS = ("/health", "/login", "/logout", "/auth/", "/static/")
 
 @app.middleware("http")
 async def require_login(request: Request, call_next):
-    """Anmeldung per Magic Link, wenn AUTH_EMAILS gesetzt ist (siehe auth.py)."""
+    """Anmeldung per Magic Link, wenn ADMIN_EMAILS gesetzt ist (siehe auth.py)."""
     path = request.url.path
     if auth.enabled() and not path.startswith(PUBLIC_PATHS) and not auth.current_user(request):
         # Direkt im Browser geöffnete API-Adressen (z. B. Export) auch zur Anmeldeseite
@@ -84,26 +92,43 @@ async def revalidate_frontend(request: Request, call_next):
     return response
 
 
+@app.exception_handler(tenancy.Forbidden)
+async def forbidden(_request, exc):
+    return JSONResponse({"detail": str(exc)}, status_code=403)
+
+
+def access(request: Request) -> tenancy.Access:
+    """Rechte des angemeldeten Benutzers und ausgewählte Wehr (ohne Anmeldung: Superadmin)."""
+    email = auth.current_user(request) if auth.enabled() else None
+    return tenancy.access_for(email, request.cookies.get(auth.SCOPE_COOKIE))
+
+
 # ---------------------------------------------------------------- PDF-Vorschau im Speicher
 class PreviewSessions:
-    """Gelesene Berichte bis zur Übernahme. Liegt im Prozess – daher nur ein uvicorn-Worker."""
+    """Gelesene Berichte bis zur Übernahme. Liegt im Prozess – daher nur ein uvicorn-Worker.
+
+    Eine Vorschau gehört dem Benutzer, der sie angelegt hat, und der Wehr, für die gelesen wurde."""
     TTL = 60 * 60
 
     def __init__(self):
         self._sessions = {}
         self._lock = threading.Lock()
 
-    def add(self, reports):
+    def add(self, reports, owner, slug):
         token = uuid.uuid4().hex
         with self._lock:
             self._expire()
-            self._sessions[token] = {"time": time.time(), "reports": {r["filename"]: r for r in reports}}
+            self._sessions[token] = {"time": time.time(), "owner": owner, "slug": slug,
+                                     "reports": {r["filename"]: r for r in reports}}
         return token
 
-    def get(self, token, filename):
+    def get(self, token, filename, owner):
+        """(bericht, slug) oder (None, None), auch wenn die Vorschau einem anderen Benutzer gehört."""
         with self._lock:
             session = self._sessions.get(token)
-        return session and session["reports"].get(filename)
+        if not session or session["owner"] != owner or filename not in session["reports"]:
+            return None, None
+        return session["reports"][filename], session["slug"]
 
     def _expire(self):
         cutoff = time.time() - self.TTL
@@ -128,8 +153,21 @@ def _resolve_year(con, year):
     return year or store.latest_year(con) or dt.date.today().year
 
 
-def incident_json(incident, leaders, cfg, limit=None):
+def incident_key(tenant, incident_id):
+    """Eindeutige Einsatz-ID über alle Wehren: "<slug>:<id>"."""
+    return f"{tenant.slug}:{incident_id}" if incident_id is not None else None
+
+
+def parse_incident_key(key):
+    slug, _, number = key.partition(":")
+    if not number.isdigit():
+        raise HTTPException(404, "Einsatz nicht gefunden.")
+    return slug, int(number)
+
+
+def incident_json(incident, leaders, tenant, limit=None):
     """Einsatz mit Kennzahlen für die Oberfläche. leaders: store.LeaderNames für die EHF-Auswahl."""
+    cfg = tenant.config
     m = metrics.incident_metrics(incident, cfg, limit)
     vehicles = []
     for call_sign in cfg.vehicles:
@@ -139,7 +177,9 @@ def incident_json(incident, leaders, cfg, limit=None):
                          "turnout_min": _rounded(vm.get("turnout_min")),
                          "arrival_min": _rounded(vm.get("arrival_min"))})
     return {
-        **{name: incident.get(name) for name in ("id", "year", *store.FIELDS, "source", "filename", "warnings")},
+        "id": incident_key(tenant, incident.get("id")),
+        "tenant": tenant.slug,
+        **{name: incident.get(name) for name in ("year", *store.FIELDS, "source", "filename", "warnings")},
         "weekend_or_holiday": bool(incident.get("weekend_or_holiday")),
         **{name: _rounded(m[name]) for name in ("daytime", "duration_min", "turnout_min", "arrival_min", "on_time",
                                                  "crew_on_arrival", "crew_within_limit", "crew_within_second",
@@ -163,25 +203,46 @@ def health():
 
 
 @app.get("/api/config")
-def api_config(request: Request):
-    return {**CONFIG.client_config(), "user": auth.current_user(request)}
+def api_config(a: tenancy.Access = Depends(access)):
+    """Fachkonfiguration der ausgewählten Wehr, Benutzer, Rechte und Auswahl der Wehren."""
+    tenant = a.selected
+    cfg = tenant.config if tenant else tenancy.TenantConfig(name="Einsatzstatistik")
+    return {**cfg.client_config(), "user": a.email, "superadmin": a.superadmin, "roles": a.roles,
+            "tenant": tenant.json() if tenant else None,
+            "permissions": sorted(tenant.permissions) if tenant else [], "scopes": a.scopes()}
+
+
+class Scope(BaseModel):
+    key: str
+
+
+@app.post("/api/scope")
+def api_scope(scope: Scope, response: Response, a: tenancy.Access = Depends(access)):
+    """Wehr auswählen ("t:<slug>"); nur unter den eigenen Wehren."""
+    if scope.key not in {s["key"] for s in a.scopes()}:
+        raise HTTPException(403, "Keine Berechtigung für diese Wehr.")
+    response.set_cookie(auth.SCOPE_COOKIE, scope.key, max_age=auth.SESSION_TTL, httponly=True, samesite="lax",
+                        secure=auth.BASE_URL.startswith("https://"))
+    return {"ok": True}
 
 
 # ---------------------------------------------------------------- Auswertung
 @app.get("/api/years")
-def api_years():
-    with db.connection() as con:
+def api_years(a: tenancy.Access = Depends(access)):
+    with a.current(STATS).connection() as con:
         return {"years": store.years(con), "today": dt.date.today().isoformat()}
 
 
 @app.get("/api/evaluation")
-def api_evaluation(year: Optional[int] = None, limit: Optional[int] = None):
-    cfg = CONFIG
+def api_evaluation(year: Optional[int] = None, limit: Optional[int] = None, a: tenancy.Access = Depends(access)):
+    """Auswertung der ausgewählten Wehr. Ohne Recht auf Einsätze/Personal ohne Anwesenheit (Namen)."""
+    tenant = a.current(STATS)
+    cfg = tenant.config
     limit = limit or cfg.default_limit
     if limit not in cfg.response_limits:
         allowed = " oder ".join(str(x) for x in cfg.response_limits)
         raise HTTPException(400, f"Die Zeitgrenze muss {allowed} Minuten sein.")
-    with db.connection() as con:
+    with tenant.connection() as con:
         year = _resolve_year(con, year)
         current = metrics.evaluate(store.load_incidents(con, year=year), cfg, limit)
         previous = store.load_incidents(con, year=year - 1) or None
@@ -192,7 +253,7 @@ def api_evaluation(year: Optional[int] = None, limit: Optional[int] = None):
             "response_plan": metrics.response_plan(current, limit, cfg),
             "response_plan_previous": metrics.response_plan(metrics.evaluate(previous, cfg, limit), limit, cfg)
             if previous else None,
-            "attendance": metrics.attendance_overview(current)}
+            "attendance": metrics.attendance_overview(current) if tenant.can(INCIDENTS) else None}
 
 
 # ---------------------------------------------------------------- Einsätze
@@ -202,29 +263,35 @@ IncidentFields = create_model(
 
 
 @app.get("/api/incidents")
-def api_incidents(year: Optional[int] = None):
-    with db.connection() as con:
+def api_incidents(year: Optional[int] = None, a: tenancy.Access = Depends(access)):
+    tenant = a.current(INCIDENTS)
+    with tenant.connection() as con:
         year = _resolve_year(con, year)
         leaders = store.LeaderNames(con)
-        return {"year": year, "incidents": [incident_json(i, leaders, CONFIG) for i in store.load_incidents(con, year=year)]}
+        return {"year": year,
+                "incidents": [incident_json(i, leaders, tenant) for i in store.load_incidents(con, year=year)]}
 
 
-@app.put("/api/incidents/{incident_id}")
-def api_update_incident(incident_id: int, fields: IncidentFields):
-    with db.connection() as con:
+@app.put("/api/incidents/{key}")
+def api_update_incident(key: str, fields: IncidentFields, a: tenancy.Access = Depends(access)):
+    slug, incident_id = parse_incident_key(key)
+    tenant = a.tenant(slug, WRITE)
+    with tenant.connection() as con:
         try:
-            store.update_incident(con, incident_id, fields.model_dump(exclude_unset=True))
+            store.update_incident(con, incident_id, fields.model_dump(exclude_unset=True), modified_by=a.email)
         except KeyError:
             raise HTTPException(404, "Einsatz nicht gefunden.")
         except store.DuplicateIncident as e:
             raise HTTPException(409, str(e))
-        return incident_json(store.load_incident(con, incident_id), store.LeaderNames(con), CONFIG)
+        return incident_json(store.load_incident(con, incident_id), store.LeaderNames(con), tenant)
 
 
-@app.delete("/api/incidents/{incident_id}")
-def api_delete_incident(incident_id: int):
-    with db.connection() as con:
+@app.delete("/api/incidents/{key}")
+def api_delete_incident(key: str, a: tenancy.Access = Depends(access)):
+    slug, incident_id = parse_incident_key(key)
+    with a.tenant(slug, WRITE).connection() as con:
         store.delete_incident(con, incident_id)
+    log.info("Einsatz %s gelöscht von %s", key, a.email or "lokal")
     return {"ok": True}
 
 
@@ -274,7 +341,7 @@ def _unpack_zip(data, zip_name, errors):
     return files
 
 
-def _read_uploads(uploads):
+def _read_uploads(uploads, cfg):
     """Hochgeladene PDFs und ZIP-Dateien lesen -> (berichte, fehler)."""
     reports, errors, files = [], [], []
     for upload in uploads:
@@ -288,33 +355,34 @@ def _read_uploads(uploads):
             with open(path, "wb") as fh:
                 fh.write(data)
             try:
-                reports.append(report.read_pdf(path, filename, CONFIG))
+                reports.append(report.read_pdf(path, filename, cfg))
             except Exception as e:  # defekte oder fremde PDF: melden, Rest weiter lesen
                 log.exception("PDF %s", filename)
                 errors.append({"file": filename, "message": str(e) or type(e).__name__})
     return reports, errors
 
 
-def _preview_json(con, r, leaders):
+def _preview_json(con, r, leaders, tenant):
     incident, existing = report.preview(con, r)
-    result = incident_json(incident, leaders, CONFIG)
+    result = incident_json(incident, leaders, tenant)
     result["reported_as"] = r["reported_as"]
     result["incident_commander"] = r["incident_commander"]
-    result["existing"] = {"id": existing["id"], "source": existing["source"],
-                          "differences": report.differences(existing, incident, CONFIG)} if existing else None
+    result["existing"] = {"id": incident_key(tenant, existing["id"]), "source": existing["source"],
+                          "differences": report.differences(existing, incident, tenant.config)} if existing else None
     return result
 
 
 @app.post("/api/reports")
-def api_read_reports(pdfs: List[UploadFile] = File(...)):
+def api_read_reports(pdfs: List[UploadFile] = File(...), a: tenancy.Access = Depends(access)):
+    tenant = a.current(WRITE)
     pdfs = [p for p in pdfs if _is_upload(p.filename)]
     if not pdfs:
         raise HTTPException(400, "Bitte eine PDF- oder ZIP-Datei (Einsatzberichte aus dem BKS-Portal) auswählen.")
-    reports, errors = _read_uploads(pdfs)
-    with db.connection() as con:
+    reports, errors = _read_uploads(pdfs, tenant.config)
+    with tenant.connection() as con:
         leaders = store.LeaderNames(con)
-        previews_json = [_preview_json(con, r, leaders) for r in reports]
-    return {"token": previews.add(reports), "reports": previews_json, "errors": errors}
+        previews_json = [_preview_json(con, r, leaders, tenant) for r in reports]
+    return {"token": previews.add(reports, a.email, tenant.slug), "reports": previews_json, "errors": errors}
 
 
 class Acceptance(BaseModel):
@@ -325,37 +393,36 @@ class Acceptance(BaseModel):
 
 
 @app.post("/api/reports/accept")
-def api_accept_report(a: Acceptance):
-    r = previews.get(a.token, a.filename)
+def api_accept_report(acceptance: Acceptance, a: tenancy.Access = Depends(access)):
+    r, slug = previews.get(acceptance.token, acceptance.filename, a.email)
     if not r:
         raise HTTPException(410, "Die Vorschau ist abgelaufen – bitte die PDF erneut einlesen.")
-    fields = {**report.to_fields(r), **a.fields.model_dump(exclude_unset=True)}
-    with db.connection() as con:
+    tenant = a.tenant(slug, WRITE)
+    fields = {**report.to_fields(r), **acceptance.fields.model_dump(exclude_unset=True)}
+    with tenant.connection() as con:
         replace_id = store.find_incident(con, year_of(fields.get("started_at")),
-                                         store.to_int(fields.get("number"))) if a.replace else None
+                                         store.to_int(fields.get("number"))) if acceptance.replace else None
         try:
-            incident_id = report.save(con, r, fields, replace_id)
+            incident_id = report.save(con, r, fields, replace_id, modified_by=a.email)
         except store.DuplicateIncident as e:
             raise HTTPException(409, str(e))
-        return incident_json(store.load_incident(con, incident_id), store.LeaderNames(con), CONFIG)
+        return incident_json(store.load_incident(con, incident_id), store.LeaderNames(con), tenant)
 
 
 # ---------------------------------------------------------------- Export
 @app.get("/api/export")
-def api_export(year: Optional[int] = None, ids: Optional[str] = None):
+def api_export(year: Optional[int] = None, a: tenancy.Access = Depends(access)):
     """Excel im Format der Einsatzübersicht (Spalten A:AV + Anwesenheit)."""
-    with db.connection() as con:
+    tenant = a.current(INCIDENTS)
+    with tenant.connection() as con:
         year = _resolve_year(con, year)
         incidents = store.load_incidents(con, year=year)
-        if ids:
-            selected = {int(i) for i in ids.split(",") if i.strip().isdigit()}
-            incidents = [i for i in incidents if i["id"] in selected]
         members = store.members_of_year(con, year)
     if not incidents:
         raise HTTPException(404, "Keine Einsätze für den Export.")
     buffer = io.BytesIO()
-    excel_export.write_workbook(incidents, members, year, buffer, CONFIG)
+    excel_export.write_workbook(incidents, members, year, buffer, tenant.config)
     buffer.seek(0)
     stamp = f"{dt.datetime.now():%Y-%m-%d_%H%M}"
-    name = f"Import_Einsatzberichte_{stamp}.xlsx" if ids else f"Einsaetze_{year}_{stamp}.xlsx"
+    name = f"Einsaetze_{tenant.slug}_{year}_{stamp}.xlsx"
     return StreamingResponse(buffer, media_type=XLSX, headers={"Content-Disposition": f'attachment; filename="{name}"'})

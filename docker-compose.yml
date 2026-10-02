@@ -12,8 +12,8 @@ services:
     # Alle Einstellungen kommen aus .env (Vorlage: .env.example), hier stehen keine Standardwerte
     env_file: .env
     environment:
-      # Pfad im Container, gehört zum Volume unten
-      DB_PATH: /daten/einsaetze.db
+      # Datenordner im Container, gehört zum Volume unten
+      DATA_DIR: /daten
     volumes:
       - ./daten:/daten
     restart: unless-stopped

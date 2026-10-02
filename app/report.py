@@ -189,10 +189,10 @@ def preview(con, report):
     return incident, (store.load_incident(con, existing_id) if existing_id else None)
 
 
-def save(con, report, fields, replace_id=None):
+def save(con, report, fields, replace_id=None, modified_by=None):
     """Bericht mit den (ggf. korrigierten) Feldern als Einsatz speichern; unbekannte Personen anlegen."""
     incident_id = store.create_incident(con, fields, source="pdf", filename=report["filename"],
-                                        warnings=report["warnings"], replace_id=replace_id)
+                                        warnings=report["warnings"], replace_id=replace_id, modified_by=modified_by)
     for row in vehicle_rows(report).values():
         store.add_vehicle(con, incident_id, **row)
     members = store.MemberDirectory(con)

@@ -29,6 +29,8 @@ const weekdayShort = (iso) => iso ? new Date(iso).toLocaleDateString("de-DE", { 
 const MONTH_NAMES = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
 const categoryOf = (keyword) => (keyword || "").charAt(0);
 const errorBox = (message) => `<div class="message message-error">${esc(message)}</div>`;
+// Rechte des Benutzers für die ausgewählte Wehr (stats, incidents, write, admin) – geprüft wird im Backend
+const can = (permission) => Boolean(config?.permissions.includes(permission));
 
 function formatDuration(min) {
   if (min == null) return "–";
@@ -135,14 +137,23 @@ function chartCard({ id, title, subtitle = "", chart, table, extra = "", heading
 }
 
 // ------------------------------------------------------------ Ansichten & Laden
-const VIEWS = {
-  evaluation: { label: "Auswertung", load: loadEvaluation, render: renderEvaluation },
-  incidents: { label: "Einsätze", load: loadIncidents, render: renderIncidents },
-  members: { label: "Kameraden", load: loadEvaluation, render: renderMembers },
+const VIEWS = {   // permission: nötiges Recht, sonst fehlt der Reiter
+  evaluation: { label: "Auswertung", load: loadEvaluation, render: renderEvaluation, permission: "stats" },
+  incidents: { label: "Einsätze", load: loadIncidents, render: renderIncidents, permission: "incidents" },
+  members: { label: "Kameraden", load: loadEvaluation, render: renderMembers, permission: "incidents" },
 };
+const allowedViews = () => Object.keys(VIEWS).filter((key) => can(VIEWS[key].permission));
 
 function renderTabs() {
-  $("#tabs").innerHTML = Object.entries(VIEWS).map(([key, v]) => `<a href="#${key}" data-view="${key}">${v.label}</a>`).join("");
+  $("#tabs").innerHTML = allowedViews().map((key) => `<a href="#${key}" data-view="${key}">${VIEWS[key].label}</a>`).join("");
+}
+
+// Auswahl der Wehr in der Kopfzeile, nur wenn mehrere sichtbar sind
+function renderScopes() {
+  const current = config.tenant && `t:${config.tenant.slug}`;
+  $("#scope-select").hidden = config.scopes.length < 2;
+  $("#scope").innerHTML = config.scopes.map((s) =>
+    `<option value="${esc(s.key)}" ${s.key === current ? "selected" : ""}>${esc(s.name)}</option>`).join("");
 }
 
 async function loadYears() {
@@ -169,8 +180,8 @@ async function loadIncidents() {
 }
 
 async function showView() {
-  const key = location.hash.slice(1);
-  state.view = key in VIEWS ? key : "evaluation";
+  const key = location.hash.slice(1), allowed = allowedViews();
+  state.view = allowed.includes(key) ? key : allowed[0];
   const view = VIEWS[state.view];
   for (const a of $$("#tabs a")) a.classList.toggle("active", a.dataset.view === state.view);
   for (const k of Object.keys(VIEWS)) $(`#view-${k}`).hidden = k !== state.view;
@@ -569,12 +580,12 @@ async function handleIncidentAction(action, id) {
     if (action === "delete") {
       const incident = state.incidents.incidents.find((x) => x.id === id);
       if (!confirm(`Einsatz ${incident.number ?? ""} vom ${formatDate(incident.started_at)} wirklich löschen?`)) return;
-      await api(`/api/incidents/${id}`, { method: "DELETE" });
+      await api(`/api/incidents/${encodeURIComponent(id)}`, { method: "DELETE" });
       state.expanded.delete(id);
       toast("Einsatz gelöscht");
     }
     if (action === "save") {
-      await apiJson(`/api/incidents/${id}`, "PUT", readForm($(`[data-form="${id}"]`)));
+      await apiJson(`/api/incidents/${encodeURIComponent(id)}`, "PUT", readForm($(`[data-form="${id}"]`)));
       state.editing = null;
       toast("Gespeichert");
     }
@@ -815,11 +826,11 @@ $("#incident-table tbody").addEventListener("click", (e) => {
   const chip = e.target.closest("[data-leader]");
   if (chip) { pickLeader(chip); return; }
   const action = e.target.closest("[data-action]");
-  if (action) { handleIncidentAction(action.dataset.action, Number(action.dataset.id)); return; }
+  if (action) { handleIncidentAction(action.dataset.action, action.dataset.id); return; }
   if (e.target.closest("tr.detail")) return;
   const row = e.target.closest("tr.row");
   if (!row) return;
-  const id = Number(row.dataset.id);
+  const id = row.dataset.id;
   if (state.expanded.has(id)) {
     state.expanded.delete(id);
     if (state.editing === id) state.editing = null;
@@ -988,21 +999,45 @@ $("#previews").addEventListener("click", (e) => {
   if (button) acceptReport(Number(button.dataset.accept));
 });
 
+$("#scope").addEventListener("change", async (e) => {
+  try {
+    await apiJson("/api/scope", "POST", { key: e.target.value });
+    location.reload();
+  } catch (err) {
+    alert(err.message);
+  }
+});
+
 // Start
 (async () => {
-  renderTabs();
-  addHelpButtons();
-  try {
-    [config] = await Promise.all([api("/api/config"), loadYears()]);
-  } catch (e) {
+  const fail = (message) => {
     $("#view-evaluation").hidden = false;
-    $("#view-evaluation").innerHTML = errorBox(e.message);
+    $("#view-evaluation").innerHTML = errorBox(message);
+  };
+  try {
+    config = await api("/api/config");
+  } catch (e) {
+    fail(e.message);
     return;
   }
-  state.limit = config.default_limit;
   if (config.user) {
     $("#logout").hidden = false;
     $("#logout button").dataset.tip = `Abmelden (${config.user})`;
   }
+  if (!config.tenant) {
+    fail(config.superadmin ? "Es ist noch keine Wehr angelegt." : "Dir ist keine Wehr zugeordnet.");
+    return;
+  }
+  renderTabs();
+  renderScopes();
+  addHelpButtons();
+  $("#btn-pdf").hidden = !can("write");
+  try {
+    await loadYears();
+  } catch (e) {
+    fail(e.message);
+    return;
+  }
+  state.limit = config.default_limit;
   await showView();
 })();

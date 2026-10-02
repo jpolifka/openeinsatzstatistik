@@ -6,7 +6,7 @@ from app import db, store
 
 def test_migrates_legacy_german_schema_with_data():
     con = db.connect(":memory:")
-    db.MIGRATIONS[0](con)                    # Schritt 1: altes deutsches Schema
+    db.TENANT_MIGRATIONS[0](con)                    # Schritt 1: altes deutsches Schema
     con.execute("PRAGMA user_version = 1")
     con.execute("INSERT INTO einsatz (id, jahr, nr, beginn, stichwort, quelle, personen_gh) "
                 "VALUES (1, 2025, 7, '2025-01-05T10:00:00', 'H2', 'excel', 2)")
@@ -16,7 +16,7 @@ def test_migrates_legacy_german_schema_with_data():
     con.commit()
 
     db.migrate(con)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == len(db.MIGRATIONS)
+    assert con.execute("PRAGMA user_version").fetchone()[0] == len(db.TENANT_MIGRATIONS)
     incident = store.load_incident(con, 1)
     assert (incident["year"], incident["number"], incident["keyword"], incident["station_staff"]) == (2025, 7, "H2", 2)
     assert incident["vehicles"]["02/45"]["crew"] == 6

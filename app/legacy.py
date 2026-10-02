@@ -2,10 +2,28 @@
 """
 Übernahme der Einzel-Installation der FF Rheinbrohl in die mandantenfähige Ablage.
 
-rheinbrohl_config() enthält die Fachkonstanten, die bis zur Mandantenfähigkeit fest im Code
-standen. Nach der Übernahme liegen sie nur noch in der Datenbank dieser Wehr.
+Bis zur Mandantenfähigkeit lag der ganze Bestand in DATA_DIR/einsaetze.db, die Fachkonstanten
+standen im Code (rheinbrohl_config) und berechtigt waren die Adressen aus AUTH_EMAILS.
+migrate_single_install() macht daraus beim ersten Start einmalig die VG Bad Hönningen mit der
+Wehr Rheinbrohl. Danach liegen die Werte nur noch in deren Datenbank.
 """
+import logging
+import os
+import shutil
+import sqlite3
+
+from app import db, tenancy
 from app.tenant_config import TenantConfig, Vehicle
+
+log = logging.getLogger("pdf2einsatz")
+
+LEGACY_FILE = "einsaetze.db"
+BACKUP_FILE = "einsaetze-vor-mandanten.db"
+VG_SLUG, VG_NAME = "bad-hoenningen", "VG Bad Hönningen"
+TENANT_SLUG = "rheinbrohl"
+STATIC_IMG = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static", "img")
+# Logos der bisherigen Oberfläche -> Assets der Wehr
+LOGOS = {"logo-light": "logo-weiss.png", "logo-dark": "logo-schwarz.png"}
 
 
 def rheinbrohl_config():
@@ -24,3 +42,74 @@ def rheinbrohl_config():
         # Ausrückebereich laut Feuerwehrbedarfsplan Pos. 8.4
         plan_places=("Rheinbrohl", "Hammerstein", "Arienheller"),
     )
+
+
+def legacy_emails():
+    return [tenancy.normalize_email(e) for e in os.environ.get("AUTH_EMAILS", "").replace(";", ",").split(",")
+            if e.strip()]
+
+
+def needs_migration(data_dir):
+    return not os.path.exists(os.path.join(data_dir, "app.db")) and \
+        os.path.exists(os.path.join(data_dir, LEGACY_FILE))
+
+
+def _copy_database(source, target):
+    """Konsistente Kopie auch im WAL-Modus (SQLite-Backup statt Dateikopie)."""
+    src, dst = sqlite3.connect(source), sqlite3.connect(target)
+    try:
+        src.backup(dst)
+    finally:
+        dst.close()
+        src.close()
+
+
+def migrate_single_install(data_dir):
+    """Einmalig: DATA_DIR/einsaetze.db wird zur Wehr Rheinbrohl. Die alte Datei bleibt als
+    einsaetze-vor-mandanten.db liegen. Bricht der Ablauf ab, beginnt er beim nächsten Start neu."""
+    legacy, central = os.path.join(data_dir, LEGACY_FILE), os.path.join(data_dir, "app.db")
+    staging = central + ".neu"
+    target = tenancy.tenant_path(TENANT_SLUG)
+    for leftover in (staging, staging + "-wal", staging + "-shm"):
+        if os.path.exists(leftover):
+            os.remove(leftover)
+    shutil.rmtree(os.path.dirname(target), ignore_errors=True)
+    os.makedirs(os.path.dirname(target))
+
+    # WAL der alten Datei zurückschreiben, damit die umbenannte Sicherung vollständig ist
+    con = sqlite3.connect(legacy)
+    con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    con.close()
+    _copy_database(legacy, target)
+    db.setup(target)
+    cfg = rheinbrohl_config()
+    with db.connection(target) as con:
+        tenancy.save_config(con, cfg)
+        for name, filename in LOGOS.items():
+            path = os.path.join(STATIC_IMG, filename)
+            if os.path.exists(path):
+                with open(path, "rb") as f:
+                    con.execute("INSERT OR REPLACE INTO asset (name, content_type, data) VALUES (?, ?, ?)",
+                                (name, "image/png", f.read()))
+        incidents = con.execute("SELECT COUNT(*) FROM incident").fetchone()[0]
+
+    db.setup(staging, db.CENTRAL_MIGRATIONS)
+    with db.connection(staging) as con:
+        vg_id = tenancy.create_vg(con, VG_SLUG, VG_NAME)
+        tenant_id = con.execute("INSERT INTO tenant (slug, name, vg_id) VALUES (?, ?, ?)",
+                                (TENANT_SLUG, cfg.name, vg_id)).lastrowid
+        emails = legacy_emails()
+        for email in emails:
+            tenancy.grant(con, email, "lead", tenant_id)
+    con = sqlite3.connect(staging)
+    con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    con.close()
+    os.replace(staging, central)
+    os.replace(legacy, os.path.join(data_dir, BACKUP_FILE))
+    for suffix in ("-wal", "-shm"):
+        for path in (legacy + suffix, staging + suffix):
+            if os.path.exists(path):
+                os.remove(path)
+    log.info("Mandanten: %s mit %d Einsätzen als Wehr '%s' in der %s übernommen, %d Adressen aus AUTH_EMAILS "
+             "als Wehrführer zugeordnet. Die alte Datei liegt als %s im Datenordner.",
+             LEGACY_FILE, incidents, TENANT_SLUG, VG_NAME, len(emails), BACKUP_FILE)

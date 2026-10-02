@@ -3,23 +3,22 @@ import io
 import zipfile
 
 import pytest
-from fastapi.testclient import TestClient
 
-from app import db, main, store
-from conftest import CFG
+from app import db, main, store, tenancy
+from conftest import CFG, make_tenant
 
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
-    monkeypatch.setattr(db, "PATH", str(tmp_path / "test.db"))
-    with TestClient(main.app) as c:
-        yield c
+def client(make_client):
+    make_tenant("wehr-a1")
+    return make_client()
 
 
 def _create(client, number, started_at="2025-03-12T10:00:00"):
-    with db.connection() as con:
-        return store.create_incident(con, {"number": number, "started_at": started_at, "keyword": "B2",
-                                           "place": "Rheinbrohl"}, source="pdf")
+    with db.connection(tenancy.tenant_path("wehr-a1")) as con:
+        incident_id = store.create_incident(con, {"number": number, "started_at": started_at, "keyword": "B2",
+                                                  "place": "Rheinbrohl"}, source="pdf")
+    return f"wehr-a1:{incident_id}"
 
 
 def test_frontend_is_revalidated(client):
@@ -56,7 +55,7 @@ def test_incidents_update_and_conflict(client):
     changed = client.put(f"/api/incidents/{second}", json={"unit_leader": "E. Beispiel"}).json()
     assert changed["unit_leader"] == "E. Beispiel"
     assert client.put(f"/api/incidents/{second}", json={"number": 1}).status_code == 409
-    assert client.put("/api/incidents/999", json={}).status_code == 404
+    assert client.put("/api/incidents/wehr-a1:999", json={}).status_code == 404
     assert client.delete(f"/api/incidents/{first}").json() == {"ok": True}
 
 
