@@ -108,25 +108,31 @@ eine eigene Datenbank und eine eigene Fachkonfiguration (Fahrzeuge, BKS-Kennung,
 Bedarfsplan). Wer sich anmeldet, sieht nur die Wehren, denen er zugeordnet ist; bei mehreren
 gibt es oben eine Auswahl.
 
-| Rolle | Bereich | Statistik | Einsätze und Personal | Berichte einlesen, bearbeiten | Verwaltung der Wehr |
-|---|---|:-:|:-:|:-:|:-:|
-| Superadmin (`ADMIN_EMAILS`) | alle | ✓ | ✓ | ✓ | ✓ |
-| Wehrleiter | alle Wehren einer VG | ✓ | ✓ | ✓ | ✓ |
-| Statistik VG (z. B. Bürgermeister) | alle Wehren einer VG | ✓ | – | – | – |
-| Wehrführer | eine Wehr | ✓ | ✓ | ✓ | ✓ |
-| Erfasser | eine Wehr | ✓ | ✓ | ✓ | – |
-| Benutzer | eine Wehr | ✓ | – | – | – |
+| Rolle | Bereich | Statistik | Einsätze | Anwesenheit und Kameraden | Berichte einlesen, bearbeiten | Verwaltung der Wehr |
+|---|---|:-:|:-:|:-:|:-:|:-:|
+| Superadmin (`ADMIN_EMAILS`) | alle | ✓ | ✓ | – | ✓ | ✓ |
+| Wehrleiter | alle Wehren einer VG | ✓ | ✓ | – | ✓ | ✓ |
+| Statistik VG (z. B. Bürgermeister) | alle Wehren einer VG | ✓ | – | – | – | – |
+| Wehrführer | eine Wehr | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Erfasser | eine Wehr | ✓ | ✓ | ✓ | ✓ | – |
+| Benutzer | eine Wehr | ✓ | – | – | – | – |
 
-Rollen nur mit Statistik sehen keine Namen: Anwesenheit, Einsatzliste, Kameraden und der
-Excel-Export sind für sie gesperrt. Geprüft wird im Backend, die Oberfläche blendet nur aus.
+Die Anwesenheit (Namen der Kameraden) sehen nur Wehrführer und Erfasser der Wehr – auch nicht
+Wehrleiter oder Superadmin. Sie sehen bei einem Einsatz nur die Anzahl der Anwesenden; der
+Excel-Export enthält für sie kein Blatt Anwesenheit, Kameraden und die Anwesenheitsübersicht der
+Auswertung fehlen. Rollen mit Anwesenheit kann man sich nicht selbst geben. Ohne `ADMIN_EMAILS`
+(lokal, ohne Anmeldung) gelten alle Rechte. Rollen nur mit Statistik sehen keine Namen:
+Einsatzliste und Excel-Export sind für sie ebenfalls gesperrt. Geprüft wird im Backend, die
+Oberfläche blendet nur aus.
 
-**Gesamtansicht einer VG** (Wehrleiter, Statistik VG, Superadmin; oben „Alle Wehren · …“):
+**Gesamtansicht einer VG** (Wehrleiter, Statistik VG, Superadmin; oben „Wehrleitung · …“):
 - Auswertung über alle Wehren der VG, auf einzelne Wehren filterbar. Ein Einsatz mehrerer Wehren
   zählt bei jeder Wehr (Beteiligungen); die große Zahl zählt ihn über den Stammdatensatz im
   BKS-Portal bzw. die Einsatznummer der Leitstelle nur einmal. Der Bedarfsplan wertet jede Wehr
   mit ihren eigenen Orten aus.
 - Einsatzliste aller Wehren mit Markierung der Wehr; Kameraden gibt es nur je Wehr.
-- Excel-Export als eine Mappe mit Übersicht und je Wehr Einsatzübersicht und Anwesenheit.
+- Excel-Export als eine Mappe mit Übersicht und je Wehr Einsatzübersicht (Anwesenheit nur, wo man
+  Wehrführer oder Erfasser ist).
   „Kennzahlen (Excel)“ enthält nur die Zahlen je Wehr, ohne Namen.
 - „Drucken / PDF“ öffnet die Druckansicht der Auswertung (im Druckdialog als PDF sichern).
 - Bericht einlesen verteilt die Berichte auf die passende Wehr (über die berichtende Einheit; die

@@ -8,7 +8,7 @@ import pytest
 
 from app import db, report, store, tenancy
 from app.tenant_config import Vehicle
-from conftest import CFG, grant, login, make_tenant
+from conftest import CFG, grant, login, make_incident, make_tenant
 from test_report import FULL, LEFT
 
 # Zweite Wehr derselben VG mit eigenen Fahrzeugen, Orten und Bedarfsplan
@@ -71,14 +71,24 @@ def test_vg_export_has_sheets_per_tenant(vg):
     response = vg.get("/api/export?year=2025")
     assert response.status_code == 200
     workbook = openpyxl.load_workbook(io.BytesIO(response.content))
-    assert workbook.sheetnames == ["Übersicht", "Einsätze Wehr wehr-a1", "Anwesenheit Wehr wehr-a1",
-                                   "Einsätze Wehr wehr-a2", "Anwesenheit Wehr wehr-a2"]
+    # Wehrleiter: ohne Anwesenheit (Namen sehen nur Wehrführer und Erfasser)
+    assert workbook.sheetnames == ["Übersicht", "Einsätze Wehr wehr-a1", "Einsätze Wehr wehr-a2"]
     summary = workbook["Übersicht"]
     assert [summary.cell(r, 1).value for r in (4, 5, 6)] == ["Wehr wehr-a1", "Wehr wehr-a2", "Summe (Beteiligungen)"]
     assert summary["B6"].value == 3
     assert "ohne Doppelte" in summary["A8"].value and summary["A8"].value.endswith(": 2")
-    # Anwesenheit verweist auf die Einsatzübersicht ihrer Wehr
-    assert workbook["Anwesenheit Wehr wehr-a2"]["A4"].value == "='Einsätze Wehr wehr-a2'!A4"
+
+
+def test_combined_export_attendance_refers_to_its_tenant():
+    """Mit Anwesenheit (members nicht None) verweist sie auf die Einsatzübersicht ihrer Wehr."""
+    from app import excel_export
+    incident = make_incident()
+    target = io.BytesIO()
+    parts = [(dataclasses.replace(CFG, name="Wehr A"), [incident], []), (dataclasses.replace(CFG, name="Wehr B"), [incident], None)]
+    excel_export.write_combined_workbook(parts, [], {}, 2025, 10, target)
+    workbook = openpyxl.load_workbook(io.BytesIO(target.getvalue()))
+    assert workbook.sheetnames == ["Übersicht", "Einsätze Wehr A", "Anwesenheit Wehr A", "Einsätze Wehr B"]
+    assert workbook["Anwesenheit Wehr A"]["A4"].value == "='Einsätze Wehr A'!A4"
 
 
 def test_statistics_role_gets_summary_without_names(vg):

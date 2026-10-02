@@ -145,7 +145,7 @@ const VIEWS = {
   evaluation: { label: "Auswertung", load: loadEvaluation, render: renderEvaluation, permission: "stats" },
   incidents: { label: "Einsätze", load: loadIncidents, render: renderIncidents, permission: "incidents" },
   // Kameraden gehören zu einer Wehr – nicht in der Gesamtansicht einer VG
-  members: { label: "Kameraden", load: loadMembers, render: renderMembers, permission: "incidents", single: true },
+  members: { label: "Kameraden", load: loadMembers, render: renderMembers, permission: "people", single: true },
 };
 const allowedViews = () => Object.keys(VIEWS).filter((key) => {
   const view = VIEWS[key];
@@ -572,6 +572,11 @@ function warningsList(warnings, emptyText = "") {
 }
 
 function attendancePanel(e, options = {}) {
+  // Ohne Recht auf Anwesenheit (z. B. Wehrleiter) nur die Anzahl
+  if (!e.people_visible) {
+    return `<h4>Anwesenheit · ${e.people_count} Personen${helpButton("attendance")}</h4>
+      <p class="small muted">Die Namen sehen nur Wehrführer und Erfasser der Wehr.</p>`;
+  }
   const newCount = options.markNew ? e.people.filter((p) => p.new).length : 0;
   const hint = options.pickLeader && e.people.length ? `<p class="small muted">Einen Namen anklicken, um die Person als EHF einzutragen.</p>` : "";
   return `<h4>Anwesenheit · ${e.people.length} Personen${newCount ? ` · ${newCount} neu` : ""}${helpButton("attendance")}</h4>
@@ -688,6 +693,7 @@ function readIncidentForm(form) {
     return { call_sign: row.dataset.vehicle, crew: value("crew") === "" ? null : Number(value("crew")),
              departed: value("departed") || null, arrived: value("arrived") || null };
   });
+  if (!state.editDraft.visible) return { ...readForm(form), vehicles };      // Anwesenheit bleibt unverändert
   const people = state.editDraft.people.map((p) => ({ id: p.id, name: p.id == null ? p.name : null,
     role: p.role || null, vehicle: p.vehicle || null }));
   return { ...readForm(form), vehicles, people };
@@ -719,10 +725,11 @@ function redrawPeople(form) {
 async function startEditing(id) {
   const incident = state.incidents.incidents.find((x) => x.id === id);
   state.editing = id;
-  state.editDraft = { people: incident.people.map((p) => ({ id: p.id, name: p.name, role: p.role || "",
-    vehicle: p.vehicle || "", leader_name: p.leader_name })) };
+  state.editDraft = { visible: incident.people_visible, people: incident.people.map((p) => ({ id: p.id, name: p.name,
+    role: p.role || "", vehicle: p.vehicle || "", leader_name: p.leader_name })) };
   updateDatalists();
   renderIncidents();
+  if (!incident.people_visible) { state.memberOptions = []; return; }
   try {
     state.memberOptions = (await api(`/api/members?tenant=${encodeURIComponent(incident.tenant)}`)).members;
   } catch (e) {
@@ -740,7 +747,7 @@ function editForm(e) {
     <div class="panel full"><h4>Fahrzeuge${helpButton("vehicles")}</h4>
       <p class="small muted">Stärke und Zeiten korrigieren oder ein Fahrzeug ergänzen („dabei“). Manuell ergänzte Fahrzeuge und Personen bleiben erhalten, wenn der Bericht später erneut eingelesen wird.</p>
       ${vehicleEditTable(e)}</div>
-    <div class="panel full" data-people-edit>${peopleEditPanel()}</div>
+    <div class="panel full" data-people-edit>${state.editDraft.visible ? peopleEditPanel() : attendancePanel(e)}</div>
     <div class="actions panel full bare">
       <button type="button" class="btn btn-outline btn-small" data-action="cancel">Abbrechen</button>
       <button type="button" class="btn btn-primary btn-small" data-action="save" data-id="${e.id}">Speichern</button>

@@ -76,5 +76,5 @@ def test_permissions_add_up_over_roles(data_dir):
     assert access.tenants["wehr-a1"].permissions == {"stats"} and access.tenants["wehr-a2"].permissions == {"stats"}
     grant("x@example.org", "editor", a1)                    # ersetzt die Rolle in derselben Wehr
     access = tenancy.access_for("x@example.org")
-    assert access.tenants["wehr-a1"].permissions == {"stats", "incidents", "write"}
+    assert access.tenants["wehr-a1"].permissions == {"stats", "incidents", "people", "write"}
     assert not access.superadmin and tenancy.access_for(None).superadmin

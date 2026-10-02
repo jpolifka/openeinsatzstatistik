@@ -206,7 +206,8 @@ def _write_instructions(ws, sheet, last_member_column):
         "Einsatzübersicht in die erste freie Tabellenzeile einfügen (Strg+V). Die Formeln passen sich automatisch an.",
         f"2. Blatt '{ATTENDANCE_SHEET}': Spalten {get_column_letter(ATTENDANCE_FIRST_COLUMN)} bis "
         f"{get_column_letter(last_member_column)} der gleichen Zeilen kopieren und im Blatt Anwesenheit ab Spalte "
-        f"{get_column_letter(ATTENDANCE_FIRST_COLUMN)} einfügen (Rechtsklick > Einfügeoptionen > Werte).",
+        f"{get_column_letter(ATTENDANCE_FIRST_COLUMN)} einfügen (Rechtsklick > Einfügeoptionen > Werte)."
+        if last_member_column else "2. Die Anwesenheit ist nur im Export für Wehrführer und Erfasser enthalten.",
         f"3. Spalte 'Prüfhinweise' ({get_column_letter(sheet.warnings_column)}) beachten – gelb markierte Zeilen bitte "
         "kontrollieren.",
         "",
@@ -231,13 +232,15 @@ def _write_instructions(ws, sheet, last_member_column):
 
 
 def write_workbook(incidents, members, year, target, cfg):
-    """incidents wie aus store.load_incidents, members wie aus store.members_of_year, cfg: TenantConfig."""
+    """incidents wie aus store.load_incidents, members wie aus store.members_of_year, cfg: TenantConfig.
+    members=None: ohne Blatt Anwesenheit (Benutzer ohne Recht auf Anwesenheit)."""
     sheet = Sheet(cfg, year, incidents)
     wb = openpyxl.Workbook()
     overview = wb.active
     overview.title = OVERVIEW_SHEET
     _write_overview(overview, sheet, incidents, year)
-    last_member_column = _write_attendance(wb.create_sheet(ATTENDANCE_SHEET), sheet, incidents, members, OVERVIEW_SHEET)
+    last_member_column = None if members is None else \
+        _write_attendance(wb.create_sheet(ATTENDANCE_SHEET), sheet, incidents, members, OVERVIEW_SHEET)
     _write_instructions(wb.create_sheet("Anleitung"), sheet, last_member_column)
     wb.calculation = CalcProperties(fullCalcOnLoad=True)
     wb.save(target)
@@ -292,7 +295,7 @@ def write_summary_workbook(rows, total, year, limit, target, notes=()):
 def write_combined_workbook(parts, rows, total, year, limit, target, notes=()):
     """Gesamt-Excel mehrerer Wehren: Übersicht plus je Wehr Einsatzübersicht und Anwesenheit.
 
-    parts: [(cfg, incidents, members)] in der Reihenfolge der Übersicht.
+    parts: [(cfg, incidents, members)] in der Reihenfolge der Übersicht; members=None: ohne Anwesenheit.
     """
     wb = openpyxl.Workbook()
     wb.active.title = "Übersicht"
@@ -302,7 +305,8 @@ def write_combined_workbook(parts, rows, total, year, limit, target, notes=()):
         sheet = Sheet(cfg, year, incidents)
         overview_title = _sheet_title("Einsätze", cfg.name, taken)
         _write_overview(wb.create_sheet(overview_title), sheet, incidents, year)
-        _write_attendance(wb.create_sheet(_sheet_title("Anwesenheit", cfg.name, taken)), sheet, incidents, members,
-                          overview_title)
+        if members is not None:
+            _write_attendance(wb.create_sheet(_sheet_title("Anwesenheit", cfg.name, taken)), sheet, incidents,
+                              members, overview_title)
     wb.calculation = CalcProperties(fullCalcOnLoad=True)
     wb.save(target)

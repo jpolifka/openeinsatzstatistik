@@ -29,7 +29,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, create_model
 
 from app import admin, auth, db, domain, dpa, fees, mail, excel_export, legacy, metrics, pdf_report, records, report, store, tenancy, tenant_config, theme
-from app.tenancy import ADMIN, INCIDENTS, STATS, WRITE
+from app.tenancy import ADMIN, INCIDENTS, PEOPLE, STATS, WRITE
 from app.timeutil import year_of
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -164,7 +164,8 @@ def parse_incident_key(key):
 
 def incident_json(incident, leaders, tenant, limit=None, cfg=None):
     """Einsatz mit Kennzahlen für die Oberfläche. leaders: store.LeaderNames für die EHF-Auswahl.
-    cfg: abweichende Konfiguration (Vorschau mit neu entdeckten Fahrzeugen), sonst die der Wehr."""
+    cfg: abweichende Konfiguration (Vorschau mit neu entdeckten Fahrzeugen), sonst die der Wehr.
+    Die Anwesenheit (Namen) nur mit Recht PEOPLE; sonst nur ihre Anzahl."""
     cfg = cfg or tenant.config
     m = metrics.incident_metrics(incident, cfg, limit)
     vehicles = []
@@ -188,7 +189,10 @@ def incident_json(incident, leaders, tenant, limit=None, cfg=None):
         "vehicles": vehicles,
         "people": [{"id": p["id"], "name": p["name"], "role": p.get("role"), "vehicle": p.get("vehicle"),
                     "new": p.get("new", False), "leader_name": leaders.spelling(p),
-                    "leader": leaders.is_leader(incident.get("unit_leader"), p)} for p in incident["people"]],
+                    "leader": leaders.is_leader(incident.get("unit_leader"), p)} for p in incident["people"]]
+        if tenant.can(PEOPLE) else [],
+        "people_count": len(incident["people"]),
+        "people_visible": tenant.can(PEOPLE),
     }
 
 
@@ -366,7 +370,7 @@ def api_evaluation(year: Optional[int] = None, limit: Optional[int] = None, tena
               if plan_parts and any(prev for _, _, prev in plan_parts) else None,
               "response_plan_public": all(t.config.response_plan_public for t in selection),
               "response_plan_hidden": [t.name for t in selection if not _plan_visible(t)],
-              "attendance": metrics.attendance_overview(current) if single and selection[0].can(INCIDENTS) else None,
+              "attendance": metrics.attendance_overview(current) if single and selection[0].can(PEOPLE) else None,
               "tenants": None}
     if not single:
         unique, without = metrics.unique_incidents([i for i, _ in current])
@@ -426,6 +430,8 @@ def api_update_incident(key: str, update: IncidentUpdate, a: tenancy.Access = De
     by_date = tenant.config.numbering == "by_date"
     if by_date:
         changes.pop("number", None)          # ergibt sich aus dem Beginn
+    if people is not None and not tenant.can(PEOPLE):
+        raise tenancy.Forbidden("Die Anwesenheit bearbeiten nur Wehrführer und Erfasser der Wehr.")
     if vehicles is not None and any(v["call_sign"] not in tenant.config.vehicles for v in vehicles):
         raise HTTPException(422, "Unbekanntes Fahrzeug – Fahrzeuge der Wehr in der Verwaltung pflegen.")
     with tenant.connection() as con:
@@ -451,7 +457,7 @@ def api_update_incident(key: str, update: IncidentUpdate, a: tenancy.Access = De
 @app.get("/api/members")
 def api_members(tenant: str, a: tenancy.Access = Depends(access)):
     """Kameraden einer Wehr für Vorschläge beim Bearbeiten der Anwesenheit."""
-    with a.tenant(tenant, INCIDENTS).connection() as con:
+    with a.tenant(tenant, PEOPLE).connection() as con:
         return {"members": store.all_members(con)}
 
 
@@ -913,7 +919,7 @@ def api_export(year: Optional[int] = None, a: tenancy.Access = Depends(access)):
         tenant = tenants[0]
         with tenant.connection() as con:
             incidents = store.load_incidents(con, year=year)
-            members = store.members_of_year(con, year)
+            members = store.members_of_year(con, year) if tenant.can(PEOPLE) else None
         if not incidents:
             raise HTTPException(404, "Keine Einsätze für den Export.")
         return _xlsx(lambda target: excel_export.write_workbook(incidents, members, year, target, tenant.config),
@@ -923,7 +929,8 @@ def api_export(year: Optional[int] = None, a: tenancy.Access = Depends(access)):
     workbook_parts = []
     for t, evaluated, _ in parts:
         with t.connection() as con:
-            workbook_parts.append((t.config, [i for i, _ in evaluated], store.members_of_year(con, year)))
+            workbook_parts.append((t.config, [i for i, _ in evaluated],
+                                   store.members_of_year(con, year) if t.can(PEOPLE) else None))
     if not any(incidents for _, incidents, _ in workbook_parts):
         raise HTTPException(404, "Keine Einsätze für den Export.")
     return _xlsx(lambda target: excel_export.write_combined_workbook(workbook_parts, rows, total, year, limit, target,
