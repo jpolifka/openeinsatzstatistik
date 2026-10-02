@@ -117,3 +117,13 @@ def test_document_warns_when_text_changed_after_generation(pending, monkeypatch)
     monkeypatch.setenv("DPA_PROCESSOR_ADDRESS", "Musterweg 2, 12345 Musterstadt")
     page = pending.get("/api/dpa/vg-neu/document").text
     assert "Musterweg 2" in page and "weicht vom erzeugten Vertrag ab" in page
+
+
+def test_generated_contract_keeps_its_template_version(pending):
+    _fill(pending)
+    with tenancy.central() as con:                        # Vertrag stammt aus Vorlage 1 (mit Resend)
+        con.execute("UPDATE dpa SET template_version = 1")
+    assert "Resend" in pending.get("/api/dpa/vg-neu/document").text
+    _fill(pending)
+    page = pending.get("/api/dpa/vg-neu/document").text
+    assert "Resend" not in page and "Vorlage Version 2" in page and "DKIM" in page

@@ -59,8 +59,12 @@ Code und `docker-compose.yml` enthalten keine Standardwerte. Ohne `.env` startet
 | `APP_PORT`     | ja          | Port auf dem Host, z. B. `8112`. Hinter einem Reverse Proxy auf demselben Host `127.0.0.1:8112`, damit die App nur über den Proxy erreichbar ist |
 | `ADMIN_EMAILS` | nein        | Superadmins, durch Komma getrennt. Gesetzt = Anmeldung an; alle anderen Benutzer werden den Wehren zugeordnet (siehe [Mandanten und Rollen](#mandanten-und-rollen)). Leer = kein Schutz, jeder ist Superadmin. **Setzen, sobald die App im Netz läuft.** |
 | `BASE_URL`     | mit `ADMIN_EMAILS` | Öffentliche Adresse der App, z. B. `https://einsatz.example.org`. Daraus entsteht der Link in der Mail. Mit `https://` wird das Sitzungs-Cookie nur über HTTPS gesendet |
-| `RESEND_API_KEY` | nein      | API-Schlüssel von [Resend](https://resend.com). Leer = Link steht nur im Log (`docker compose logs`) |
-| `MAIL_FROM`    | mit `RESEND_API_KEY` | Absender, z. B. `Einsatzstatistik <statistik@example.org>` (Domain in Resend verifiziert) |
+| `SMTP_HOST`    | nein        | SMTP-Server des Postfachs der eigenen Domain, z. B. `smtp.strato.de`. Leer = kein Versand, Link steht nur im Log (`docker compose logs`) |
+| `SMTP_PORT`, `SMTP_SECURITY` | mit `SMTP_HOST` | `465` + `ssl` oder `587` + `starttls` |
+| `SMTP_USER`, `SMTP_PASSWORD` | mit `SMTP_HOST` | Zugangsdaten des Postfachs |
+| `MAIL_FROM`    | mit `SMTP_HOST` | Absender, z. B. `Einsatzstatistik <statistik@example.org>` – Adresse des Postfachs oder ein Alias davon |
+| `DKIM_SELECTOR`, `DKIM_KEY_FILE` | empfohlen | DKIM-Signatur durch die App, siehe [Mailversand](#mailversand) |
+| `DPA_*`        | für den AVV | Angaben zum Auftragnehmer, Hosting, Datensicherung, Mail-Anbieter (siehe [Datenschutz](#datenschutz)) |
 | `SECRET_KEY`   | nein        | Schlüssel für Links und Sitzungen. Leer = wird als `daten/session.key` erzeugt |
 
 **Reverse Proxy:** Die App muss an der Wurzel der Domain laufen (nicht unter einem Unterpfad).
@@ -73,6 +77,25 @@ Wer keine Zuordnung zu einer aktiven Wehr mehr hat, ist beim nächsten Aufruf ab
 Wird `daten/session.key` gelöscht, sind alle abgemeldet. Die früheren Variablen `APP_PASSWORD`
 und `AUTH_EMAILS` werden nicht mehr unterstützt; ist eine davon ohne `ADMIN_EMAILS` gesetzt,
 startet die App nicht (sonst liefe sie still ohne Schutz).
+
+### Mailversand
+
+Die Anmeldelinks gehen per SMTP über das Postfach der eigenen Domain hinaus (kein Dritt-Dienst).
+Damit sie bei Domains mit `DMARC p=reject` ankommen, muss SPF oder DKIM zur Absenderdomain passen:
+
+- **SPF:** Der SPF-Eintrag der Domain muss den Ausgangsserver des Anbieters erlauben (bei Strato:
+  `v=spf1 redirect=_spf.strato.com`). Die App setzt die Absenderadresse auch als Envelope-From.
+- **DKIM:** Die App signiert jede Mail selbst (`d=` Domain aus `MAIL_FROM`). Einmalig:
+  ```bash
+  docker compose exec einsatzberichte python -m app.mail dkim-key   # legt DKIM_KEY_FILE an, gibt den TXT-Eintrag aus
+  ```
+  Den Eintrag als TXT unter `<DKIM_SELECTOR>._domainkey.<domain>` im DNS anlegen (Strato: Domainverwaltung
+  → DNS → TXT- und CNAME-Records). Der Schlüssel wird nie überschrieben; für einen neuen Schlüssel einen
+  neuen Selektor wählen.
+- **Prüfen:** `docker compose exec einsatzberichte python -m app.mail check` zeigt SPF, DKIM und DMARC;
+  `… python -m app.mail test <adresse>` schickt eine Test-Mail. Beim Start steht das Ergebnis im Log.
+
+Die frühere Variable `RESEND_API_KEY` wird nicht mehr unterstützt; ist sie gesetzt, startet die App nicht.
 
 Im Container fest eingestellt, weil er zum Volume gehört (siehe [`docker-compose.yml`](docker-compose.yml)):
 `DATA_DIR=/daten` (Pflicht).
@@ -160,7 +183,8 @@ Verantwortlich ist die Verbandsgemeinde als Träger der Feuerwehr, deshalb gilt 
 - **Sperre bis zum AVV:** Eine neue VG startet mit „AVV ausstehend“. Ihre Wehren sind für alle außer
   Superadmins gesperrt; Zugeordnete sehen nach der Anmeldung nur „Auftragsverarbeitung“.
 - **Ablauf:** Wehrleitung, Statistik VG oder Wehrführer füllen die Angaben des Auftraggebers aus, die App
-  erzeugt daraus den Vertrag (Vorlage `app/templates/avv_v1.html`, Prüfsumme des Textes wird gespeichert).
+  erzeugt daraus den Vertrag (Vorlage `app/templates/avv_v2.html`, Prüfsumme des Textes wird gespeichert;
+  ein mit einer älteren Vorlage erzeugter Vertrag wird weiter mit dieser angezeigt).
   Nach der Unterschrift wird das PDF hochgeladen (`daten/avv/<vg>/`, nie überschrieben, mit Prüfsumme)
   und/oder ein Link zur Ablage der VG hinterlegt. Der Superadmin bestätigt mit dem Datum der Unterschrift;
   erst dann sind die Wehren frei. Zurücknehmen (z. B. bei Kündigung) sperrt wieder. Jeder Schritt steht in
@@ -217,6 +241,7 @@ app/
   main.py          FastAPI: Schnittstellen, Anmeldung, Zugriff je Wehr
   tenancy.py       VGs, Wehren, Rollen und Rechte; Fachkonfiguration laden und speichern
   auth.py          Anmeldung per Magic Link
+  mail.py          Mailversand per SMTP mit DKIM, Prüfung von SPF/DKIM/DMARC
   domain.py        Fachkonstanten für alle Wehren (Stichworte, Einsatzarten, Standardwerte)
   tenant_config.py Fachkonfiguration einer Wehr (Fahrzeuge, Orte, Bedarfsplan) – auch für die Oberfläche
   legacy.py        Übernahme der bisherigen Einzel-Installation (FF Rheinbrohl)
