@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """
 Vom gelesenen Einsatzbericht zum Einsatz: Ableitungsregeln, Prüfhinweise und die
-Umwandlung in die Form der Datenbank.
+Umwandlung in die Form der Datenbank. cfg ist die TenantConfig der Wehr, für die der
+Bericht eingelesen wird.
 
   read_pdf()          PDF lesen, Nr. ergänzen, Felder ableiten, Plausibilität prüfen
   to_fields()         abgeleitete Felder -> Datenbankfelder (store.FIELDS)
@@ -21,10 +22,10 @@ from app.timeutil import parse_iso, time_text, to_iso, year_of
 MAX_DURATION_HOURS = 24
 
 
-def read_pdf(path, filename):
-    report = pdf_report.read_report(path, filename)
+def read_pdf(path, filename, cfg):
+    report = pdf_report.read_report(path, filename, cfg.unit_prefix)
     complete_number(report)
-    derive(report)
+    derive(report, cfg)
     check_plausibility(report)
     return report
 
@@ -51,45 +52,45 @@ def complete_number(report):
 
 
 # ---------------------------------------------------------------- Ableitungen
-def _is_own(vehicle):
-    return vehicle["name"].startswith(domain.OWN_VEHICLE_PREFIX)
+def _is_own(vehicle, cfg):
+    return vehicle["name"].startswith(cfg.own_vehicle_prefix)
 
 
-def assign_vehicles(report):
+def assign_vehicles(report, cfg):
     """Fahrzeuge den Blöcken der Einsatzübersicht zuordnen (inkl. Ersatzfahrzeuge)."""
     slots = {}
     crewed = {p["vehicle"] for p in report["people"] if p["vehicle"]}
     for v in report["vehicles"]:
-        if v["call_sign"] in domain.VEHICLES:
+        if v["call_sign"] in cfg.vehicles:
             slots[v["call_sign"]] = v
     for v in report["vehicles"]:
-        target = domain.SUBSTITUTES.get(v["call_sign"])
+        target = cfg.substitutes.get(v["call_sign"])
         if target and target not in slots and v["call_sign"] in crewed:
             slots[target] = v
             report["warnings"].append(f"{v['name']} als Ersatz für {target} eingetragen")
-    unassigned = [v["name"] for v in report["vehicles"] if _is_own(v) and v not in slots.values()]
+    unassigned = [v["name"] for v in report["vehicles"] if _is_own(v, cfg) and v not in slots.values()]
     if unassigned:
         report["warnings"].append("Nicht in Liste abgebildete Fahrzeuge: " + ", ".join(unassigned))
     return slots
 
 
-def _start_and_end(report):
+def _start_and_end(report, cfg):
     """Beginn = früheste Alarmierung der eigenen Fahrzeuge, Ende = spätestes Einsatzende (inkl. FEZ)."""
-    own = [v for v in report["vehicles"] if _is_own(v)] or [v for v in report["vehicles"] if v["call_sign"]]
+    own = [v for v in report["vehicles"] if _is_own(v, cfg)] or [v for v in report["vehicles"] if v["call_sign"]]
     alarms = [v["alerted"] for v in own if v["alerted"]] or \
              [v["alerted"] for v in report["slots"].values() if v["alerted"]]
     start = min(alarms) if alarms else report["first_alarm"]
     ends = [v["finished"] for v in report["vehicles"]
-            if v["finished"] and (v["call_sign"] or v["name"] == domain.CONTROL_CENTER)]
+            if v["finished"] and (v["call_sign"] or v["name"] == cfg.control_center)]
     return start, (max(ends) if ends else None)
 
 
-def _place(report):
+def _place(report, cfg):
     """Bekannter Ortsteil vor bekanntem Ort, sonst was im Bericht steht."""
     district, town = report["district"], report["town"]
-    if district in domain.PLACE_NAMES:
+    if district in cfg.place_names:
         return district
-    if town in domain.PLACE_NAMES:
+    if town in cfg.place_names:
         return town
     return district or town
 
@@ -122,15 +123,15 @@ def _station_staff(report):
     return max(0, present - sum(v["crew"] for v in report["slots"].values()))
 
 
-def derive(report):
+def derive(report, cfg):
     """Felder der Einsatzübersicht aus dem gelesenen Bericht ableiten."""
-    report["slots"] = assign_vehicles(report)
-    report["started_at"], report["ended_at"] = _start_and_end(report)
+    report["slots"] = assign_vehicles(report, cfg)
+    report["started_at"], report["ended_at"] = _start_and_end(report, cfg)
     if not report["started_at"]:
         report["warnings"].append("Einsatzbeginn nicht ermittelbar")
     if not report["ended_at"]:
         report["warnings"].append("Einsatzende nicht ermittelbar")
-    report["place"] = _place(report)
+    report["place"] = _place(report, cfg)
     report["description"] = _description(report)
     report["unit_leader"] = _unit_leader(report)
     report["station_staff"] = _station_staff(report)
@@ -218,7 +219,7 @@ def _display(name, value):
     return str(value)
 
 
-def differences(stored, incoming):
+def differences(stored, incoming, cfg):
     """Unterschiede zwischen gespeichertem Einsatz und Bericht als [{field, stored, report}]."""
     diffs = []
 
@@ -229,7 +230,7 @@ def differences(stored, incoming):
 
     for name, label in COMPARED_FIELDS.items():
         compare(label, name, stored.get(name), incoming.get(name))
-    for call_sign in domain.VEHICLES:
+    for call_sign in cfg.vehicles:
         old, new = stored["vehicles"].get(call_sign) or {}, incoming["vehicles"].get(call_sign) or {}
         for name, label in COMPARED_VEHICLE_FIELDS.items():
             compare(f"{label} {call_sign}", name, old.get(name), new.get(name))

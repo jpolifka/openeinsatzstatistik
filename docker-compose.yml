@@ -12,11 +12,8 @@ services:
     # Alle Einstellungen kommen aus .env (Vorlage: .env.example), hier stehen keine Standardwerte
     env_file: .env
     environment:
-      # Pfade im Container, gehören zu den Volumes unten
+      # Pfad im Container, gehört zum Volume unten
       DB_PATH: /daten/einsaetze.db
-      IMPORT_DIR: /import
     volumes:
       - ./daten:/daten
-      # Nur für den Erstimport: vorhandene Einsatzübersicht_JJJJ.xlsx
-      - ./Einsatzberichte:/import:ro
     restart: unless-stopped

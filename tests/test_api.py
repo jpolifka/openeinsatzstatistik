@@ -5,13 +5,13 @@ import zipfile
 import pytest
 from fastapi.testclient import TestClient
 
-from app import db, domain, main, store
+from app import db, main, store
+from conftest import CFG
 
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "PATH", str(tmp_path / "test.db"))
-    monkeypatch.setattr(main, "IMPORT_DIR", str(tmp_path / "kein-import"))
     with TestClient(main.app) as c:
         yield c
 
@@ -30,8 +30,8 @@ def test_frontend_is_revalidated(client):
     assert "cache-control" not in client.get("/health").headers
 
 
-def test_config_comes_from_domain(client):
-    assert client.get("/api/config").json()["vehicles"] == list(domain.VEHICLES)
+def test_config_comes_from_tenant_config(client):
+    assert client.get("/api/config").json()["vehicles"] == list(CFG.vehicles)
 
 
 def test_evaluation_contains_history(client):
@@ -51,7 +51,7 @@ def test_incidents_update_and_conflict(client):
     first, second = _create(client, 1), _create(client, 2)
     incidents = client.get("/api/incidents?year=2025").json()["incidents"]
     assert [i["number"] for i in incidents] == [1, 2]
-    assert [v["call_sign"] for v in incidents[0]["vehicles"]] == list(domain.VEHICLES)
+    assert [v["call_sign"] for v in incidents[0]["vehicles"]] == list(CFG.vehicles)
 
     changed = client.put(f"/api/incidents/{second}", json={"unit_leader": "E. Beispiel"}).json()
     assert changed["unit_leader"] == "E. Beispiel"
@@ -75,7 +75,7 @@ def _zip(entries):
 
 def test_zip_upload_unpacks_pdfs(client, monkeypatch):
     read = []
-    def fake_read_pdf(path, filename):
+    def fake_read_pdf(path, filename, cfg):
         read.append(filename)
         raise ValueError("kein Bericht")
     monkeypatch.setattr(main.report, "read_pdf", fake_read_pdf)

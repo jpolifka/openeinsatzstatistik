@@ -14,7 +14,7 @@ Bevorzugt mit Docker arbeiten:
 
 ```bash
 docker compose up -d --build          # bauen + starten → http://localhost:8112
-docker compose logs -f                # Logs (u. a. Erstimport, Migration)
+docker compose logs -f                # Logs (u. a. Migration)
 curl localhost:8112/health            # Health-Check (ohne Passwortschutz erreichbar)
 docker build --target test -t pdf2einsatz-test . && docker run --rm pdf2einsatz-test   # Tests (pytest)
 docker run --rm -v "$PWD/static:/s:ro" node:22-alpine node --check /s/app.js          # JS-Syntax
@@ -22,7 +22,7 @@ docker run --rm -v "$PWD/static:/s:ro" node:22-alpine node --check /s/app.js    
 
 `static/` ist nicht gemountet, sondern ins Image kopiert. Nach Änderungen an Python- oder Frontend-Dateien ist deshalb `--build` nötig.
 
-Lokal ohne Docker: `DB_PATH=daten/einsaetze.db IMPORT_DIR=Einsatzberichte uvicorn app.main:app --reload --port 8112`, Tests mit `pip install -r requirements-dev.txt && pytest`.
+Lokal ohne Docker: `DB_PATH=daten/einsaetze.db uvicorn app.main:app --reload --port 8112`, Tests mit `pip install -r requirements-dev.txt && pytest`.
 
 ## Architektur
 
@@ -31,13 +31,15 @@ Lokal ohne Docker: `DB_PATH=daten/einsaetze.db IMPORT_DIR=Einsatzberichte uvicor
 2. `POST /api/reports/accept` mit Token, Dateiname und vom Nutzer korrigierten `fields` → `report.save`. Unbekannte Personen werden als neue `member`-Zeilen angelegt.
 
 **Module (`app/`):**
-- `domain.py`: **einzige Quelle der Fachkonstanten** (Fahrzeuge `02/45, 02/24, 02/71, 02/19, 01/10`, Ersatzfahrzeuge, Orte, Bedarfsplan-Orte, Zeitgrenzen 8/10/15 Min., Tag 06–18 Uhr, Sonderstichworte B2.07/S1.00) und kleine Fachregeln (`alarm_level`, `is_daytime`, `is_plan_relevant`). Die Oberfläche bekommt sie über `GET /api/config` (`client_config`) und hält keine eigenen Kopien.
+- `domain.py`: Fachkonstanten, die **für alle Wehren** gelten (Einsatzarten, Alarmstufen, Sonderstichworte B2.07/S1.00, Vorlage des Stichwortkatalogs) und Standardwerte für neue Wehren (Zeitgrenzen 8/10/15 Min., Tag 06–18 Uhr).
+- `tenant_config.py`: `TenantConfig`, die **Fachkonfiguration einer Wehr** (Fahrzeuge als `Vehicle` mit Dienstzeitraum, Ersatzfahrzeuge, BKS-Kennungen, Orte, Bedarfsplan-Orte, Zeitgrenzen, Stichwortkatalog) mit den Regeln, die davon abhängen (`area_of`, `is_daytime`, `is_plan_relevant`, `substitute_label`). Sie wird als `cfg` durch `report`, `metrics`, `excel_export` und `main.incident_json` gereicht, nie als Modul-Global gelesen. Die Oberfläche bekommt sie über `GET /api/config` (`client_config`) und hält keine eigenen Kopien.
+- `legacy.py`: `rheinbrohl_config()`, die Werte der bisherigen Einzel-Installation (in Phase 1 der Mandantenfähigkeit noch die einzige Wehr, `main.CONFIG`). Tests nutzen sie als `conftest.CFG`.
 - `pdf_report.py`: Text aus der PDF holen (`extract_text`) und auswerten (`parse_report`). Getrennt, damit Tests ohne PDF auskommen.
 - `report.py`: Ableitungsregeln (Einsatzbeginn = früheste Alarmierung der eigenen Fahrzeuge `02/..`, EHF, Gerätehaus, Wochenende/Feiertag), Prüfhinweise und Umwandlung Bericht → Einsatz.
 - `metrics.py`: rechnet die Excel-Formeln nach. Kommentare nennen die Excel-Spalten (AO = Azeit, AP = Ezeit, AR–AU = Stärken, AM = Gesamtstärke). Kennzahlen werden **nie gespeichert**. `evaluate()` berechnet sie einmal je Einsatz für `statistics`, `response_plan` und `attendance_overview`. Minuten laufen wie in Excel per Modulo 24 h ab Einsatzbeginn.
 - `store.py`: Datenbankzugriff. `FIELDS` ist die Liste der bearbeitbaren Einsatzfelder; INSERT/UPDATE, das Pydantic-Modell in `main.py` und der Abgleich bauen darauf auf. `MemberDirectory` gleicht Namen über `names.NameMatcher` ab.
 - `db.py`: Verbindung und **Migrationen** (`MIGRATIONS`, gezählt über `PRAGMA user_version`). Schemaänderungen nur als neuen Schritt hinten anfügen. Schritt 1 ist das ursprüngliche deutsche Schema, Schritt 2 benennt es ins Englische um. Eindeutigkeit gilt über `(year, number)`.
-- `excel_layout.py`: Spaltenaufbau der Einsatzübersicht (A:AV), aus `domain.VEHICLES` erzeugt. Gemeinsam genutzt von `excel_import.py` (Erstimport aller `Einsatzübersicht_JJJJ.xlsx` aus `IMPORT_DIR`, wenn die DB leer ist) und `excel_export.py` (Export mit Formeln wie im Original).
+- `excel_layout.py`: `Layout`, der Spaltenaufbau der Einsatzübersicht aus der Fahrzeugliste einer Wehr (bei fünf Fahrzeugen A:AV). `excel_export.py` schreibt damit den Export mit Formeln wie im Original. Einen Excel-Import gibt es nicht mehr.
 - `names.py`, `timeutil.py`, `holidays.py`: Namensvergleich, Zeitumwandlungen, Feiertage RLP.
 - `auth.py`: Anmeldung per Magic Link (aktiv, wenn `AUTH_EMAILS` gesetzt ist): Versand über die Resend-API, HMAC-signierte Links (15 Min., einmalig) und Sitzungs-Cookies (30 Tage), Anmeldeseiten als `APIRouter`. Schlüssel aus `SECRET_KEY` oder `session.key` neben der DB.
 - `main.py`: nur HTTP: Endpunkte, Anmeldeprüfung als Middleware (`PUBLIC_PATHS` ohne Anmeldung), JSON-Aufbereitung (`incident_json`).

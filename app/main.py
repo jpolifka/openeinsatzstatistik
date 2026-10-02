@@ -3,7 +3,7 @@
 Einsatzstatistik – HTTP-Schnittstelle, Passwortschutz und Auslieferung der Oberfläche.
 
 Fachlogik liegt in report.py (PDF -> Einsatz), metrics.py (Auswertungen), store.py
-(Datenbank) sowie excel_import.py / excel_export.py.
+(Datenbank) und excel_export.py; die Fachkonfiguration der Wehr in tenant_config.py.
 """
 import contextlib
 import datetime as dt
@@ -25,7 +25,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Stre
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, create_model
 
-from app import auth, db, domain, excel_export, excel_import, metrics, report, store
+from app import auth, db, excel_export, legacy, metrics, report, store
 from app.timeutil import year_of
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -33,7 +33,6 @@ log = logging.getLogger("pdf2einsatz")
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
-IMPORT_DIR = os.environ.get("IMPORT_DIR", "")
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
@@ -46,16 +45,14 @@ async def lifespan(_app):
         raise RuntimeError("DB_PATH fehlt (siehe README)")
     auth.check_config()
     db.setup()
-    if IMPORT_DIR and os.path.isdir(IMPORT_DIR):
-        with db.connection() as con:
-            for result in excel_import.initial_import(con, IMPORT_DIR):
-                log.info("Erstimport: %s", result)
     yield
 
 
 app = FastAPI(title="Einsatzstatistik – FF Rheinbrohl", lifespan=lifespan)
 # JSON der Einsatzliste schrumpft komprimiert auf ca. 1/16
 app.add_middleware(GZipMiddleware, minimum_size=1000)
+# Fachkonfiguration der Wehr
+CONFIG = legacy.rheinbrohl_config()
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
@@ -131,13 +128,13 @@ def _resolve_year(con, year):
     return year or store.latest_year(con) or dt.date.today().year
 
 
-def incident_json(incident, leaders, limit=domain.DEFAULT_LIMIT):
+def incident_json(incident, leaders, cfg, limit=None):
     """Einsatz mit Kennzahlen für die Oberfläche. leaders: store.LeaderNames für die EHF-Auswahl."""
-    m = metrics.incident_metrics(incident, limit)
+    m = metrics.incident_metrics(incident, cfg, limit)
     vehicles = []
-    for call_sign in domain.VEHICLES:
+    for call_sign in cfg.vehicles:
         v, vm = incident["vehicles"].get(call_sign) or {}, m["vehicles"].get(call_sign) or {}
-        vehicles.append({"call_sign": call_sign, "substitute": domain.substitute_label(v.get("name"), call_sign),
+        vehicles.append({"call_sign": call_sign, "substitute": cfg.substitute_label(v.get("name"), call_sign),
                          "crew": v.get("crew"), "departed": v.get("departed"), "arrived": v.get("arrived"),
                          "turnout_min": _rounded(vm.get("turnout_min")),
                          "arrival_min": _rounded(vm.get("arrival_min"))})
@@ -167,7 +164,7 @@ def health():
 
 @app.get("/api/config")
 def api_config(request: Request):
-    return {**domain.client_config(), "user": auth.current_user(request)}
+    return {**CONFIG.client_config(), "user": auth.current_user(request)}
 
 
 # ---------------------------------------------------------------- Auswertung
@@ -178,20 +175,22 @@ def api_years():
 
 
 @app.get("/api/evaluation")
-def api_evaluation(year: Optional[int] = None, limit: int = domain.DEFAULT_LIMIT):
-    if limit not in domain.RESPONSE_LIMITS:
-        allowed = " oder ".join(str(x) for x in domain.RESPONSE_LIMITS)
+def api_evaluation(year: Optional[int] = None, limit: Optional[int] = None):
+    cfg = CONFIG
+    limit = limit or cfg.default_limit
+    if limit not in cfg.response_limits:
+        allowed = " oder ".join(str(x) for x in cfg.response_limits)
         raise HTTPException(400, f"Die Zeitgrenze muss {allowed} Minuten sein.")
     with db.connection() as con:
         year = _resolve_year(con, year)
-        current = metrics.evaluate(store.load_incidents(con, year=year), limit)
+        current = metrics.evaluate(store.load_incidents(con, year=year), cfg, limit)
         previous = store.load_incidents(con, year=year - 1) or None
         history = metrics.monthly_history(store.incident_months(con))
     return {"year": year,
             "history": history,
-            "statistics": metrics.statistics(current, year, previous),
-            "response_plan": metrics.response_plan(current, limit),
-            "response_plan_previous": metrics.response_plan(metrics.evaluate(previous, limit), limit)
+            "statistics": metrics.statistics(current, year, cfg, previous),
+            "response_plan": metrics.response_plan(current, limit, cfg),
+            "response_plan_previous": metrics.response_plan(metrics.evaluate(previous, cfg, limit), limit, cfg)
             if previous else None,
             "attendance": metrics.attendance_overview(current)}
 
@@ -207,7 +206,7 @@ def api_incidents(year: Optional[int] = None):
     with db.connection() as con:
         year = _resolve_year(con, year)
         leaders = store.LeaderNames(con)
-        return {"year": year, "incidents": [incident_json(i, leaders) for i in store.load_incidents(con, year=year)]}
+        return {"year": year, "incidents": [incident_json(i, leaders, CONFIG) for i in store.load_incidents(con, year=year)]}
 
 
 @app.put("/api/incidents/{incident_id}")
@@ -219,7 +218,7 @@ def api_update_incident(incident_id: int, fields: IncidentFields):
             raise HTTPException(404, "Einsatz nicht gefunden.")
         except store.DuplicateIncident as e:
             raise HTTPException(409, str(e))
-        return incident_json(store.load_incident(con, incident_id), store.LeaderNames(con))
+        return incident_json(store.load_incident(con, incident_id), store.LeaderNames(con), CONFIG)
 
 
 @app.delete("/api/incidents/{incident_id}")
@@ -289,7 +288,7 @@ def _read_uploads(uploads):
             with open(path, "wb") as fh:
                 fh.write(data)
             try:
-                reports.append(report.read_pdf(path, filename))
+                reports.append(report.read_pdf(path, filename, CONFIG))
             except Exception as e:  # defekte oder fremde PDF: melden, Rest weiter lesen
                 log.exception("PDF %s", filename)
                 errors.append({"file": filename, "message": str(e) or type(e).__name__})
@@ -298,11 +297,11 @@ def _read_uploads(uploads):
 
 def _preview_json(con, r, leaders):
     incident, existing = report.preview(con, r)
-    result = incident_json(incident, leaders)
+    result = incident_json(incident, leaders, CONFIG)
     result["reported_as"] = r["reported_as"]
     result["incident_commander"] = r["incident_commander"]
     result["existing"] = {"id": existing["id"], "source": existing["source"],
-                          "differences": report.differences(existing, incident)} if existing else None
+                          "differences": report.differences(existing, incident, CONFIG)} if existing else None
     return result
 
 
@@ -338,7 +337,7 @@ def api_accept_report(a: Acceptance):
             incident_id = report.save(con, r, fields, replace_id)
         except store.DuplicateIncident as e:
             raise HTTPException(409, str(e))
-        return incident_json(store.load_incident(con, incident_id), store.LeaderNames(con))
+        return incident_json(store.load_incident(con, incident_id), store.LeaderNames(con), CONFIG)
 
 
 # ---------------------------------------------------------------- Export
@@ -355,7 +354,7 @@ def api_export(year: Optional[int] = None, ids: Optional[str] = None):
     if not incidents:
         raise HTTPException(404, "Keine Einsätze für den Export.")
     buffer = io.BytesIO()
-    excel_export.write_workbook(incidents, members, year, buffer)
+    excel_export.write_workbook(incidents, members, year, buffer, CONFIG)
     buffer.seek(0)
     stamp = f"{dt.datetime.now():%Y-%m-%d_%H%M}"
     name = f"Import_Einsatzberichte_{stamp}.xlsx" if ids else f"Einsaetze_{year}_{stamp}.xlsx"
