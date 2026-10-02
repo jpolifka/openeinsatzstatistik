@@ -1,16 +1,19 @@
 "use strict";
 
 // Verwaltung: Einstellungen der Wehr (Name, Farben, Logos, Fahrzeuge, BKS-Kennung, Orte, Bedarfsplan),
-// Stichwortkatalog, Benutzer und – für Superadmins – Verbandsgemeinden und Wehren.
+// Stichwortkatalog, Benutzer, Rollen und – für Superadmins – Verbandsgemeinden und Wehren.
 // Wird nach app.js geladen und trägt sich in VIEWS ein. Rechte prüft das Backend (app/admin.py).
 
-// [Schlüssel, Bezeichnung, braucht die Einstellungen der Wehr, nur Superadmin, Auswahl oben: Wehr, Wehrleitung, beide]
+// [Schlüssel, Bezeichnung, braucht die Einstellungen der Wehr, nur Superadmin, Auswahl oben: Wehr, Wehrleitung, beide,
+//  nötiges Recht in der gewählten Wehr bzw. VG (rbac.py); bei „beide“ entscheidet admin.overview.users]
 const ADMIN_SECTIONS = [
-  ["unit", "Wehr", true, false, "tenant"], ["fleet", "Fahrzeuge", true, false, "tenant"],
-  ["bks", "BKS-Kennung", true, false, "tenant"], ["places", "Orte & Bedarfsplan", true, false, "tenant"],
-  ["keywords", "Stichworte", false, false, "tenant"],
-  ["vehicles", "Fahrzeuge", false, false, "vg"], ["fees", "Gebührenordnung", false, false, "vg"],
-  ["users", "Benutzer", false, false, "any"], ["super", "Wehren & VGs", false, true, "any"],
+  ["unit", "Wehr", true, false, "tenant", "tenant.settings"], ["fleet", "Fahrzeuge", true, false, "tenant", "tenant.settings"],
+  ["bks", "BKS-Kennung", true, false, "tenant", "tenant.settings"],
+  ["places", "Orte & Bedarfsplan", true, false, "tenant", "tenant.settings"],
+  ["keywords", "Stichworte", false, false, "tenant", "tenant.keywords"],
+  ["vehicles", "Fahrzeuge", false, false, "vg", "vg.fees"], ["fees", "Gebührenordnung", false, false, "vg", "vg.fees"],
+  ["users", "Benutzer", false, false, "any"], ["roles", "Rollen", false, false, "any"],
+  ["super", "Wehren & VGs", false, true, "any"],
 ];
 const SETTINGS_SECTIONS = ADMIN_SECTIONS.filter((s) => s[2]).map((s) => s[0]);
 
@@ -18,6 +21,11 @@ const admin = {
   overview: null, slug: null, section: null, settings: null, keywords: null, memberships: null, superOverview: null,
   check: null, importFile: null, importPreview: null, keywordQuery: "", keywordEdit: null, parseResult: null, error: "",
   fees: null, feeDraft: null,
+  userScopes: null,           // Bereiche, in denen der Benutzer Rollen vergeben darf, mit den Rollen
+  effective: null,            // Rechte einer Person mit Herkunft (Benutzer → „Rechte“)
+  events: null,               // Protokoll der Vergaben und Rollenänderungen
+  roles: null,                // Rechtekatalog und Rollen (/api/admin/roles)
+  roleDraft: null,            // Rolle im Editor (neu: id null)
   vg: null,                   // ausgewählte Wehrleitung (Slug der VG) statt einer Wehr
   vgVehicles: null,           // Fahrzeuge der VG (Wehrleitung)
   savedSettings: null,        // Stand der Einstellungen beim Laden/Speichern – Vergleich für „ungespeichert“
@@ -25,10 +33,11 @@ const admin = {
 
 // Hilfe zum gerade offenen Bereich der Verwaltung
 const ADMIN_HELP = { unit: "admin_colors", fleet: "admin_fleet", bks: "admin_bks", places: "admin_places",
-  keywords: "admin_keywords", vehicles: "admin_vg_vehicles", fees: "fees", users: "admin_roles" };
+  keywords: "admin_keywords", vehicles: "admin_vg_vehicles", fees: "fees", users: "admin_users",
+  roles: () => admin.roleDraft ? "admin_role_editor" : "admin_roles" };
 
 VIEWS.admin = { label: "Verwaltung", load: loadAdmin, render: renderAdmin, noYear: true,
-  visible: () => can("admin") || config.superadmin, help: () => ADMIN_HELP[admin.section] || "sec_admin" };
+  visible: () => config.admin, help: () => helpValue(ADMIN_HELP[admin.section]) || "sec_admin" };
 
 // ------------------------------------------------------------ Laden
 async function loadAdmin() {
@@ -41,7 +50,7 @@ async function loadAdmin() {
     if (config.vg && admin.overview.vgs.some((v) => v.slug === config.vg.slug)) admin.vg = config.vg.slug;
   }
   const sections = adminSections();
-  if (!sections.some(([key]) => key === admin.section)) admin.section = sections[0][0];
+  if (!sections.some(([key]) => key === admin.section)) admin.section = sections[0]?.[0] || null;
   const s = admin.section;
   if (SETTINGS_SECTIONS.includes(s) && admin.settings?.slug !== admin.slug) {
     admin.settings = await api(`/api/admin/${admin.slug}/settings`);
@@ -51,7 +60,8 @@ async function loadAdmin() {
   if (s === "keywords" && admin.keywords?.slug !== admin.slug) {
     admin.keywords = { ...(await api(`/api/admin/${admin.slug}/keywords`)), slug: admin.slug };
   }
-  if (s === "users" && !admin.memberships) admin.memberships = (await api("/api/admin/memberships")).memberships;
+  if (s === "users" && !admin.memberships) setMemberships(await api("/api/admin/memberships"));
+  if (s === "roles" && !admin.roles) admin.roles = await api("/api/admin/roles");
   if (s === "super" && !admin.superOverview) admin.superOverview = await api("/api/super/overview");
   if (s === "fees" && admin.fees?.vg !== admin.vg) {
     admin.fees = { vg: admin.vg, ...(await api(`/api/admin/vgs/${encodeURIComponent(admin.vg)}/fees`)) };
@@ -65,10 +75,15 @@ async function loadVgVehicles() {
 }
 
 function adminSections() {
-  const hasTenant = Boolean(admin.overview.tenants.length);
+  const { overview } = admin;
   const mode = admin.vg ? "vg" : "tenant";
-  return ADMIN_SECTIONS.filter(([, , , superOnly, scope]) =>
-    (!superOnly || admin.overview.superadmin) && (superOnly || hasTenant) && (scope === "any" || scope === mode));
+  const granted = (admin.vg ? overview.vgs.find((v) => v.slug === admin.vg)
+    : overview.tenants.find((t) => t.slug === admin.slug))?.permissions || [];
+  return ADMIN_SECTIONS.filter(([, , , superOnly, scope, permission]) => {
+    if (superOnly) return overview.superadmin;
+    if (scope === "any") return overview.users || overview.superadmin;
+    return scope === mode && granted.includes(permission);
+  });
 }
 
 async function adminGo(changes) {
@@ -83,15 +98,15 @@ function renderAdmin() {
   const choices = [...vgs.map((v) => ({ key: `vg:${v.slug}`, label: `Wehrleitung · ${v.name}` })),
     ...tenants.map((t) => ({ key: t.slug, label: `${t.name} · ${t.vg}` }))];
   const current = admin.vg ? `vg:${admin.vg}` : admin.slug;
-  const tenantSelect = choices.length > 1 && !["users", "super"].includes(admin.section)
+  const tenantSelect = choices.length > 1 && !["users", "roles", "super"].includes(admin.section)
     ? `<label class="field admin-tenant"><span>${admin.vg ? "Wehrleitung" : "Wehr"}</span><select data-admin-tenant>${choices.map((c) =>
       `<option value="${esc(c.key)}" ${c.key === current ? "selected" : ""}>${esc(c.label)}</option>`).join("")}</select></label>` : "";
   const sections = `<div class="segments" role="tablist">${adminSections().map(([key, label]) =>
     `<button type="button" data-admin-section="${key}" class="${key === admin.section ? "active" : ""}">${label}</button>`).join("")}</div>`;
-  const body = {
+  const body = ({
     unit: unitSection, fleet: fleetSection, bks: bksSection, places: placesSection, vehicles: vgVehiclesSection,
-    keywords: keywordsSection, users: usersSection, super: superSection, fees: feesSection,
-  }[admin.section]();
+    keywords: keywordsSection, users: usersSection, roles: rolesSection, super: superSection, fees: feesSection,
+  }[admin.section] || (() => `<p class="muted">Hier gibt es für dich nichts zu verwalten.</p>`))();
   $("#view-admin").innerHTML = `<div class="card admin-card">
     <div class="admin-head">${sections}${tenantSelect}</div>
     ${admin.error ? errorBox(admin.error) : ""}
@@ -446,7 +461,7 @@ function placesSection() {
       ${adminField("Tag bis (Uhr)", `<input type="number" min="1" max="24" data-bind="day_hours.1" value="${s.day_hours[1]}">`)}
     </div>
     <label class="toggle section-gap"><input type="checkbox" data-bind="response_plan_public" ${s.response_plan_public ? "checked" : ""}>
-      Bedarfsplan für alle Rollen freigeben <span class="muted">(sonst nur Wehrführer, Wehrleiter)</span></label>
+      Bedarfsplan für alle Rollen freigeben <span class="muted">(sonst nur mit dem Recht „Bedarfsplan ohne Freigabe sehen“)</span></label>
     ${saveButton()}`;
 }
 
@@ -489,32 +504,208 @@ function keywordsSection() {
 }
 
 // ------------------------------------------------------------ Benutzer
+function setMemberships(data) {
+  admin.memberships = data.memberships;
+  admin.userScopes = data.scopes;
+}
+
 function usersSection() {
-  const { tenants, vgs, roles } = admin.overview;
-  const scopes = [...vgs.map((v) => ({ key: `vg:${v.slug}`, label: `${v.name} (alle Wehren)` })),
-    ...tenants.map((t) => ({ key: `tenant:${t.slug}`, label: t.name }))];
+  const scopes = admin.userScopes;
   const rows = admin.memberships.map((m) => `<tr>
     <td>${esc(m.email)}</td><td>${esc(m.name)}${m.scope === "vg" ? " <span class='small muted'>(VG)</span>" : ""}</td><td>${esc(m.label)}</td>
     <td class="small muted">${m.last_login ? formatDate(m.last_login) : "noch nie"}</td>
-    <td>${m.editable ? `<button type="button" class="icon-button" data-admin-action="revoke" data-email="${esc(m.email)}" data-scope="${m.scope}" data-slug="${esc(m.slug)}" aria-label="entfernen">✕</button>` : ""}</td></tr>`).join("");
-  const roleOptions = Object.entries(roles).map(([key, r]) => `<option value="${key}" data-scope="${r.scope}">${esc(r.label)}</option>`).join("");
-  return `<p class="small muted">Wer eine Zuordnung hat, kann sich mit seiner E-Mail-Adresse anmelden. Was eine Rolle darf, steht in der Hilfe.${helpButton("admin_roles")}</p>
-    <div class="form-grid">
+    <td class="nowrap"><button type="button" class="btn btn-light btn-small" data-admin-action="effective" data-email="${esc(m.email)}">Rechte</button>
+      ${m.editable ? `<button type="button" class="icon-button" data-admin-action="revoke" data-email="${esc(m.email)}" data-scope="${m.scope}" data-slug="${esc(m.slug)}" data-key="${esc(m.role)}" aria-label="Rolle entziehen" data-tip="Rolle entziehen">✕</button>` : ""}</td></tr>`).join("");
+  const form = scopes.length ? `<div class="form-grid">
       ${adminField("E-Mail-Adresse", `<input type="email" id="grant-email" autocomplete="off">`, "span-2")}
-      ${adminField("Bereich", `<select id="grant-scope">${scopes.map((s) => `<option value="${esc(s.key)}">${esc(s.label)}</option>`).join("")}</select>`, "span-2")}
-      ${adminField("Rolle", `<select id="grant-role">${roleOptions}</select>`)}
+      ${adminField("Bereich", `<select id="grant-scope">${scopes.map((x) => `<option value="${esc(x.key)}">${esc(x.label)}</option>`).join("")}</select>`, "span-2")}
+      ${adminField("Rolle", `<select id="grant-role"></select>`)}
       <div class="field"><span>&nbsp;</span><button type="button" class="btn btn-primary" data-admin-action="grant">Zuordnen</button></div>
-    </div>
+    </div>` : `<p class="small muted">Rollen vergeben darfst du nicht – hier stehen nur die Zuordnungen.</p>`;
+  return `<p class="small muted">Wer eine Zuordnung hat, kann sich mit seiner E-Mail-Adresse anmelden. Eine Person kann mehrere Rollen haben;
+    ihre Rechte addieren sich. Eigene Zuordnungen ändert jemand anderes.${helpButton("admin_users")}</p>
+    <div class="section-gap">${form}</div>
     <div class="table-wrap section-gap"><table class="mini-table admin-table"><thead><tr><th>E-Mail</th><th>Bereich</th><th>Rolle</th><th>zuletzt angemeldet</th><th></th></tr></thead>
-    <tbody>${rows || `<tr><td colspan="5" class="muted">Noch keine Zuordnungen.</td></tr>`}</tbody></table></div>`;
+    <tbody>${rows || `<tr><td colspan="5" class="muted">Noch keine Zuordnungen.</td></tr>`}</tbody></table></div>
+    ${admin.effective ? effectivePanel() : ""}
+    <h3 class="section-gap">Protokoll${helpButton("admin_role_events")}</h3>
+    ${admin.events ? eventsTable() : `<button type="button" class="btn btn-light btn-small" data-admin-action="events">Protokoll anzeigen</button>`}`;
 }
 
+function effectivePanel() {
+  const e = admin.effective;
+  const areas = e.areas.map((a) => `<h4 class="section-gap">${esc(a.name)}</h4>
+    <div class="table-wrap"><table class="mini-table admin-table"><thead><tr><th>Recht</th><th>über</th></tr></thead><tbody>
+    ${a.permissions.map((p) => `<tr><td>${esc(p.label)}${helpButton(permissionHelpKey(p.key))}</td><td class="small muted">${p.from.map(esc).join(", ")}</td></tr>`).join("")}
+    </tbody></table></div>`).join("");
+  return `<div class="message message-info section-gap"><b>Rechte von ${esc(e.email)}</b>${e.superadmin ? " – Superadmin: darf alles" : ""}
+    <button type="button" class="icon-button" data-admin-action="effective-close" aria-label="schließen">✕</button>
+    ${areas || `<p class="small muted">In deinen Bereichen keine Rechte.</p>`}</div>`;
+}
+
+function eventsTable() {
+  return `<div class="table-wrap keyword-table"><table class="mini-table admin-table"><thead><tr><th>Zeit</th><th>Wer</th><th>Was</th><th></th></tr></thead><tbody>
+    ${admin.events.map((x) => `<tr><td class="small nowrap">${formatDate(x.at)} ${esc(x.at.slice(11, 16))}</td><td class="small">${esc(x.email || "")}</td><td>${esc(x.action)}</td><td class="small muted">${esc(x.detail)}</td></tr>`).join("")
+      || `<tr><td colspan="4" class="muted">Noch keine Einträge.</td></tr>`}</tbody></table></div>`;
+}
+
+// Rollen passend zum gewählten Bereich (aus /api/admin/memberships: nur, was der Benutzer dort vergeben darf)
 function filterRoleOptions() {
-  const scope = ($("#grant-scope")?.value || "").split(":")[0];
   const select = $("#grant-role");
-  if (!select) return;
-  for (const option of select.options) option.hidden = option.dataset.scope !== scope;
-  if (select.selectedOptions[0]?.hidden) select.value = [...select.options].find((o) => !o.hidden)?.value || "";
+  const scope = admin.userScopes?.find((x) => x.key === $("#grant-scope")?.value);
+  if (!select || !scope) return;
+  select.innerHTML = scope.roles.map((r) => `<option value="${esc(r.key)}">${esc(r.label)}</option>`).join("");
+}
+
+// ------------------------------------------------------------ Rollen
+const permissionHelpKey = (key) => `perm_${key.replace(".", "_")}`;
+const roleById = (id) => admin.roles.roles.find((r) => r.id === id);
+
+function roleOrigin(r) {
+  if (r.system) return "System";
+  if (!r.vg) return "alle VGs";
+  return admin.roles.vgs.find((v) => v.slug === r.vg)?.name || r.vg;
+}
+
+function rolesSection() {
+  const { roles, permissions, vgs, superadmin } = admin.roles;
+  const canCreate = superadmin || vgs.some((v) => v.manage);
+  const head = roles.map((r) => `<th class="center role-head">
+    <button type="button" class="link-button" data-admin-action="role-open" data-id="${r.id}">${esc(r.label)}</button>
+    <span class="small muted">${admin.roles.scopes[r.scope]} · ${esc(roleOrigin(r))}</span></th>`).join("");
+  let group = "";
+  const body = permissions.map((p) => {
+    const groupRow = p.group !== group ? `<tr class="group-row"><th colspan="${roles.length + 1}">${esc(group = p.group)}</th></tr>` : "";
+    const cells = roles.map((r) => {
+      if (!p.scopes.includes(r.scope)) return `<td class="center muted" data-tip="Für Rollen dieses Bereichs nicht vorgesehen">·</td>`;
+      if (r.permissions.includes(p.key)) return `<td class="center" data-tip="eigenes Recht">●</td>`;
+      if (r.effective.includes(p.key)) return `<td class="center muted" data-tip="geerbt von ${esc(roleById(r.parent)?.label || "")}">○</td>`;
+      return "<td></td>";
+    }).join("");
+    return `${groupRow}<tr><td>${esc(p.label)}${helpButton(permissionHelpKey(p.key))}</td>${cells}</tr>`;
+  }).join("");
+  const users = `<tr class="group-row"><th colspan="${roles.length + 1}">Zuordnungen</th></tr>
+    <tr><td>Personen mit dieser Rolle</td>${roles.map((r) => `<td class="center">${r.members}</td>`).join("")}</tr>`;
+  return `<p class="small muted">● eigenes Recht, ○ geerbt. Rollen eines Bereichs „VG“ gelten in allen Wehren der VG.
+    Rechte, Vererbung und wer eine Rolle vergeben darf, stehen im Editor (Klick auf den Namen).${helpButton("admin_roles")}</p>
+    ${admin.roleDraft ? roleEditor() : ""}
+    ${canCreate && !admin.roleDraft ? `<div class="admin-actions left"><button type="button" class="btn btn-primary btn-small" data-admin-action="role-new">Neue Rolle</button></div>` : ""}
+    <div class="table-wrap section-gap"><table class="mini-table admin-table role-matrix"><thead><tr><th>Recht</th>${head}</tr></thead>
+    <tbody>${body}${users}</tbody></table></div>`;
+}
+
+// Rollen, die für den Entwurf in Frage kommen (gelten in seiner VG)
+const draftVisible = (d) => admin.roles.roles.filter((r) => r.id !== d.id && (r.vg === null || r.vg === d.vg));
+
+function draftInherited(d) {
+  const parent = d.parent ? roleById(d.parent) : null;
+  return parent ? parent.effective : [];
+}
+
+function roleEditor() {
+  const d = admin.roleDraft;
+  const { permissions, vgs, superadmin } = admin.roles;
+  const readOnly = d.id !== null && !d.editable;
+  const disabled = readOnly ? "disabled" : "";
+  const inherited = draftInherited(d);
+  const effective = new Set([...inherited, ...d.permissions]);
+  const others = draftVisible(d);
+  const vgOptions = [...(superadmin ? [{ slug: "", name: "alle VGs" }] : []), ...vgs.filter((v) => superadmin || v.manage)];
+  const scopeField = d.id === null
+    ? adminField("Bereich", `<select data-role="scope">${Object.entries(admin.roles.scopes).map(([k, l]) => `<option value="${k}" ${k === d.scope ? "selected" : ""}>${l}</option>`).join("")}</select>`)
+    : adminField("Bereich", `<input type="text" value="${esc(admin.roles.scopes[d.scope])}" disabled>`);
+  const vgField = d.id === null
+    ? adminField("Gilt in", `<select data-role="vg">${vgOptions.map((v) => `<option value="${esc(v.slug)}" ${v.slug === (d.vg || "") ? "selected" : ""}>${esc(v.name)}</option>`).join("")}</select>`)
+    : adminField("Gilt in", `<input type="text" value="${esc(roleOrigin(d))}" disabled>`);
+  const parents = others.filter((r) => r.scope === d.scope);
+  let group = "";
+  const checks = permissions.map((p) => {
+    const heading = p.group !== group ? `<div class="check-group">${esc(group = p.group)}</div>` : "";
+    const wrongScope = !p.scopes.includes(d.scope);
+    const fromParent = inherited.includes(p.key);
+    const checked = fromParent || d.permissions.includes(p.key);
+    const note = wrongScope ? `nur für Rollen ${p.scopes.map((x) => admin.roles.scopes[x] === "VG" ? "der VG" : "einer Wehr").join(" oder ")}`
+      : fromParent ? "geerbt" : p.requires.length ? `setzt voraus: ${p.requires.map((k) => permissions.find((x) => x.key === k).label).join(", ")}` : "";
+    return `${heading}<label class="check ${wrongScope ? "muted" : ""}"><input type="checkbox" data-role-permission="${p.key}"
+      ${checked ? "checked" : ""} ${wrongScope || fromParent || readOnly ? "disabled" : ""}> ${esc(p.label)}${helpButton(permissionHelpKey(p.key))}
+      ${note ? `<span class="small muted">${esc(note)}</span>` : ""}</label>`;
+  }).join("");
+  const granters = others.filter((r) => r.effective.includes("users.grant"));
+  const grantable = others.filter((r) => d.vg !== null || r.vg === null);
+  const roleChecks = (list, field) => list.map((r) => `<label class="check"><input type="checkbox" data-role-${field}="${r.id}"
+    ${d[field].includes(r.id) ? "checked" : ""} ${disabled}> ${esc(r.label)} <span class="small muted">${admin.roles.scopes[r.scope]}</span></label>`).join("")
+    || `<span class="small muted">keine</span>`;
+  return `<div class="role-editor section-gap">
+    <h3>${d.id === null ? "Neue Rolle" : esc(d.label)}${helpButton("admin_role_editor")}
+      ${readOnly ? `<span class="tenant-badge">nur ansehen</span>` : ""}</h3>
+    <div class="form-grid">
+      ${adminField("Bezeichnung", `<input type="text" data-role="label" value="${esc(d.label)}" maxlength="60" ${disabled}>`, "span-2")}
+      ${scopeField}${vgField}
+      ${adminField("Erbt von", `<select data-role="parent" ${disabled}><option value="">–</option>${parents.map((r) =>
+        `<option value="${r.id}" ${r.id === d.parent ? "selected" : ""}>${esc(r.label)} (${esc(roleOrigin(r))})</option>`).join("")}</select>`, "span-2")}
+      ${adminField("Beschreibung", `<input type="text" data-role="description" value="${esc(d.description)}" maxlength="300" ${disabled}>`, "span-4")}
+    </div>
+    <h4 class="section-gap">Rechte</h4>
+    <div class="check-grid">${checks}</div>
+    <h4 class="section-gap">Verteilung${helpButton("admin_role_grants")}</h4>
+    <div class="check-columns">
+      <div><div class="check-group">Diese Rolle dürfen vergeben</div>${roleChecks(granters, "granted_by")}</div>
+      ${effective.has("users.grant") ? `<div><div class="check-group">Inhaber dieser Rolle vergeben</div>${roleChecks(grantable, "grants")}</div>` : ""}
+    </div>
+    <div class="admin-actions">
+      ${d.id !== null && d.deletable ? `<button type="button" class="btn btn-outline" data-admin-action="role-delete">Löschen</button>` : ""}
+      ${d.id !== null && (superadmin || vgs.some((v) => v.manage)) ? `<button type="button" class="btn btn-light" data-admin-action="role-copy">Als Kopie anlegen</button>` : ""}
+      <button type="button" class="btn btn-outline" data-admin-action="role-cancel">${readOnly ? "Schließen" : "Abbrechen"}</button>
+      ${readOnly ? "" : `<button type="button" class="btn btn-primary" data-admin-action="role-save">Speichern</button>`}
+    </div></div>`;
+}
+
+function roleDraftFrom(r) {
+  return { id: r.id, label: r.label, description: r.description, scope: r.scope, vg: r.vg, parent: r.parent,
+    permissions: [...r.permissions], granted_by: [...r.granted_by], grants: [...r.grants],
+    editable: r.editable, deletable: r.deletable, system: r.system };
+}
+
+function newRoleDraft(base = null) {
+  const { vgs, superadmin } = admin.roles;
+  const vg = base ? (base.vg ?? (superadmin ? null : vgs.find((v) => v.manage)?.slug))
+    : (admin.vg && vgs.some((v) => v.slug === admin.vg && v.manage) ? admin.vg : vgs.find((v) => v.manage)?.slug ?? null);
+  const draft = { id: null, label: base ? `${base.label} (Kopie)` : "", description: base?.description || "",
+    scope: base?.scope || "tenant", vg, parent: base?.parent ?? null, permissions: [...(base?.permissions || [])],
+    granted_by: [], grants: [], editable: true, deletable: false, system: false };
+  // Standard der Verteilung: wer Rollen der VG pflegt, darf die neue Rolle auch vergeben
+  draft.granted_by = draftVisible(draft).filter((r) => r.effective.includes("roles.manage")).map((r) => r.id);
+  return draft;
+}
+
+// Recht an- oder abwählen: mit allen Voraussetzungen bzw. allem, was darauf aufbaut
+function toggleRolePermission(key, on) {
+  const d = admin.roleDraft;
+  const { permissions } = admin.roles;
+  const set = new Set(d.permissions);
+  if (on) {
+    const todo = [key];
+    while (todo.length) {
+      const k = todo.pop();
+      if (set.has(k)) continue;
+      set.add(k);
+      todo.push(...permissions.find((p) => p.key === k).requires);
+    }
+  } else {
+    const todo = [key];
+    while (todo.length) {
+      const k = todo.pop();
+      set.delete(k);
+      todo.push(...permissions.filter((p) => p.requires.includes(k) && set.has(p.key)).map((p) => p.key));
+    }
+  }
+  d.permissions = permissions.filter((p) => set.has(p.key) && p.scopes.includes(d.scope)).map((p) => p.key);
+}
+
+function rolePayload() {
+  const d = admin.roleDraft;
+  return { label: d.label, description: d.description, scope: d.scope, vg: d.vg || null, parent: d.parent,
+    permissions: d.permissions, granted_by: d.granted_by, grants: d.grants };
 }
 
 // ------------------------------------------------------------ Superadmin: Wehren und VGs
@@ -678,14 +869,60 @@ async function runAdminAction(button) {
     }
     case "grant": {
       const [grantScope, grantSlug] = $("#grant-scope").value.split(":");
-      admin.memberships = (await apiJson("/api/admin/memberships", "POST",
-        { email: $("#grant-email").value, scope: grantScope, slug: grantSlug, role: $("#grant-role").value })).memberships;
+      const selected = $("#grant-scope").value;
+      setMemberships(await apiJson("/api/admin/memberships", "POST",
+        { email: $("#grant-email").value, scope: grantScope, slug: grantSlug, role: $("#grant-role").value }));
+      admin.events = null;
       toast("Zugeordnet");
-      return rerender();
+      rerender();
+      if (admin.userScopes.some((x) => x.key === selected)) { $("#grant-scope").value = selected; filterRoleOptions(); }
+      return;
     }
     case "revoke":
-      if (!confirm(`Zuordnung von ${email} entfernen?`)) return;
-      admin.memberships = (await api(`/api/admin/memberships?${new URLSearchParams({ email, scope, slug })}`, { method: "DELETE" })).memberships;
+      if (!confirm(`Rolle von ${email} in diesem Bereich entfernen?`)) return;
+      setMemberships(await api(`/api/admin/memberships?${new URLSearchParams({ email, scope, slug, role: key })}`, { method: "DELETE" }));
+      admin.events = null;
+      return rerender();
+    case "effective":
+      admin.effective = await api(`/api/admin/users/effective?${new URLSearchParams({ email })}`);
+      rerender();
+      $(".admin-body .message-info")?.scrollIntoView({ block: "nearest" });
+      return;
+    case "effective-close":
+      admin.effective = null;
+      return rerender();
+    case "events":
+      admin.events = (await api("/api/admin/role-events")).events;
+      return rerender();
+    case "role-open":
+      admin.roleDraft = roleDraftFrom(roleById(Number(button.dataset.id)));
+      rerender();
+      $(".role-editor")?.scrollIntoView({ block: "start" });
+      return;
+    case "role-new":
+      admin.roleDraft = newRoleDraft();
+      return rerender();
+    case "role-copy":
+      admin.roleDraft = newRoleDraft(admin.roleDraft);
+      return rerender();
+    case "role-cancel":
+      admin.roleDraft = null;
+      return rerender();
+    case "role-save": {
+      const d = admin.roleDraft;
+      admin.roles = d.id === null ? await apiJson("/api/admin/roles", "POST", rolePayload())
+        : await apiJson(`/api/admin/roles/${d.id}`, "PUT", rolePayload());
+      admin.roleDraft = null;
+      admin.memberships = admin.events = null;          // Rollenauswahl und Protokoll neu laden
+      toast("Rolle gespeichert");
+      return rerender();
+    }
+    case "role-delete":
+      if (!confirm(`Rolle „${admin.roleDraft.label}“ löschen?`)) return;
+      admin.roles = await api(`/api/admin/roles/${admin.roleDraft.id}`, { method: "DELETE" });
+      admin.roleDraft = null;
+      admin.memberships = admin.events = null;
+      toast("Rolle gelöscht");
       return rerender();
     case "create-vg":
       admin.superOverview = await apiJson("/api/super/vgs", "POST", { slug: $("#vg-slug").value.trim(), name: $("#vg-name").value });
@@ -717,7 +954,7 @@ async function keywordsChanged(message) {
 async function superChanged(message) {
   if (!config.tenants.length) { location.reload(); return; }   // erste Wehr: Jahre, Reiter usw. neu aufbauen
   admin.overview = null;
-  admin.settings = admin.keywords = admin.memberships = null;
+  admin.settings = admin.keywords = admin.memberships = admin.roles = admin.roleDraft = null;
   await refreshCurrentTenant();
   renderScopes();
   renderTabs();
@@ -839,6 +1076,7 @@ window.addEventListener("beforeunload", (e) => {
 
 function handleAdminInput(e) {
   const t = e.target;
+  if (t.dataset.role === "label" || t.dataset.role === "description") { admin.roleDraft[t.dataset.role] = t.value; return; }
   if (t.dataset.bind) { setPath(t.dataset.bind, t.dataset.number !== undefined ? Number(t.value) : inputValue(t)); return; }
   if (t.dataset.fee) { setFeePath(t.dataset.fee, t.type === "number" ? Number(t.value || 0) : t.value); return; }
   if (t.dataset.colorPicker) { setColor(t.dataset.colorPicker, t.value.toUpperCase(), "picker"); return; }
@@ -923,6 +1161,7 @@ $("#view-admin").addEventListener("change", async (e) => {
       return;
     }
     if (t.id === "grant-scope") { filterRoleOptions(); return; }
+    if (admin.roleDraft && handleRoleChange(t)) { renderAdmin(); return; }
     if (t.dataset.tenantActive) {
       admin.superOverview = await apiJson(`/api/super/tenants/${t.dataset.tenantActive}`, "PUT", { active: t.checked });
       await superChanged(t.checked ? "Wehr aktiviert" : "Wehr deaktiviert");
@@ -938,6 +1177,31 @@ $("#view-admin").addEventListener("change", async (e) => {
     renderAdmin();
   }
 });
+
+// Auswahl im Rollen-Editor -> true, wenn neu gezeichnet werden soll
+function handleRoleChange(t) {
+  const d = admin.roleDraft;
+  if (t.dataset.rolePermission) { toggleRolePermission(t.dataset.rolePermission, t.checked); return true; }
+  for (const field of ["granted_by", "grants"]) {
+    const id = t.dataset[field === "granted_by" ? "roleGranted_by" : "roleGrants"];
+    if (id !== undefined) {
+      d[field] = t.checked ? [...new Set([...d[field], Number(id)])] : d[field].filter((x) => x !== Number(id));
+      return true;
+    }
+  }
+  if (t.dataset.role === "parent") { d.parent = t.value ? Number(t.value) : null; return true; }
+  if (t.dataset.role === "scope" || t.dataset.role === "vg") {
+    d[t.dataset.role] = t.dataset.role === "vg" ? (t.value || null) : t.value;
+    // Elternrolle, Verteilung und Rechte nur behalten, wenn sie zum neuen Bereich bzw. zur VG passen
+    const ids = new Set(draftVisible(d).map((r) => r.id));
+    if (d.parent && (!ids.has(d.parent) || roleById(d.parent).scope !== d.scope)) d.parent = null;
+    d.granted_by = d.granted_by.filter((x) => ids.has(x));
+    d.grants = d.grants.filter((x) => ids.has(x) && (d.vg !== null || roleById(x).vg === null));
+    d.permissions = d.permissions.filter((k) => admin.roles.permissions.find((p) => p.key === k).scopes.includes(d.scope));
+    return true;
+  }
+  return false;
+}
 
 // Rollenauswahl passend zum ersten Bereich, sobald der Benutzer-Bereich gezeichnet ist
 new MutationObserver(() => { if (admin.section === "users") filterRoleOptions(); })

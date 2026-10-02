@@ -1,18 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-Mandanten: Verbandsgemeinden (VG), ihre Wehren, Benutzer und Rollen.
+Mandanten: Verbandsgemeinden (VG), ihre Wehren, Benutzer und ihre Zuordnungen (Rollen).
 
 Jede Wehr hat eine eigene Datenbank (tenants/<slug>/einsaetze.db) mit Einsätzen und ihrer
-Fachkonfiguration. Die zentrale Datenbank (app.db) kennt nur VGs, Wehren und Zuordnungen.
+Fachkonfiguration. Die zentrale Datenbank (app.db) kennt VGs, Wehren, Rollen und Zuordnungen.
 
-Rollen (Bereich, Rechte):
-  vg_lead   Wehrleiter      VG    Statistik, Einsätze, Erfassen, Verwaltung, vergibt alle Rollen der VG – ohne Anwesenheit
-  vg_stats  Statistik VG    VG    nur Statistik (z. B. Bürgermeister)
-  lead      Wehrführer      Wehr  Statistik, Einsätze, Anwesenheit, Erfassen, Verwaltung, vergibt Erfasser/Benutzer
-  editor    Erfasser        Wehr  Statistik, Einsätze, Anwesenheit, Erfassen
-  viewer    Benutzer        Wehr  nur Statistik
-Superadmins (ADMIN_EMAILS) dürfen alles. Die Anwesenheit (Namen der Kameraden) sehen sonst nur Wehrführer und
-Erfasser der Wehr, nicht der Wehrleiter. Ohne ADMIN_EMAILS ist die Anmeldung aus (lokaler Betrieb): dann gilt
+Rollen und Rechte stehen in rbac.py (Startbestand: Wehrleiter und Statistik VG für die VG, Wehrführer,
+Erfasser und Benutzer für eine Wehr). Eine Zuordnung zur VG gilt in allen ihren Wehren. Superadmins
+(ADMIN_EMAILS) dürfen alles. Ohne ADMIN_EMAILS ist die Anmeldung aus (lokaler Betrieb): dann gilt
 jeder Aufruf als Superadmin.
 """
 import dataclasses
@@ -21,32 +16,13 @@ import os
 import re
 import threading
 
-from app import db, domain
+from app import db, domain, rbac
 from app.tenant_config import TenantConfig, Vehicle
 
 ADMIN_EMAILS = {e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").replace(";", ",").split(",")
                 if e.strip()}
 
 SLUG = re.compile(r"[a-z0-9][a-z0-9-]{0,38}[a-z0-9]")
-
-# Rechte
-STATS = "stats"            # Auswertung ohne Personenbezug
-INCIDENTS = "incidents"    # Einsatzliste, Einsätze, Export (ohne Anwesenheit)
-PEOPLE = "people"          # Anwesenheit und Kameraden (Namen) – Wehrführer, Erfasser und Superadmin
-WRITE = "write"            # PDF einlesen, Einsätze bearbeiten und löschen
-ADMIN = "admin"            # Fachkonfiguration und Branding der Wehr, Benutzer zuordnen
-
-ROLES = {  # Rolle -> (Bereich, Bezeichnung, Rechte)
-    "vg_lead": ("vg", "Wehrleiter", {STATS, INCIDENTS, WRITE, ADMIN}),        # bewusst ohne PEOPLE
-    "vg_stats": ("vg", "Statistik VG", {STATS}),
-    "lead": ("tenant", "Wehrführer", {STATS, INCIDENTS, PEOPLE, WRITE, ADMIN}),
-    "editor": ("tenant", "Erfasser", {STATS, INCIDENTS, PEOPLE, WRITE}),
-    "viewer": ("tenant", "Benutzer", {STATS}),
-}
-ALL_PERMISSIONS = frozenset({STATS, INCIDENTS, PEOPLE, WRITE, ADMIN})
-# Welche Rollen eine Rolle vergeben darf (innerhalb ihres Bereichs)
-GRANTABLE = {"vg_lead": set(ROLES), "lead": {"editor", "viewer"}}
-
 
 def auth_enabled():
     return bool(ADMIN_EMAILS)
@@ -200,12 +176,34 @@ def add_account(con, email):
     return email
 
 
+def scope_vg(con, scope, scope_id):
+    """VG-ID eines Bereichs (die VG selbst bzw. die VG der Wehr) oder None."""
+    if scope == "vg":
+        row = con.execute("SELECT id FROM vg WHERE id = ?", (scope_id,)).fetchone()
+    else:
+        row = con.execute("SELECT vg_id FROM tenant WHERE id = ?", (scope_id,)).fetchone()
+    return row[0] if row else None
+
+
+def find_role(con, key, scope, scope_id):
+    """Rolle mit diesem Schlüssel, die im Bereich gilt (System-, globale oder eigene Rolle der VG), sonst None."""
+    role = rbac.Roles(con).find(key, scope_vg(con, scope, scope_id))
+    return role if role and role.scope == scope else None
+
+
 def grant(con, email, role, scope_id):
-    """Rolle zuordnen; scope_id ist die VG- bzw. Wehr-ID passend zum Bereich der Rolle."""
-    scope = ROLES[role][0]
+    """Rolle zuordnen (zusätzlich zu vorhandenen); role ist der Schlüssel, scope_id die VG- bzw. Wehr-ID
+    passend zum Bereich der Rolle."""
+    for scope in ("tenant", "vg"):
+        found = find_role(con, role, scope, scope_id)
+        if found:
+            break
+    else:
+        raise ValueError(f"Rolle „{role}“ gibt es in diesem Bereich nicht.")
     email = add_account(con, email)
-    con.execute("INSERT INTO membership (email, scope, scope_id, role) VALUES (?, ?, ?, ?) "
-                "ON CONFLICT(email, scope, scope_id) DO UPDATE SET role = excluded.role", (email, scope, scope_id, role))
+    con.execute("INSERT OR IGNORE INTO membership (email, scope, scope_id, role_id) VALUES (?, ?, ?, ?)",
+                (email, found.scope, scope_id, found.id))
+    return found
 
 
 def normalize_email(email):
@@ -281,8 +279,9 @@ class Access:
     email: str
     superadmin: bool
     tenants: dict              # slug -> Tenant, nur aktive Wehren mit mindestens einem Recht (und AVV)
-    roles: list                # [{role, scope, scope_id, label}] für die Anzeige
+    roles: list                # [{role, role_id, scope, scope_id, vg_id, label}] eigene Zuordnungen
     vgs: dict = dataclasses.field(default_factory=dict)   # slug -> Name der VGs mit Gesamtansicht
+    vg_permissions: dict = dataclasses.field(default_factory=dict)   # VG-ID -> Rechte aus Rollen der VG
     selected: Tenant = None
     vg: str = None             # Slug der ausgewählten VG
     blocked: list = dataclasses.field(default_factory=list)   # [{slug, name}] VGs, deren Wehren der AVV fehlt
@@ -316,10 +315,22 @@ class Access:
             raise Forbidden("Keine Wehr zugeordnet.")
         return self.tenant(self.selected.slug, permission)
 
-    def manages_vg(self, vg_id):
-        """Superadmin oder Wehrleiter dieser VG (Prüfprotokoll, Rollen der VG)."""
-        return self.superadmin or any(r["role"] == "vg_lead" and r["scope"] == "vg" and r["scope_id"] == vg_id
-                                      for r in self.roles)
+    def vg_can(self, vg_id, permission):
+        """Recht auf Ebene der VG (aus Rollen der VG): Gesamtansicht, Prüfprotokoll, Gebühren, Rollen."""
+        return self.superadmin or permission in self.vg_permissions.get(vg_id, ())
+
+    def grantable(self, roles, scope, scope_id, vg_id):
+        """IDs der Rollen, die der Benutzer in diesem Bereich vergeben und entziehen darf: nach der Verteilung
+        seiner Rollen der VG und – bei einer Wehr – seiner Rollen dieser Wehr."""
+        visible = {r.id for r in roles.visible(vg_id) if r.scope == scope}
+        if self.superadmin:
+            return visible
+        result = set()
+        for r in self.roles:
+            if (r["scope"] == "vg" and r["scope_id"] == vg_id) or \
+                    (scope == "tenant" and r["scope"] == "tenant" and r["scope_id"] == scope_id):
+                result |= roles.grants(r["role_id"])
+        return result & visible
 
     def is_member(self, tenant):
         """Hat eine eigene Rolle in dieser Wehr (nicht nur über VG-Rolle oder als Superadmin)."""
@@ -363,35 +374,40 @@ def access_for(email, scope=None):
                            "FROM tenant t JOIN vg v ON v.id = t.vg_id WHERE t.active ORDER BY v.name, t.name").fetchall()
         # Ohne AVV (fehlende Zeile = ausstehend) sind die Wehren einer VG gesperrt – außer für Superadmins
         signed = {r[0] for r in con.execute("SELECT vg_id FROM dpa WHERE status IN ('signed', 'not_required')")}
-        memberships = con.execute("SELECT scope, scope_id, role FROM membership WHERE email = ?",
-                                  (email,)).fetchall() if email else []
-    permissions = {r["slug"]: set(ALL_PERMISSIONS) if superadmin else set() for r in rows}
+        roles = rbac.Roles(con)
+        memberships = con.execute(
+            "SELECT m.scope, m.scope_id, m.role_id, COALESCE(t.vg_id, m.scope_id) AS vg_id FROM membership m "
+            "LEFT JOIN tenant t ON m.scope = 'tenant' AND t.id = m.scope_id WHERE m.email = ?",
+            (email,)).fetchall() if email else []
+    permissions = {r["slug"]: rbac.allowed(rbac.ALL_PERMISSIONS, "tenant") if superadmin else set() for r in rows}
+    vg_permissions = {}
     for m in memberships:
-        if m["role"] not in ROLES:
-            continue
+        granted = roles.permissions(m["role_id"])
+        if m["scope"] == "vg":
+            vg_permissions.setdefault(m["scope_id"], set()).update(granted)
         for r in rows:
             if (m["scope"] == "tenant" and r["id"] == m["scope_id"]) or (m["scope"] == "vg" and r["vg_id"] == m["scope_id"]):
-                permissions[r["slug"]] |= ROLES[m["role"]][2]
+                permissions[r["slug"]] |= rbac.allowed(granted, "tenant")     # ohne reine VG-Rechte
     blocked = {} if superadmin else {r["vg_slug"]: r["vg_name"] for r in rows
                                      if permissions[r["slug"]] and r["vg_id"] not in signed}
     tenants = {r["slug"]: Tenant(r["id"], r["slug"], r["name"], r["vg_id"], r["vg_slug"], r["vg_name"],
                                  frozenset(permissions[r["slug"]]))
                for r in rows if permissions[r["slug"]] and r["vg_slug"] not in blocked}
-    roles = [{"role": m["role"], "scope": m["scope"], "scope_id": m["scope_id"], "label": ROLES[m["role"]][1]}
-             for m in memberships if m["role"] in ROLES]
-    vg_role_ids = {m["scope_id"] for m in memberships if m["scope"] == "vg" and m["role"] in ROLES}
+    own = [{"role": role.key, "role_id": role.id, "scope": m["scope"], "scope_id": m["scope_id"], "vg_id": m["vg_id"],
+            "label": role.label} for m in memberships if (role := roles.get(m["role_id"]))]
+    overview = {vg_id for vg_id, granted in vg_permissions.items() if rbac.VG_OVERVIEW in granted}
     vgs = {}
     for r in rows:
-        if r["slug"] in tenants and (superadmin or r["vg_id"] in vg_role_ids):
+        if r["slug"] in tenants and (superadmin or r["vg_id"] in overview):
             vgs.setdefault(r["vg_slug"], r["vg_name"])
-    access = Access(email, superadmin, tenants, roles, vgs,
+    access = Access(email, superadmin, tenants, own, vgs, {k: frozenset(v) for k, v in vg_permissions.items()},
                     blocked=[{"slug": slug, "name": name} for slug, name in blocked.items()])
     kind, _, wanted = (scope or "").partition(":")
     if kind == "t" and wanted in tenants:
         access.selected = tenants[wanted]
     elif kind == "vg" and wanted in vgs:
         access.vg = wanted
-    elif vg_role_ids and vgs and not superadmin:
+    elif any(m["scope"] == "vg" for m in memberships) and vgs and not superadmin:
         access.vg = next(iter(vgs))
     else:
         access.selected = next(iter(tenants.values()), None)

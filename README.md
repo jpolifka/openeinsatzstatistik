@@ -111,23 +111,35 @@ eine eigene Datenbank und eine eigene Fachkonfiguration (Fahrzeuge, BKS-Kennung,
 Bedarfsplan). Wer sich anmeldet, sieht nur die Wehren, denen er zugeordnet ist; bei mehreren
 gibt es oben eine Auswahl.
 
-| Rolle | Bereich | Statistik | Einsätze | Anwesenheit und Kameraden | Berichte einlesen, bearbeiten | Verwaltung der Wehr |
-|---|---|:-:|:-:|:-:|:-:|:-:|
-| Superadmin (`ADMIN_EMAILS`) | alle | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Wehrleiter | alle Wehren einer VG | ✓ | ✓ | – | ✓ | ✓ |
-| Statistik VG (z. B. Bürgermeister) | alle Wehren einer VG | ✓ | – | – | – | – |
-| Wehrführer | eine Wehr | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Erfasser | eine Wehr | ✓ | ✓ | ✓ | ✓ | – |
-| Benutzer | eine Wehr | ✓ | – | – | – | – |
+Rechte und Rollen (`app/rbac.py`): Die **Rechte** sind fest (Auswertung, Bedarfsplan, Einsätze ansehen,
+exportieren, einlesen, bearbeiten, löschen, Anwesenheit sehen/bearbeiten, Einstellungen, Stichworte,
+Gesamtansicht, Prüfprotokoll, Gebühren, AVV, Zuordnungen sehen, Rollen vergeben, Rollen pflegen). Eine
+**Rolle** bündelt Rechte für einen Bereich – eine Wehr oder eine VG (gilt dann in allen Wehren der VG).
+Rollen erben von einer anderen Rolle desselben Bereichs, eine Person kann mehrere Rollen haben. Startbestand
+(entspricht dem früheren festen Modell):
 
-Die Anwesenheit (Namen der Kameraden) sehen nur Wehrführer, Erfasser und der Superadmin – nicht
-der Wehrleiter. Er sieht bei einem Einsatz nur die Anzahl der Anwesenden; der Excel-Export enthält
+| Rolle | Bereich | erbt von | Statistik | Einsätze | Anwesenheit und Kameraden | Berichte einlesen, bearbeiten | Verwaltung | vergibt |
+|---|---|---|:-:|:-:|:-:|:-:|:-:|---|
+| Superadmin (`ADMIN_EMAILS`) | alle | – | ✓ | ✓ | ✓ | ✓ | ✓ | alles |
+| Wehrleiter | VG | Statistik VG | ✓ | ✓ | – | ✓ | ✓ (+ Rollen der VG) | alle Rollen |
+| Statistik VG (z. B. Bürgermeister) | VG | – | ✓ | – | – | – | – | – |
+| Wehrführer | Wehr | Erfasser | ✓ | ✓ | ✓ | ✓ | ✓ | Erfasser, Benutzer |
+| Erfasser | Wehr | Benutzer | ✓ | ✓ | ✓ | ✓ | – | – |
+| Benutzer | Wehr | – | ✓ | – | – | – | – | – |
+
+**Eigene Rollen:** Der Wehrleiter legt unter Verwaltung → Rollen eigene Rollen für seine VG an (z. B.
+„Gruppenführer“: erbt Benutzer, darf Einsätze einlesen und bearbeiten, aber nicht löschen), der Superadmin Rollen für alle VGs und ändert die
+Systemrollen. Die **Verteilung** legt fest, welche Rolle welche Rollen vergeben darf. Änderungen gelten
+sofort; Vergaben und Rollenänderungen stehen im Protokoll (nur anhängbar).
+
+**Leitplanken** (fest im Code): Die Anwesenheit (Namen der Kameraden) gibt es nur für Rollen einer
+Wehr – der Wehrleiter sieht bei einem Einsatz nur die Anzahl der Anwesenden; der Excel-Export enthält
 für ihn kein Blatt Anwesenheit, Kameraden und die Anwesenheitsübersicht der Auswertung fehlen.
-Rollen mit Anwesenheit kann man sich (außer als Superadmin) nicht selbst geben. Rollen nur mit Statistik sehen keine Namen:
-Einsatzliste und Excel-Export sind für sie ebenfalls gesperrt. Geprüft wird im Backend, die
-Oberfläche blendet nur aus.
+Eigene Zuordnungen und Rollen, die man selbst hat (auch über Vererbung), ändert nur jemand anderes.
+Rollen nur mit Statistik sehen keine Namen: Einsatzliste und Excel-Export sind für sie ebenfalls
+gesperrt. Geprüft wird im Backend, die Oberfläche blendet nur aus.
 
-**Gesamtansicht einer VG** (Wehrleiter, Statistik VG, Superadmin; oben „Wehrleitung · …“):
+**Gesamtansicht einer VG** (Recht „Gesamtansicht“: Wehrleiter, Statistik VG, Superadmin; oben „Wehrleitung · …“):
 - Auswertung über alle Wehren der VG, auf einzelne Wehren filterbar. Ein Einsatz mehrerer Wehren
   zählt bei jeder Wehr (Beteiligungen); die große Zahl zählt ihn über den Stammdatensatz im
   BKS-Portal bzw. die Einsatznummer der Leitstelle nur einmal. Der Bedarfsplan wertet jede Wehr
@@ -141,7 +153,7 @@ Oberfläche blendet nur aus.
   eigenen Fahrzeuge im Bericht nur bei Wehren ohne BKS-Kennung). Haben andere Wehren denselben
   Einsatz schon erfasst, zeigt die Vorschau „gemeinsamer Einsatz mit …“.
 
-**Verwaltung** (Reiter „Verwaltung“ für Wehrführer, Wehrleiter und Superadmin):
+**Verwaltung** (Reiter „Verwaltung“ mit einem Verwaltungsrecht, im Startbestand Wehrführer, Wehrleiter und Superadmin):
 - *Wehr*: Name, Farben (Farbwähler, Hex oder RGB, mit Vorschau und Kontrastprüfung), Logos.
 - *Fahrzeuge*: Reihenfolge, Bezeichnung, Dienstzeitraum („im Dienst ab“, „außer Dienst ab“), Nachfolger,
   Zählung im Bedarfsplan, Ersatzfahrzeuge. Neue eigene Fahrzeuge aus BKS-Berichten nimmt die App beim
@@ -150,8 +162,9 @@ Oberfläche blendet nur aus.
 - *Orte & Bedarfsplan*: Orte mit Namensanfang, Ausrückebereich, Alarmstufe, Zeitgrenzen, Tagesstunden.
 - *Stichworte*: Vorlage der AAO oder eigener Katalog – einzelne Stichworte anlegen, ändern, deaktivieren;
   Import aus CSV/Excel mit Vorschau.
-- *Benutzer*: E-Mail-Adressen Rollen zuordnen (Wehrführer vergeben Erfasser und Benutzer, Wehrleiter alle
-  Rollen ihrer VG). Den letzten Wehrleiter einer VG entfernt nur der Superadmin.
+- *Benutzer*: E-Mail-Adressen Rollen zuordnen – nach der Verteilung der eigenen Rolle, nie sich selbst.
+  „Rechte“ zeigt, was eine Person darf und über welche Rolle; dazu das Protokoll der Vergaben.
+- *Rollen*: Rechtematrix aller Rollen; eigene Rollen anlegen, ändern, kopieren und löschen (siehe oben).
 - *Wehren & VGs* (Superadmin): VGs und Wehren anlegen, umbenennen, einer VG zuordnen, deaktivieren und
   entfernen (die Daten wandern nach `daten/deleted/`, gelöscht wird nichts).
 
@@ -259,11 +272,11 @@ fehlt sie (z. B. bei selbst angelegten Brandsicherheitswachen), vergibt die App 
 „nach Datum durchnummerieren“ vergibt alle Nummern nach dem Einsatzbeginn – ein später eingelesener
 Einsatz rückt an seine Stelle, die folgenden Nummern verschieben sich.
 
-**Bedarfsplan:** Wehrführer und Wehrleiter sehen ihn immer und geben ihn mit „für alle freigegeben“
+**Bedarfsplan:** Rollen mit „Bedarfsplan ohne Freigabe sehen“ (Wehrführer, Wehrleiter) sehen ihn immer; mit „Bedarfsplan freigeben“ geben sie ihn über „für alle freigegeben“
 (Karte in der Auswertung oder Verwaltung → Orte & Bedarfsplan) für die übrigen Rollen frei. Ohne
 Freigabe fehlt er für diese auch in der Gesamtansicht und im Kennzahlen-Export.
 
-**Kostenersatz** (Wehrleiter): Verwaltung → Gebührenordnung pflegt die Satzung der VG in Fassungen
+**Kostenersatz** (Recht „Prüfprotokoll und Kostenersatz“, Gebührenordnung mit „Gebührenordnung und Fahrzeuge der VG“; im Startbestand der Wehrleiter): Verwaltung → Gebührenordnung pflegt die Satzung der VG in Fassungen
 mit „gültig ab“ (für die VG Bad Hönningen vorbelegt mit der Satzung vom 16.05.2024 – Beginn der
 Gültigkeit bitte prüfen). Im Prüfprotokoll rechnet „Kostenersatz berechnen“ einen Einsatz über alle
 beteiligten Wehren: Fahrzeuge vom Ausrücken bis zum Einsatzende des Fahrzeugs, Einsatzkräfte von der
@@ -301,7 +314,8 @@ DATA_DIR=daten uvicorn app.main:app --reload --port 8112
 ```text
 app/
   main.py          FastAPI: Schnittstellen, Anmeldung, Zugriff je Wehr
-  tenancy.py       VGs, Wehren, Rollen und Rechte; Fachkonfiguration laden und speichern
+  tenancy.py       VGs, Wehren, Zuordnungen und Zugriff je Anfrage; Fachkonfiguration laden und speichern
+  rbac.py          Rechtekatalog, Rollen mit Vererbung und Verteilung, Leitplanken, Protokoll
   auth.py          Anmeldung per Magic Link
   mail.py          Mailversand per SMTP mit DKIM, Prüfung von SPF/DKIM/DMARC
   domain.py        Fachkonstanten für alle Wehren (Stichworte, Einsatzarten, Standardwerte)

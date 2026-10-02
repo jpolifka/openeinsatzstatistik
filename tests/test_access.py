@@ -82,7 +82,8 @@ def test_statistics_roles_see_no_names(world, email):
     assert response.json()["attendance"] is None
     assert "Muster" not in response.text
     config = client.get("/api/config").json()
-    assert config["permissions"] == ["stats"]
+    assert "stats.view" in config["permissions"]
+    assert not {"incidents.view", "people.view", "incidents.edit"} & set(config["permissions"])
 
 
 def test_foreign_scope_cookie_falls_back_to_own_tenant(world):
@@ -153,7 +154,7 @@ def test_vg_lead_sees_no_attendance(world):
     assert incident["people"] == [] and incident["people_count"] == 1 and not incident["people_visible"]
     assert "Max" not in client.get("/api/incidents?year=2025").text
     assert client.get("/api/evaluation?year=2025").json()["attendance"] is None
-    assert "people" not in client.get("/api/config").json()["permissions"]
+    assert "people.view" not in client.get("/api/config").json()["permissions"]
     export = client.get("/api/export?year=2025")
     assert export.status_code == 200
     import io, openpyxl
@@ -179,3 +180,27 @@ def test_no_self_grant_of_attendance_roles(world):
     assert client.post("/api/admin/memberships", json=grant_self).status_code == 403
     grant_other = {**grant_self, "email": "neu@example.org"}
     assert client.post("/api/admin/memberships", json=grant_other).status_code == 200
+
+
+def test_fine_grained_rights_of_own_role(world):
+    """Eigene Rolle nur mit „Einsätze ansehen“: Liste ja, Export, Einlesen, Bearbeiten und Löschen nein."""
+    client, ids = world
+    _as(client, "admin@example.org")
+    client.post("/api/admin/roles", json={"label": "Leser", "scope": "tenant", "vg": "vg-a",
+                                          "permissions": ["incidents.view"]})
+    client.post("/api/admin/memberships", json={"email": "leser@example.org", "scope": "tenant", "slug": "wehr-a1",
+                                                "role": "leser"})
+    _as(client, "leser@example.org")
+    assert client.get("/api/incidents?year=2025").status_code == 200
+    assert client.get("/api/export?year=2025").status_code == 403
+    assert client.post("/api/reports", files=[("pdfs", ("a.txt", b"x", "text/plain"))]).status_code == 403
+    assert client.put(f"/api/incidents/{ids['wehr-a1']}", json={"description": "x"}).status_code == 403
+    assert client.delete(f"/api/incidents/{ids['wehr-a1']}").status_code == 403
+    assert client.get("/api/members?tenant=wehr-a1").status_code == 403
+
+
+@pytest.mark.parametrize("email,status", [("vglead@example.org", 200), ("vgstats@example.org", 403),
+                                          ("lead@example.org", 403), ("admin@example.org", 200)])
+def test_records_need_vg_right(world, email, status):
+    client, _ = world
+    assert _as(client, email, scope="vg:vg-a").get("/api/records?year=2025").status_code == status

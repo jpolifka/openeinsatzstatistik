@@ -461,6 +461,17 @@ h2 .help-btn, h3 .help-btn { color: var(--brand); }
 .logo-preview { width: 72px; height: 72px; flex: none; border-radius: 10px; background: var(--light-gray); display: flex; align-items: center; justify-content: center; }
 .logo-slot.on-brand .logo-preview { background: var(--brand); }
 .logo-preview img { max-width: 60px; max-height: 60px; }
+/* Rollen: Rechtematrix und Editor */
+.role-matrix th.role-head { white-space: normal; min-width: 96px; vertical-align: bottom; }
+.role-matrix th.role-head span { display: block; font-weight: 400; }
+.link-button { border: 0; background: none; padding: 0; font: inherit; font-weight: 700; color: var(--brand-dark); cursor: pointer; text-align: center; }
+.link-button:hover, .link-button:focus-visible { text-decoration: underline; }
+.role-editor { border: 1px solid var(--line); border-radius: 12px; padding: 16px; background: var(--white); }
+.check-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 4px 18px; }
+.check-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 4px 18px; }
+.check-group { grid-column: 1 / -1; margin-top: 10px; font-size: .78rem; font-weight: 700; color: var(--gray); text-transform: uppercase; letter-spacing: .04em; }
+.check { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; padding: 3px 0; }
+.check input { accent-color: var(--brand); width: 16px; height: 16px; flex: none; transform: translateY(2px); }
 @media (max-width: 900px) {
   .admin-colors, .logo-slots { grid-template-columns: 1fr; }
 }

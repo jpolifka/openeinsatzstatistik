@@ -7,6 +7,9 @@ const CHANGELOG = [
   {
     date: "2026-10-02",
     items: [
+      "<b>Rollen selbst gestalten:</b> Unter Verwaltung → <b>Rollen</b> steht, welche Rolle was darf. Der Wehrleiter kann eigene Rollen für seine VG anlegen – zum Beispiel einen „Gruppenführer“, der Einsätze einliest und bearbeitet, aber nicht löscht.",
+      "<b>Feinere Rechte:</b> Ansehen, Exportieren, Einlesen, Bearbeiten und Löschen von Einsätzen sind getrennte Rechte. Schaltflächen, die man nicht nutzen darf, sind ausgeblendet.",
+      "<b>Mehrere Rollen</b> je Person sind möglich. Unter Verwaltung → Benutzer zeigt <b>Rechte</b>, was jemand darf und woher; das <b>Protokoll</b> zeigt, wer wann Rollen vergeben oder geändert hat.",
       "<b>Hilfe passend zur Ansicht:</b> Das <b>?</b> im Kopf öffnet die Hilfe direkt beim Thema der aktuellen Seite – auch im Fenster „Bericht einlesen“ und in jedem Bereich der Verwaltung.",
       "<b>Neuigkeiten</b> und <b>Feedback</b> im Hilfefenster: Hier steht, was neu ist. Fragen, Fehler und Wünsche gehen direkt an den Betreiber.",
       "<b>Anwesenheit</b> sehen nur noch Wehrführer und Erfasser. Der Wehrleiter sieht die Zahl der Personen, aber keine Namen.",

@@ -31,7 +31,8 @@ def test_single_install_becomes_tenant(old_install):
     assert (old_install / "einsaetze-vor-mandanten.db").exists() and not (old_install / "einsaetze.db").exists()
     with tenancy.central() as con:
         tenant = con.execute("SELECT t.slug, t.name, v.name AS vg FROM tenant t JOIN vg v ON v.id = t.vg_id").fetchone()
-        roles = con.execute("SELECT email, role FROM membership ORDER BY email").fetchall()
+        roles = con.execute("SELECT m.email, r.key FROM membership m JOIN role r ON r.id = m.role_id "
+                            "ORDER BY m.email").fetchall()
     assert tuple(tenant) == ("rheinbrohl", "Feuerwehr Rheinbrohl", "VG Bad Hönningen")
     assert [tuple(r) for r in roles] == [("e.beispiel@example.org", "lead"), ("m.muster@example.org", "lead")]
     with tenancy.central() as con:                     # Eigenbetrieb: kein AVV nötig, Wehr bleibt nutzbar
