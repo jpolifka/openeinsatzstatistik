@@ -10,6 +10,7 @@ const state = {
   tableCards: new Set(),                      // Diagramme, die gerade als Tabelle angezeigt werden
   memberSort: { field: "incidents", descending: true },
   upload: { token: null, reports: [], errors: [] }, dataChanged: false,
+  tenantFilter: new Set(),                    // Gesamtansicht: ausgewählte Wehren (leer = alle)
 };
 
 // ------------------------------------------------------------ Hilfsfunktionen
@@ -140,9 +141,10 @@ function chartCard({ id, title, subtitle = "", chart, table, extra = "", heading
 const VIEWS = {   // permission: nötiges Recht, sonst fehlt der Reiter
   evaluation: { label: "Auswertung", load: loadEvaluation, render: renderEvaluation, permission: "stats" },
   incidents: { label: "Einsätze", load: loadIncidents, render: renderIncidents, permission: "incidents" },
-  members: { label: "Kameraden", load: loadEvaluation, render: renderMembers, permission: "incidents" },
+  // Kameraden gehören zu einer Wehr – nicht in der Gesamtansicht einer VG
+  members: { label: "Kameraden", load: loadEvaluation, render: renderMembers, permission: "incidents", single: true },
 };
-const allowedViews = () => Object.keys(VIEWS).filter((key) => can(VIEWS[key].permission));
+const allowedViews = () => Object.keys(VIEWS).filter((key) => can(VIEWS[key].permission) && !(VIEWS[key].single && config.vg));
 
 function renderTabs() {
   $("#tabs").innerHTML = allowedViews().map((key) => `<a href="#${key}" data-view="${key}">${VIEWS[key].label}</a>`).join("");
@@ -150,10 +152,9 @@ function renderTabs() {
 
 // Auswahl der Wehr in der Kopfzeile, nur wenn mehrere sichtbar sind
 function renderScopes() {
-  const current = config.tenant && `t:${config.tenant.slug}`;
   $("#scope-select").hidden = config.scopes.length < 2;
   $("#scope").innerHTML = config.scopes.map((s) =>
-    `<option value="${esc(s.key)}" ${s.key === current ? "selected" : ""}>${esc(s.name)}</option>`).join("");
+    `<option value="${esc(s.key)}" ${s.key === config.scope ? "selected" : ""}>${esc(s.name)}</option>`).join("");
 }
 
 async function loadYears() {
@@ -167,9 +168,10 @@ async function loadYears() {
 }
 
 async function loadEvaluation() {
-  const e = state.evaluation;
-  if (!e || e.year !== state.year || e.response_plan.limit !== state.limit) {
-    state.evaluation = await api(`/api/evaluation?year=${state.year}&limit=${state.limit}`);
+  const e = state.evaluation, filter = [...state.tenantFilter].sort().join(",");
+  if (!e || e.year !== state.year || e.response_plan.limit !== state.limit || e.filter !== filter) {
+    state.evaluation = await api(`/api/evaluation?year=${state.year}&limit=${state.limit}${filter ? `&tenants=${encodeURIComponent(filter)}` : ""}`);
+    state.evaluation.filter = filter;
   }
 }
 
@@ -219,8 +221,11 @@ function renderEvaluation() {
   }
   const kpi = (title, value, sub, hero = false) =>
     `<div class="kpi ${hero ? "hero" : ""}"><span class="kpi-title">${title}</span><span class="kpi-value">${value}</span><span class="kpi-sub">${sub}</span></div>`;
+  const vg = state.evaluation.tenants;
   const kpis = `<div class="kpis">
-    ${kpi(`Einsätze ${state.year}`, s.count, esc(comparison), true)}
+    ${vg ? kpi(`Einsätze ${state.year}${helpButton("participations")}`, vg.unique,
+      esc(`${vg.participations} Beteiligungen der Wehren${vg.without_dispatch_number ? ` · ${vg.without_dispatch_number} ohne Leitstellen-Nr.` : ""}`), true)
+      : kpi(`Einsätze ${state.year}`, s.count, esc(comparison), true)}
     ${kpi(`Einsätze / Woche${helpButton("per_week")}`, num(s.per_week, 2), currentYear ? "bis zur aktuellen KW" : "im ganzen Jahr")}
     ${kpi(`Ø Einsatzdauer${helpButton("duration")}`, formatDuration(s.duration_avg_min), "Alarm bis Einsatzende")}
     ${kpi(`Einsatzstunden${helpButton("operation_hours")}`, formatHours(s.duration_total_min), "Summe aller Einsätze")}
@@ -228,11 +233,38 @@ function renderEvaluation() {
     ${kpi(`Eintreffen ≤ ${plan.limit} Min.${helpButton("on_time")}`, percent(plan.total.rate), `${plan.total.on_time} von ${plan.total.count} (Bedarfsplan)`)}
   </div>`;
 
-  $("#view-evaluation").innerHTML = kpis + responsePlanCard(plan, previousPlan) + `
+  $("#view-evaluation").innerHTML = evaluationToolbar() + kpis + responsePlanCard(plan, previousPlan) + (vg ? tenantsCard(vg) : "") + `
     <div class="grid grid-3">${categoriesCard(s)}${levelsCard(s)}${areasCard(s)}</div>
     <div class="grid">${monthsCard(s)}</div>
     <div class="grid">${historyCard(state.evaluation.history)}</div>
     <div class="grid grid-2">${hoursCard(s)}${weekdaysCard(s)}</div>`;
+}
+
+// Kopf der Auswertung: Wehr-Filter (Gesamtansicht), Drucken und Kennzahlen-Export
+function evaluationToolbar() {
+  const tenants = config.vg ? config.tenants : [];
+  const chips = tenants.length > 1 ? `<div class="segments tenant-filter" role="group" aria-label="Wehren">
+    <button type="button" data-tenant-filter="" class="${state.tenantFilter.size ? "" : "active"}">Alle Wehren</button>
+    ${tenants.map((t) => `<button type="button" data-tenant-filter="${esc(t.slug)}" class="${state.tenantFilter.has(t.slug) ? "active" : ""}">${esc(t.name)}</button>`).join("")}
+  </div>` : "<div></div>";
+  const chosen = state.tenantFilter.size ? tenants.filter((t) => state.tenantFilter.has(t.slug)).map((t) => t.name).join(", ") : "";
+  return `<div class="evaluation-toolbar no-print">${chips}<div class="toolbar-right">
+      <button type="button" class="btn btn-light btn-small" data-action="summary-export" data-tip="Kennzahlen je Wehr, ohne Namen">Kennzahlen (Excel)</button>
+      <button type="button" class="btn btn-light btn-small" data-action="print" data-tip="Druckansicht, im Druckdialog „Als PDF sichern“">Drucken / PDF</button>
+    </div></div>
+    <p class="print-only print-stamp">${esc(config.name)} · Einsatzstatistik ${state.year}${chosen ? ` · ${esc(chosen)}` : ""} · Stand ${formatDate(new Date().toISOString())}</p>`;
+}
+
+function tenantsCard(vg) {
+  const rows = vg.rows.map((r) => [esc(r.name), r.count, r.plan_count, percent(r.rate), minutes(r.arrival_min),
+    num(r.duration_hours, 0), num(r.staff_hours, 0)]);
+  const sum = (key) => vg.rows.reduce((total, r) => total + (r[key] || 0), 0);
+  const table = dataTable(["Wehr", "Einsätze", "Bedarfsplan", "Erreichungsgrad", "Ø Eintreffzeit", "Einsatzstunden", "Personalstunden"],
+    rows, ["Summe (Beteiligungen)", vg.participations, sum("plan_count"), "", "", num(sum("duration_hours"), 0), num(sum("staff_hours"), 0)]);
+  const items = vg.rows.map((r) => ({ label: r.name, value: r.count, tip: `${r.name}: ${r.count} Einsätze` }));
+  const extra = keyFigures([[vg.unique, "Einsätze ohne Doppelte"], [vg.participations - vg.unique, "gemeinsame Beteiligungen"]]);
+  return `<div class="grid">${chartCard({ id: "tenants", title: `Wehren${helpButton("participations")}`,
+    subtitle: "Einsätze je Wehr; ein gemeinsamer Einsatz zählt bei jeder beteiligten Wehr", chart: barChart(items), table, extra })}</div>`;
 }
 
 function responsePlanCard(plan, previousPlan) {
@@ -414,7 +446,8 @@ function renderIncidents() {
     `<button type="button" data-category="${c.code}" class="${state.category === c.code ? "active" : ""}" ${c.code !== "all" ? `data-tip="${c.name}"` : ""}>${c.code === "all" ? c.name : c.code}<span class="count">${count(c.code)}</span></button>`).join("");
 
   const visible = list.filter(matchesFilter).reverse();   // neueste zuerst
-  const limit = config.default_limit;
+  const limit = config.default_limit, withTenant = Boolean(config.vg);
+  const tenantNames = Object.fromEntries(config.tenants.map((t) => [t.slug, t.name]));
   $("#incident-table tbody").innerHTML = visible.map((e) => {
     const open = state.expanded.has(e.id);
     const arrival = e.arrival_min == null ? `<span class="muted">–</span>`
@@ -423,7 +456,7 @@ function renderIncidents() {
       <td><span class="number">${orDash(e.number)}</span></td>
       <td><div>${formatDate(e.started_at)}</div><div class="time">${weekdayShort(e.started_at)} ${formatTime(e.started_at)}${e.weekend_or_holiday ? " · WE/FT" : ""}</div></td>
       <td><span class="keyword ${categoryOf(e.keyword).toLowerCase()}" ${keywordName(e) ? `data-tip="${esc(keywordName(e))}"` : ""}>${esc(e.keyword)}${e.subcode ? "." + esc(e.subcode) : ""}</span></td>
-      <td><div class="incident-title">${esc(e.description)}</div><div class="incident-place">${esc(e.place)}</div></td>
+      <td><div class="incident-title">${esc(e.description)}</div><div class="incident-place">${withTenant ? `<span class="tenant-badge">${esc(tenantNames[e.tenant] || e.tenant)}</span>` : ""}${esc(e.place)}</div></td>
       <td>${e.unit_leader ? esc(e.unit_leader) : `<span class="muted">–</span>`}</td>
       <td>${vehicleChips(e)}</td>
       <td class="right">${arrival}</td>
@@ -705,7 +738,7 @@ function previewStatus(r) {
     const diffs = existing.differences.length ? plural(existing.differences.length, "Abweichung", "Abweichungen") : "keine Abweichungen";
     return status("existing", r.number ?? "?", `Einsatz ${r.number}/${r.year} ist bereits erfasst`, `${origin} · ${diffs}`);
   }
-  return status("", r.number ?? "?", `Neuer Einsatz ${r.number ?? ""}${r.number ? "/" + r.year : ""}`,
+  return status("", r.number ?? "?", `Neuer Einsatz ${r.number ?? ""}${r.number ? "/" + r.year : ""}${config.vg ? ` · ${esc(r.tenant_name)}` : ""}`,
     [esc(r.filename), ...reviewReasons(r).map(esc)].join(" · "));
 }
 
@@ -729,7 +762,8 @@ function renderPreviews() {
         <div class="preview-grid">
           <div class="panel outlined"><h4>Fahrzeuge${helpButton("vehicles")}</h4>${vehicleTable(r)}
             <p class="small muted section-gap">Ezeit erstes Fahrzeug: <b>${minutes(r.arrival_min)}</b> · Gesamtstärke ${r.crew_total}</p></div>
-          <div class="panel outlined"><h4>Prüfhinweise${helpButton("warnings")}</h4>${warningsList(r.warnings, "Keine Prüfhinweise")}${differencesTable(existing)}</div>
+          <div class="panel outlined"><h4>Prüfhinweise${helpButton("warnings")}</h4>${warningsList(r.warnings, "Keine Prüfhinweise")}${differencesTable(existing)}
+            ${r.shared_with?.length ? `<p class="small muted section-gap">Gemeinsamer Einsatz mit ${esc(r.shared_with.join(", "))} (gleiche Einsatznummer der Leitstelle).</p>` : ""}</div>
         </div>
         <div class="panel outlined">${attendancePanel(r, { markNew: true, pickLeader: true })}</div>
         <div class="preview-footer">
@@ -810,7 +844,21 @@ $("#view-evaluation").addEventListener("click", (e) => {
   if (limitButton && Number(limitButton.dataset.limit) !== state.limit) {
     state.limit = Number(limitButton.dataset.limit);
     showView();
+    return;
   }
+  const filterButton = e.target.closest("[data-tenant-filter]");
+  if (filterButton) {
+    const slug = filterButton.dataset.tenantFilter;
+    if (!slug) state.tenantFilter.clear();
+    else if (state.tenantFilter.has(slug)) state.tenantFilter.delete(slug);
+    else state.tenantFilter.add(slug);
+    if (state.tenantFilter.size === config.tenants.length) state.tenantFilter.clear();
+    showView();
+    return;
+  }
+  const action = e.target.closest("[data-action]")?.dataset.action;
+  if (action === "print") window.print();
+  if (action === "summary-export") location.href = `/api/export/summary?year=${state.year}`;
 });
 
 $("#category-filter").addEventListener("click", (e) => {
@@ -1020,11 +1068,12 @@ $("#scope").addEventListener("change", async (e) => {
     fail(e.message);
     return;
   }
+  $(".topbar-kicker").textContent = `Einsatzstatistik · ${config.name}`;
   if (config.user) {
     $("#logout").hidden = false;
     $("#logout button").dataset.tip = `Abmelden (${config.user})`;
   }
-  if (!config.tenant) {
+  if (!config.tenants.length) {
     fail(config.superadmin ? "Es ist noch keine Wehr angelegt." : "Dir ist keine Wehr zugeordnet.");
     return;
   }

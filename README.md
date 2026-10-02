@@ -95,6 +95,18 @@ gibt es oben eine Auswahl.
 Rollen nur mit Statistik sehen keine Namen: Anwesenheit, Einsatzliste, Kameraden und der
 Excel-Export sind für sie gesperrt. Geprüft wird im Backend, die Oberfläche blendet nur aus.
 
+**Gesamtansicht einer VG** (Wehrleiter, Statistik VG, Superadmin; oben „Alle Wehren · …“):
+- Auswertung über alle Wehren der VG, auf einzelne Wehren filterbar. Ein Einsatz mehrerer Wehren
+  zählt bei jeder Wehr (Beteiligungen); die große Zahl zählt ihn über die Einsatznummer der
+  Leitstelle nur einmal. Der Bedarfsplan wertet jede Wehr mit ihren eigenen Orten aus.
+- Einsatzliste aller Wehren mit Markierung der Wehr; Kameraden gibt es nur je Wehr.
+- Excel-Export als eine Mappe mit Übersicht und je Wehr Einsatzübersicht und Anwesenheit.
+  „Kennzahlen (Excel)“ enthält nur die Zahlen je Wehr, ohne Namen.
+- „Drucken / PDF“ öffnet die Druckansicht der Auswertung (im Druckdialog als PDF sichern).
+- PDF einlesen verteilt die Berichte auf die passende Wehr (über die berichtende Einheit,
+  ersatzweise die eigenen Fahrzeuge im Bericht). Haben andere Wehren denselben Einsatz schon
+  erfasst, zeigt die Vorschau „gemeinsamer Einsatz mit …“.
+
 **Umstellung einer bestehenden Installation:** Liegt beim Start noch `daten/einsaetze.db` (ohne
 `daten/app.db`), übernimmt die App sie einmalig als Wehr „Rheinbrohl“ in der „VG Bad Hönningen“
 (`daten/tenants/rheinbrohl/einsaetze.db`), samt den bisherigen Fahrzeugen, Orten und Logos. Die

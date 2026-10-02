@@ -230,6 +230,28 @@ def response_plan(evaluated, limit, cfg):
             "without_times": len(relevant) - len(timed)}
 
 
+# ---------------------------------------------------------------- Mehrere Wehren
+def unique_incidents(incidents):
+    """Einsätze ohne Doppelte über mehrere Wehren -> (anzahl, ohne_nummer).
+
+    Gleiche Einsatznummer der Leitstelle = ein gemeinsamer Einsatz. Einsätze ohne Nummer
+    (Altdaten aus der Excel-Übersicht) zählen einzeln.
+    """
+    numbers = {i["dispatch_number"] for i in incidents if i.get("dispatch_number")}
+    without = sum(1 for i in incidents if not i.get("dispatch_number"))
+    return len(numbers) + without, without
+
+
+def summary(evaluated, limit, cfg):
+    """Kennzahlen einer Wehr (oder der Summe) für Übersichten – ohne Personenbezug."""
+    plan = response_plan(evaluated, limit, cfg)["total"]
+    durations = [m["duration_min"] for _, m in evaluated if m["duration_min"] is not None]
+    staff_minutes = sum(m["duration_min"] * m["attendees"] for _, m in evaluated if m["duration_min"] is not None)
+    return {"count": len(evaluated), "plan_count": plan["count"], "on_time": plan["on_time"], "rate": plan["rate"],
+            "arrival_min": plan["arrival_min"], "duration_hours": round(sum(durations) / 60, 1),
+            "staff_hours": round(staff_minutes / 60, 1)}
+
+
 # ---------------------------------------------------------------- Blatt Anwesenheit
 def attendance_overview(evaluated):
     count = len(evaluated)
