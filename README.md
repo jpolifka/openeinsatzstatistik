@@ -234,6 +234,14 @@ der Wehren und die Befunde – Stärke und Zeiten der Fahrzeuge im Vergleich zum
 anderes Stichwort, fehlende, unbearbeitete (ohne Anwesenheit) und Berichte ohne Nr. „Als geprüft
 markieren“ gilt für den jetzigen Stand der Befunde; „Drucken / PDF“ für die Ablage.
 
+**Einsatz bearbeiten** (Einsätze → aufklappen → Bearbeiten): Felder, Fahrzeuge (dabei, Stärke,
+Ausrücken, Eintreffen) und Anwesenheit (Person entfernen, vorhandenen Kameraden oder neue Person
+„Nachname, Vorname“ hinzufügen). Manuell ergänzte Fahrzeuge und Personen bleiben erhalten, wenn der
+Bericht später erneut eingelesen wird; Werte von Fahrzeugen aus der PDF ersetzt der neue Bericht.
+
+**Kameraden:** Ein Klick auf eine Person zeigt ihre Einsätze im Jahr, ein Klick auf einen Einsatz
+öffnet ihn in der Einsatzliste.
+
 Was die einzelnen Felder und Kennzahlen bedeuten, erklärt die Online-Hilfe in der App.
 
 ## Entwicklung

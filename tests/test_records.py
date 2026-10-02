@@ -155,3 +155,41 @@ def test_vehicle_differences_compare_minutes_and_skip_unknown_old_times():
         {"vehicle": "02/45", "field": "Stärke", "source": 4, "stored": 5},
         {"vehicle": "02/45", "field": "Eintreffen", "source": None, "stored": "10:16"},
         {"vehicle": "02/24", "field": "Fahrzeug", "source": "ausgerückt", "stored": None}]
+
+
+def test_edit_vehicles_and_people_survive_reimport(vg):
+    client = _as(vg, "lead1@example.org")
+    data = _upload(client, "a1.pdf")
+    saved = _accept(client, data, "a1.pdf")
+    members = {m["name"]: m["id"] for m in client.get("/api/members?tenant=wehr-a1").json()["members"]}
+    body = {"vehicles": [{"call_sign": "02/45", "crew": 4, "departed": "10:12", "arrived": "10:16"},
+                         {"call_sign": "02/71", "crew": 3, "departed": "10:20", "arrived": None}],
+            "people": [{"id": members["Muster, Max"], "role": "Einheitsführer", "vehicle": "02/45"},
+                       {"name": "Neu, Nora", "role": "Maschinist", "vehicle": "02/71"}]}
+    edited = client.put(f"/api/incidents/{saved['id']}", json=body).json()
+    vehicles = {v["call_sign"]: v for v in edited["vehicles"] if v["crew"] is not None}
+    assert {cs: (v["crew"], v["departed"]) for cs, v in vehicles.items()} == \
+        {"02/45": (4, "10:12:00"), "02/71": (3, "10:20:00")}           # 02/24 entfernt
+    assert sorted(p["name"] for p in edited["people"]) == ["Muster, Max", "Neu, Nora"]
+    assert "Neu, Nora" in [m["name"] for m in client.get("/api/members?tenant=wehr-a1").json()["members"]]
+
+    # Erneut eingelesen: Werte aus der PDF ersetzen die importierten Zeilen, manuelle bleiben
+    data = _upload(client, "a1.pdf")
+    updated = _accept(client, data, "a1.pdf", replace=True)
+    vehicles = {v["call_sign"]: v["crew"] for v in updated["vehicles"] if v["crew"] is not None}
+    assert vehicles == {"02/45": 2, "02/24": 0, "02/71": 3}
+    assert "Neu, Nora" in [p["name"] for p in updated["people"]]
+
+
+def test_edit_rejects_invalid_values(vg):
+    client = _as(vg, "lead1@example.org")
+    saved = _accept(client, _upload(client, "a1.pdf"), "a1.pdf")
+    url = f"/api/incidents/{saved['id']}"
+    assert client.put(url, json={"vehicles": [{"call_sign": "09/99"}]}).status_code == 422
+    assert client.put(url, json={"vehicles": [{"call_sign": "02/45", "departed": "25:00"}]}).status_code == 422
+    response = client.put(url, json={"description": "geändert", "vehicles": [{"call_sign": "02/45", "crew": 120}]})
+    assert response.status_code == 422
+    # Nichts halb gespeichert
+    incident = [i for i in client.get("/api/incidents?year=2025").json()["incidents"] if i["id"] == saved["id"]][0]
+    assert incident["description"] != "geändert"
+    assert client.get("/api/members?tenant=wehr-a2").status_code == 403
