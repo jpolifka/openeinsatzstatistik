@@ -291,7 +291,7 @@ def replace_vehicles(con, incident_id, rows):
     """Fahrzeuge aus dem Formular: [{call_sign, crew, departed, arrived}]. Nicht genannte Fahrzeuge entfallen;
     vorhandene behalten Name, Alarmierung und Ende, neue gelten als manuell ergänzt."""
     current = {r["call_sign"]: dict(r) for r in con.execute("SELECT * FROM vehicle WHERE incident_id = ?", (incident_id,))}
-    wanted = {}
+    wanted, rows_by_sign = {}, {row["call_sign"]: row for row in rows}
     for row in rows:
         crew = to_int(row.get("crew"))
         if crew is not None and not 0 <= crew <= 99:
@@ -302,6 +302,10 @@ def replace_vehicles(con, incident_id, rows):
         con.execute("DELETE FROM vehicle WHERE incident_id = ? AND call_sign = ?", (incident_id, call_sign))
     for call_sign, values in wanted.items():
         if call_sign in current:
+            for key in ("departed", "arrived"):    # nur Minuten im Formular: Sekunden aus dem Bericht behalten
+                stored, given = current[call_sign][key], (rows_by_sign[call_sign].get(key) or "").strip()
+                if stored and len(given) == 5 and stored[:5] == given:
+                    values[key] = stored
             con.execute("UPDATE vehicle SET crew = ?, departed = ?, arrived = ? WHERE incident_id = ? AND call_sign = ?",
                         (values["crew"], values["departed"], values["arrived"], incident_id, call_sign))
         else:

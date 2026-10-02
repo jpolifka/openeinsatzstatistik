@@ -655,15 +655,15 @@ function readForm(el) {
 
 // Bearbeiten: Fahrzeuge direkt im Formular, Anwesenheit als Entwurf (state.editDraft) bis zum Speichern
 function vehicleEditTable(e) {
-  const time = (t) => t ? t.slice(0, 5) : "";
+  const time = (t) => t ? t.slice(0, 8) : "";   // mit Sekunden (step="1"), sonst ändern sich Azeit und Ezeit
   return `<div class="table-wrap"><table class="mini-table vehicle-edit"><thead><tr>
     <th>Fzg.</th><th>dabei</th><th>Stärke</th><th>Ausrücken</th><th>Eintreffen</th></tr></thead>
     <tbody>${e.vehicles.map((v) => `<tr data-vehicle="${esc(v.call_sign)}">
       <td><strong>${esc(v.call_sign)}</strong></td>
       <td><input type="checkbox" data-v="present" ${isIdle(v) ? "" : "checked"} aria-label="${esc(v.call_sign)} im Einsatz"></td>
       <td><input type="number" min="0" max="99" data-v="crew" value="${v.crew ?? ""}" aria-label="Stärke ${esc(v.call_sign)}"></td>
-      <td><input type="time" data-v="departed" value="${time(v.departed)}" aria-label="Ausrücken ${esc(v.call_sign)}"></td>
-      <td><input type="time" data-v="arrived" value="${time(v.arrived)}" aria-label="Eintreffen ${esc(v.call_sign)}"></td>
+      <td><input type="time" step="1" data-v="departed" value="${time(v.departed)}" aria-label="Ausrücken ${esc(v.call_sign)}"></td>
+      <td><input type="time" step="1" data-v="arrived" value="${time(v.arrived)}" aria-label="Eintreffen ${esc(v.call_sign)}"></td>
     </tr>`).join("")}</tbody></table></div>`;
 }
 
