@@ -121,7 +121,7 @@ def _style_header(cell, **alignment):
 def _write_overview(ws, sheet, incidents, year):
     layout = sheet.layout
     column = layout.column
-    ws["A1"] = f"Import aus Einsatzberichten – Spalten A:{get_column_letter(layout.last_column)} " \
+    ws["A1"] = f"{sheet.cfg.name}: Import aus Einsatzberichten – Spalten A:{get_column_letter(layout.last_column)} " \
                f"entsprechen 1:1 dem Blatt Einsatzübersicht_{year}"
     ws["A1"].font = Font(name="Calibri", size=16, bold=True)
     groups = [(layout.vehicle_column(cs, "crew"), layout.vehicle_column(cs, "arrival"), cs.replace("/", "-") + "-1")
@@ -155,7 +155,7 @@ def _write_overview(ws, sheet, incidents, year):
     ws.freeze_panes = f"{column['start']}{FIRST_ROW}"
 
 
-def _write_attendance(ws, sheet, incidents, members):
+def _write_attendance(ws, sheet, incidents, members, overview_title):
     ws["A1"] = "Anwesenheit – Spalten entsprechen 1:1 dem Blatt Anwesenheit (Werte kopieren)"
     ws["A1"].font = Font(name="Calibri", size=14, bold=True)
     member_columns = {m["id"]: ATTENDANCE_FIRST_COLUMN + i for i, m in enumerate(members)}
@@ -176,7 +176,7 @@ def _write_attendance(ws, sheet, incidents, members):
     L = get_column_letter
     for r, incident in enumerate(incidents, start=FIRST_ROW):
         for column, key, number_format in linked:
-            cell = ws.cell(r, column, f"={OVERVIEW_SHEET}!{sheet.layout.column[key]}{r}")
+            cell = ws.cell(r, column, f"='{overview_title}'!{sheet.layout.column[key]}{r}")
             cell.number_format, cell.fill, cell.border, cell.alignment = number_format, FORMULA_FILL, BORDER, CENTER
         for column in range(ATTENDANCE_FIRST_COLUMN, last + 1):
             ws.cell(r, column).border, ws.cell(r, column).alignment = BORDER, CENTER
@@ -235,7 +235,72 @@ def write_workbook(incidents, members, year, target, cfg):
     overview = wb.active
     overview.title = OVERVIEW_SHEET
     _write_overview(overview, sheet, incidents, year)
-    last_member_column = _write_attendance(wb.create_sheet(ATTENDANCE_SHEET), sheet, incidents, members)
+    last_member_column = _write_attendance(wb.create_sheet(ATTENDANCE_SHEET), sheet, incidents, members, OVERVIEW_SHEET)
     _write_instructions(wb.create_sheet("Anleitung"), sheet, last_member_column)
+    wb.calculation = CalcProperties(fullCalcOnLoad=True)
+    wb.save(target)
+
+
+# ---------------------------------------------------------------- Mehrere Wehren und Kennzahlen
+SUMMARY_COLUMNS = (("name", "Wehr", None), ("count", "Einsätze", "0"), ("plan_count", "Bedarfsplan: Einsätze", "0"),
+                   ("on_time", "davon in der Zeitgrenze", "0"), ("rate", "Erreichungsgrad", "0%"),
+                   ("arrival_min", "Ø Eintreffzeit (min)", "0.0"), ("duration_hours", "Einsatzstunden", "0.0"),
+                   ("staff_hours", "Personalstunden", "0.0"))
+
+
+def _sheet_title(prefix, name, taken):
+    """Blattname (höchstens 31 Zeichen, ohne verbotene Zeichen), eindeutig in der Mappe."""
+    base = f"{prefix} {''.join(c for c in name if c not in '[]:*?/\\')}"[:31].rstrip()
+    title, n = base, 2
+    while title in taken:
+        title, n = f"{base[:28]} {n}", n + 1
+    taken.add(title)
+    return title
+
+
+def write_summary(ws, rows, total, year, limit, notes=()):
+    """Kennzahlen je Wehr und Summe (rows/total: metrics.summary mit "name"). Ohne Namen von Personen."""
+    ws["A1"] = f"Einsatzstatistik {year} – Kennzahlen je Wehr (Bedarfsplan mit {limit} Minuten)"
+    ws["A1"].font = Font(name="Calibri", size=14, bold=True)
+    for i, (_, title, _) in enumerate(SUMMARY_COLUMNS, start=1):
+        _style_header(ws.cell(HEADER_ROW, i, title), horizontal="center", vertical="center")
+    for r, row in enumerate([*rows, total], start=FIRST_ROW):
+        for i, (key, _, number_format) in enumerate(SUMMARY_COLUMNS, start=1):
+            cell = ws.cell(r, i, row.get(key))
+            cell.border = BORDER
+            if number_format:
+                cell.number_format = number_format
+            if row is total:
+                cell.font = Font(name="Calibri", size=11, bold=True)
+    for i, note in enumerate(notes, start=FIRST_ROW + len(rows) + 2):
+        ws.cell(i, 1, note)
+    ws.column_dimensions["A"].width = 30
+    for i in range(2, len(SUMMARY_COLUMNS) + 1):
+        ws.column_dimensions[get_column_letter(i)].width = 16
+
+
+def write_summary_workbook(rows, total, year, limit, target, notes=()):
+    """Nur die Kennzahlen (für Rollen ohne Zugriff auf Namen)."""
+    wb = openpyxl.Workbook()
+    wb.active.title = "Übersicht"
+    write_summary(wb.active, rows, total, year, limit, notes)
+    wb.save(target)
+
+
+def write_combined_workbook(parts, rows, total, year, limit, target, notes=()):
+    """Gesamt-Excel mehrerer Wehren: Übersicht plus je Wehr Einsatzübersicht und Anwesenheit.
+
+    parts: [(cfg, incidents, members)] in der Reihenfolge der Übersicht.
+    """
+    wb = openpyxl.Workbook()
+    wb.active.title = "Übersicht"
+    write_summary(wb.active, rows, total, year, limit, notes)
+    taken = {"Übersicht"}
+    for cfg, incidents, members in parts:
+        sheet = Sheet(cfg)
+        overview_title = _sheet_title("Einsätze", cfg.name, taken)
+        _write_overview(wb.create_sheet(overview_title), sheet, incidents, year)
+        _write_attendance(wb.create_sheet(_sheet_title("Anwesenheit", cfg.name, taken)), sheet, incidents, members,
+                          overview_title)
     wb.calculation = CalcProperties(fullCalcOnLoad=True)
     wb.save(target)

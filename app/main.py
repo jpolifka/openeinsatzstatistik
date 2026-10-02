@@ -28,7 +28,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Stre
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, create_model
 
-from app import auth, db, excel_export, legacy, metrics, report, store, tenancy
+from app import auth, db, excel_export, legacy, metrics, pdf_report, report, store, tenancy, tenant_config
 from app.tenancy import INCIDENTS, STATS, WRITE
 from app.timeutil import year_of
 
@@ -114,12 +114,13 @@ class PreviewSessions:
         self._sessions = {}
         self._lock = threading.Lock()
 
-    def add(self, reports, owner, slug):
+    def add(self, reports, owner):
+        """reports: [(bericht, slug der Wehr, für die er gelesen wurde)]."""
         token = uuid.uuid4().hex
         with self._lock:
             self._expire()
-            self._sessions[token] = {"time": time.time(), "owner": owner, "slug": slug,
-                                     "reports": {r["filename"]: r for r in reports}}
+            self._sessions[token] = {"time": time.time(), "owner": owner,
+                                     "reports": {r["filename"]: (r, slug) for r, slug in reports}}
         return token
 
     def get(self, token, filename, owner):
@@ -128,7 +129,7 @@ class PreviewSessions:
             session = self._sessions.get(token)
         if not session or session["owner"] != owner or filename not in session["reports"]:
             return None, None
-        return session["reports"][filename], session["slug"]
+        return session["reports"][filename]
 
     def _expire(self):
         cutoff = time.time() - self.TTL
@@ -147,10 +148,6 @@ def _safe_filename(name):
 
 def _rounded(value):
     return round(value, 1) if isinstance(value, float) else value
-
-
-def _resolve_year(con, year):
-    return year or store.latest_year(con) or dt.date.today().year
 
 
 def incident_key(tenant, incident_id):
@@ -202,14 +199,26 @@ def health():
     return {"status": "ok"}
 
 
+def _selection_config(tenants, a):
+    """Konfiguration der Auswahl: die der einen Wehr oder die vereinigte der VG-Gesamtansicht."""
+    if len(tenants) == 1 and not a.vg:
+        return tenants[0].config
+    return tenant_config.combine(a.vgs.get(a.vg, "Alle Wehren"), [t.config for t in tenants])
+
+
 @app.get("/api/config")
 def api_config(a: tenancy.Access = Depends(access)):
-    """Fachkonfiguration der ausgewählten Wehr, Benutzer, Rechte und Auswahl der Wehren."""
-    tenant = a.selected
-    cfg = tenant.config if tenant else tenancy.TenantConfig(name="Einsatzstatistik")
-    return {**cfg.client_config(), "user": a.email, "superadmin": a.superadmin, "roles": a.roles,
-            "tenant": tenant.json() if tenant else None,
-            "permissions": sorted(tenant.permissions) if tenant else [], "scopes": a.scopes()}
+    """Fachkonfiguration der Auswahl, Benutzer, Rechte und Auswahlmöglichkeiten.
+
+    permissions: Rechte, die für mindestens eine Wehr der Auswahl gelten (für das Ein- und
+    Ausblenden; geprüft wird je Endpunkt). tenants: die ausgewählten Wehren.
+    """
+    tenants = a.selection
+    cfg = _selection_config(tenants, a) if tenants else tenancy.TenantConfig(name="Einsatzstatistik")
+    return {**cfg.client_config(), "name": cfg.name, "user": a.email, "superadmin": a.superadmin, "roles": a.roles,
+            "scope": a.scope_key, "vg": {"slug": a.vg, "name": a.vgs[a.vg]} if a.vg else None,
+            "tenant": a.selected.json() if a.selected else None, "tenants": [t.json() for t in tenants],
+            "permissions": sorted(set().union(*(t.permissions for t in tenants))), "scopes": a.scopes()}
 
 
 class Scope(BaseModel):
@@ -218,42 +227,94 @@ class Scope(BaseModel):
 
 @app.post("/api/scope")
 def api_scope(scope: Scope, response: Response, a: tenancy.Access = Depends(access)):
-    """Wehr auswählen ("t:<slug>"); nur unter den eigenen Wehren."""
+    """Wehr ("t:<slug>") oder Gesamtansicht einer VG ("vg:<slug>") auswählen; nur unter den eigenen."""
     if scope.key not in {s["key"] for s in a.scopes()}:
-        raise HTTPException(403, "Keine Berechtigung für diese Wehr.")
+        raise HTTPException(403, "Keine Berechtigung für diese Auswahl.")
     response.set_cookie(auth.SCOPE_COOKIE, scope.key, max_age=auth.SESSION_TTL, httponly=True, samesite="lax",
                         secure=auth.BASE_URL.startswith("https://"))
     return {"ok": True}
 
 
+def _filtered(tenants, only):
+    """Wehr-Filter der Gesamtansicht (?tenants=a,b); ohne Filter alle."""
+    if not only:
+        return tenants
+    wanted = set(only.split(","))
+    chosen = [t for t in tenants if t.slug in wanted]
+    if not chosen:
+        raise HTTPException(400, "Keine der gewählten Wehren ist in der Auswahl.")
+    return chosen
+
+
+def _latest_year(tenants):
+    years = []
+    for t in tenants:
+        with t.connection() as con:
+            years.append(store.latest_year(con))
+    return max((y for y in years if y), default=dt.date.today().year)
+
+
 # ---------------------------------------------------------------- Auswertung
 @app.get("/api/years")
 def api_years(a: tenancy.Access = Depends(access)):
-    with a.current(STATS).connection() as con:
-        return {"years": store.years(con), "today": dt.date.today().isoformat()}
+    counts = {}
+    for t in a.selection_with(STATS):
+        with t.connection() as con:
+            for row in store.years(con):
+                entry = counts.setdefault(row["year"], {"year": row["year"], "count": 0, "last_number": None})
+                entry["count"] += row["count"]
+                entry["last_number"] = row["last_number"] if len(a.selection) == 1 else None
+    return {"years": [counts[y] for y in sorted(counts)], "today": dt.date.today().isoformat()}
+
+
+def _evaluate(tenants, year, limit):
+    """Einsätze des Jahres und des Vorjahres je Wehr, jeweils mit der eigenen Konfiguration ausgewertet."""
+    parts, months = [], {}
+    for t in tenants:
+        cfg = t.config
+        with t.connection() as con:
+            current = metrics.evaluate(store.load_incidents(con, year=year), cfg, limit)
+            previous = store.load_incidents(con, year=year - 1)
+            for month, count in store.incident_months(con).items():
+                months[month] = months.get(month, 0) + count
+        parts.append((t, current, previous))
+    return parts, months
 
 
 @app.get("/api/evaluation")
-def api_evaluation(year: Optional[int] = None, limit: Optional[int] = None, a: tenancy.Access = Depends(access)):
-    """Auswertung der ausgewählten Wehr. Ohne Recht auf Einsätze/Personal ohne Anwesenheit (Namen)."""
-    tenant = a.current(STATS)
-    cfg = tenant.config
+def api_evaluation(year: Optional[int] = None, limit: Optional[int] = None, tenants: Optional[str] = None,
+                   a: tenancy.Access = Depends(access)):
+    """Auswertung der Auswahl – einer Wehr oder (summiert) mehrerer Wehren einer VG.
+
+    Ohne Recht auf Einsätze/Personal kommt die Anwesenheit (Namen) nicht mit; in der
+    Gesamtansicht gibt es sie nie (Kameraden gehören zu einer Wehr).
+    """
+    selection = _filtered(a.selection_with(STATS), tenants)
+    cfg = _selection_config(selection, a)
     limit = limit or cfg.default_limit
     if limit not in cfg.response_limits:
         allowed = " oder ".join(str(x) for x in cfg.response_limits)
         raise HTTPException(400, f"Die Zeitgrenze muss {allowed} Minuten sein.")
-    with tenant.connection() as con:
-        year = _resolve_year(con, year)
-        current = metrics.evaluate(store.load_incidents(con, year=year), cfg, limit)
-        previous = store.load_incidents(con, year=year - 1) or None
-        history = metrics.monthly_history(store.incident_months(con))
-    return {"year": year,
-            "history": history,
-            "statistics": metrics.statistics(current, year, cfg, previous),
-            "response_plan": metrics.response_plan(current, limit, cfg),
-            "response_plan_previous": metrics.response_plan(metrics.evaluate(previous, cfg, limit), limit, cfg)
-            if previous else None,
-            "attendance": metrics.attendance_overview(current) if tenant.can(INCIDENTS) else None}
+    year = year or _latest_year(selection)
+    parts, months = _evaluate(selection, year, limit)
+    current = [e for _, evaluated, _ in parts for e in evaluated]
+    previous = [i for _, _, prev in parts for i in prev]
+    previous_evaluated = [e for t, _, prev in parts for e in metrics.evaluate(prev, t.config, limit)]
+    single = len(selection) == 1 and not a.vg
+    result = {"year": year,
+              "history": metrics.monthly_history(months),
+              "statistics": metrics.statistics(current, year, cfg, previous or None),
+              "response_plan": metrics.response_plan(current, limit, cfg),
+              "response_plan_previous": metrics.response_plan(previous_evaluated, limit, cfg) if previous else None,
+              "attendance": metrics.attendance_overview(current) if single and selection[0].can(INCIDENTS) else None,
+              "tenants": None}
+    if not single:
+        unique, without = metrics.unique_incidents([i for i, _ in current])
+        result["tenants"] = {
+            "participations": len(current), "unique": unique, "without_dispatch_number": without,
+            "rows": [{"slug": t.slug, "name": t.name, **metrics.summary(evaluated, limit, t.config)}
+                     for t, evaluated, _ in parts]}
+    return result
 
 
 # ---------------------------------------------------------------- Einsätze
@@ -264,12 +325,17 @@ IncidentFields = create_model(
 
 @app.get("/api/incidents")
 def api_incidents(year: Optional[int] = None, a: tenancy.Access = Depends(access)):
-    tenant = a.current(INCIDENTS)
-    with tenant.connection() as con:
-        year = _resolve_year(con, year)
-        leaders = store.LeaderNames(con)
-        return {"year": year,
-                "incidents": [incident_json(i, leaders, tenant) for i in store.load_incidents(con, year=year)]}
+    """Einsätze der Auswahl; in der Gesamtansicht nur aus Wehren mit Recht auf Einsätze, nach Beginn sortiert."""
+    tenants = a.selection_with(INCIDENTS)
+    year = year or _latest_year(tenants)
+    incidents = []
+    for tenant in tenants:
+        with tenant.connection() as con:
+            leaders = store.LeaderNames(con)
+            incidents += [incident_json(i, leaders, tenant) for i in store.load_incidents(con, year=year)]
+    if len(tenants) > 1:
+        incidents.sort(key=lambda i: (i["started_at"] or "", i["tenant"]))
+    return {"year": year, "incidents": incidents}
 
 
 @app.put("/api/incidents/{key}")
@@ -341,8 +407,21 @@ def _unpack_zip(data, zip_name, errors):
     return files
 
 
-def _read_uploads(uploads, cfg):
-    """Hochgeladene PDFs und ZIP-Dateien lesen -> (berichte, fehler)."""
+def _read_pdf(path, filename, tenants):
+    """Bericht lesen -> (bericht, wehr). Bei mehreren Wehren wird die passende über die Einheit bzw.
+    die eigenen Fahrzeuge im Bericht gesucht; passt keine, ValueError."""
+    if len(tenants) == 1:
+        return report.read_pdf(path, filename, tenants[0].config), tenants[0]
+    texts = pdf_report.extract_text(path)
+    by_slug = {t.slug: t for t in tenants}
+    slug = report.match_tenant(texts, filename, [(t.slug, t.config) for t in tenants])
+    if not slug:
+        raise ValueError("Der Bericht passt zu keiner der ausgewählten Wehren (Einheit und Fahrzeuge unbekannt).")
+    return report.read_text(texts, filename, by_slug[slug].config), by_slug[slug]
+
+
+def _read_uploads(uploads, tenants):
+    """Hochgeladene PDFs und ZIP-Dateien lesen -> ([(bericht, wehr)], fehler)."""
     reports, errors, files = [], [], []
     for upload in uploads:
         filename, data = _safe_filename(upload.filename), upload.file.read()
@@ -355,34 +434,51 @@ def _read_uploads(uploads, cfg):
             with open(path, "wb") as fh:
                 fh.write(data)
             try:
-                reports.append(report.read_pdf(path, filename, cfg))
+                reports.append(_read_pdf(path, filename, tenants))
             except Exception as e:  # defekte oder fremde PDF: melden, Rest weiter lesen
                 log.exception("PDF %s", filename)
                 errors.append({"file": filename, "message": str(e) or type(e).__name__})
     return reports, errors
 
 
-def _preview_json(con, r, leaders, tenant):
-    incident, existing = report.preview(con, r)
-    result = incident_json(incident, leaders, tenant)
+def _shared_with(r, tenant, a):
+    """Andere sichtbare Wehren, die denselben Einsatz (Einsatznummer der Leitstelle) schon erfasst haben."""
+    if not r.get("dispatch_number"):
+        return []
+    names = []
+    for other in a.tenants.values():
+        if other.slug != tenant.slug and other.can(STATS):
+            with other.connection() as con:
+                if con.execute("SELECT 1 FROM incident WHERE dispatch_number = ?", (r["dispatch_number"],)).fetchone():
+                    names.append(other.name)
+    return names
+
+
+def _preview_json(r, tenant, a):
+    with tenant.connection() as con:
+        incident, existing = report.preview(con, r)
+        result = incident_json(incident, store.LeaderNames(con), tenant)
+    result["tenant_name"] = tenant.name
     result["reported_as"] = r["reported_as"]
     result["incident_commander"] = r["incident_commander"]
     result["existing"] = {"id": incident_key(tenant, existing["id"]), "source": existing["source"],
                           "differences": report.differences(existing, incident, tenant.config)} if existing else None
+    result["shared_with"] = _shared_with(r, tenant, a)
     return result
 
 
 @app.post("/api/reports")
 def api_read_reports(pdfs: List[UploadFile] = File(...), a: tenancy.Access = Depends(access)):
-    tenant = a.current(WRITE)
+    """Berichte lesen – für die ausgewählte Wehr oder, in der Gesamtansicht, verteilt auf die passende
+    Wehr der VG (nur Wehren mit Schreibrecht)."""
+    tenants = a.selection_with(WRITE) if a.vg else [a.current(WRITE)]
     pdfs = [p for p in pdfs if _is_upload(p.filename)]
     if not pdfs:
         raise HTTPException(400, "Bitte eine PDF- oder ZIP-Datei (Einsatzberichte aus dem BKS-Portal) auswählen.")
-    reports, errors = _read_uploads(pdfs, tenant.config)
-    with tenant.connection() as con:
-        leaders = store.LeaderNames(con)
-        previews_json = [_preview_json(con, r, leaders, tenant) for r in reports]
-    return {"token": previews.add(reports, a.email, tenant.slug), "reports": previews_json, "errors": errors}
+    reports, errors = _read_uploads(pdfs, tenants)
+    previews_json = [_preview_json(r, tenant, a) for r, tenant in reports]
+    token = previews.add([(r, tenant.slug) for r, tenant in reports], a.email)
+    return {"token": token, "reports": previews_json, "errors": errors}
 
 
 class Acceptance(BaseModel):
@@ -410,19 +506,63 @@ def api_accept_report(acceptance: Acceptance, a: tenancy.Access = Depends(access
 
 
 # ---------------------------------------------------------------- Export
+def _xlsx(write, name):
+    buffer = io.BytesIO()
+    write(buffer)
+    buffer.seek(0)
+    name = f"{name}_{dt.datetime.now():%Y-%m-%d_%H%M}.xlsx"
+    return StreamingResponse(buffer, media_type=XLSX, headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+
+def _summary(tenants, year, limit):
+    """Kennzahlzeilen je Wehr, Summenzeile und Hinweise für die Excel-Übersicht."""
+    parts, _ = _evaluate(tenants, year, limit)
+    rows = [{"name": t.name, **metrics.summary(evaluated, limit, t.config)} for t, evaluated, _ in parts]
+    everything = [e for _, evaluated, _ in parts for e in evaluated]
+    combined = tenant_config.combine("Summe", [t.config for t in tenants])
+    total = {**metrics.summary(everything, limit, combined), "name": "Summe (Beteiligungen)"}
+    notes = []
+    if len(tenants) > 1:
+        unique, without = metrics.unique_incidents([i for i, _ in everything])
+        notes.append(f"Einsätze ohne Doppelte (gleiche Einsatznummer der Leitstelle = ein Einsatz): {unique}")
+        if without:
+            notes.append(f"{without} Einsätze ohne Einsatznummer der Leitstelle zählen einzeln.")
+    return parts, rows, total, notes
+
+
 @app.get("/api/export")
 def api_export(year: Optional[int] = None, a: tenancy.Access = Depends(access)):
-    """Excel im Format der Einsatzübersicht (Spalten A:AV + Anwesenheit)."""
-    tenant = a.current(INCIDENTS)
-    with tenant.connection() as con:
-        year = _resolve_year(con, year)
-        incidents = store.load_incidents(con, year=year)
-        members = store.members_of_year(con, year)
-    if not incidents:
+    """Excel im Format der Einsatzübersicht (Spalten je Fahrzeug + Anwesenheit). In der Gesamtansicht
+    eine Mappe mit Übersicht und je Wehr Einsatzübersicht und Anwesenheit."""
+    tenants = a.selection_with(INCIDENTS)
+    year = year or _latest_year(tenants)
+    if len(tenants) == 1 and not a.vg:
+        tenant = tenants[0]
+        with tenant.connection() as con:
+            incidents = store.load_incidents(con, year=year)
+            members = store.members_of_year(con, year)
+        if not incidents:
+            raise HTTPException(404, "Keine Einsätze für den Export.")
+        return _xlsx(lambda target: excel_export.write_workbook(incidents, members, year, target, tenant.config),
+                     f"Einsaetze_{tenant.slug}_{year}")
+    limit = tenants[0].config.default_limit
+    parts, rows, total, notes = _summary(tenants, year, limit)
+    workbook_parts = []
+    for t, evaluated, _ in parts:
+        with t.connection() as con:
+            workbook_parts.append((t.config, [i for i, _ in evaluated], store.members_of_year(con, year)))
+    if not any(incidents for _, incidents, _ in workbook_parts):
         raise HTTPException(404, "Keine Einsätze für den Export.")
-    buffer = io.BytesIO()
-    excel_export.write_workbook(incidents, members, year, buffer, tenant.config)
-    buffer.seek(0)
-    stamp = f"{dt.datetime.now():%Y-%m-%d_%H%M}"
-    name = f"Einsaetze_{tenant.slug}_{year}_{stamp}.xlsx"
-    return StreamingResponse(buffer, media_type=XLSX, headers={"Content-Disposition": f'attachment; filename="{name}"'})
+    return _xlsx(lambda target: excel_export.write_combined_workbook(workbook_parts, rows, total, year, limit, target,
+                                                                     notes), f"Einsaetze_{a.vg}_{year}")
+
+
+@app.get("/api/export/summary")
+def api_export_summary(year: Optional[int] = None, a: tenancy.Access = Depends(access)):
+    """Kennzahlen je Wehr als Excel – ohne Namen, daher auch für Rollen nur mit Statistik."""
+    tenants = a.selection_with(STATS)
+    year = year or _latest_year(tenants)
+    limit = tenants[0].config.default_limit
+    _, rows, total, notes = _summary(tenants, year, limit)
+    return _xlsx(lambda target: excel_export.write_summary_workbook(rows, total, year, limit, target, notes),
+                 f"Kennzahlen_{a.vg or tenants[0].slug}_{year}")

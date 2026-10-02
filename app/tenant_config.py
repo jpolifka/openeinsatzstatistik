@@ -110,3 +110,32 @@ class TenantConfig:
             "fire_watch": ".".join(domain.FIRE_WATCH),
             "keyword_catalog": [{"code": code, "name": name, "terms": terms} for code, name, terms in self.keywords],
         }
+
+
+def _unique(values, key=lambda v: v):
+    seen, result = set(), []
+    for v in values:
+        if key(v) not in seen:
+            seen.add(key(v))
+            result.append(v)
+    return tuple(result)
+
+
+def combine(name, cfgs):
+    """Konfiguration für die Gesamtansicht mehrerer Wehren (Anzeige und Statistik über alle).
+
+    Orte, Bedarfsplan-Orte, Fahrzeuge, Zeitgrenzen und Stichworte werden vereinigt; Tagesstunden,
+    Standard- und zweite Zeitgrenze kommen von der ersten Wehr. Die Kennzahlen je Einsatz rechnet
+    trotzdem jede Wehr mit ihrer eigenen Konfiguration (metrics.evaluate).
+    """
+    first = cfgs[0]
+    return dataclasses.replace(
+        first, name=name,
+        fleet=_unique((v for c in cfgs for v in c.fleet), key=lambda v: v.call_sign),
+        substitutes={k: v for c in reversed(cfgs) for k, v in c.substitutes.items()},
+        places=_unique((p for c in cfgs for p in c.places), key=lambda p: p[0]),
+        plan_places=_unique(p for c in cfgs for p in c.plan_places),
+        plan_min_level=min(c.plan_min_level for c in cfgs),
+        response_limits=tuple(sorted({limit for c in cfgs for limit in c.response_limits})),
+        keywords=_unique((k for c in cfgs for k in c.keywords), key=lambda k: k[0]),
+    )

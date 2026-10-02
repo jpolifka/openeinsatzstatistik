@@ -23,11 +23,38 @@ MAX_DURATION_HOURS = 24
 
 
 def read_pdf(path, filename, cfg):
-    report = pdf_report.read_report(path, filename, cfg.unit_prefix)
+    return read_text(pdf_report.extract_text(path), filename, cfg)
+
+
+def read_text(texts, filename, cfg):
+    """Ablauf ab dem Text der PDF (pdf_report.extract_text): auswerten, ableiten, prüfen."""
+    report = pdf_report.parse_report(*texts, filename, cfg.unit_prefix)
     complete_number(report)
     derive(report, cfg)
     check_plausibility(report)
+    check_unit(report, cfg)
     return report
+
+
+def match_tenant(texts, filename, candidates):
+    """Wehr, zu der ein Bericht gehört: zuerst über die berichtende Einheit (unit_marker), sonst über
+    die meisten eigenen Fahrzeuge im Bericht. candidates: [(schlüssel, cfg)] -> schlüssel oder None."""
+    best, best_score = None, 0
+    for key, cfg in candidates:
+        report = pdf_report.parse_report(*texts, filename, cfg.unit_prefix)
+        if cfg.unit_marker and report["unit"] == cfg.unit_marker:
+            return key
+        score = sum(1 for v in report["vehicles"] if cfg.own_prefix and _is_own(v, cfg))
+        if score > best_score:
+            best, best_score = key, score
+    return best
+
+
+def check_unit(report, cfg):
+    """Hinweis, wenn der Bericht von einer anderen Einheit stammt als der Wehr, für die er gelesen wird."""
+    if report.get("unit") and cfg.unit_marker and report["unit"] != cfg.unit_marker:
+        name = f" ({report['unit_name']})" if report.get("unit_name") else ""
+        report["warnings"].append(f"Bericht der Einheit {report['unit']}{name} – gehört er zu {cfg.name}?")
 
 
 # ---------------------------------------------------------------- Einsatz-Nr.

@@ -105,24 +105,27 @@ def test_foreign_incidents_cannot_be_changed(world):
 
 def test_vg_roles_see_only_their_vg(world):
     client, ids = world
-    scopes = [s["key"] for s in _as(client, "vglead@example.org").get("/api/config").json()["scopes"]]
-    assert scopes == ["t:wehr-a1", "t:wehr-a2"]
+    config = _as(client, "vglead@example.org", scope="").get("/api/config").json()
+    assert [s["key"] for s in config["scopes"]] == ["vg:vg-a", "t:wehr-a1", "t:wehr-a2"]
+    assert config["vg"]["slug"] == "vg-a" and config["tenant"] is None      # Standard: Gesamtansicht der VG
     _as(client, "vglead@example.org", scope="t:wehr-a2")
     assert client.put(f"/api/incidents/{ids['wehr-a2']}", json={"description": "VG"}).status_code == 200
     assert client.get("/api/export?year=2025").status_code == 200
-    _as(client, "vglead@example.org", scope="t:wehr-b1")
-    assert client.get("/api/config").json()["tenant"]["slug"] == "wehr-a1"
+    _as(client, "vglead@example.org", scope="vg:vg-b")
+    assert client.get("/api/config").json()["vg"]["slug"] == "vg-a"
+    assert client.post("/api/scope", json={"key": "vg:vg-b"}).status_code == 403
+    assert _as(client, "lead@example.org").post("/api/scope", json={"key": "vg:vg-a"}).status_code == 403
 
 
 def test_preview_belongs_to_its_user_and_tenant(world):
     client, _ = world
     r = read()
-    token = main.previews.add([r], "lead@example.org", "wehr-a1")
+    token = main.previews.add([(r, "wehr-a1")], "lead@example.org")
     body = {"token": token, "filename": r["filename"], "fields": {}}
     assert _as(client, "editor@example.org").post("/api/reports/accept", json=body).status_code == 410
     assert _as(client, "lead@example.org").post("/api/reports/accept", json=body).status_code == 200
     # Vorschau einer fremden Wehr (z. B. nach Entzug der Rolle) wird nicht übernommen
-    token = main.previews.add([read()], "lead@example.org", "wehr-b1")
+    token = main.previews.add([(read(), "wehr-b1")], "lead@example.org")
     response = client.post("/api/reports/accept", json={**body, "token": token})
     assert response.status_code == 403
     with db.connection(tenancy.tenant_path("wehr-b1")) as con:
@@ -132,7 +135,7 @@ def test_preview_belongs_to_its_user_and_tenant(world):
 def test_saved_report_records_author(world):
     client, _ = world
     r = read()
-    token = main.previews.add([r], "editor@example.org", "wehr-a1")
+    token = main.previews.add([(r, "wehr-a1")], "editor@example.org")
     saved = _as(client, "editor@example.org").post(
         "/api/reports/accept", json={"token": token, "filename": r["filename"], "fields": {}}).json()
     slug, incident_id = saved["id"].split(":")

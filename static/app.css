@@ -389,6 +389,24 @@ button.person:hover:not(.leader) { background: var(--light-red); color: var(--da
 .help-btn:hover, .help-btn:focus-visible { opacity: 1; color: var(--red); }
 h2 .help-btn, h3 .help-btn { color: var(--red); }
 .help-sample { margin: 0 2px; cursor: default; }
+/* ------------------------------------------------------------ Gesamtansicht und Druck */
+.evaluation-toolbar { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 14px; }
+.tenant-badge { display: inline-block; margin-right: 8px; padding: 1px 8px; border-radius: 999px; background: var(--light-red); color: var(--dark-red); font-size: .78rem; font-weight: 700; }
+.print-only { display: none; }
+@media print {
+  @page { margin: 12mm; }
+  body { background: var(--white); font-size: 11px; }
+  .topbar { background: none; color: var(--text); }
+  .topbar-logo, .topbar-actions, .tabs, .no-print, .footer, .actions, .help-btn, .segments, .toast, .tooltip { display: none !important; }
+  .topbar-inner { padding: 0 0 8px; }
+  .topbar-title { border-left: 0; padding-left: 0; }
+  .page { padding: 0; max-width: none; }
+  .print-only { display: block; }
+  .print-stamp { color: var(--gray); margin-bottom: 10px; }
+  .card, .kpi { box-shadow: none; border: 1px solid var(--line); break-inside: avoid; }
+  .grid { break-inside: avoid; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
 .btn-help-header {
   width: 38px; height: 38px; border-radius: 50%; border: 1px solid rgba(255,255,255,.45);
   background: rgba(255,255,255,.14); color: var(--white); font-weight: 700; font-size: 1.05rem; cursor: pointer; flex: none;

@@ -159,6 +159,11 @@ const HELP_SECTIONS = [
         short: "Einsätze je Ort anhand des Anfangs des Ortsnamens.",
         text: "Zuordnung nach dem Anfang des Ortsnamens (z. B. „Rheinbrohl-…“ → Rheinbrohl). Orte außerhalb der bekannten Liste erscheinen als „sonstige“.",
       },
+      participations: {
+        title: "Einsätze und Beteiligungen (alle Wehren)",
+        short: "Große Zahl: Einsätze ohne Doppelte. Beteiligungen: Summe der Einsätze aller Wehren.",
+        text: "In der Gesamtansicht einer Verbandsgemeinde zählt ein Einsatz, an dem mehrere Wehren beteiligt waren, bei jeder Wehr (Beteiligungen). Die große Zahl zählt ihn nur einmal: Einsätze mit derselben Einsatznummer der Leitstelle aus dem BKS-Bericht gelten als ein Einsatz. Einsätze ohne diese Nummer (z. B. aus der früheren Excel-Übersicht) zählen einzeln. Alle übrigen Kennzahlen und Diagramme summieren die Beteiligungen; der Bedarfsplan wertet jede Wehr mit ihren eigenen Orten aus. Über die Schaltflächen oben lässt sich die Auswertung auf einzelne Wehren einschränken.",
+      },
     },
   },
   {

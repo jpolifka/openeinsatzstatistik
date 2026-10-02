@@ -228,12 +228,29 @@ class Forbidden(Exception):
 
 @dataclasses.dataclass
 class Access:
-    """Was ein Benutzer sehen und tun darf, und welche Wehr gerade ausgewählt ist."""
+    """Was ein Benutzer sehen und tun darf, und was gerade ausgewählt ist: eine Wehr
+    (selected) oder alle sichtbaren Wehren einer VG (vg, für Wehrleiter, Statistik VG, Superadmin)."""
     email: str
     superadmin: bool
     tenants: dict              # slug -> Tenant, nur aktive Wehren mit mindestens einem Recht
     roles: list                # [{role, scope, scope_id, label}] für die Anzeige
+    vgs: dict = dataclasses.field(default_factory=dict)   # slug -> Name der VGs mit Gesamtansicht
     selected: Tenant = None
+    vg: str = None             # Slug der ausgewählten VG
+
+    @property
+    def selection(self):
+        """Ausgewählte Wehren: die eine Wehr oder alle sichtbaren der VG."""
+        if self.vg:
+            return [t for t in self.tenants.values() if t.vg_slug == self.vg]
+        return [self.selected] if self.selected else []
+
+    def selection_with(self, permission):
+        """Ausgewählte Wehren mit dem verlangten Recht; keine heißt Forbidden."""
+        tenants = [t for t in self.selection if t.can(permission)]
+        if not tenants:
+            raise Forbidden("Keine Berechtigung für diese Auswahl.")
+        return tenants
 
     def tenant(self, slug, permission):
         """Wehr mit dem verlangten Recht, sonst Forbidden – auch für unbekannte Kurznamen."""
@@ -243,22 +260,33 @@ class Access:
         return tenant
 
     def current(self, permission):
-        """Ausgewählte Wehr mit dem verlangten Recht."""
+        """Die eine ausgewählte Wehr mit dem verlangten Recht (Endpunkte ohne VG-Gesamtansicht)."""
+        if self.vg:
+            raise Forbidden("Bitte oben eine einzelne Wehr auswählen.")
         if not self.selected:
             raise Forbidden("Keine Wehr zugeordnet.")
         return self.tenant(self.selected.slug, permission)
 
+    @property
+    def scope_key(self):
+        return f"vg:{self.vg}" if self.vg else f"t:{self.selected.slug}" if self.selected else None
+
     def scopes(self):
-        """Auswahlmöglichkeiten für die Kopfzeile."""
-        return [{"key": f"t:{t.slug}", "name": t.name, "vg": t.vg_name} for t in
-                sorted(self.tenants.values(), key=lambda t: (t.vg_name, t.name))]
+        """Auswahlmöglichkeiten für die Kopfzeile: je VG mit Gesamtansicht „alle Wehren“, dann die Wehren."""
+        result = []
+        for vg_slug, vg_name in self.vgs.items():
+            result.append({"key": f"vg:{vg_slug}", "name": f"Alle Wehren · {vg_name}", "vg": vg_name})
+        result += [{"key": f"t:{t.slug}", "name": t.name, "vg": t.vg_name}
+                   for t in sorted(self.tenants.values(), key=lambda t: (t.vg_name, t.name))]
+        return result
 
 
 def access_for(email, scope=None):
     """Zugriff für eine (angemeldete) Adresse. email=None heißt Anmeldung aus: Superadmin.
 
-    scope (Cookie) wählt die Wehr ("t:<slug>"); unbekannte oder nicht erlaubte Werte werden
-    ignoriert, dann gilt die erste sichtbare Wehr.
+    scope (Cookie) wählt eine Wehr ("t:<slug>") oder die Gesamtansicht einer VG ("vg:<slug>").
+    Unbekannte oder nicht erlaubte Werte werden ignoriert; dann gilt die Gesamtansicht der eigenen
+    VG (Rollen auf VG-Ebene) bzw. die erste sichtbare Wehr.
     """
     email = normalize_email(email) if email else None
     superadmin = email is None or email in ADMIN_EMAILS
@@ -278,7 +306,19 @@ def access_for(email, scope=None):
                                  frozenset(permissions[r["slug"]])) for r in rows if permissions[r["slug"]]}
     roles = [{"role": m["role"], "scope": m["scope"], "scope_id": m["scope_id"], "label": ROLES[m["role"]][1]}
              for m in memberships if m["role"] in ROLES]
-    access = Access(email, superadmin, tenants, roles)
-    wanted = (scope or "")[2:] if (scope or "").startswith("t:") else None
-    access.selected = tenants.get(wanted) or next(iter(tenants.values()), None)
+    vg_role_ids = {m["scope_id"] for m in memberships if m["scope"] == "vg" and m["role"] in ROLES}
+    vgs = {}
+    for r in rows:
+        if r["slug"] in tenants and (superadmin or r["vg_id"] in vg_role_ids):
+            vgs.setdefault(r["vg_slug"], r["vg_name"])
+    access = Access(email, superadmin, tenants, roles, vgs)
+    kind, _, wanted = (scope or "").partition(":")
+    if kind == "t" and wanted in tenants:
+        access.selected = tenants[wanted]
+    elif kind == "vg" and wanted in vgs:
+        access.vg = wanted
+    elif vg_role_ids and vgs and not superadmin:
+        access.vg = next(iter(vgs))
+    else:
+        access.selected = next(iter(tenants.values()), None)
     return access
