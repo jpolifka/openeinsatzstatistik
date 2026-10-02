@@ -77,11 +77,15 @@ def test_settings_roundtrip_changes_config(world):
     ({"fleet": [{"call_sign": "02/45"}, {"call_sign": "02/45"}]}, "doppelt"),
     ({"fleet": [{"call_sign": "02/45", "in_service_from": "2025-01-01", "in_service_until": "2024-01-01"}]}, "außer Dienst"),
     ({"substitutes": {"01/23": "09/99"}}, "Block"),
+    ({"substitutes": {"01/23": ["02/45"]}}, "Fahrzeug der Liste"),
+    ({"fleet": [{"call_sign": "<img src=x onerror=alert(1)>"}]}, "Kurzname"),
+    ({"places": [{"name": "<img src=x onerror=alert(1)>", "prefix": "x"}]}, "Ortsnamen"),
     ({"plan_places": ["Nirgendwo"]}, "Ortsliste"),
     ({"response_limits": [8, 10], "default_limit": 12}, "Standardgrenze"),
     ({"second_limit": 9}, "zweite Zeitgrenze"),
     ({"day_hours": [18, 6]}, "Beginn vor Ende"),
     ({"own_prefix": "02"}, "Schrägstrich"),
+    ({"name": "   "}, "Namen der Wehr"),
 ])
 def test_invalid_settings_are_rejected(world, change, message):
     _as(world, "lead@example.org")

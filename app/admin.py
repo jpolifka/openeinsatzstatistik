@@ -32,6 +32,8 @@ router = APIRouter()
 
 # Funkrufname wie im BKS-Bericht; als Schlüssel eines Ersatzfahrzeugs auch der alte Kurzname (01/23)
 VEHICLE_NAME = re.compile(r"[A-ZÄÖÜ0-9][\w#./^ -]{0,59}")
+CALL_SIGN = re.compile(r"[\w#./ -]{1,40}")         # Kurzname eines Fahrzeugs (Block), z. B. 02/45
+UNSAFE = re.compile(r"[<>\"&]")                     # in Namen nicht nötig, in der Oberfläche heikel
 KEYWORD_CODE = re.compile(r"[A-Z]\d(\.\d\d)?")
 NUMBERINGS = ("bks", "by_date")
 MAX_KEYWORD_FILE = 2 * 1024 * 1024
@@ -189,6 +191,8 @@ def _check_fleet(s: SettingsIn):
         if not call_sign:
             call_sign = derive.new_call_sign(name, taken)
             taken.add(call_sign)
+        elif not CALL_SIGN.fullmatch(call_sign):
+            _invalid(f"Kurzname „{call_sign}“: nur Buchstaben, Ziffern und . / # -")
         if v.in_service_from and v.in_service_until and v.in_service_until < v.in_service_from:
             _invalid(f"{label}: „außer Dienst ab“ liegt vor „im Dienst ab“.")
         result.append((v, name, call_sign))
@@ -216,6 +220,8 @@ def _check_fleet(s: SettingsIn):
 
 def _check_settings(s: SettingsIn):
     """Fachliche Prüfung -> TenantConfig; Meldungen auf Deutsch (422)."""
+    if len(s.name.strip()) < 2:
+        _invalid("Bitte den Namen der Wehr angeben.")
     try:
         colors = theme.normalize(s.colors)
     except ValueError as e:
@@ -228,6 +234,8 @@ def _check_settings(s: SettingsIn):
     by_name = {v.name: v.call_sign for v in fleet if v.name}
     substitutes = {}
     for sub, block in s.substitutes.items():
+        if not isinstance(block, str):
+            _invalid(f"Ersatzfahrzeug {sub}: bitte ein Fahrzeug der Liste wählen.")
         sub, block = sub.strip(), by_name.get(block, block)
         if not VEHICLE_NAME.fullmatch(sub) or block not in call_signs:
             _invalid(f"Ersatzfahrzeug {sub}: der Block {block} muss ein Fahrzeug der Liste sein.")
@@ -235,6 +243,8 @@ def _check_settings(s: SettingsIn):
     names = [p.name.strip() for p in s.places]
     if any(not p.name.strip() or not p.prefix.strip() for p in s.places) or len(set(names)) != len(names):
         _invalid("Jeder Ort braucht einen eindeutigen Namen und einen Namensanfang.")
+    if any(UNSAFE.search(p.name + p.prefix) for p in s.places):
+        _invalid("Ortsnamen ohne die Zeichen < > \" &.")
     if not set(s.plan_places) <= set(names):
         _invalid("Bedarfsplan-Orte müssen in der Ortsliste stehen.")
     limits = sorted(set(s.response_limits))

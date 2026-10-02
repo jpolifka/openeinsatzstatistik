@@ -353,12 +353,12 @@ function responsePlanCard(plan, previousPlan) {
   const release = config.tenant && can("plan.release") ? `<label class="toggle no-print" data-tip="Ohne Freigabe sehen den Bedarfsplan nur Rollen mit dem Recht „Bedarfsplan ohne Freigabe sehen“ (z. B. Wehrführer, Wehrleiter)">
       <input type="checkbox" data-plan-release ${e.response_plan_public ? "checked" : ""}> für alle freigegeben</label>` : "";
   const hidden = e.response_plan_hidden.length ? ` Ohne ${esc(e.response_plan_hidden.join(", "))} (nicht freigegeben).` : "";
-  const footer = `<p class="plan-footer">${!e.response_plan_public && !hidden ? "<b>Nur für die Verwaltung sichtbar.</b> " : ""}Zeiten ab Einsatzbeginn (früheste Alarmierung). Gesamtstärke ohne ${config.plan_excluded_vehicles.join(", ")}, wie in der Einsatzübersicht.
+  const footer = `<p class="plan-footer">${!e.response_plan_public && !hidden ? "<b>Nur für die Verwaltung sichtbar.</b> " : ""}Zeiten ab Einsatzbeginn (früheste Alarmierung). Gesamtstärke ohne ${esc(config.plan_excluded_vehicles.join(", "))}, wie in der Einsatzübersicht.
     ${plan.without_times ? `${plural(plan.without_times, "Einsatz", "Einsätze")} ohne Eintreffzeit nicht berücksichtigt (Excel zählte sie mit 0 min als erreicht).` : ""}${hidden}</p>`;
   return chartCard({
     id: "plan", heading: "h2", className: "plan grid", chartLabel: "Kacheln", controls: release + limitSwitch, extra: footer,
     title: `Feuerwehrbedarfsplan · Pos. 8.4${helpButton("response_plan")}`,
-    subtitle: `Einsätze ab Alarmstufe ${config.plan_min_level} in ${plan.places.join(", ")} – Eintreffen des ersten Fahrzeugs innerhalb von ${limit} Minuten nach Alarmierung.`,
+    subtitle: `Einsätze ab Alarmstufe ${config.plan_min_level} in ${esc(plan.places.join(", "))} – Eintreffen des ersten Fahrzeugs innerhalb von ${limit} Minuten nach Alarmierung.`,
     chart: `<div class="plan-windows">${plan.windows.map((w) => windowTile(w, false)).join("")}${windowTile(plan.total, true)}</div>`,
     table,
   });
@@ -492,8 +492,8 @@ const isIdle = (v) => v.crew == null && !v.departed && !v.arrived;
 
 function vehicleChips(e) {
   return `<div class="vehicle-chips">${e.vehicles.map((v) => {
-    const short = v.call_sign.slice(3);
-    if (isIdle(v)) return `<span data-tip="${v.call_sign}: nicht im Einsatz">${short}</span>`;
+    const short = esc(v.call_sign.slice(3));
+    if (isIdle(v)) return `<span data-tip="${esc(v.call_sign)}: nicht im Einsatz">${short}</span>`;
     const tip = `${esc(v.substitute || v.call_sign)} · Stärke ${orDash(v.crew)}\nEintreffen ${minutes(v.arrival_min)}`;
     return `<span class="on" data-tip="${tip}">${short}<b>${orDash(v.crew)}</b></span>`;
   }).join("")}</div>`;
@@ -533,8 +533,8 @@ function vehicleTable(e) {
   return `<div class="table-wrap"><table class="mini-table"><thead><tr>
     <th>Fzg.</th><th class="right">Stärke</th><th>Ausr.</th><th class="right">Azeit</th><th>Eintr.</th><th class="right">Ezeit</th></tr></thead>
     <tbody>${e.vehicles.map((v) => isIdle(v)
-      ? `<tr class="vehicle-idle"><td>${v.call_sign}</td><td colspan="5">nicht im Einsatz</td></tr>`
-      : `<tr><td><strong>${v.call_sign}</strong>${v.substitute ? `<br><span class="small muted">${esc(v.substitute)}</span>` : ""}</td>
+      ? `<tr class="vehicle-idle"><td>${esc(v.call_sign)}</td><td colspan="5">nicht im Einsatz</td></tr>`
+      : `<tr><td><strong>${esc(v.call_sign)}</strong>${v.substitute ? `<br><span class="small muted">${esc(v.substitute)}</span>` : ""}</td>
         <td class="right">${orDash(v.crew)}</td><td>${formatTime(v.departed)}</td><td class="right minutes">${num(v.turnout_min)}</td>
         <td>${formatTime(v.arrived)}</td><td class="right minutes ${v.arrival_min != null && v.arrival_min > limit ? "late" : ""}">${num(v.arrival_min)}</td></tr>`).join("")}
     </tbody></table></div>`;
