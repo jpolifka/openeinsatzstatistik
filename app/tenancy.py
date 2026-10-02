@@ -11,6 +11,7 @@ Erfasser und Benutzer für eine Wehr). Eine Zuordnung zur VG gilt in allen ihren
 jeder Aufruf als Superadmin.
 """
 import dataclasses
+import hashlib
 import json
 import os
 import re
@@ -76,6 +77,13 @@ def load_config(con, name):
     inactive = tuple((r["code"], r["name"], r["terms"]) for r in rows if not r["active"])
     return TenantConfig(name=name, fleet=fleet, keywords=keywords if rows else domain.KEYWORD_CATALOG,
                         inactive_keywords=inactive, **kwargs)
+
+
+def fleet_version(con):
+    """Stand der Fahrzeugliste: Einstellungen, die auf einem älteren Stand bearbeitet wurden, würden Fahrzeuge
+    überschreiben, die inzwischen (Import, Fahrzeuge der VG) dazugekommen sind."""
+    rows = [tuple(r) for r in con.execute("SELECT * FROM fleet ORDER BY sort_order, call_sign")]
+    return hashlib.sha1(json.dumps(rows, ensure_ascii=False).encode()).hexdigest()[:16]
 
 
 def save_config(con, cfg, keywords=False):

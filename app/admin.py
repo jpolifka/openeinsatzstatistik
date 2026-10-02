@@ -111,11 +111,13 @@ class SettingsIn(BaseModel):
     day_hours: List[int] = [domain.DAY_START_HOUR, domain.DAY_END_HOUR]
     numbering: str = "bks"
     response_plan_public: bool = False
+    fleet_version: Optional[str] = None   # Stand der Fahrzeugliste beim Laden (tenancy.fleet_version)
 
 
 def _settings_json(tenant, cfg):
     with tenant.connection() as con:
         used = store.vehicles_with_data(con)
+        version = tenancy.fleet_version(con)
         assets = {r["name"]: f"/api/branding/{tenant.slug}/{r['name']}?v={r['modified'].replace(' ', 'T')}"
                   for r in con.execute("SELECT name, modified FROM asset")}
     with tenancy.central() as con:
@@ -126,7 +128,7 @@ def _settings_json(tenant, cfg):
 
     return {
         "assets": {name: assets.get(name) for name in theme.ASSETS},
-        "slug": tenant.slug, "name": cfg.name, "colors": cfg.colors,
+        "slug": tenant.slug, "name": cfg.name, "colors": cfg.colors, "fleet_version": version,
         "palette": theme.palette(cfg.colors) if cfg.colors else None,
         "fleet": [{"call_sign": v.call_sign, "name": v.name, "description": domain.call_sign_text(v.name),
                    "suggested_name": "" if v.name else _suggested_name(v.call_sign, cfg) or "",
@@ -277,6 +279,9 @@ def put_settings(slug: str, s: SettingsIn, a: tenancy.Access = Depends(access)):
     if not tenant.can(PLAN_RELEASE):            # Freigabe des Bedarfsplans ist ein eigenes Recht
         cfg = dataclasses.replace(cfg, response_plan_public=tenant.config.response_plan_public)
     with tenant.connection() as con:
+        if s.fleet_version and s.fleet_version != tenancy.fleet_version(con):
+            raise HTTPException(409, "Die Fahrzeugliste wurde inzwischen geändert (z. B. durch einen Import). "
+                                     "Bitte die Seite neu laden und die Änderungen erneut eintragen.")
         tenancy.save_config(con, cfg)
         if cfg.numbering == "by_date":         # beim Umstellen alle Jahre nach Datum durchnummerieren
             for row in store.years(con):

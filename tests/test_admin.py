@@ -283,3 +283,17 @@ def test_vg_vehicles_overview_and_move(world):
     assert world.post("/api/admin/vgs/vg-a/vehicles/move",
                       json={"name": "RP WW 01/23-06", "target": "wehr-b1"}).status_code == 404
     assert CFG.vehicles      # Konfiguration der Tests unverändert
+
+
+def test_settings_do_not_overwrite_newer_fleet(world):
+    """Fahrzeug kommt beim Import dazu, während die Einstellungen offen sind: Speichern wird abgelehnt (409)."""
+    _as(world, "lead@example.org")
+    s = _settings(world)
+    with db.connection(tenancy.tenant_path("wehr-a1")) as con:
+        con.execute("INSERT INTO fleet (call_sign, name, label, sort_order) VALUES ('02/99', 'FL NR#.BHÖ 02/99-01', '', 99)")
+    tenancy.forget_config("wehr-a1")
+    response = world.put("/api/admin/wehr-a1/settings", json=s)
+    assert response.status_code == 409 and "neu laden" in response.json()["detail"]
+    fresh = _settings(world)
+    assert "02/99" in [v["call_sign"] for v in fresh["fleet"]]
+    assert world.put("/api/admin/wehr-a1/settings", json=fresh).status_code == 200
