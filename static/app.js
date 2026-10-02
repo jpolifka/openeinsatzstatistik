@@ -192,9 +192,11 @@ async function loadYears() {
 
 async function loadEvaluation() {
   const e = state.evaluation, filter = [...state.tenantFilter].sort().join(",");
-  if (!e || e.year !== state.year || e.response_plan.limit !== state.limit || e.filter !== filter) {
-    state.evaluation = await api(`/api/evaluation?year=${state.year}&limit=${state.limit}${filter ? `&tenants=${encodeURIComponent(filter)}` : ""}`);
-    state.evaluation.filter = filter;
+  // Zeitgrenze der Anfrage merken: ohne Freigabe fehlt der Bedarfsplan (response_plan = null)
+  if (!e || e.year !== state.year || e.limit !== state.limit || e.filter !== filter) {
+    const limit = state.limit;
+    state.evaluation = await api(`/api/evaluation?year=${state.year}&limit=${limit}${filter ? `&tenants=${encodeURIComponent(filter)}` : ""}`);
+    Object.assign(state.evaluation, { filter, limit });
   }
 }
 
