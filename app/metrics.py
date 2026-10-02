@@ -232,14 +232,30 @@ def response_plan(evaluated, limit, cfg):
 
 # ---------------------------------------------------------------- Mehrere Wehren
 def unique_incidents(incidents):
-    """Einsätze ohne Doppelte über mehrere Wehren -> (anzahl, ohne_nummer).
+    """Einsätze ohne Doppelte über mehrere Wehren -> (anzahl, ohne_schlüssel).
 
-    Gleiche Einsatznummer der Leitstelle = ein gemeinsamer Einsatz. Einsätze ohne Nummer
-    (Altdaten aus der Excel-Übersicht) zählen einzeln.
+    Ein gemeinsamer Einsatz teilt den Stammdatensatz im BKS-Portal oder die Einsatznummer der
+    Leitstelle (selbst angelegte Datensätze wie BSW haben keine; Altdaten nur die Nummer). Einsätze,
+    die über einen der beiden Schlüssel verbunden sind, zählen einmal; ohne beide zählt jeder einzeln.
     """
-    numbers = {i["dispatch_number"] for i in incidents if i.get("dispatch_number")}
-    without = sum(1 for i in incidents if not i.get("dispatch_number"))
-    return len(numbers) + without, without
+    parent = {}
+
+    def root(key):
+        while parent.setdefault(key, key) != key:
+            key = parent[key]
+        return key
+
+    without = 0
+    for i in incidents:
+        keys = [f"{kind}:{i[name]}" for kind, name in (("bks", "bks_record_id"), ("els", "dispatch_number"))
+                if i.get(name)]
+        if not keys:
+            without += 1
+        for key in keys[1:]:
+            parent[root(key)] = root(keys[0])
+        for key in keys[:1]:
+            root(key)
+    return len({root(key) for key in parent}) + without, without
 
 
 def summary(evaluated, limit, cfg):

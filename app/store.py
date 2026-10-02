@@ -14,12 +14,14 @@ FULL_KEYWORD = re.compile(r"([A-Za-z]\d)\s*[.\s]?\s*(\d{0,2})")
 FIELDS = ("number", "started_at", "ended_at", "keyword", "subcode", "description", "place",
           "unit_leader", "station_staff", "dispatch_number")
 INT_FIELDS = ("number", "station_staff")
+# Datensätze im BKS-Portal (eigener Bericht, Stammdatensatz des Einsatzes): kommen aus der PDF, nicht aus dem Formular
+ID_FIELDS = ("bks_report_id", "bks_record_id")
 TEXT_FIELDS = tuple(name for name in FIELDS if name not in INT_FIELDS + ("started_at", "ended_at", "dispatch_number"))
 
 
 class DuplicateIncident(ValueError):
-    def __init__(self, number, year):
-        super().__init__(f"Einsatz Nr. {number}/{year} ist bereits vorhanden.")
+    def __init__(self, number, year, message=None):
+        super().__init__(message or f"Einsatz Nr. {number}/{year} ist bereits vorhanden.")
 
 
 def to_int(value):
@@ -40,7 +42,7 @@ def split_keyword(keyword, subcode=""):
 
 def normalize_fields(fields, weekend_or_holiday=None):
     """Eingaben bereinigen und Jahr sowie Wochenende/Feiertag aus dem Beginn ableiten."""
-    f = {name: fields.get(name) for name in FIELDS}
+    f = {name: fields.get(name) for name in FIELDS + ID_FIELDS}
     f["number"] = to_int(f["number"])
     f["station_staff"] = to_int(f["station_staff"]) or 0
     f["started_at"], f["ended_at"] = normalize_iso(f["started_at"]), normalize_iso(f["ended_at"])
@@ -48,7 +50,8 @@ def normalize_fields(fields, weekend_or_holiday=None):
         f[name] = (f[name] or "").strip()
     f["keyword"], f["subcode"] = split_keyword(f["keyword"], f["subcode"])
     # Einsatznummer der Leitstelle: leer heißt unbekannt (Altdaten aus Excel)
-    f["dispatch_number"] = str(f["dispatch_number"] or "").strip() or None
+    for name in ("dispatch_number", *ID_FIELDS):
+        f[name] = str(f[name] or "").strip() or None
     start = parse_iso(f["started_at"])
     f["year"] = year_of(start)
     if weekend_or_holiday is None:
@@ -154,7 +157,7 @@ def load_incidents(con, year=None, ids=None):
     for v in con.execute(f"SELECT * FROM vehicle WHERE incident_id {in_ids}", list(by_id)):
         by_id[v["incident_id"]]["vehicles"][v["call_sign"]] = dict(v)
     for p in con.execute(
-            "SELECT a.incident_id, a.role, a.vehicle, m.id, m.name, m.last_name, m.first_name "
+            "SELECT a.incident_id, a.role, a.vehicle, a.manual, m.id, m.name, m.last_name, m.first_name "
             f"FROM attendance a JOIN member m ON m.id = a.member_id WHERE a.incident_id {in_ids} "
             "ORDER BY m.sort_order, m.name", list(by_id)):
         by_id[p["incident_id"]]["people"].append(dict(p))
@@ -189,6 +192,26 @@ def find_incident(con, year, number):
     return row["id"] if row else None
 
 
+def find_existing(con, bks_report_id, year, number):
+    """Erfasster Einsatz zu einem Bericht: über den Bericht im BKS-Portal, sonst über Jahr und Nr."""
+    if bks_report_id:
+        row = con.execute("SELECT id FROM incident WHERE bks_report_id = ?", (str(bks_report_id),)).fetchone()
+        if row:
+            return row["id"]
+    return find_incident(con, year, number)
+
+
+def _check_unique(con, f, incident_id=None):
+    other = find_incident(con, f["year"], f["number"])
+    if other and other != incident_id:
+        raise DuplicateIncident(f["number"], f["year"])
+    if f["bks_report_id"]:
+        row = con.execute("SELECT id, number, year FROM incident WHERE bks_report_id = ?", (f["bks_report_id"],)).fetchone()
+        if row and row["id"] != incident_id:
+            raise DuplicateIncident(row["number"], row["year"], f"Der Bericht {f['bks_report_id']} ist schon als "
+                                    f"Einsatz Nr. {row['number']}/{row['year']} erfasst.")
+
+
 def is_empty(con):
     return not con.execute("SELECT 1 FROM incident LIMIT 1").fetchone()
 
@@ -203,37 +226,55 @@ def _insert(con, table, row):
                        list(row.values())).lastrowid
 
 
-def create_incident(con, fields, source, filename=None, warnings=(), replace_id=None, weekend_or_holiday=None,
-                    modified_by=None):
-    """Einsatz anlegen (oder einen vorhandenen ersetzen) und die ID zurückgeben."""
+def create_incident(con, fields, source, filename=None, warnings=(), weekend_or_holiday=None, modified_by=None):
+    """Einsatz anlegen und die ID zurückgeben."""
     f = normalize_fields(fields, weekend_or_holiday)
-    if replace_id:
-        delete_incident(con, replace_id)
-    elif find_incident(con, f["year"], f["number"]):
-        raise DuplicateIncident(f["number"], f["year"])
+    _check_unique(con, f)
     return _insert(con, "incident", {**f, "source": source, "filename": filename, "modified_by": modified_by,
                                      "warnings": json.dumps(list(warnings), ensure_ascii=False)})
 
 
-def add_vehicle(con, incident_id, call_sign, name, crew, departed, arrived):
+def add_vehicle(con, incident_id, call_sign, name, crew, departed, arrived, alerted=None, finished=None, manual=False):
     _insert(con, "vehicle", {"incident_id": incident_id, "call_sign": call_sign, "name": name,
-                             "crew": crew, "departed": departed, "arrived": arrived})
+                             "crew": crew, "departed": departed, "arrived": arrived,
+                             "alerted": alerted, "finished": finished, "manual": int(manual)})
 
 
-def add_attendance(con, incident_id, member_id, role=None, vehicle=None):
-    con.execute("INSERT OR IGNORE INTO attendance (incident_id, member_id, role, vehicle) VALUES (?,?,?,?)",
-                (incident_id, member_id, role, vehicle))
+def add_attendance(con, incident_id, member_id, role=None, vehicle=None, manual=False):
+    con.execute("INSERT OR IGNORE INTO attendance (incident_id, member_id, role, vehicle, manual) VALUES (?,?,?,?,?)",
+                (incident_id, member_id, role, vehicle, int(manual)))
 
 
-def update_incident(con, incident_id, changes, modified_by=None):
-    """Felder ändern; Jahr und Wochenende/Feiertag werden neu abgeleitet."""
+def replace_report_rows(con, incident_id, vehicles, attendance):
+    """Fahrzeuge und Anwesenheit aus einem (erneut eingelesenen) Bericht schreiben.
+
+    Zeilen aus dem vorigen Bericht entfallen; manuell ergänzte bleiben, außer der Bericht bringt
+    dasselbe Fahrzeug bzw. dieselbe Person. attendance: [(kamerad_id, funktion, fahrzeug)].
+    """
+    con.execute("DELETE FROM vehicle WHERE incident_id = ? AND manual = 0", (incident_id,))
+    con.execute("DELETE FROM attendance WHERE incident_id = ? AND manual = 0", (incident_id,))
+    for row in vehicles:
+        con.execute("DELETE FROM vehicle WHERE incident_id = ? AND call_sign = ?", (incident_id, row["call_sign"]))
+        add_vehicle(con, incident_id, **row)
+    seen = set()
+    for member_id, role, vehicle in attendance:
+        if member_id not in seen:   # doppelte Zeile im Bericht: die erste zählt
+            seen.add(member_id)
+            con.execute("DELETE FROM attendance WHERE incident_id = ? AND member_id = ?", (incident_id, member_id))
+            add_attendance(con, incident_id, member_id, role, vehicle)
+
+
+def update_incident(con, incident_id, changes, modified_by=None, source=None):
+    """Felder ändern; Jahr und Wochenende/Feiertag werden neu abgeleitet.
+    source: {source, filename, warnings} beim Aktualisieren aus einem Bericht."""
     current = con.execute("SELECT * FROM incident WHERE id = ?", (incident_id,)).fetchone()
     if not current:
         raise KeyError(incident_id)
     f = normalize_fields({**dict(current), **changes})
-    other = find_incident(con, f["year"], f["number"])
-    if other and other != incident_id:
-        raise DuplicateIncident(f["number"], f["year"])
+    _check_unique(con, f, incident_id)
+    if source:
+        f.update(source=source["source"], filename=source["filename"],
+                 warnings=json.dumps(list(source["warnings"]), ensure_ascii=False))
     assignments = ", ".join(f"{name} = ?" for name in f)
     con.execute(f"UPDATE incident SET {assignments}, modified = datetime('now', 'localtime'), modified_by = ? "
                 "WHERE id = ?", [*f.values(), modified_by, incident_id])

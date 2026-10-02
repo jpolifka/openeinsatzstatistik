@@ -83,3 +83,52 @@ def test_member_directory_keeps_relatives_apart(con):
     assert members.find_or_create("Kunz", "Max") == max_id
     assert members.find_or_create("Kunz", "Erika") != max_id       # gleicher Nachname, anderer Vorname
     assert members.names[max_id] == "Kunz, Max"
+
+
+def test_migration_drops_eight_minute_limit():
+    con = db.connect(":memory:")
+    db.migrate(con, db.TENANT_MIGRATIONS[:3])
+    con.execute("INSERT INTO setting VALUES ('response_limits', '[8, 10]'), ('default_limit', '8')")
+    con.commit()
+    db.migrate(con)
+    assert dict(con.execute("SELECT key, value FROM setting").fetchall()) == \
+        {"response_limits": "[10]", "default_limit": "10"}
+    con.close()
+
+
+def test_find_existing_prefers_bks_report(con):
+    first = store.create_incident(con, {**FIELDS, "bks_report_id": "9000003", "bks_record_id": "9000001"},
+                                  source="pdf")
+    other = store.create_incident(con, {**FIELDS, "number": 6}, source="pdf")
+    assert store.find_existing(con, "9000003", 2026, 6) == first      # Nr. im Bericht geändert
+    assert store.find_existing(con, "9999999", 2026, 6) == other      # unbekannter Bericht: über die Nr.
+    assert store.find_existing(con, None, 2026, 7) is None
+    with pytest.raises(store.DuplicateIncident, match="9000003"):
+        store.create_incident(con, {**FIELDS, "number": 8, "bks_report_id": "9000003"}, source="pdf")
+    # Die BKS-Datensätze kommen nur aus der PDF: Bearbeiten im Formular lässt sie stehen
+    store.update_incident(con, first, {"description": "geändert"})
+    assert store.load_incident(con, first)["bks_report_id"] == "9000003"
+
+
+def test_report_rows_replace_imported_but_keep_manual(con):
+    incident_id = store.create_incident(con, FIELDS, source="pdf")
+    members = store.MemberDirectory(con)
+    imported, manual, both = (members.find_or_create(*n) for n in (("Muster", "Max"), ("Beispiel", "Erika"),
+                                                                   ("Probe", "Otto")))
+    store.add_vehicle(con, incident_id, "02/45", None, 6, "10:03:00", "10:07:00")
+    store.add_vehicle(con, incident_id, "02/24", None, 2, None, None, manual=True)
+    store.add_vehicle(con, incident_id, "02/71", None, 3, None, None, manual=True)
+    store.add_attendance(con, incident_id, imported)
+    store.add_attendance(con, incident_id, manual, manual=True)
+    store.add_attendance(con, incident_id, both, manual=True)
+
+    vehicle = {"name": None, "crew": 5, "departed": "10:04:00", "arrived": "10:09:00", "alerted": "10:00:00",
+               "finished": "11:00:00"}
+    store.replace_report_rows(con, incident_id, [{**vehicle, "call_sign": "02/71"}],
+                              [(both, "Maschinist", "02/71"), (both, "doppelt", None)])
+    incident = store.load_incident(con, incident_id)
+    assert {cs: (v["crew"], v["manual"]) for cs, v in incident["vehicles"].items()} == \
+        {"02/24": (2, 1), "02/71": (5, 0)}
+    assert incident["vehicles"]["02/71"]["finished"] == "11:00:00"
+    assert {p["id"]: (p["role"], p["manual"]) for p in incident["people"]} == \
+        {manual: (None, 1), both: ("Maschinist", 0)}

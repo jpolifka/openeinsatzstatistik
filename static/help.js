@@ -17,7 +17,7 @@ const HELP_SECTIONS = [
       number: {
         title: "Nr.",
         short: "Laufende Einsatznummer im Jahr (z. B. 54 für 54-26).",
-        text: "Laufende Einsatznummer innerhalb des Jahres, wie im Dateinamen des Berichts (<i>54-26_B2_…pdf</i> → 54). Zusammen mit dem Jahr aus dem Einsatzbeginn erkennt die App, ob ein Einsatz schon erfasst ist.",
+        text: "Laufende Einsatznummer innerhalb des Jahres, wie im Dateinamen des Berichts (<i>54-26_B2_…pdf</i> → 54). Ob ein Einsatz schon erfasst ist, erkennt die App an der Nummer des Berichts im BKS-Portal, bei älteren Einsätzen an Nr. und Jahr. Ein erneut eingelesener Bericht aktualisiert dann den erfassten Einsatz.",
       },
       started_at: {
         title: "Beginn",
@@ -53,6 +53,11 @@ const HELP_SECTIONS = [
         title: "Ort",
         short: "Einsatzort; bestimmt Einsatzgebiet und Bedarfsplan.",
         text: () => `Ortsteil oder Ort des Einsatzes. Bekannte Orte (${helpList(config.places)}) werden vorgeschlagen. Nur Einsätze in ${helpList(config.plan_places)} zählen für den Feuerwehrbedarfsplan – bitte den Ort daher genau so schreiben.`,
+      },
+      bks_url: {
+        title: "BKS-Portal",
+        short: "Bericht im BKS-Portal öffnen.",
+        text: "Jeder Bericht im BKS-Portal hat eine eigene Nummer (Haupt- bzw. Nebenbericht einer Einheit). Alle Berichte eines Einsatzes verweisen auf denselben <i>Stammdatensatz</i>; darüber erkennt die App gemeinsame Einsätze mehrerer Wehren – auch selbst angelegte ohne Einsatznummer der Leitstelle, z. B. Brandsicherheitswachen. Der Link öffnet den Bericht im Portal (Anmeldung dort nötig).",
       },
       unit_leader: {
         title: "EHF",
@@ -169,7 +174,7 @@ const HELP_SECTIONS = [
       participations: {
         title: "Einsätze und Beteiligungen (alle Wehren)",
         short: "Große Zahl: Einsätze ohne Doppelte. Beteiligungen: Summe der Einsätze aller Wehren.",
-        text: "In der Gesamtansicht einer Verbandsgemeinde zählt ein Einsatz, an dem mehrere Wehren beteiligt waren, bei jeder Wehr (Beteiligungen). Die große Zahl zählt ihn nur einmal: Einsätze mit derselben Einsatznummer der Leitstelle aus dem BKS-Bericht gelten als ein Einsatz. Einsätze ohne diese Nummer (z. B. aus der früheren Excel-Übersicht) zählen einzeln. Alle übrigen Kennzahlen und Diagramme summieren die Beteiligungen; der Bedarfsplan wertet jede Wehr mit ihren eigenen Orten aus. Über die Schaltflächen oben lässt sich die Auswertung auf einzelne Wehren einschränken.",
+        text: "In der Gesamtansicht einer Verbandsgemeinde zählt ein Einsatz, an dem mehrere Wehren beteiligt waren, bei jeder Wehr (Beteiligungen). Die große Zahl zählt ihn nur einmal: Einsätze mit demselben Stammdatensatz im BKS-Portal oder derselben Einsatznummer der Leitstelle gelten als ein Einsatz. Einsätze ohne beides (z. B. aus der früheren Excel-Übersicht) zählen einzeln. Alle übrigen Kennzahlen und Diagramme summieren die Beteiligungen; der Bedarfsplan wertet jede Wehr mit ihren eigenen Orten aus. Über die Schaltflächen oben lässt sich die Auswertung auf einzelne Wehren einschränken.",
       },
     },
   },

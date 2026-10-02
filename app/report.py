@@ -8,7 +8,7 @@ Bericht eingelesen wird.
   to_fields()         abgeleitete Felder -> Datenbankfelder (store.FIELDS)
   to_incident()       Bericht -> Einsatz wie aus store.load_incidents
   preview()           Einsatz für die Vorschau mit Namensabgleich und bereits erfasstem Einsatz
-  save()              Bericht als Einsatz speichern
+  save()              Bericht als Einsatz speichern bzw. einen erfassten Einsatz damit aktualisieren
   differences()       Abweichungen zwischen erfasstem Einsatz und Bericht
 """
 import datetime as dt
@@ -32,29 +32,33 @@ def read_text(texts, filename, cfg):
     complete_number(report)
     derive(report, cfg)
     check_plausibility(report)
-    check_unit(report, cfg)
     return report
 
 
 def match_tenant(texts, filename, candidates):
-    """Wehr, zu der ein Bericht gehört: zuerst über die berichtende Einheit (unit_marker), sonst über
-    die meisten eigenen Fahrzeuge im Bericht. candidates: [(schlüssel, cfg)] -> schlüssel oder None."""
+    """Wehr, zu der ein Bericht gehört -> (schlüssel, "unit" | "vehicles") oder (None, None).
+
+    Zuerst über die berichtende Einheit (unit_marker). Über die meisten eigenen Fahrzeuge im Bericht nur
+    bei Wehren ohne unit_marker – sonst landete z. B. der Bericht der FEZ über mitalarmierte Fahrzeuge
+    bei einer Wehr. candidates: [(schlüssel, cfg)].
+    """
     best, best_score = None, 0
     for key, cfg in candidates:
         report = pdf_report.parse_report(*texts, filename, cfg.unit_prefix)
         if cfg.unit_marker and report["unit"] == cfg.unit_marker:
-            return key
+            return key, "unit"
+        if cfg.unit_marker and report["unit"]:
+            continue
         score = sum(1 for v in report["vehicles"] if cfg.own_prefix and _is_own(v, cfg))
         if score > best_score:
             best, best_score = key, score
-    return best
+    return (best, "vehicles") if best else (None, None)
 
 
-def check_unit(report, cfg):
-    """Hinweis, wenn der Bericht von einer anderen Einheit stammt als der Wehr, für die er gelesen wird."""
-    if report.get("unit") and cfg.unit_marker and report["unit"] != cfg.unit_marker:
-        name = f" ({report['unit_name']})" if report.get("unit_name") else ""
-        report["warnings"].append(f"Bericht der Einheit {report['unit']}{name} – gehört er zu {cfg.name}?")
+def unit_label(report):
+    """Berichtende Einheit für Meldungen, z. B. "FW NR#.ABC 00 (FEZ VG)"."""
+    name = f" ({report['unit_name']})" if report.get("unit_name") else ""
+    return f"{report['unit']}{name}" if report.get("unit") else "unbekannte Einheit"
 
 
 # ---------------------------------------------------------------- Einsatz-Nr.
@@ -201,6 +205,7 @@ def check_plausibility(report):
 def to_fields(report):
     """Abgeleitete Felder in der Form der Datenbank (Zeiten als ISO-Text)."""
     fields = {name: report[name] for name in store.FIELDS}
+    fields.update({name: report.get(name) for name in store.ID_FIELDS})
     fields["started_at"], fields["ended_at"] = to_iso(report["started_at"]), to_iso(report["ended_at"])
     return fields
 
@@ -208,7 +213,8 @@ def to_fields(report):
 def vehicle_rows(report):
     """Fahrzeugblöcke in der Form der Datenbank."""
     return {call_sign: {"call_sign": call_sign, "name": v["name"], "crew": v["crew"],
-                        "departed": time_text(v["departed"]), "arrived": time_text(v["arrived"])}
+                        "departed": time_text(v["departed"]), "arrived": time_text(v["arrived"]),
+                        "alerted": time_text(v.get("alerted")), "finished": time_text(v.get("finished"))}
             for call_sign, v in report["slots"].items()}
 
 
@@ -229,21 +235,28 @@ def preview(con, report):
         people.append({"id": member_id, "name": name, "last_name": p["last_name"], "first_name": p["first_name"],
                        "role": p["role"], "vehicle": p["vehicle"], "new": member_id is None})
     incident = to_incident(report, to_fields(report), people)
-    existing_id = store.find_incident(con, incident["year"], incident["number"])
+    existing_id = store.find_existing(con, incident["bks_report_id"], incident["year"], incident["number"])
     return incident, (store.load_incident(con, existing_id) if existing_id else None)
 
 
-def save(con, report, fields, replace_id=None, modified_by=None):
-    """Bericht mit den (ggf. korrigierten) Feldern als Einsatz speichern; unbekannte Personen anlegen."""
-    incident_id = store.create_incident(con, fields, source="pdf", filename=report["filename"],
-                                        warnings=report["warnings"], replace_id=replace_id, modified_by=modified_by)
+def save(con, report, fields, update_id=None, modified_by=None):
+    """Bericht mit den (ggf. korrigierten) Feldern als Einsatz speichern; unbekannte Personen anlegen.
+
+    update_id: erfasster Einsatz, der mit dem Bericht aktualisiert wird. Er behält seine ID und
+    manuell ergänzte Fahrzeuge und Personen (siehe store.replace_report_rows).
+    """
+    if update_id:
+        store.update_incident(con, update_id, fields, modified_by=modified_by,
+                              source={"source": "pdf", "filename": report["filename"], "warnings": report["warnings"]})
+        incident_id = update_id
+    else:
+        incident_id = store.create_incident(con, fields, source="pdf", filename=report["filename"],
+                                            warnings=report["warnings"], modified_by=modified_by)
     store.add_fleet_vehicles(con, report.get("new_vehicles", ()), report.get("day"))
-    for row in vehicle_rows(report).values():
-        store.add_vehicle(con, incident_id, **row)
     members = store.MemberDirectory(con)
-    for p in report["people"]:
-        member_id = members.find_or_create(p["last_name"], p["first_name"])
-        store.add_attendance(con, incident_id, member_id, p["role"] or None, p["vehicle"])
+    attendance = [(members.find_or_create(p["last_name"], p["first_name"]), p["role"] or None, p["vehicle"])
+                  for p in report["people"]]
+    store.replace_report_rows(con, incident_id, vehicle_rows(report).values(), attendance)
     return incident_id
 
 

@@ -28,7 +28,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Stre
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, create_model
 
-from app import admin, auth, db, dpa, mail, excel_export, legacy, metrics, pdf_report, report, store, tenancy, tenant_config, theme
+from app import admin, auth, db, domain, dpa, mail, excel_export, legacy, metrics, pdf_report, records, report, store, tenancy, tenant_config, theme
 from app.tenancy import INCIDENTS, STATS, WRITE
 from app.timeutil import year_of
 
@@ -172,12 +172,15 @@ def incident_json(incident, leaders, tenant, limit=None, cfg=None):
         v, vm = incident["vehicles"].get(call_sign) or {}, m["vehicles"].get(call_sign) or {}
         vehicles.append({"call_sign": call_sign, "substitute": cfg.substitute_label(v.get("name"), call_sign),
                          "crew": v.get("crew"), "departed": v.get("departed"), "arrived": v.get("arrived"),
+                         "alerted": v.get("alerted"), "finished": v.get("finished"),
                          "turnout_min": _rounded(vm.get("turnout_min")),
                          "arrival_min": _rounded(vm.get("arrival_min"))})
     return {
         "id": incident_key(tenant, incident.get("id")),
         "tenant": tenant.slug,
-        **{name: incident.get(name) for name in ("year", *store.FIELDS, "source", "filename", "warnings")},
+        **{name: incident.get(name) for name in ("year", *store.FIELDS, *store.ID_FIELDS, "source", "filename",
+                                                 "warnings")},
+        "bks_url": domain.BKS_REPORT_URL.format(incident["bks_report_id"]) if incident.get("bks_report_id") else None,
         "weekend_or_holiday": bool(incident.get("weekend_or_holiday")),
         **{name: _rounded(m[name]) for name in ("daytime", "duration_min", "turnout_min", "arrival_min", "on_time",
                                                  "crew_on_arrival", "crew_within_limit", "crew_within_second",
@@ -442,22 +445,42 @@ def _unpack_zip(data, zip_name, errors):
     return files
 
 
+class Skipped(Exception):
+    """Bericht wird nicht eingelesen (Meldung als Info, nicht als Fehler)."""
+
+
 def _read_pdf(path, filename, tenants):
-    """Bericht lesen -> (bericht, wehr). Bei mehreren Wehren wird die passende über die Einheit bzw.
-    die eigenen Fahrzeuge im Bericht gesucht; passt keine, ValueError."""
-    if len(tenants) == 1:
-        return report.read_pdf(path, filename, tenants[0].config), tenants[0]
+    """Bericht lesen -> (bericht, wehr); wehr=None beim Stammdatensatz.
+
+    Bei mehreren Wehren wird die passende über die Einheit bzw. die eigenen Fahrzeuge im Bericht
+    gesucht. Berichte anderer Einheiten (z. B. FEZ) werden übersprungen (Skipped)."""
     texts = pdf_report.extract_text(path)
+    head = pdf_report.parse_report(*texts, filename, "")
+    if head["report_kind"] == "master":
+        return head, None
+    if len(tenants) == 1:
+        cfg = tenants[0].config
+        if head["unit"] and cfg.unit_marker and head["unit"] != cfg.unit_marker:
+            raise Skipped(f"Bericht der Einheit {report.unit_label(head)} – gehört nicht zu {tenants[0].name}, "
+                          "übersprungen.")
+        return report.read_text(texts, filename, cfg), tenants[0]
     by_slug = {t.slug: t for t in tenants}
-    slug = report.match_tenant(texts, filename, [(t.slug, t.config) for t in tenants])
+    slug, how = report.match_tenant(texts, filename, [(t.slug, t.config) for t in tenants])
     if not slug:
+        if head["unit"]:
+            raise Skipped(f"Bericht der Einheit {report.unit_label(head)} – gehört zu keiner der ausgewählten "
+                          "Wehren, übersprungen.")
         raise ValueError("Der Bericht passt zu keiner der ausgewählten Wehren (Einheit und Fahrzeuge unbekannt).")
-    return report.read_text(texts, filename, by_slug[slug].config), by_slug[slug]
+    r = report.read_text(texts, filename, by_slug[slug].config)
+    if how == "vehicles":
+        r["warnings"].append(f"{by_slug[slug].name} über die Fahrzeuge im Bericht zugeordnet – bitte prüfen")
+    return r, by_slug[slug]
 
 
-def _read_uploads(uploads, tenants):
-    """Hochgeladene PDFs und ZIP-Dateien lesen -> ([(bericht, wehr)], fehler)."""
-    reports, errors, files = [], [], []
+def _read_uploads(uploads, tenants, email=None):
+    """Hochgeladene PDFs und ZIP-Dateien lesen -> ([(bericht, wehr)], fehler, hinweise).
+    Stammdatensätze werden gleich bei der VG gespeichert."""
+    reports, errors, notes, files = [], [], [], []
     for upload in uploads:
         filename, data = _safe_filename(upload.filename), upload.file.read()
         files += _unpack_zip(data, filename, errors) if filename.lower().endswith(".zip") else [(filename, data)]
@@ -469,22 +492,35 @@ def _read_uploads(uploads, tenants):
             with open(path, "wb") as fh:
                 fh.write(data)
             try:
-                reports.append(_read_pdf(path, filename, tenants))
+                r, tenant = _read_pdf(path, filename, tenants)
+            except Skipped as e:
+                notes.append({"file": filename, "message": str(e)})
+                continue
             except Exception as e:  # defekte oder fremde PDF: melden, Rest weiter lesen
                 log.exception("PDF %s", filename)
                 errors.append({"file": filename, "message": str(e) or type(e).__name__})
-    return reports, errors
+                continue
+            if tenant:
+                reports.append((r, tenant))
+                continue
+            with tenancy.central() as con:
+                records.save_master(con, tenants[0].vg_id, r, email)
+            notes.append({"file": filename, "message": f"Stammdatensatz {r['bks_record_id']} gespeichert."})
+    return reports, errors, notes
 
 
 def _shared_with(r, tenant, a):
-    """Andere sichtbare Wehren, die denselben Einsatz (Einsatznummer der Leitstelle) schon erfasst haben."""
-    if not r.get("dispatch_number"):
+    """Andere sichtbare Wehren, die denselben Einsatz schon erfasst haben: gleicher Stammdatensatz im
+    BKS-Portal oder gleiche Einsatznummer der Leitstelle."""
+    keys = [(name, r[name]) for name in ("bks_record_id", "dispatch_number") if r.get(name)]
+    if not keys:
         return []
+    where = " OR ".join(f"{name} = ?" for name, _ in keys)
     names = []
     for other in a.tenants.values():
         if other.slug != tenant.slug and other.can(STATS):
             with other.connection() as con:
-                if con.execute("SELECT 1 FROM incident WHERE dispatch_number = ?", (r["dispatch_number"],)).fetchone():
+                if con.execute(f"SELECT 1 FROM incident WHERE {where}", [v for _, v in keys]).fetchone():
                     names.append(other.name)
     return names
 
@@ -512,10 +548,10 @@ def api_read_reports(pdfs: List[UploadFile] = File(...), a: tenancy.Access = Dep
     pdfs = [p for p in pdfs if _is_upload(p.filename)]
     if not pdfs:
         raise HTTPException(400, "Bitte eine PDF- oder ZIP-Datei (Einsatzberichte aus dem BKS-Portal) auswählen.")
-    reports, errors = _read_uploads(pdfs, tenants)
+    reports, errors, notes = _read_uploads(pdfs, tenants, a.email)
     previews_json = [_preview_json(r, tenant, a) for r, tenant in reports]
     token = previews.add([(r, tenant.slug) for r, tenant in reports], a.email)
-    return {"token": token, "reports": previews_json, "errors": errors}
+    return {"token": token, "reports": previews_json, "errors": errors, "notes": notes}
 
 
 class Acceptance(BaseModel):
@@ -533,12 +569,14 @@ def api_accept_report(acceptance: Acceptance, a: tenancy.Access = Depends(access
     tenant = a.tenant(slug, WRITE)
     fields = {**report.to_fields(r), **acceptance.fields.model_dump(exclude_unset=True)}
     with tenant.connection() as con:
-        replace_id = store.find_incident(con, year_of(fields.get("started_at")),
-                                         store.to_int(fields.get("number"))) if acceptance.replace else None
+        update_id = store.find_existing(con, fields.get("bks_report_id"), year_of(fields.get("started_at")),
+                                        store.to_int(fields.get("number"))) if acceptance.replace else None
         try:
-            incident_id = report.save(con, r, fields, replace_id, modified_by=a.email)
+            incident_id = report.save(con, r, fields, update_id, modified_by=a.email)
         except store.DuplicateIncident as e:
             raise HTTPException(409, str(e))
+    with tenancy.central() as con:
+        records.register_report(con, tenant.id, r, a.email)
     if r.get("new_vehicles"):
         tenancy.forget_config(tenant.slug)
         log.info("Fahrzeuge %s in die Liste von %s aufgenommen", ", ".join(r["new_vehicles"]), tenant.slug)
