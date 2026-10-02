@@ -31,7 +31,7 @@ def read_text(texts, filename, cfg):
     report = pdf_report.parse_report(*texts, filename, cfg.unit_prefix)
     complete_number(report)
     derive(report, cfg)
-    check_plausibility(report)
+    check_plausibility(report, cfg)
     return report
 
 
@@ -188,8 +188,9 @@ def derive(report, cfg):
     return report
 
 
-def check_plausibility(report):
-    if report["number"] is None:
+def check_plausibility(report, cfg=None):
+    # Bei Nummerierung nach Datum vergibt die App die Nr. selbst
+    if report["number"] is None and not (cfg and cfg.numbering == "by_date"):
         report["warnings"].append("Einsatzbericht-Nr. nicht erkannt")
     start, end = report["started_at"], report["ended_at"]
     if start and end:

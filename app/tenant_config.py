@@ -50,6 +50,10 @@ class TenantConfig:
     second_limit: int = domain.SECOND_LIMIT
     day_hours: tuple = (domain.DAY_START_HOUR, domain.DAY_END_HOUR)
     keywords: tuple = domain.KEYWORD_CATALOG  # (Stichwort.Stufe, Bezeichnung, Suchbegriffe)
+    # Einsatznummern: "bks" = Nr. aus dem Bericht (fehlt sie, die nächste freie), "by_date" = nach Beginn
+    # durchnummeriert (ein später eingelesener Einsatz rückt an seine Stelle)
+    numbering: str = "bks"
+    response_plan_public: bool = False        # Bedarfsplan für alle Rollen; sonst nur mit Verwaltungsrecht
     inactive_keywords: tuple = ()             # deaktivierte: nur noch Bezeichnung für alte Einsätze
     colors: dict = dataclasses.field(default_factory=dict)   # {"brand": "#RRGGBB", "brand_dark": …}, siehe theme.py
 
@@ -134,6 +138,8 @@ class TenantConfig:
             "default_limit": self.default_limit,
             "second_limit": self.second_limit,
             "day_hours": list(self.day_hours),
+            "numbering": self.numbering,
+            "response_plan_public": self.response_plan_public,
             "fire_alarm_system": ".".join(domain.FIRE_ALARM_SYSTEM),
             "fire_watch": ".".join(domain.FIRE_WATCH),
             "keyword_catalog": [{"code": code, "name": name, "terms": terms, "active": True}
@@ -169,4 +175,6 @@ def combine(name, cfgs):
         plan_min_level=min(c.plan_min_level for c in cfgs),
         response_limits=tuple(sorted({limit for c in cfgs for limit in c.response_limits})),
         keywords=_unique((k for c in cfgs for k in c.keywords), key=lambda k: k[0]),
+        numbering=first.numbering if len({c.numbering for c in cfgs}) == 1 else "mixed",
+        response_plan_public=all(c.response_plan_public for c in cfgs),
     )

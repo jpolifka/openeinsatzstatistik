@@ -29,6 +29,7 @@ router = APIRouter()
 
 CALL_SIGN = re.compile(r"\d\d/\d\d")
 KEYWORD_CODE = re.compile(r"[A-Z]\d(\.\d\d)?")
+NUMBERINGS = ("bks", "by_date")
 MAX_KEYWORD_FILE = 2 * 1024 * 1024
 
 
@@ -88,6 +89,8 @@ class SettingsIn(BaseModel):
     default_limit: int = domain.DEFAULT_LIMIT
     second_limit: int = domain.SECOND_LIMIT
     day_hours: List[int] = [domain.DAY_START_HOUR, domain.DAY_END_HOUR]
+    numbering: str = "bks"
+    response_plan_public: bool = False
 
 
 def _settings_json(tenant, cfg):
@@ -106,7 +109,7 @@ def _settings_json(tenant, cfg):
         "substitutes": cfg.substitutes,
         **{key: getattr(cfg, key) for key in ("unit_prefix", "own_prefix", "unit_marker", "control_center",
                                                "plan_places", "plan_min_level", "response_limits", "default_limit",
-                                               "second_limit", "day_hours")},
+                                               "second_limit", "day_hours", "numbering", "response_plan_public")},
         "places": [{"name": n, "prefix": p} for n, p in cfg.places],
     }
 
@@ -153,6 +156,8 @@ def _check_settings(s: SettingsIn):
         _invalid("Die Mindest-Alarmstufe muss zwischen 1 und 4 liegen.")
     if len(s.day_hours) != 2 or not 0 <= s.day_hours[0] < s.day_hours[1] <= 24:
         _invalid("Tag: Beginn und Ende als volle Stunden, Beginn vor Ende.")
+    if s.numbering not in NUMBERINGS:
+        _invalid("Nummerierung: aus dem Bericht oder nach Datum.")
     if s.own_prefix and not re.fullmatch(r"\d\d/", s.own_prefix):
         _invalid("Eigener Präfix: zwei Ziffern und Schrägstrich, z. B. 02/.")
     return TenantConfig(
@@ -165,7 +170,8 @@ def _check_settings(s: SettingsIn):
         control_center=s.control_center.strip() or domain.CONTROL_CENTER,
         places=tuple((p.name.strip(), p.prefix.strip().lower()) for p in s.places), plan_places=tuple(s.plan_places),
         plan_min_level=s.plan_min_level, response_limits=tuple(limits), default_limit=s.default_limit,
-        second_limit=s.second_limit, day_hours=tuple(s.day_hours))
+        second_limit=s.second_limit, day_hours=tuple(s.day_hours), numbering=s.numbering,
+        response_plan_public=s.response_plan_public)
 
 
 @router.put("/api/admin/{slug}/settings")
@@ -174,12 +180,32 @@ def put_settings(slug: str, s: SettingsIn, a: tenancy.Access = Depends(access)):
     cfg = _check_settings(s)
     with tenant.connection() as con:
         tenancy.save_config(con, cfg)
+        if cfg.numbering == "by_date":         # beim Umstellen alle Jahre nach Datum durchnummerieren
+            for row in store.years(con):
+                store.renumber(con, row["year"])
     with tenancy.central() as con:
         con.execute("UPDATE tenant SET name = ? WHERE id = ?", (cfg.name, tenant.id))
     tenancy.forget_config(slug)
     log.info("Einstellungen von %s geändert durch %s", slug, a.email or "lokal")
     tenant.name = cfg.name
     return _settings_json(tenant, tenant.config)
+
+
+class PlanRelease(BaseModel):
+    public: bool
+
+
+@router.put("/api/admin/{slug}/response-plan")
+def release_response_plan(slug: str, release: PlanRelease, a: tenancy.Access = Depends(access)):
+    """Bedarfsplan für alle Rollen der Wehr freigeben bzw. wieder nur für die Verwaltung zeigen."""
+    tenant = a.tenant(slug, ADMIN)
+    with tenant.connection() as con:
+        con.execute("INSERT INTO setting (key, value) VALUES ('response_plan_public', ?) "
+                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value", ("true" if release.public else "false",))
+    tenancy.forget_config(slug)
+    log.info("Bedarfsplan von %s %s durch %s", slug, "freigegeben" if release.public else "zurückgezogen",
+             a.email or "lokal")
+    return {"public": release.public}
 
 
 class Colors(BaseModel):

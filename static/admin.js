@@ -235,7 +235,11 @@ function bksSection() {
       ${adminField("Eigener Präfix", textInput("own_prefix", s.own_prefix, 'placeholder="02/" maxlength="3"'))}
       ${adminField("Einheit im Bericht", textInput("unit_marker", s.unit_marker, 'placeholder="FW NR#.ABC 02" spellcheck="false"'), "span-2")}
       ${adminField("FEZ-Kennung", textInput("control_center", s.control_center, 'spellcheck="false"'))}
+      ${adminField("Einsatznummern", `<select data-bind="numbering">
+        <option value="bks" ${s.numbering === "bks" ? "selected" : ""}>aus dem Bericht (fehlt sie: nächste freie)</option>
+        <option value="by_date" ${s.numbering === "by_date" ? "selected" : ""}>nach Datum durchnummerieren</option></select>`, "span-3")}
     </div>
+    <p class="small muted">Nach Datum: Die App nummeriert alle Einsätze eines Jahres nach dem Beginn; ein später eingelesener Einsatz (z. B. eine selbst angelegte Brandsicherheitswache) rückt an seine Stelle, die folgenden Nummern verschieben sich. Beim Speichern werden alle Jahre neu nummeriert.</p>
     <p class="small muted">Leerzeichen am Ende des Einheiten-Präfixes gehören dazu.</p>
     <h3 class="section-gap">Testen</h3>
     <label class="field"><span>Fahrzeugzeile aus einem Bericht</span>
@@ -267,6 +271,8 @@ function placesSection() {
       ${adminField("Tag ab (Uhr)", `<input type="number" min="0" max="23" data-bind="day_hours.0" value="${s.day_hours[0]}">`)}
       ${adminField("Tag bis (Uhr)", `<input type="number" min="1" max="24" data-bind="day_hours.1" value="${s.day_hours[1]}">`)}
     </div>
+    <label class="toggle section-gap"><input type="checkbox" data-bind="response_plan_public" ${s.response_plan_public ? "checked" : ""}>
+      Bedarfsplan für alle Rollen freigeben <span class="muted">(sonst nur Wehrführer, Wehrleiter)</span></label>
     ${saveButton()}`;
 }
 
