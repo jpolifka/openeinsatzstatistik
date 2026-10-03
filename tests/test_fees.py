@@ -102,3 +102,33 @@ def test_suggest_type_prefers_fee_schedule():
     assert fees.suggest_type(["HLF 20", "HLF 20/16", "LF 24"], fee_types) == "HLF 20"
     assert fees.suggest_type(["LF 10", "HLF 10"], fee_types + ["HLF 10"]) == ""      # zwei möglich
     assert fees.suggest_type(["TSF"], fee_types) == "TSF"
+
+
+def test_vehicle_minutes_use_incident_end_with_date():
+    """Ohne eigenes Ende gilt das Einsatzende mit Datum – auch über 24 Stunden (nicht modulo 24 h)."""
+    import datetime as dt
+    start, end = dt.datetime(2025, 3, 12, 22, 0), dt.datetime(2025, 3, 14, 0, 30)
+    assert fees._vehicle_minutes({"departed": "22:10:00"}, start, end) == 26 * 60 + 20
+    assert fees._vehicle_minutes({"departed": "00:10:00"}, start, end) == 24 * 60 + 20   # nach Mitternacht
+    assert fees._vehicle_minutes({"departed": "22:10:00", "finished": "23:40:00"}, start, end) == 90
+
+
+def test_substitute_and_schedule_hints(vg, monkeypatch):
+    """Ersatzfahrzeug wird nach seinem eigenen Typ berechnet; Einsatz vor der Gebührenordnung gibt einen Hinweis."""
+    with tenancy.central() as con:
+        vg_id = con.execute("SELECT id FROM vg WHERE slug = 'vg-a'").fetchone()[0]
+    with db.connection(tenancy.tenant_path("wehr-a1")) as con:
+        con.execute("INSERT INTO setting (key, value) VALUES ('substitutes', ?) "
+                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value", ('{"FL NR#.BHÖ 02/24-01": "02/45"}',))
+        con.execute("UPDATE fleet SET name = 'FL NR#.BHÖ 02/24-01' WHERE call_sign = '02/24'")   # Typ MTF
+    tenancy.forget_config("wehr-a1")
+    _incident(vg, monkeypatch, FULL.replace("FL NR#.BHÖ 02/45-01", "FL NR#.BHÖ 02/19-01"))
+    with db.connection(tenancy.tenant_path("wehr-a1")) as con:
+        con.execute("UPDATE vehicle SET call_sign = '02/45', name = 'FL NR#.BHÖ 02/24-01' WHERE call_sign = '02/24'")
+    result = _fees(vg).json()
+    vehicle = next(p for p in result["positions"] if p["kind"] == "vehicle" and "Ersatz" in p["label"])
+    assert vehicle["label"].endswith("MTF") and vehicle["rate"] == 37.0
+    with tenancy.central() as con:
+        con.execute("UPDATE fee_schedule SET valid_from = '2026-01-01' WHERE vg_id = ? AND valid_from < '2030'", (vg_id,))
+    assert any("vor dem Gültigkeitsbeginn" in h for h in _fees(vg).json()["hints"])
+    assert _fees(vg, schedule_id=999999).status_code == 422
