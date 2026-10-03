@@ -146,6 +146,8 @@ def _settings_json(tenant, cfg):
     with tenancy.central() as con:
         fee_types = fees.vehicle_types(con, tenant.vg_id)
     bks_code, station = _bks_parts(cfg)
+    if not bks_code and "bks_code" not in overrides:   # noch ohne Standort: die Kennung der VG
+        bks_code = layer.value("bks_code")
     return {
         "assets": {name: assets.get(name) for name in theme.ASSETS},
         "slug": tenant.slug, "name": cfg.name, "colors": cfg.colors, "fleet_version": version,
@@ -623,7 +625,10 @@ def parse_test(t: ParseTest, a: tenancy.Access = Depends(access)):
     if t.vg:
         configs = [(x.name, x.config) for x in tenancy.vg_tenants(_managed_vg_id(a, t.vg, SETTINGS))]
         owner = lambda n: next((name for name, cfg in configs if cfg.is_own(n)), None)
-        return {"vehicles": [{"name": n, "tenant": owner(n), "description": domain.call_sign_text(n)} for n in names],
+        block = lambda n: next(({"tenant": name, "call_sign": cfg.block_of(n)} for name, cfg in configs
+                                if cfg.vehicle(cfg.block_of(n) or "")), None)
+        return {"vehicles": [{"name": n, "tenant": owner(n), "block": block(n), "description": domain.call_sign_text(n)}
+                             for n in names],
                 "units": [{"unit": u, "tenant": next((name for name, cfg in configs if cfg.unit_marker == u), None)}
                           for u in units]}
     unit_marker = t.unit_marker.strip()

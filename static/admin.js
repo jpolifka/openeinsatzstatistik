@@ -1,21 +1,25 @@
 "use strict";
 
-// Verwaltung: Einstellungen der Wehr (Name, Farben, Logos, Fahrzeuge, BKS-Kennung, Orte, Bedarfsplan),
-// Stichwortkatalog, Benutzer, Rollen und – für Superadmins – Verbandsgemeinden und Wehren.
+// Verwaltung: Einstellungen (Name, Farben, Logos, Fahrzeuge, BKS-Kennung, Orte, Bedarfsplan), Stichwortkatalog,
+// Benutzer, Rollen und – für Superadmins – Verbandsgemeinden und Wehren. Ist oben in der Verwaltung die
+// Wehrleitung einer VG gewählt, zeigen dieselben Bereiche die Vorgaben der VG und alle ihre Wehren auf einmal;
+// bei einer Wehr deren Werte und wo sie von der VG abweicht. Ein Bereich wechselt nie die Auswahl.
 // Wird nach app.js geladen und trägt sich in VIEWS ein. Rechte prüft das Backend (app/admin.py).
 
-// [Schlüssel, Bezeichnung, braucht die Einstellungen der Wehr, nur Superadmin, Auswahl oben: Wehr, Wehrleitung, beide,
-//  nötiges Recht in der gewählten Wehr bzw. VG (rbac.py); bei „beide“ entscheidet admin.overview.users]
+// Bereiche mit dem nötigen Recht (rbac.py) bei gewählter Wehr (tenant) bzw. Wehrleitung (vg);
+// any: Benutzer und Rollen (entscheidet admin.overview.users), superOnly: nur Superadmin
 const ADMIN_SECTIONS = [
-  ["unit", "Wehr", true, false, "tenant", "tenant.settings"], ["fleet", "Fahrzeuge", true, false, "tenant", "tenant.settings"],
-  ["bks", "BKS-Kennung", true, false, "tenant", "tenant.settings"],
-  ["places", "Orte & Bedarfsplan", true, false, "tenant", "tenant.settings"],
-  ["keywords", "Stichworte", false, false, "tenant", "tenant.keywords"],
-  ["vehicles", "Fahrzeuge der VG", false, false, "vg", "vg.fees"], ["fees", "Gebührenordnung", false, false, "vg", "vg.fees"],
-  ["users", "Benutzer", false, false, "any"], ["roles", "Rollen", false, false, "any"],
-  ["super", "Wehren & VGs", false, true, "any"],
+  { key: "unit", label: "Allgemein", tenant: "tenant.settings", vg: "tenant.settings" },
+  { key: "fleet", label: "Fahrzeuge", tenant: "tenant.settings", vg: "tenant.settings" },
+  { key: "bks", label: "BKS-Kennung", tenant: "tenant.settings", vg: "tenant.settings" },
+  { key: "places", label: "Orte & Bedarfsplan", tenant: "tenant.settings", vg: "tenant.settings" },
+  { key: "keywords", label: "Stichworte", tenant: "tenant.keywords", vg: "tenant.keywords" },
+  { key: "fees", label: "Gebührenordnung", vg: "vg.fees" },
+  { key: "users", label: "Benutzer", any: true }, { key: "roles", label: "Rollen", any: true },
+  { key: "super", label: "Wehren & VGs", superOnly: true },
 ];
-const SETTINGS_SECTIONS = ADMIN_SECTIONS.filter((s) => s[2]).map((s) => s[0]);
+// Bereiche, deren Eingaben über „Speichern“ gesichert werden (Einstellungen der Wehr bzw. Vorgaben der VG)
+const SETTINGS_SECTIONS = ["unit", "fleet", "bks", "places"];
 
 const admin = {
   overview: null, slug: null, section: null, settings: null, keywords: null, memberships: null, superOverview: null,
@@ -27,51 +31,68 @@ const admin = {
   roles: null,                // Rechtekatalog und Rollen (/api/admin/roles)
   roleDraft: null,            // Rolle im Editor (neu: id null)
   vg: null,                   // ausgewählte Wehrleitung (Slug der VG) statt einer Wehr
-  vgVehicles: null,           // Fahrzeuge der VG (Wehrleitung)
-  savedSettings: null,        // Stand der Einstellungen beim Laden/Speichern – Vergleich für „ungespeichert“
+  vgSettings: null,           // Vorgaben der VG mit allen Wehren (Allgemein, BKS-Kennung, Orte & Bedarfsplan)
+  vgFleet: null,              // Fahrzeuglisten aller Wehren der VG
+  saved: null,                // Stand des gerade bearbeiteten Datensatzes beim Laden/Speichern – Vergleich für „ungespeichert“
 };
 
 // Hilfe zum gerade offenen Bereich der Verwaltung
-const ADMIN_HELP = { unit: "admin_colors", fleet: "admin_fleet", bks: "admin_bks", places: "admin_places",
-  keywords: "admin_keywords", vehicles: "admin_vg_vehicles", fees: "fees", users: "admin_users",
+const ADMIN_HELP = { unit: () => admin.vg ? "admin_vg_defaults" : "admin_colors", fleet: () => admin.vg ? "admin_vg_vehicles" : "admin_fleet",
+  bks: "admin_bks", places: "admin_places", keywords: "admin_keywords", fees: "fees", users: "admin_users",
   roles: () => admin.roleDraft ? "admin_role_editor" : "admin_roles" };
 
 VIEWS.admin = { label: "Verwaltung", load: loadAdmin, render: renderAdmin, noYear: true,
   visible: () => config.admin, help: () => helpValue(ADMIN_HELP[admin.section]) || "sec_admin" };
 
 // ------------------------------------------------------------ Laden
+const vgUrl = (path = "") => `/api/admin/vgs/${encodeURIComponent(admin.vg)}${path}`;
+const keywordsUrl = (path = "") => admin.vg ? vgUrl(`/keywords${path}`) : `/api/admin/${admin.slug}/keywords${path}`;
+const keywordsScope = () => admin.vg ? `vg:${admin.vg}` : admin.slug;
+
+// Was „Speichern“ im offenen Bereich sichert: Einstellungen der Wehr, Vorgaben der VG oder ihre Fahrzeuge
+function adminData() {
+  if (!SETTINGS_SECTIONS.includes(admin.section)) return null;
+  if (!admin.vg) return admin.settings;
+  return admin.section === "fleet" ? admin.vgFleet : admin.vgSettings;
+}
+
 async function loadAdmin() {
   if (!admin.overview) {
     admin.overview = await api("/api/admin");
     // Gewählte Wehr behalten (z. B. nach dem Speichern), sonst die oben ausgewählte, sonst die erste
     const pick = (slug) => admin.overview.tenants.find((t) => t.slug === slug);
     admin.slug = (pick(admin.slug) || pick(config.tenant?.slug) || admin.overview.tenants[0])?.slug || null;
-    // Oben die Wehrleitung gewählt: in der Verwaltung ebenfalls (falls sie die VG verwalten darf)
-    if (config.vg && admin.overview.vgs.some((v) => v.slug === config.vg.slug)) admin.vg = config.vg.slug;
+    // Oben die Wehrleitung gewählt (oder keine Wehr zu verwalten): in der Verwaltung ebenfalls
+    const vgs = admin.overview.vgs;
+    if (config.vg && vgs.some((v) => v.slug === config.vg.slug)) admin.vg = config.vg.slug;
+    else if (!admin.slug && vgs.length) admin.vg = vgs[0].slug;
   }
   const sections = adminSections();
-  if (!sections.some(([key]) => key === admin.section)) admin.section = sections[0]?.[0] || null;
+  if (!sections.some((x) => x.key === admin.section)) admin.section = sections[0]?.key || null;
   const s = admin.section;
-  if (SETTINGS_SECTIONS.includes(s) && admin.settings?.slug !== admin.slug) {
-    admin.settings = await api(`/api/admin/${admin.slug}/settings`);
-    admin.savedSettings = JSON.stringify(settingsPayload());
-    admin.check = null;
+  const snapshot = () => { admin.saved = JSON.stringify(settingsPayload()); admin.check = null; };
+  if (SETTINGS_SECTIONS.includes(s)) {
+    if (admin.vg && s === "fleet" && admin.vgFleet?.vg !== admin.vg) {
+      admin.vgFleet = { vg: admin.vg, ...(await api(vgUrl("/fleet"))) };
+      snapshot();
+    } else if (admin.vg && s !== "fleet" && admin.vgSettings?.vg?.slug !== admin.vg) {
+      admin.vgSettings = await api(vgUrl("/settings"));
+      snapshot();
+    } else if (!admin.vg && admin.settings?.slug !== admin.slug) {
+      admin.settings = await api(`/api/admin/${admin.slug}/settings`);
+      snapshot();
+    } else if (adminData() && admin.saved === null) snapshot();
   }
-  if (s === "keywords" && admin.keywords?.slug !== admin.slug) {
-    admin.keywords = { ...(await api(`/api/admin/${admin.slug}/keywords`)), slug: admin.slug };
+  if (s === "keywords" && admin.keywords?.scope !== keywordsScope()) {
+    admin.keywords = { ...(await api(keywordsUrl())), scope: keywordsScope() };
   }
   if (s === "users" && !admin.memberships) setMemberships(await api("/api/admin/memberships"));
   if (s === "roles" && !admin.roles) admin.roles = await api("/api/admin/roles");
   if (s === "super" && !admin.superOverview) admin.superOverview = await api("/api/super/overview");
   if (s === "fees" && admin.fees?.vg !== admin.vg) {
-    admin.fees = { vg: admin.vg, ...(await api(`/api/admin/vgs/${encodeURIComponent(admin.vg)}/fees`)) };
+    admin.fees = { vg: admin.vg, ...(await api(vgUrl("/fees"))) };
     admin.feeDraft = null;
   }
-  if (s === "vehicles" && admin.vgVehicles?.vg !== admin.vg) await loadVgVehicles();
-}
-
-async function loadVgVehicles() {
-  admin.vgVehicles = { vg: admin.vg, ...(await api(`/api/admin/vgs/${encodeURIComponent(admin.vg)}/vehicles`)) };
 }
 
 // Rechte in der ausgewählten Wehr bzw. VG der Verwaltung
@@ -81,7 +102,7 @@ function adminGranted() {
     : overview.tenants.find((t) => t.slug === admin.slug))?.permissions || [];
 }
 
-// VG der oben gewählten Wehr, falls der Benutzer sie verwalten darf (Bereiche der Wehrleitung auch bei gewählter Wehr)
+// VG der gewählten Wehr, falls der Benutzer sie verwalten darf (Hinweis „zur Wehrleitung wechseln“)
 function adminTenantVg() {
   const { overview } = admin;
   const tenant = overview.tenants.find((t) => t.slug === admin.slug);
@@ -90,15 +111,12 @@ function adminTenantVg() {
 
 function adminSections() {
   const { overview } = admin;
-  const mode = admin.vg ? "vg" : "tenant";
   const granted = adminGranted();
-  const tenantVg = admin.vg ? null : adminTenantVg();
-  return ADMIN_SECTIONS.filter(([, , , superOnly, scope, permission]) => {
-    if (superOnly) return overview.superadmin;
-    if (scope === "any") return overview.users || overview.superadmin;
-    // Bei gewählter Wehr führen die Bereiche der VG direkt zur Wehrleitung ihrer VG
-    if (scope === "vg" && tenantVg) return tenantVg.permissions.includes(permission);
-    return scope === mode && granted.includes(permission);
+  return ADMIN_SECTIONS.filter((x) => {
+    if (x.superOnly) return overview.superadmin;
+    if (x.any) return overview.users || overview.superadmin;
+    const permission = admin.vg ? x.vg : x.tenant;
+    return Boolean(permission) && granted.includes(permission);
   });
 }
 
@@ -110,21 +128,25 @@ async function adminGo(changes) {
 // ------------------------------------------------------------ Rahmen
 function renderAdmin() {
   const { tenants, vgs } = admin.overview;
-  // Auswahl: Wehrleitung einer VG (Fahrzeuge der VG, Gebührenordnung) oder eine Wehr
+  // Auswahl: Wehrleitung einer VG (Vorgaben und alle Wehren) oder eine Wehr – nur hier wechselt sie
   const choices = [...vgs.map((v) => ({ key: `vg:${v.slug}`, label: `Wehrleitung · ${v.name}` })),
     ...tenants.map((t) => ({ key: t.slug, label: `${t.name} · ${t.vg}` }))];
   const current = admin.vg ? `vg:${admin.vg}` : admin.slug;
   const tenantSelect = choices.length > 1 && !["users", "roles", "super"].includes(admin.section)
     ? `<label class="field admin-tenant"><span>${admin.vg ? "Wehrleitung" : "Wehr"}</span><select data-admin-tenant>${choices.map((c) =>
       `<option value="${esc(c.key)}" ${c.key === current ? "selected" : ""}>${esc(c.label)}</option>`).join("")}</select></label>` : "";
-  const sections = `<div class="segments" role="group" aria-label="Verwaltungsbereich">${adminSections().map(([key, label]) =>
+  const sections = `<div class="segments" role="group" aria-label="Verwaltungsbereich">${adminSections().map(({ key, label }) =>
     `<button type="button" data-admin-section="${key}" aria-pressed="${key === admin.section}" class="${key === admin.section ? "active" : ""}">${label}</button>`).join("")}</div>`;
+  // Wer auch die VG verwaltet, wechselt bei gewählter Wehr ausdrücklich in deren Wehrleitung
+  const vg = !admin.vg && !["users", "roles", "super"].includes(admin.section) && adminTenantVg();
+  const toVg = vg ? `<button type="button" class="btn btn-light btn-small admin-switch" data-admin-action="go-vg">Alle Wehren der ${esc(vg.name)} bearbeiten</button>` : "";
   const body = ({
-    unit: unitSection, fleet: fleetSection, bks: bksSection, places: placesSection, vehicles: vgVehiclesSection,
+    unit: () => admin.vg ? vgUnitSection() : unitSection(), fleet: () => admin.vg ? vgFleetSection() : fleetSection(),
+    bks: () => admin.vg ? vgBksSection() : bksSection(), places: () => admin.vg ? vgPlacesSection() : placesSection(),
     keywords: keywordsSection, users: usersSection, roles: rolesSection, super: superSection, fees: feesSection,
   }[admin.section] || (() => `<p class="muted">Hier gibt es für dich nichts zu verwalten.</p>`))();
   $("#view-admin").innerHTML = `<div class="card admin-card">
-    <div class="admin-head">${sections}${tenantSelect}</div>
+    <div class="admin-head">${sections}${toVg}${tenantSelect}</div>
     ${admin.error ? errorBox(admin.error) : ""}
     <div class="admin-body">${body}</div>
   </div>`;
@@ -146,8 +168,8 @@ const saveButton = (label = "Speichern") =>
   `<div class="admin-actions" id="admin-savebar"><span class="unsaved-note">Ungespeicherte Änderungen</span>
     <button type="button" class="btn btn-primary" data-admin-action="save-settings">${label}</button></div>`;
 
-// Ungespeicherte Änderungen an den Einstellungen der Wehr (Name, Farben, Fahrzeuge, Orte …)
-const settingsDirty = () => Boolean(admin.settings && admin.savedSettings !== JSON.stringify(settingsPayload()));
+// Ungespeicherte Änderungen an den Einstellungen der Wehr bzw. den Vorgaben oder Fahrzeugen der VG
+const settingsDirty = () => Boolean(adminData() && admin.saved !== null && admin.saved !== JSON.stringify(settingsPayload()));
 
 function updateDirty() {
   $("#admin-savebar")?.classList.toggle("dirty", settingsDirty());
@@ -157,14 +179,23 @@ function updateDirty() {
 function confirmDiscard() {
   if (!settingsDirty()) return true;
   if (!confirm("Die Änderungen an den Einstellungen sind noch nicht gespeichert. Verwerfen?")) return false;
-  admin.settings = admin.savedSettings = null;
+  forgetAdminData();
   return true;
 }
 
-// Wert in admin.settings über einen Pfad wie "fleet.0.label" setzen
+// Bearbeitete Daten verwerfen (werden beim nächsten Zeichnen neu geladen)
+function forgetAdminData() {
+  admin.settings = admin.vgSettings = admin.vgFleet = admin.saved = null;
+}
+
+// Wert im gerade bearbeiteten Datensatz (adminData) über einen Pfad wie "fleet.0.label" lesen bzw. setzen
+function getPath(path) {
+  return path.split(".").reduce((target, key) => target?.[key], adminData());
+}
+
 function setPath(path, value) {
   const keys = path.split(".");
-  let target = admin.settings;
+  let target = adminData();
   for (const key of keys.slice(0, -1)) target = target[key];
   target[keys.at(-1)] = value;
 }
@@ -177,14 +208,28 @@ function inputValue(input) {
 
 
 // ------------------------------------------------------------ Aktionen
+const VG_DEFAULT_KEYS = ["bks_code", "control_center", "places", "plan_min_level", "response_limits", "default_limit",
+  "second_limit", "day_hours", "numbering"];
+
 function settingsPayload() {
-  const s = admin.settings;
-  return {
-    ...s, colors: cleanColors(),
-    fleet: s.fleet.map((v) => ({ ...v, in_service_from: v.in_service_from || null, in_service_until: v.in_service_until || null,
-      replaced_by: v.replaced_by || null })),
-  };
+  const d = adminData();
+  if (!d) return null;
+  const vehicles = (fleet) => fleet.map((v) => ({ ...v, in_service_from: v.in_service_from || null,
+    in_service_until: v.in_service_until || null, replaced_by: v.replaced_by || null }));
+  if (d === admin.vgFleet) {
+    return { tenants: d.tenants.map((t) => ({ slug: t.slug, fleet_version: t.fleet_version, substitutes: t.substitutes,
+      fleet: vehicles(t.fleet) })) };
+  }
+  if (d === admin.vgSettings) {
+    return { ...Object.fromEntries(VG_DEFAULT_KEYS.map((key) => [key, d[key] ?? ""])), colors: cleanColors(),
+      tenants: d.tenants.map((t) => ({ slug: t.slug, station: t.station || "", plan_places: t.plan_places })) };
+  }
+  return { ...d, colors: cleanColors(), fleet: vehicles(d.fleet) };
 }
+
+// Betrifft die Änderung die oben ausgewählte Wehr bzw. Gesamtansicht? Dann deren Konfiguration neu holen
+const affectsCurrent = () => admin.vg ? [config.tenant?.vg?.slug, config.vg?.slug].includes(admin.vg)
+  : admin.slug === config.tenant?.slug;
 
 // Nach Änderungen an der ausgewählten Wehr: Konfiguration, Farben und Logos neu holen
 async function refreshCurrentTenant() {
@@ -198,82 +243,93 @@ async function refreshCurrentTenant() {
 
 async function runAdminAction(button) {
   const { adminAction: action, index, step, key, name, code, mode, email, scope, slug } = button.dataset;
-  const s = admin.settings;
+  const d = adminData();
+  const list = button.dataset.list ? getPath(button.dataset.list) : null;     // Fahrzeugliste (Wehr oder eine Wehr der VG)
   const i = Number(index);
   const rerender = () => renderAdmin();
   if (action.startsWith("fee-")) { await runFeeAction(action, button.dataset); return; }
   switch (action) {
     case "save-settings": {
-      admin.settings = await apiJson(`/api/admin/${admin.slug}/settings`, "PUT", settingsPayload());
-      admin.savedSettings = JSON.stringify(settingsPayload());
+      const payload = settingsPayload();
+      if (admin.vg && admin.section === "fleet") admin.vgFleet = { vg: admin.vg, ...(await apiJson(vgUrl("/fleet"), "PUT", payload)) };
+      else if (admin.vg) admin.vgSettings = await apiJson(vgUrl("/settings"), "PUT", payload);
+      else admin.settings = await apiJson(`/api/admin/${admin.slug}/settings`, "PUT", payload);
+      admin.saved = JSON.stringify(settingsPayload());
       admin.check = null;
-      admin.overview = null;                 // Name der Wehr kann sich geändert haben
-      if (admin.slug === config.tenant?.slug) await refreshCurrentTenant();
+      // Die jeweils andere Sicht ist jetzt veraltet (Vorgaben vererben sich, Fahrzeuge stehen in beiden)
+      if (admin.vg) admin.settings = null;
+      else admin.vgSettings = admin.vgFleet = admin.overview = null;     // Name der Wehr kann sich geändert haben
+      if (affectsCurrent()) await refreshCurrentTenant();
       toast("Gespeichert");
       await loadAdmin();
       return rerender();
     }
+    case "go-vg":
+      if (!confirmDiscard()) return;
+      return adminGo({ vg: adminTenantVg().slug, saved: null, parseResult: null, keywordEdit: null });
     case "select-tenant":
       if (settingsDirty() && !confirm("Die Änderungen sind noch nicht gespeichert. Trotzdem wechseln?")) return;
       await apiJson("/api/scope", "POST", { key: `t:${admin.slug}` });
-      admin.settings = admin.savedSettings = null;    // kein Rückfrage-Dialog beim Neuladen
+      forgetAdminData();                              // kein Rückfrage-Dialog beim Neuladen
       location.reload();
       return;
     case "clear-color":
-      s.colors[key] = "";
-      if (key === "brand") s.colors.brand_dark = "";
+      d.colors[key] = "";
+      if (key === "brand") d.colors.brand_dark = "";
       admin.check = null;
-      if (!s.colors.brand) admin.settings.palette = null;
+      if (!d.colors.brand) d.palette = null;
       scheduleThemeCheck();
       return rerender();
     case "delete-asset":
       await api(`/api/admin/${admin.slug}/assets/${name}`, { method: "DELETE" });
       return afterAssetChange();
     case "assign-vehicle": {
-      const input = $("#vg-vehicle-name"), select = $("#vg-vehicle-tenant");
+      const input = $("#vg-vehicle-name");
       if (!input.value.trim()) return;
-      const fake = { dataset: { name: input.value.trim(), source: "", callSign: "" }, value: select.value };
-      return moveVehicle(fake);
+      assignVehicle(input.value.trim(), Number($("#vg-vehicle-tenant").value));
+      return rerender();
     }
-    case "edit-fleet":
-      if (!confirmDiscard()) return;
-      return adminGo({ vg: null, slug: button.dataset.tenant, section: "fleet" });
     case "add-vehicle":
-      s.fleet.push({ call_sign: "", name: "", suggested_name: "", types: [], label: "", in_service_from: "", in_service_until: "", replaced_by: "", in_plan_crew: true, incidents: 0 });
+      list.push(newVehicle());
       return rerender();
     case "move-vehicle": {
       const j = i + Number(step);
-      [s.fleet[i], s.fleet[j]] = [s.fleet[j], s.fleet[i]];
+      [list[i], list[j]] = [list[j], list[i]];
       return rerender();
     }
     case "remove-vehicle": {
-      const v = s.fleet[i];
+      const v = list[i];
       if (v.incidents && !confirm(`${v.name || v.call_sign} hat Daten in ${v.incidents} Einsätzen. Ohne Eintrag in der Liste erscheinen sie nicht mehr in Auswertung und Export (die Daten bleiben erhalten). Entfernen?`)) return;
-      s.fleet.splice(i, 1);
+      list.splice(i, 1);
       return rerender();
     }
     case "add-substitute":
-      s.substitutes[""] = vehicleKey(s.fleet[0]);
+      getPath(button.dataset.subs)[""] = vehicleKey(list[0]);
       return rerender();
     case "remove-substitute":
-      delete s.substitutes[button.dataset.sub];
+      delete getPath(button.dataset.subs)[button.dataset.sub];
       return rerender();
     case "add-place":
-      s.places.push({ name: "" });
+      d.places.push({ name: "" });
       return rerender();
-    case "remove-place":
-      s.plan_places = s.plan_places.filter((p) => p !== s.places[i].name);
-      s.places.splice(i, 1);
+    case "remove-place": {
+      const removed = d.places[i].name;
+      for (const t of admin.vg ? d.tenants : [d]) t.plan_places = t.plan_places.filter((p) => p !== removed);
+      d.places.splice(i, 1);
+      return rerender();
+    }
+    case "inherit":                          // Abweichung aufheben: Wert der VG übernehmen
+      takeInherited(key);
       return rerender();
     case "parse-test":
-      admin.parseResult = (await apiJson("/api/admin/parse-test", "POST",
-        { line: $("#parse-line").value, unit_marker: s.unit_marker }));
+      admin.parseResult = (await apiJson("/api/admin/parse-test", "POST", admin.vg
+        ? { line: $("#parse-line").value, vg: admin.vg } : { line: $("#parse-line").value, unit_marker: d.unit_marker }));
       return rerender();
     case "keyword-save": {
       const keywordCode = $("#keyword-code").value.trim().toUpperCase();
       const existing = admin.keywords.keywords.find((x) => x.code === keywordCode);
-      admin.keywords = { ...(await apiJson(`/api/admin/${admin.slug}/keywords/${encodeURIComponent(keywordCode)}`, "PUT",
-        { name: $("#keyword-name").value, terms: $("#keyword-terms").value, active: existing ? existing.active : true })), slug: admin.slug };
+      admin.keywords = { ...(await apiJson(keywordsUrl(`/${encodeURIComponent(keywordCode)}`), "PUT",
+        { name: $("#keyword-name").value, terms: $("#keyword-terms").value, active: existing ? existing.active : true })), scope: keywordsScope() };
       admin.keywordEdit = null;
       return keywordsChanged("Stichwort gespeichert");
     }
@@ -283,22 +339,26 @@ async function runAdminAction(button) {
     case "keyword-cancel":
       admin.keywordEdit = null;
       return rerender();
-    case "keyword-delete":
-      if (!confirm(`${code} löschen? Alte Einsätze behalten das Stichwort, zeigen aber keine Bezeichnung mehr. Deaktivieren erhält sie.`)) return;
-      admin.keywords = { ...(await api(`/api/admin/${admin.slug}/keywords/${encodeURIComponent(code)}`, { method: "DELETE" })), slug: admin.slug };
-      return keywordsChanged("Stichwort gelöscht");
+    case "keyword-delete": {
+      const k = admin.keywords.keywords.find((x) => x.code === code);
+      const own = admin.vg || k?.source === "own";
+      if (own && !confirm(`${code} löschen? Alte Einsätze behalten das Stichwort, zeigen aber keine Bezeichnung mehr. Deaktivieren erhält sie.`)) return;
+      admin.keywords = { ...(await api(keywordsUrl(`/${encodeURIComponent(code)}`), { method: "DELETE" })), scope: keywordsScope() };
+      return keywordsChanged(own ? "Stichwort gelöscht" : "Wie bei der VG");
+    }
     case "keywords-template":
-      admin.keywords = { ...(await apiJson(`/api/admin/${admin.slug}/keywords/template`, "POST", {})), slug: admin.slug };
+      admin.keywords = { ...(await apiJson(keywordsUrl("/template"), "POST", {})), scope: keywordsScope() };
       return keywordsChanged("Stichworte ergänzt");
     case "keywords-reset":
-      if (!confirm("Eigenen Katalog verwerfen und wieder die Vorlage verwenden?")) return;
-      admin.keywords = { ...(await api(`/api/admin/${admin.slug}/keywords`, { method: "DELETE" })), slug: admin.slug };
-      return keywordsChanged("Vorlage wird verwendet");
+      if (!confirm(admin.vg ? "Katalog der VG verwerfen und wieder die Vorlage verwenden?"
+        : "Alle Abweichungen dieser Wehr aufheben und den Katalog der VG verwenden?")) return;
+      admin.keywords = { ...(await api(keywordsUrl(), { method: "DELETE" })), scope: keywordsScope() };
+      return keywordsChanged(admin.vg ? "Vorlage wird verwendet" : "Katalog der VG wird verwendet");
     case "keywords-import": {
       if (mode === "replace" && !confirm("Den ganzen Katalog durch die Datei ersetzen?")) return;
       const form = new FormData();
       form.append("file", admin.importFile);
-      admin.keywords = { ...(await api(`/api/admin/${admin.slug}/keywords/import?mode=${mode}`, { method: "POST", body: form })), slug: admin.slug };
+      admin.keywords = { ...(await api(keywordsUrl(`/import?mode=${mode}`), { method: "POST", body: form })), scope: keywordsScope() };
       admin.importFile = admin.importPreview = null;
       return keywordsChanged("Katalog importiert");
     }
@@ -381,7 +441,7 @@ async function runAdminAction(button) {
 }
 
 async function keywordsChanged(message) {
-  if (admin.slug === config.tenant?.slug) await refreshCurrentTenant();
+  if (affectsCurrent()) await refreshCurrentTenant();
   toast(message);
   renderAdmin();
 }
@@ -389,7 +449,8 @@ async function keywordsChanged(message) {
 async function superChanged(message) {
   if (!config.tenants.length) { location.reload(); return; }   // erste Wehr: Jahre, Reiter usw. neu aufbauen
   admin.overview = null;
-  admin.settings = admin.keywords = admin.memberships = admin.roles = admin.roleDraft = null;
+  forgetAdminData();
+  admin.keywords = admin.memberships = admin.roles = admin.roleDraft = null;
   await refreshCurrentTenant();
   renderScopes();
   renderTabs();
@@ -486,10 +547,17 @@ function setFeePath(path, value) {
 $("#view-admin").addEventListener("click", async (e) => {
   const section = e.target.closest("[data-admin-section]");
   if (section) {
-    const key = section.dataset.adminSection;
-    const toVg = !admin.vg && ADMIN_SECTIONS.find((x) => x[0] === key)?.[4] === "vg";
-    if (toVg && !confirmDiscard()) return;
-    adminGo({ section: key, parseResult: null, ...(toVg ? { vg: adminTenantVg().slug, keywordEdit: null } : {}) });
+    // Ein Bereich wechselt nie die Auswahl (Wehr bzw. Wehrleitung). Bearbeitet er andere Daten (VG: Fahrzeuge
+    // statt Vorgaben), ungespeicherte Änderungen nur nach Rückfrage verwerfen.
+    const before = adminData(), previous = admin.section;
+    admin.section = section.dataset.adminSection;
+    const after = adminData();
+    admin.section = previous;
+    if (before && before !== after) {
+      if (!confirmDiscard()) return;
+      admin.saved = null;
+    }
+    adminGo({ section: section.dataset.adminSection, parseResult: null });
     return;
   }
   const button = e.target.closest("[data-admin-action]");
@@ -520,9 +588,9 @@ function handleAdminInput(e) {
   if (t.dataset.role === "label" || t.dataset.role === "description") { admin.roleDraft[t.dataset.role] = t.value; return; }
   if (t.dataset.bind) {
     setPath(t.dataset.bind, t.dataset.number !== undefined ? Number(t.value) : inputValue(t));
-    if (t.dataset.bind === "unit_marker") $("#bks-derived").innerHTML = bksDerived(admin.settings);
     return;
   }
+  if (t.dataset.bks) { setBks(t.dataset.bks, t.value.trim()); return; }
   if (t.dataset.fee) { setFeePath(t.dataset.fee, t.type === "number" ? Number(t.value || 0) : t.value); return; }
   if (t.dataset.colorPicker) { setColor(t.dataset.colorPicker, t.value.toUpperCase(), "picker"); return; }
   if (t.dataset.colorHex !== undefined && t.dataset.colorHex) { setColor(t.dataset.colorHex, t.value.trim().toUpperCase(), "hex"); return; }
@@ -533,7 +601,7 @@ function handleAdminInput(e) {
     return;
   }
   if (t.dataset.limits !== undefined) {
-    admin.settings.response_limits = t.value.split(/[,;\s]+/).map(Number).filter((n) => n > 0);
+    adminData().response_limits = t.value.split(/[,;\s]+/).map(Number).filter((n) => n > 0);
     return;
   }
   if (t.dataset.keywordSearch !== undefined) {
@@ -552,15 +620,26 @@ $("#view-admin").addEventListener("change", async (e) => {
     if (t.dataset.adminTenant !== undefined) {
       if (!confirmDiscard()) { t.value = admin.vg ? `vg:${admin.vg}` : admin.slug; return; }
       const vg = t.value.startsWith("vg:") ? t.value.slice(3) : null;
-      await adminGo({ vg, ...(vg ? {} : { slug: t.value }), parseResult: null, keywordEdit: null });
+      await adminGo({ vg, ...(vg ? {} : { slug: t.value }), saved: null, parseResult: null, keywordEdit: null });
       return;
     }
-    if (t.dataset.moveVehicle !== undefined) { await moveVehicle(t); return; }
-    if (t.dataset.limits !== undefined) { renderAdmin(); return; }     // Auswahl der Standardgrenze aktualisieren
-    if (t.dataset.bind?.startsWith("places.") && t.dataset.bind.endsWith(".name")) { renderAdmin(); return; }
-    if (/^fleet\.\d+\.label$/.test(t.dataset.bind || "")) { renderAdmin(); return; }   // Hinweis Gebührenordnung
-    if (/^fleet\.\d+\.name$/.test(t.dataset.bind || "")) {
-      const v = admin.settings.fleet[Number(t.dataset.bind.split(".")[1])];
+    if (t.dataset.fleetTenant !== undefined) {         // Fahrzeug wechselt die Wehr (Fahrzeuge der VG)
+      const [from, i] = t.dataset.fleetTenant.split(":").map(Number);
+      if (!moveFleetVehicle(from, i, t.value === "" ? null : Number(t.value))) t.value = String(from);
+      renderAdmin();
+      return;
+    }
+    if (t.dataset.assignVehicle !== undefined) {
+      if (t.value !== "") assignVehicle(t.dataset.assignVehicle, Number(t.value));
+      renderAdmin();
+      return;
+    }
+    if (t.dataset.bks || t.dataset.limits !== undefined) { renderAdmin(); return; }   // abgeleitete Werte, Standardgrenze
+    if (/(^|\.)places\.\d+\.name$/.test(t.dataset.bind || "")) { renderAdmin(); return; }
+    if (/^tenants\.\d+\.station$/.test(t.dataset.bind || "")) { renderAdmin(); return; }
+    if (/(^|\.)fleet\.\d+\.label$/.test(t.dataset.bind || "")) { renderAdmin(); return; }   // Hinweis Gebührenordnung
+    if (/(^|\.)fleet\.\d+\.name$/.test(t.dataset.bind || "")) {
+      const v = getPath(t.dataset.bind.replace(/\.name$/, ""));
       v.name = v.name.trim();
       const known = knownVehicle(v.name);
       if (known) v.types = known.types;
@@ -568,18 +647,21 @@ $("#view-admin").addEventListener("change", async (e) => {
       renderAdmin();
       return;
     }
-    if (t.dataset.planPlace !== undefined) {
-      const place = admin.settings.places[Number(t.dataset.planPlace)].name;
-      admin.settings.plan_places = t.checked ? [...new Set([...admin.settings.plan_places, place])]
-        : admin.settings.plan_places.filter((p) => p !== place);
+    if (t.dataset.planPlace !== undefined) {            // Wehr: Ort zählt zum Ausrückebereich; VG: „Wehr:Ort“
+      const d = adminData();
+      const [tenant, place] = admin.vg ? t.dataset.planPlace.split(":").map(Number) : [null, Number(t.dataset.planPlace)];
+      const target = admin.vg ? d.tenants[tenant] : d;
+      const name = d.places[place].name;
+      target.plan_places = t.checked ? [...new Set([...target.plan_places, name])] : target.plan_places.filter((p) => p !== name);
       return;
     }
     if (t.dataset.substitute !== undefined || t.dataset.substituteBlock !== undefined) {
-      const entries = Object.entries(admin.settings.substitutes);
+      const path = t.dataset.subs;
+      const entries = Object.entries(getPath(path));
       const i = Number(t.dataset.substitute ?? t.dataset.substituteBlock);
       if (t.dataset.substitute !== undefined) entries[i][0] = t.value.trim();
       else entries[i][1] = t.value;
-      admin.settings.substitutes = Object.fromEntries(entries);
+      setPath(path, Object.fromEntries(entries));
       return;
     }
     if (t.dataset.asset) {
@@ -592,16 +674,17 @@ $("#view-admin").addEventListener("change", async (e) => {
     }
     if (t.dataset.keywordActive) {
       const k = admin.keywords.keywords.find((x) => x.code === t.dataset.keywordActive);
-      admin.keywords = { ...(await apiJson(`/api/admin/${admin.slug}/keywords/${encodeURIComponent(k.code)}`, "PUT",
-        { name: k.name, terms: k.terms, active: t.checked })), slug: admin.slug };
-      await keywordsChanged(t.checked ? "Stichwort aktiviert" : "Stichwort deaktiviert");
+      admin.keywords = { ...(await apiJson(keywordsUrl(`/${encodeURIComponent(k.code)}`), "PUT",
+        { name: k.name, terms: k.terms, active: t.checked })), scope: keywordsScope() };
+      await keywordsChanged(t.checked ? (admin.vg ? "Stichwort aktiviert" : "Stichwort gilt hier")
+        : (admin.vg ? "Stichwort deaktiviert" : "Stichwort gilt hier nicht"));
       return;
     }
     if (t.dataset.keywordFile !== undefined) {
       admin.importFile = t.files[0];
       const form = new FormData();
       form.append("file", admin.importFile);
-      admin.importPreview = await api(`/api/admin/${admin.slug}/keywords/import?mode=preview`, { method: "POST", body: form });
+      admin.importPreview = await api(keywordsUrl("/import?mode=preview"), { method: "POST", body: form });
       renderAdmin();
       return;
     }

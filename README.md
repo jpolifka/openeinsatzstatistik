@@ -154,15 +154,24 @@ gesperrt. Geprüft wird im Backend, die Oberfläche blendet nur aus.
   eigenen Fahrzeuge im Bericht nur bei Wehren ohne BKS-Kennung). Haben andere Wehren denselben
   Einsatz schon erfasst, zeigt die Vorschau „gemeinsamer Einsatz mit …“.
 
-**Verwaltung** (Reiter „Verwaltung“ mit einem Verwaltungsrecht, im Startbestand Wehrführer, Wehrleiter und Superadmin):
-- *Wehr*: Name, Farben (Farbwähler, Hex oder RGB, mit Vorschau und Kontrastprüfung), Logos.
+**Verwaltung** (Reiter „Verwaltung“ mit einem Verwaltungsrecht, im Startbestand Wehrführer, Wehrleiter und Superadmin).
+Oben wählt man eine Wehr oder die Wehrleitung einer VG; die Bereiche wechseln diese Auswahl nie. Bei der
+Wehrleitung legen dieselben Bereiche die **Vorgaben der VG** für alle ihre Wehren fest (Recht
+„Einstellungen“ bzw. „Stichwortkatalog“ in einer Rolle der VG) und zeigen alle Wehren auf einmal. Eine Wehr
+übernimmt die Vorgaben und kann bei sich abweichen; an jedem Wert steht „von der VG“ oder „abweichend“.
+- *Allgemein*: Name und Logos der Wehr, Farben (Vorgabe der VG; Farbwähler, Hex oder RGB, mit Vorschau und
+  Kontrastprüfung).
 - *Fahrzeuge*: Reihenfolge, Bezeichnung, Dienstzeitraum („im Dienst ab“, „außer Dienst ab“), Nachfolger,
-  Zählung im Bedarfsplan, Ersatzfahrzeuge. Neue eigene Fahrzeuge aus BKS-Berichten nimmt die App beim
-  Übernehmen automatisch auf.
-- *BKS-Kennung*: Präfixe und Einheit, an denen die App eigene Fahrzeuge und Berichte erkennt, mit Testfeld.
-- *Orte & Bedarfsplan*: Orte, Ausrückebereich, Alarmstufe, Zeitgrenzen, Tagesstunden.
-- *Stichworte*: Vorlage der AAO oder eigener Katalog – einzelne Stichworte anlegen, ändern, deaktivieren;
-  Import aus CSV/Excel mit Vorschau.
+  Zählung im Bedarfsplan, Ersatzfahrzeuge. Bei der Wehrleitung die Fahrzeuge aller Wehren in einer Tabelle,
+  mit Wechsel der Wehr und den noch nicht zugeordneten Funkrufnamen aus Berichten. Neue eigene Fahrzeuge
+  aus BKS-Berichten nimmt die App beim Übernehmen automatisch auf.
+- *BKS-Kennung*: Kennung der VG (z. B. NR#.ABC) und Standort der Wehr ergeben die Einheit im Bericht
+  („FW NR#.ABC 02“) und die eigenen Funkrufnamen; FEZ-Kennung, Nummerierung; Testfeld.
+- *Orte & Bedarfsplan*: Orte, Ausrückebereich je Wehr, Alarmstufe, Zeitgrenzen, Tagesstunden.
+- *Stichworte*: Katalog der VG (Vorlage der AAO oder eigener) – Stichworte anlegen, ändern, deaktivieren,
+  Import aus CSV/Excel mit Vorschau; je Wehr Abweichungen (gilt hier nicht, eigene Bezeichnung, eigene
+  Stichworte).
+- *Gebührenordnung* (nur Wehrleitung): Fassungen der Satzung über den Kostenersatz.
 - *Benutzer*: E-Mail-Adressen Rollen zuordnen – nach der Verteilung der eigenen Rolle, nie sich selbst.
   „Rechte“ zeigt, was eine Person darf und über welche Rolle; dazu das Protokoll der Vergaben.
 - *Rollen*: Rechtematrix aller Rollen; eigene Rollen anlegen, ändern, kopieren und löschen (siehe oben).
@@ -277,7 +286,7 @@ Einsatz rückt an seine Stelle, die folgenden Nummern verschieben sich.
 (Karte in der Auswertung oder Verwaltung → Orte & Bedarfsplan) für die übrigen Rollen frei. Ohne
 Freigabe fehlt er für diese auch in der Gesamtansicht und im Kennzahlen-Export.
 
-**Kostenersatz** (Recht „Prüfprotokoll und Kostenersatz“, Gebührenordnung mit „Gebührenordnung und Fahrzeuge der VG“; im Startbestand der Wehrleiter): Verwaltung → Gebührenordnung pflegt die Satzung der VG in Fassungen
+**Kostenersatz** (Recht „Prüfprotokoll und Kostenersatz“, Gebührenordnung mit „Gebührenordnung der VG“; im Startbestand der Wehrleiter): Verwaltung → Gebührenordnung pflegt die Satzung der VG in Fassungen
 mit „gültig ab“ (für die VG Bad Hönningen vorbelegt mit der Satzung vom 16.05.2024 – Beginn der
 Gültigkeit bitte prüfen). Im Prüfprotokoll rechnet „Kostenersatz berechnen“ einen Einsatz über alle
 beteiligten Wehren: Fahrzeuge vom Ausrücken bis zum Einsatzende des Fahrzeugs, Einsatzkräfte von der
