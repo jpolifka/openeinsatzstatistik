@@ -14,6 +14,17 @@ from app import domain
 
 
 _LEGACY = re.compile(r"(\d\d/\d\d)-\d\d")
+# Einheit in der Kopfzeile des Berichts, z. B. „FW NR#.ABC 02“: Kennung der VG und Standort der Wehr
+UNIT_MARKER = re.compile(r"FW (\S+) (\d\d)")
+
+
+def prefixes_of(unit_marker):
+    """Präfixe der Fahrzeugnamen aus der Einheit im Bericht: „FW NR#.ABC 02“ -> („FL NR#.ABC “, „02/“).
+
+    None, wenn die Einheit nicht so aufgebaut ist.
+    """
+    m = UNIT_MARKER.fullmatch((unit_marker or "").strip())
+    return (f"FL {m.group(1)} ", f"{m.group(2)}/") if m else None
 
 
 @dataclasses.dataclass(frozen=True)

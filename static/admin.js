@@ -267,7 +267,7 @@ async function runAdminAction(button) {
       return rerender();
     case "parse-test":
       admin.parseResult = (await apiJson("/api/admin/parse-test", "POST",
-        { line: $("#parse-line").value, unit_prefix: s.unit_prefix, own_prefix: s.own_prefix })).vehicles;
+        { line: $("#parse-line").value, unit_marker: s.unit_marker }));
       return rerender();
     case "keyword-save": {
       const keywordCode = $("#keyword-code").value.trim().toUpperCase();
@@ -518,7 +518,11 @@ window.addEventListener("beforeunload", (e) => {
 function handleAdminInput(e) {
   const t = e.target;
   if (t.dataset.role === "label" || t.dataset.role === "description") { admin.roleDraft[t.dataset.role] = t.value; return; }
-  if (t.dataset.bind) { setPath(t.dataset.bind, t.dataset.number !== undefined ? Number(t.value) : inputValue(t)); return; }
+  if (t.dataset.bind) {
+    setPath(t.dataset.bind, t.dataset.number !== undefined ? Number(t.value) : inputValue(t));
+    if (t.dataset.bind === "unit_marker") $("#bks-derived").innerHTML = bksDerived(admin.settings);
+    return;
+  }
   if (t.dataset.fee) { setFeePath(t.dataset.fee, t.type === "number" ? Number(t.value || 0) : t.value); return; }
   if (t.dataset.colorPicker) { setColor(t.dataset.colorPicker, t.value.toUpperCase(), "picker"); return; }
   if (t.dataset.colorHex !== undefined && t.dataset.colorHex) { setColor(t.dataset.colorHex, t.value.trim().toUpperCase(), "hex"); return; }

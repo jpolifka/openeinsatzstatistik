@@ -7,6 +7,7 @@ const CHANGELOG = [
   {
     date: "2026-10-03",
     items: [
+      "<b>BKS-Kennung vereinfacht:</b> Es genügt die Einheit aus der Kopfzeile des Berichts (z. B. „FW NR#.ABC 02“); die Funkrufnamen der eigenen Fahrzeuge leitet die App daraus ab. Das Testfeld nimmt jetzt beliebigen Text aus einem Bericht, auch einzelne Funkrufnamen.",
       "<b>Gebührenordnung leichter finden:</b> In der Verwaltung stehen „Fahrzeuge der VG“ und „Gebührenordnung“ jetzt auch bei ausgewählter Wehr; ein Klick wechselt zur Wehrleitung ihrer VG.",
       "<b>Berichte prüfen:</b> Auch Stammdatensätze und Weiterleitungen werden erst nach Ihrer ausdrücklichen Bestätigung gespeichert. Schließen verwirft offene Vorschauen, nicht bereits bestätigte Berichte.",
       "<b>Abgleich:</b> Änderungen an Beschreibung, Leitstellen-Nummer, Anwesenheit und Sekunden werden genauer erkannt.",

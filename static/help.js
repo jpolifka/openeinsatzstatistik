@@ -263,7 +263,7 @@ const HELP_SECTIONS = [
       admin_bks: {
         title: "BKS-Kennung",
         short: "Woran die App die eigenen Fahrzeuge und Berichte erkennt.",
-        text: "<b>Einheiten-Präfix</b>: Anfang der Fahrzeugnamen der Einheit im Bericht, z. B. „FL NR#.ABC “ (mit Leerzeichen). <b>Eigener Präfix</b>: Funkrufnamen der eigenen Wehr, z. B. „02/“ – deren früheste Alarmierung ist der Einsatzbeginn. Fahrzeuge der Fahrzeugliste zählen immer als eigene, auch mit anderem Präfix (z. B. „RP WW …“). <b>Einheit im Bericht</b>: Kopfzeile des Berichts, z. B. „FW NR#.ABC 02“ – darüber werden Berichte in der Gesamtansicht der richtigen Wehr zugeordnet. <b>FEZ-Kennung</b>: die Feuerwehreinsatzzentrale, deren Einsatzende mitzählt. Mit dem Testfeld lässt sich eine Zeile aus einem Bericht prüfen.",
+        text: "<b>Einheit im Bericht</b>: die Einheit aus der Kopfzeile des Berichts, z. B. „FW NR#.ABC 02“. Darüber werden Berichte der richtigen Wehr zugeordnet, und daraus ergeben sich die Funkrufnamen: „FL NR#.ABC 02/…“ sind eigene Fahrzeuge (deren früheste Alarmierung ist der Einsatzbeginn), „FL NR#.ABC …“ Fahrzeuge der übrigen Wehren der VG. Fahrzeuge der Fahrzeugliste zählen immer als eigene, auch mit anderem Funkrufnamen (z. B. „RP WW …“). <b>FEZ-Kennung</b>: die Feuerwehreinsatzzentrale, deren Einsatzende mitzählt. Ins <b>Testfeld</b> passt beliebiger Text aus einem Bericht – einzelne Funkrufnamen, Zeilen der Fahrzeugtabelle oder der ganze Bericht; die App zeigt, wie sie jedes gefundene Fahrzeug zuordnet.",
       },
       admin_places: {
         title: "Orte und Bedarfsplan",
