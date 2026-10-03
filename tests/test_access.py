@@ -154,12 +154,20 @@ def test_vg_lead_sees_no_attendance(world):
     incident = client.get("/api/incidents?year=2025").json()["incidents"][0]
     assert incident["people"] == [] and incident["people_count"] == 1 and not incident["people_visible"]
     assert "Max" not in client.get("/api/incidents?year=2025").text
+    assert incident["unit_leader"] is None and "M. Muster" not in client.get("/api/incidents?year=2025").text
     assert client.get("/api/evaluation?year=2025").json()["attendance"] is None
     assert "people.view" not in client.get("/api/config").json()["permissions"]
     export = client.get("/api/export?year=2025")
     assert export.status_code == 200
     import io, openpyxl
     assert not any(n.startswith("Anwesenheit") for n in openpyxl.load_workbook(io.BytesIO(export.content)).sheetnames)
+    import io, openpyxl
+    sheets = openpyxl.load_workbook(io.BytesIO(export.content))
+    assert not any(c == "M. Muster" for ws in sheets for row in ws.iter_rows(values_only=True) for c in row)
+    # Bearbeiten ohne EHF im Formular lässt ihn unverändert
+    assert client.put(f"/api/incidents/{ids['wehr-a1']}", json={"unit_leader": "", "description": "x"}).status_code == 200
+    with db.connection(tenancy.tenant_path("wehr-a1")) as con:
+        assert store.load_incidents(con)[0]["unit_leader"] == "M. Muster"
     response = client.put(f"/api/incidents/{ids['wehr-a1']}", json={"people": []})
     assert response.status_code == 403
     with db.connection(tenancy.tenant_path("wehr-a1")) as con:

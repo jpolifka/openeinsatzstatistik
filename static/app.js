@@ -598,7 +598,7 @@ function incidentDetail(e) {
       <dt>Dauer${helpButton("duration")}</dt><dd>${formatDuration(e.duration_min)}</dd>
       <dt>Zeitfenster${helpButton("time_window")}</dt><dd>${e.weekend_or_holiday ? "Sa/So/Feiertag" : "Werktag"}, ${e.daytime ? "Tag" : "Nacht"}</dd>
       <dt>Ort</dt><dd>${esc(e.place || "–")}</dd>
-      <dt>EHF${helpButton("unit_leader")}</dt><dd>${esc(e.unit_leader || "–")}</dd>
+      ${e.people_visible !== false ? `<dt>EHF${helpButton("unit_leader")}</dt><dd>${esc(e.unit_leader || "–")}</dd>` : ""}
       <dt>Gerätehaus${helpButton("station_staff")}</dt><dd>${e.station_staff}</dd>
       <dt>Quelle</dt><dd class="small">${sourceLabel(e)}</dd>
       ${e.bks_url ? `<dt>BKS-Portal${helpButton("bks_url")}</dt><dd class="small">${bksLink(e)}</dd>` : ""}
@@ -637,7 +637,9 @@ const FORM_FIELDS = [
 ];
 
 function formFields(e) {
-  return `<div class="form-grid">${FORM_FIELDS.map(([name, title, type, span, attributes]) => {
+  // EHF ist ein Name: nur mit Recht auf die Anwesenheit (sonst bleibt der gespeicherte Wert)
+  const fields = FORM_FIELDS.filter(([name]) => name !== "unit_leader" || e.people_visible !== false);
+  return `<div class="form-grid">${fields.map(([name, title, type, span, attributes]) => {
     const value = type === "datetime-local" ? (e[name] || "").slice(0, 19) : e[name];
     const missing = name === "unit_leader" && !value;
     // Nummerierung nach Datum: die Nr. vergibt die App

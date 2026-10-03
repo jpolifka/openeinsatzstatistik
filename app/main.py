@@ -181,6 +181,11 @@ def parse_incident_key(key):
     return slug, int(number)
 
 
+def _names_for(tenant, incidents):
+    """Einsätze ohne EHF (Name), wenn der Benutzer in der Wehr keine Namen sehen darf (Recht PEOPLE)."""
+    return incidents if tenant.can(PEOPLE) else [{**i, "unit_leader": None} for i in incidents]
+
+
 def incident_json(incident, leaders, tenant, limit=None, cfg=None):
     """Einsatz mit Kennzahlen für die Oberfläche. leaders: store.LeaderNames für die EHF-Auswahl.
     cfg: abweichende Konfiguration (Vorschau mit neu entdeckten Fahrzeugen), sonst die der Wehr.
@@ -200,6 +205,7 @@ def incident_json(incident, leaders, tenant, limit=None, cfg=None):
         "tenant": tenant.slug,
         **{name: incident.get(name) for name in ("year", *store.FIELDS, *store.ID_FIELDS, "source", "filename",
                                                  "warnings")},
+        **({} if tenant.can(PEOPLE) else {"unit_leader": None}),     # EHF ist ein Name
         "bks_url": domain.BKS_REPORT_URL.format(incident["bks_report_id"]) if incident.get("bks_report_id") else None,
         "weekend_or_holiday": bool(incident.get("weekend_or_holiday")),
         **{name: _rounded(m[name]) for name in ("daytime", "duration_min", "turnout_min", "arrival_min", "on_time",
@@ -460,6 +466,8 @@ def api_update_incident(key: str, update: IncidentUpdate, a: tenancy.Access = De
     by_date = tenant.config.numbering == "by_date"
     if by_date:
         changes.pop("number", None)          # ergibt sich aus dem Beginn
+    if not tenant.can(PEOPLE):
+        changes.pop("unit_leader", None)     # sieht den EHF nicht (Name), ändert ihn also auch nicht
     if people is not None and not tenant.can(PEOPLE_EDIT):
         raise tenancy.Forbidden("Keine Berechtigung, die Anwesenheit zu bearbeiten.")
     if vehicles is not None and any(v["call_sign"] not in tenant.config.vehicles for v in vehicles):
@@ -748,9 +756,12 @@ def _preview_json(r, tenant, a):
     result["tenant_name"] = tenant.name
     result["new_vehicles"] = r.get("new_vehicles", [])
     result["reported_as"] = r["reported_as"]
-    result["incident_commander"] = r["incident_commander"]
+    names = tenant.can(PEOPLE)                  # Einsatzleiter und EHF sind Namen
+    result["incident_commander"] = r["incident_commander"] if names else None
+    differences = report.differences(existing, incident, tenant.config) if existing else []
     result["existing"] = {"id": incident_key(tenant, existing["id"]), "source": existing["source"],
-                          "differences": report.differences(existing, incident, tenant.config)} if existing else None
+                          "differences": [d for d in differences if names or d["field"] != "EHF"]} \
+        if existing else None
     result["shared_with"] = _shared_with(r, tenant, a)
     return result
 
@@ -789,7 +800,10 @@ def _accept_report(acceptance, a, r, slug):
     tenant = a.tenant(slug, IMPORT)
     if acceptance.replace:
         a.tenant(slug, WRITE)              # erfassten Einsatz überschreiben = bearbeiten
-    fields = {**report.to_fields(r), **acceptance.fields.model_dump(exclude_unset=True)}
+    corrected = acceptance.fields.model_dump(exclude_unset=True)
+    if not tenant.can(PEOPLE):
+        corrected.pop("unit_leader", None)   # sieht den EHF nicht, also bleibt der aus dem Bericht
+    fields = {**report.to_fields(r), **corrected}
     by_date = tenant.config.numbering == "by_date"
     year = year_of(fields.get("started_at"))
     with tenant.connection() as con:
@@ -992,7 +1006,7 @@ def api_export(year: Optional[int] = None, a: tenancy.Access = Depends(access)):
     if len(tenants) == 1 and not a.vg:
         tenant = tenants[0]
         with tenant.connection() as con:
-            incidents = store.load_incidents(con, year=year)
+            incidents = _names_for(tenant, store.load_incidents(con, year=year))
             members = store.members_of_year(con, year) if tenant.can(PEOPLE) else None
         if not incidents:
             raise HTTPException(404, "Keine Einsätze für den Export.")
@@ -1003,7 +1017,7 @@ def api_export(year: Optional[int] = None, a: tenancy.Access = Depends(access)):
     workbook_parts = []
     for t, evaluated, _ in parts:
         with t.connection() as con:
-            workbook_parts.append((t.config, [i for i, _ in evaluated],
+            workbook_parts.append((t.config, _names_for(t, [i for i, _ in evaluated]),
                                    store.members_of_year(con, year) if t.can(PEOPLE) else None))
     if not any(incidents for _, incidents, _ in workbook_parts):
         raise HTTPException(404, "Keine Einsätze für den Export.")
