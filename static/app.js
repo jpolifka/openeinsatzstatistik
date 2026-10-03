@@ -1,13 +1,29 @@
 "use strict";
 
+// Gemerkte Einstellungen nur im eigenen Browser (privat/gesperrt: ohne)
+function remember(key, value) { try { localStorage.setItem(key, value); } catch (e) { /* privat/gesperrt */ } }
+function recall(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+function recallList(key) { try { return JSON.parse(recall(key)) || []; } catch (e) { return []; } }
+// Sortierung der Einsatzliste: "feld-desc" bzw. "feld-asc"
+const INCIDENT_SORTS = ["number", "started_at", "keyword", "arrival_min", "crew_total"];
+function sortFrom(text) {
+  const [field, direction] = (text || "").split("-");
+  return INCIDENT_SORTS.includes(field) ? { field, descending: direction !== "asc" } : { field: "started_at", descending: true };
+}
+
 // Fachkonstanten (Fahrzeuge, Orte, Zeitgrenzen, …) kommen von /api/config – hier keine eigenen Kopien.
 let config = null;
 
 const state = {
   years: [], year: null, view: "evaluation", limit: null,
   evaluation: null, incidents: null,
-  category: "all", query: "", expanded: new Set(), editing: null,
-  tableCards: new Set(),                      // Diagramme, die gerade als Tabelle angezeigt werden
+  category: recall("incident-category") || "all", query: "", expanded: new Set(), editing: null,
+  warnOnly: false,                            // nur Einsätze mit aktuellen Prüfhinweisen
+  filters: {},                                // Filter aus der Auswertung (Monat, Ort, …), siehe LIST_FILTERS
+  incidentSort: sortFrom(recall("incident-sort")),
+  current: null,                              // zuletzt geöffneter Einsatz (Tasten j/k/e, Vor/Zurück)
+  editSnapshot: null,                         // Stand des Formulars beim Öffnen – Vergleich für „ungespeichert“
+  tableCards: new Set(recallList("table-cards")),   // Diagramme, die als Tabelle angezeigt werden (gemerkt)
   memberSort: { field: "incidents", descending: true }, openMembers: new Set(),
   editDraft: null, editNode: null, memberOptions: [], scrollTo: null,
   upload: { token: null, reports: [], errors: [], notes: [] }, dataChanged: false,
@@ -56,16 +72,22 @@ const apiJson = (url, method, body) =>
   api(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
 let toastTimer;
-function toast(text) {
+/** Kurze Meldung unten; mit action ein Knopf (z. B. „Rückgängig“), der onAction aufruft. */
+function toast(text, { action = null, onAction = null, duration = 3500 } = {}) {
   const el = $("#toast");
   el.textContent = text;
+  if (action) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "toast-action";
+    button.textContent = action;
+    button.addEventListener("click", () => { el.hidden = true; onAction(); });
+    el.append(button);
+  }
   el.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { el.hidden = true; }, 3500);
+  toastTimer = setTimeout(() => { el.hidden = true; }, duration);
 }
-
-function remember(key, value) { try { localStorage.setItem(key, value); } catch (e) { /* privat/gesperrt */ } }
-function recall(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
 
 // ------------------------------------------------------------ Diagramm-Bausteine
 function niceScale(max) {
@@ -75,18 +97,21 @@ function niceScale(max) {
   return { max: Math.ceil(max / step) * step, step };
 }
 
-/** Waagerechte Balken, eine Serie. items: [{label, hint, value, tip}] */
+// Ziel in der Einsatzliste (Filter als Adresse, siehe listLink) für anklickbare Balken und Säulen
+const linkAttributes = (link) => link ? ` data-list-link="${esc(link)}" role="link"` : "";
+
+/** Waagerechte Balken, eine Serie. items: [{label, hint, value, tip, link}] */
 function barChart(items) {
   const max = Math.max(1, ...items.map((i) => i.value));
   return `<div class="bar-list">${items.map((i) => `
-    <div class="bar-row" data-tip="${esc(i.tip || `${i.label}: ${i.value}`)}" tabindex="0">
+    <div class="bar-row ${i.link && i.value ? "linked" : ""}" data-tip="${esc(i.tip || `${i.label}: ${i.value}`)}${i.link && i.value ? "\nKlicken: Einsätze anzeigen" : ""}" tabindex="0"${i.value ? linkAttributes(i.link) : ""}>
       <span class="bar-label">${esc(i.label)}${i.hint ? `<small>${esc(i.hint)}</small>` : ""}</span>
       <span class="bar-track">${i.value ? `<span class="bar" style="width:${(i.value / max) * 100}%"></span>` : ""}</span>
       <span class="bar-value">${i.value}</span>
     </div>`).join("")}</div>`;
 }
 
-/** Säulen. groups: [{axis, tip, values: [{value, tone, labelled}]}]; tone = series | previous | day | night */
+/** Säulen. groups: [{axis, tip, link, values: [{value, tone, labelled}]}]; tone = series | previous | day | night */
 function columnChart(groups, { dense = false } = {}) {
   const max = Math.max(0, ...groups.flatMap((g) => g.values.map((v) => v.value || 0)));
   const scale = niceScale(max);
@@ -97,7 +122,7 @@ function columnChart(groups, { dense = false } = {}) {
   return `<div class="columns">
     <div class="columns-plot">${gridlines.join("")}
       <div class="columns-row">${groups.map((g) => `
-        <div class="columns-group" data-tip="${esc(g.tip)}" tabindex="0">${g.values.map((v) => `
+        <div class="columns-group ${g.link ? "linked" : ""}" data-tip="${esc(g.tip)}${g.link ? "\nKlicken: Einsätze anzeigen" : ""}" tabindex="0"${linkAttributes(g.link)}>${g.values.map((v) => `
           <div class="column tone-${v.tone || "series"}" style="height:${((v.value || 0) / scale.max) * 100}%">
             ${v.labelled && v.value ? `<span class="column-value">${v.value}</span>` : ""}
           </div>`).join("")}
@@ -216,11 +241,10 @@ async function openIncident(key, year) {
     $("#year").value = String(year);
   }
   state.scrollTo = key;
+  state.current = key;
   // Suche und Filter würden den Einsatz womöglich ausblenden
-  state.query = "";
-  state.category = "all";
-  $("#search").value = "";
-  if (location.hash === "#incidents") {
+  clearListFilters();
+  if (parseHash().view === "incidents") {
     state.expanded.add(key);
     await showView();
   } else {
@@ -236,13 +260,14 @@ document.addEventListener("app:view", () => {
 async function loadIncidents() {
   if (!state.incidents || state.incidents.year !== state.year) {
     const year = state.year, data = await api(`/api/incidents?year=${year}`);
+    data.incidents = data.incidents.filter((i) => !pendingDeletes.has(i.id));   // gelöscht, Rückgängig noch möglich
     if (year === state.year) state.incidents = data;
   }
 }
 
 let viewRun = 0;
 async function showView() {
-  const key = location.hash.slice(1), allowed = allowedViews();
+  const key = parseHash().view, allowed = allowedViews();
   state.view = allowed.includes(key) ? key : allowed[0];
   const view = VIEWS[state.view];
   for (const a of $$("#tabs a")) a.classList.toggle("active", a.dataset.view === state.view);
@@ -255,6 +280,7 @@ async function showView() {
     await view.load();
     if (run !== viewRun) return;                     // inzwischen neu angefordert: das spätere Laden zeichnet
     view.render();
+    if (state.view !== "incidents" && parseHash().params.toString()) history.replaceState(null, "", `#${state.view}`);
     document.dispatchEvent(new Event("app:view"));    // Ansicht gezeichnet (z. B. Sprung zu einem Einsatz)
   } catch (e) {
     if (run === viewRun) {
@@ -332,7 +358,8 @@ function tenantsCard(vg) {
   const sum = (key) => vg.rows.reduce((total, r) => total + (r[key] || 0), 0);
   const table = dataTable(["Wehr", "Einsätze", "Bedarfsplan", "Erreichungsgrad", "Ø Eintreffzeit", "Einsatzstunden", "Personalstunden"],
     rows, ["Summe (Beteiligungen)", vg.participations, sum("plan_count"), "", "", num(sum("duration_hours"), 0), num(sum("staff_hours"), 0)]);
-  const items = vg.rows.map((r) => ({ label: r.name, value: r.count, tip: `${r.name}: ${r.count} Einsätze` }));
+  const items = vg.rows.map((r) => ({ label: r.name, value: r.count, tip: `${r.name}: ${r.count} Einsätze`,
+    link: listLink({ tenants: config.tenants.find((t) => t.name === r.name)?.slug }) }));
   const extra = keyFigures([[vg.unique, "Einsätze ohne Doppelte"], [vg.participations - vg.unique, "gemeinsame Beteiligungen"]]);
   return `<div class="grid">${chartCard({ id: "tenants", title: `Wehren${helpButton("participations")}`,
     subtitle: "Einsätze je Wehr; ein gemeinsamer Einsatz zählt bei jeder beteiligten Wehr", chart: barChart(items), table, extra })}</div>`;
@@ -340,9 +367,16 @@ function tenantsCard(vg) {
 
 function responsePlanCard(plan, previousPlan) {
   const limit = plan.limit, second = config.second_limit;
+  // Einsätze des Zeitfensters bzw. die verspäteten in der Einsatzliste
+  const windowLinks = (w, isTotal) => {
+    const window = isTotal ? undefined : w.key;
+    return w.count ? `<div class="window-links no-print"><a href="${esc(listLink({ plan: 1, window }))}">${plural(w.count, "Einsatz", "Einsätze")}</a>
+      ${w.late ? ` · <a href="${esc(listLink({ plan: 1, window, late: limit }))}">${w.late} nicht erreicht</a>` : ""}</div>` : "";
+  };
   const windowTile = (w, isTotal) => `<div class="window ${isTotal ? "total" : ""} ${w.count ? "" : "empty"}">
       <div class="window-title">${isTotal ? "Gesamt" : esc(w.day_type)}<span>${isTotal ? "alle Zeitfenster" : esc(w.hours)}</span></div>
       <div class="rate">${percent(w.rate)}<small>${w.on_time} / ${w.count}</small></div>
+      ${windowLinks(w, isTotal)}
       <div class="meter" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round((w.rate || 0) * 100)}"
            aria-label="Erreichungsgrad"><span style="width:${(w.rate || 0) * 100}%"></span></div>
       <dl class="window-values">
@@ -385,7 +419,7 @@ const shareOf = (count, total) => percent(total ? count / total : null);
 
 function categoriesCard(s) {
   const items = s.categories.map((c) => ({
-    label: c.name, hint: c.code, value: c.count,
+    label: c.name, hint: c.code, value: c.count, link: listLink({ cat: c.code }),
     tip: `${c.name}: ${c.count}\n` + Object.entries(c.keywords).map(([k, n]) => `${k}: ${n}`).join(" · "),
   }));
   const table = dataTable(["Art", ...s.levels.map((l) => String(l.level)), "Summe"],
@@ -399,13 +433,14 @@ function categoriesCard(s) {
 }
 
 function levelsCard(s) {
-  const items = s.levels.map((l) => ({ label: `Stufe ${l.level}`, value: l.count, tip: `Alarmstufe ${l.level}: ${l.count} Einsätze` }));
+  const items = s.levels.map((l) => ({ label: `Stufe ${l.level}`, value: l.count, tip: `Alarmstufe ${l.level}: ${l.count} Einsätze`,
+    link: listLink({ level: l.level }) }));
   const table = dataTable(["Stufe", "Einsätze", "Anteil"], s.levels.map((l) => [`Stufe ${l.level}`, l.count, shareOf(l.count, s.count)]));
   return chartCard({ id: "levels", title: `Alarmstufen${helpButton("alarm_level")}`, subtitle: "zweite Ziffer des Stichworts (z. B. H<b>2</b>)", chart: barChart(items), table });
 }
 
 function areasCard(s) {
-  const items = s.areas.map((a) => ({ label: a.name, value: a.count }));
+  const items = s.areas.map((a) => ({ label: a.name, value: a.count, link: listLink({ area: a.name }) }));
   const own = s.areas.filter((a) => config.plan_places.includes(a.name)).reduce((sum, a) => sum + a.count, 0);
   const table = dataTable(["Ort", "Einsätze", "Anteil"], s.areas.map((a) => [esc(a.name), a.count, shareOf(a.count, s.count)]));
   const extra = keyFigures([[own, config.plan_places.join(", ")], [s.count - own, "außerhalb"]]);
@@ -415,8 +450,8 @@ function areasCard(s) {
 function monthsCard(s) {
   const withPrevious = s.months.some((m) => m.previous != null);
   const previousYear = state.year - 1;
-  const groups = s.months.map((m) => ({
-    axis: m.name,
+  const groups = s.months.map((m, i) => ({
+    axis: m.name, link: m.count ? listLink({ month: i + 1 }) : null,
     tip: `${m.name} ${state.year}: ${m.count}` + (withPrevious ? `\n${m.name} ${previousYear}: ${m.previous}` : ""),
     values: [...(withPrevious ? [{ value: m.previous, tone: "previous" }] : []), { value: m.count, labelled: true }],
   }));
@@ -473,7 +508,7 @@ function historyCard(history) {
 function hoursCard(s) {
   const [dayStart, dayEnd] = config.day_hours.map(pad2);
   const groups = s.hours.map((h) => ({
-    axis: h.hour % 3 === 0 ? String(h.hour) : "",
+    axis: h.hour % 3 === 0 ? String(h.hour) : "", link: h.count ? listLink({ hour: h.hour }) : null,
     tip: `${pad2(h.hour)}:00 – ${pad2(h.hour)}:59 Uhr: ${h.count}`,
     values: [{ value: h.count, tone: h.daytime ? "day" : "night" }],
   }));
@@ -488,21 +523,139 @@ function hoursCard(s) {
 }
 
 function weekdaysCard(s) {
-  const groups = s.weekdays.map((d) => ({ axis: d.name.slice(0, 2), tip: `${d.name}: ${d.count}`, values: [{ value: d.count, labelled: true }] }));
+  const groups = s.weekdays.map((d, i) => ({ axis: d.name.slice(0, 2), tip: `${d.name}: ${d.count}`,
+    link: d.count ? listLink({ weekday: i }) : null, values: [{ value: d.count, labelled: true }] }));
   const workdays = s.weekdays.slice(0, 5).reduce((sum, d) => sum + d.count, 0);
   const extra = keyFigures([[workdays, "Mo–Fr"], [s.count - workdays, "Sa/So"]]);
   const table = dataTable(["Wochentag", "Einsätze"], s.weekdays.map((d) => [d.name, d.count]));
   return chartCard({ id: "weekdays", title: "Wochentage", chart: columnChart(groups), table, extra });
 }
 
-// ------------------------------------------------------------ Einsätze
+// ------------------------------------------------------------ Einsätze: Filter, Sortierung, Adresse
+// Filter und Sortierung stehen in der Adresse (#incidents?cat=B&month=3 …): Sie überstehen das Neuladen,
+// lassen sich als Link weitergeben, und die Auswertung springt damit in die Liste.
+const WEEKDAYS = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"];
+const WINDOW_LABELS = { weekday_day: "Werktag, Tag", weekday_night: "Werktag, Nacht", weekend_day: "Sa/So/Feiertag, Tag",
+  weekend_night: "Sa/So/Feiertag, Nacht" };
+// Filter aus der Auswertung: Schlüssel in der Adresse -> Beschriftung des Filter-Chips
+const LIST_FILTERS = {
+  tenants: (v) => v.split(",").map((slug) => config.tenants.find((t) => t.slug === slug)?.name || slug).join(", "),
+  month: (v) => new Date(2000, Number(v) - 1).toLocaleString("de-DE", { month: "long" }), weekday: (v) => WEEKDAYS[Number(v)] || v,
+  hour: (v) => `${pad2(v)}–${pad2((Number(v) + 1) % 24)} Uhr`, area: (v) => v, level: (v) => `Alarmstufe ${v}`,
+  plan: () => "Bedarfsplan", window: (v) => WINDOW_LABELS[v] || v, late: (v) => `nicht innerhalb ${v} Min.`,
+};
+
+function parseHash() {
+  const [view, query = ""] = location.hash.slice(1).split("?");
+  return { view, params: new URLSearchParams(query) };
+}
+
+/** Adresse der Einsatzliste mit genau diesen Filtern (Werte undefined/null fallen weg). */
+function listLink(filters) {
+  // In der Gesamtansicht gilt die Auswahl der Wehren der Auswertung mit
+  if (state.tenantFilter.size && !("tenants" in filters)) filters = { tenants: [...state.tenantFilter].sort().join(","), ...filters };
+  const params = new URLSearchParams(Object.entries(filters).filter(([, v]) => v != null && v !== ""));
+  return params.toString() ? `#incidents?${params}` : "#incidents";
+}
+
+/** Filter aus der Adresse übernehmen; ohne Parameter bleibt der aktuelle Stand (Klick auf den Reiter). */
+function applyListParams(params) {
+  if (!params.toString()) return;
+  state.query = params.get("q") || "";
+  state.category = params.get("cat") || "all";
+  state.warnOnly = params.get("warn") === "1";
+  if (params.has("sort")) state.incidentSort = sortFrom(params.get("sort"));
+  state.filters = Object.fromEntries(Object.keys(LIST_FILTERS).filter((k) => params.has(k)).map((k) => [k, params.get(k)]));
+  $("#search").value = state.query;
+}
+
+function listParams() {
+  const params = new URLSearchParams();
+  if (state.query) params.set("q", state.query);
+  if (state.category !== "all") params.set("cat", state.category);
+  if (state.warnOnly) params.set("warn", "1");
+  const { field, descending } = state.incidentSort;
+  if (field !== "started_at" || !descending) params.set("sort", `${field}-${descending ? "desc" : "asc"}`);
+  for (const [k, v] of Object.entries(state.filters)) params.set(k, v);
+  return params;
+}
+
+// Adresse an die Filter anpassen, ohne Eintrag im Verlauf und ohne hashchange
+function syncHash() {
+  if (state.view !== "incidents") return;
+  const query = listParams().toString(), hash = `#incidents${query ? `?${query}` : ""}`;
+  if (location.hash !== hash) history.replaceState(null, "", hash);
+}
+
+function clearListFilters() {
+  state.query = "";
+  state.category = "all";
+  state.warnOnly = false;
+  state.filters = {};
+  $("#search").value = "";
+}
+
+const levelOf = (keyword) => (keyword || "").charAt(1);
+const startOf = (e) => e.started_at ? new Date(e.started_at) : null;
+// Nicht erreicht: bei der Standardgrenze wie die Auswertung (on_time), sonst über die Eintreffzeit
+const isLate = (e, limit) => limit === config.default_limit ? e.on_time === false : e.arrival_min > limit;
+
 function matchesFilter(e) {
   if (state.category !== "all" && categoryOf(e.keyword) !== state.category) return false;
+  if (state.warnOnly && !e.current_warnings?.length) return false;
+  const f = state.filters, start = startOf(e);
+  if (f.tenants && !f.tenants.split(",").includes(e.tenant)) return false;
+  if (f.month && start?.getMonth() + 1 !== Number(f.month)) return false;
+  if (f.weekday && (start ? (start.getDay() + 6) % 7 : null) !== Number(f.weekday)) return false;
+  if (f.hour && start?.getHours() !== Number(f.hour)) return false;
+  if (f.area && e.area !== f.area) return false;
+  if (f.level && levelOf(e.keyword) !== f.level) return false;
+  // Bedarfsplan wie in der Auswertung: relevante Einsätze mit Eintreffzeit
+  if ((f.plan || f.window || f.late) && !(e.plan_relevant && e.arrival_min != null)) return false;
+  if (f.window && (e.weekend_or_holiday !== f.window.startsWith("weekend") || e.daytime !== f.window.endsWith("_day"))) return false;
+  if (f.late && !isLate(e, Number(f.late))) return false;
   const query = state.query.trim().toLowerCase();
   if (!query) return true;
   const text = [e.number, e.keyword, `${e.keyword}.${e.subcode}`, keywordName(e), e.description, e.place, e.unit_leader,
     formatDate(e.started_at), e.filename, ...e.people.map((p) => p.name)].join(" ").toLowerCase();
   return query.split(/\s+/).every((t) => text.includes(t));
+}
+
+// Sortierwert einer Spalte; fehlende Werte stehen immer am Ende
+function sortValue(e, field) {
+  if (field === "keyword") return e.keyword ? `${e.keyword}.${e.subcode || ""}` : null;
+  return e[field] ?? null;
+}
+
+/** Einsätze, wie die Liste sie zeigt: gefiltert und sortiert (auch für j/k und Vor/Zurück). */
+function visibleIncidents() {
+  const { field, descending } = state.incidentSort;
+  return state.incidents.incidents.filter(matchesFilter).sort((a, b) => {
+    const x = sortValue(a, field), y = sortValue(b, field);
+    if (x === null || y === null) return x === y ? 0 : x === null ? 1 : -1;
+    const order = typeof x === "number" ? x - y : String(x).localeCompare(String(y), "de", { numeric: true });
+    return (descending ? -order : order) || (b.started_at || "").localeCompare(a.started_at || "");
+  });
+}
+
+// Kopf der Liste: Sortierung, Filter aus der Auswertung, Prüfhinweise
+function renderListControls(list) {
+  const { field, descending } = state.incidentSort;
+  for (const th of $$("#incident-table [data-sort-incidents]")) {
+    const active = th.dataset.sortIncidents === field;
+    th.setAttribute("aria-sort", active ? (descending ? "descending" : "ascending") : "none");
+    $(".sort-mark", th).textContent = active ? (descending ? " ▾" : " ▴") : "";
+  }
+  const warned = list.filter((e) => e.current_warnings?.length).length;
+  const warn = $("#warn-filter");
+  warn.classList.toggle("active", state.warnOnly);
+  warn.setAttribute("aria-pressed", String(state.warnOnly));
+  $(".count", warn).textContent = warned;
+  const chips = Object.entries(state.filters).map(([k, v]) =>
+    `<span class="filter-chip">${esc(LIST_FILTERS[k](v))}<button type="button" data-remove-filter="${k}" aria-label="Filter ${esc(LIST_FILTERS[k](v))} entfernen">×</button></span>`);
+  $("#active-filters").innerHTML = chips.length ? `<span class="small muted">aus der Auswertung:</span>${chips.join("")}
+    <button type="button" class="btn btn-link btn-small" data-remove-filter="">alle Filter aufheben</button>` : "";
+  $("#active-filters").hidden = !chips.length;
 }
 
 const isIdle = (v) => v.crew == null && !v.departed && !v.arrived;
@@ -523,7 +676,8 @@ function renderIncidents() {
   $("#category-filter").innerHTML = filters.map((c) =>
     `<button type="button" data-category="${c.code}" class="${state.category === c.code ? "active" : ""}" ${c.code !== "all" ? `data-tip="${c.name}"` : ""}>${c.code === "all" ? c.name : c.code}<span class="count">${count(c.code)}</span></button>`).join("");
 
-  const visible = list.filter(matchesFilter).reverse();   // neueste zuerst
+  renderListControls(list);
+  const visible = visibleIncidents();
   const limit = config.default_limit, withTenant = Boolean(config.vg);
   const tenantNames = Object.fromEntries(config.tenants.map((t) => [t.slug, t.name]));
   // Offenes Formular beim Neuzeichnen (Suche, Filter, andere Zeile) samt Eingaben behalten
@@ -547,6 +701,10 @@ function renderIncidents() {
   }).join("");
   if (formSelector && state.editNode && $(formSelector)) $(formSelector).replaceWith(state.editNode);
   $("#incidents-empty").hidden = visible.length > 0;
+  $("#incidents-empty").innerHTML = list.length && (state.query || state.category !== "all" || state.warnOnly || Object.keys(state.filters).length)
+    ? `Keine Einsätze zu diesen Filtern. <button type="button" class="btn btn-link btn-small" data-clear-filters>Alle Filter aufheben</button>`
+    : "Keine Einsätze gefunden.";
+  syncHash();
 }
 
 function vehicleTable(e) {
@@ -637,12 +795,21 @@ function incidentDetail(e) {
     </div>
     <div class="panel full">${attendancePanel(e)}</div>
     <div class="actions panel full bare">
+      ${stepButtons(e)}
       ${e.can_delete ? `<button type="button" class="btn btn-outline btn-small" data-action="delete" data-id="${e.id}">Löschen</button>` : ""}
-      ${e.can_edit ? `<button type="button" class="btn btn-light btn-small" data-action="edit" data-id="${e.id}">Bearbeiten</button>` : ""}
+      ${e.can_edit ? `<button type="button" class="btn btn-light btn-small" data-action="edit" data-id="${e.id}" data-tip="Taste e">Bearbeiten</button>` : ""}
     </div>
   </div>`;
 }
 
+
+// Vorheriger / nächster Einsatz in der Reihenfolge der Liste (Tasten k / j)
+function stepButtons(e) {
+  const list = visibleIncidents(), i = list.findIndex((x) => x.id === e.id);
+  const button = (delta, label, key) => `<button type="button" class="btn btn-light btn-small step" data-action="step" data-step="${delta}"
+    data-id="${e.id}" data-tip="Taste ${key}" ${list[i + delta] ? "" : "disabled"}>${label}</button>`;
+  return `<span class="step-buttons">${button(-1, "‹ Vorheriger", "k")}${button(1, "Nächster ›", "j")}</span>`;
+}
 
 let formSequence = 0;
 function formFields(e) {
@@ -749,6 +916,9 @@ async function startEditing(id) {
     role: p.role || "", vehicle: p.vehicle || "", leader_name: p.leader_name })) };
   updateDatalists();
   renderIncidents();
+  state.current = id;
+  state.editSnapshot = editSnapshot();
+  $(`[data-form="${CSS.escape(id)}"] input:not([readonly])`)?.focus({ preventScroll: true });
   if (!incident.people_editable) { state.memberOptions = []; return; }
   try {
     state.memberOptions = (await api(`/api/members?tenant=${encodeURIComponent(incident.tenant)}`)).members;
@@ -769,7 +939,8 @@ function editForm(e) {
       ${vehicleEditTable(e)}</div>
     <div class="panel full" data-people-edit>${state.editDraft.visible ? peopleEditPanel() : attendancePanel(e)}</div>
     <div class="actions panel full bare">
-      <button type="button" class="btn btn-outline btn-small" data-action="cancel">Abbrechen</button>
+      ${stepButtons(e)}
+      <button type="button" class="btn btn-outline btn-small" data-action="cancel" data-tip="Esc">Abbrechen</button>
       <button type="button" class="btn btn-primary btn-small" data-action="save" data-id="${e.id}">Speichern</button>
     </div>
   </div>`;
@@ -786,9 +957,97 @@ function updateDatalists() {
   container.innerHTML = `<datalist id="place-options">${options(places)}</datalist><datalist id="leader-options">${options(leaders)}</datalist>`;
 }
 
+// ------------------------------------------------------------ Ungespeicherte Bearbeitung
+const openEditForm = () => state.editing == null ? null : $(`[data-form="${CSS.escape(state.editing)}"]`) || state.editNode;
+const editSnapshot = () => { const form = openEditForm(); return form ? JSON.stringify(readIncidentForm(form)) : null; };
+const incidentDirty = () => state.editing != null && state.editSnapshot != null && editSnapshot() !== state.editSnapshot;
+
+/** Vor dem Verlassen eines geänderten Formulars nachfragen; true = weiter (Bearbeitung ist dann beendet). */
+function confirmLeaveEdit() {
+  if (state.editing == null) return true;
+  if (incidentDirty() && !confirm("Die Änderungen am Einsatz sind noch nicht gespeichert. Verwerfen?")) return false;
+  state.editing = null;
+  state.editSnapshot = null;
+  return true;
+}
+
+/** Benachbarten Einsatz der Liste aufklappen (delta +1 nächster, -1 vorheriger); ohne geöffneten der erste. */
+function stepIncident(delta, from = state.current) {
+  const list = visibleIncidents();
+  if (!list.length) return;
+  const index = list.findIndex((x) => x.id === from);
+  const target = list[index < 0 ? (delta > 0 ? 0 : list.length - 1) : index + delta];
+  if (!target || !confirmLeaveEdit()) return;
+  state.expanded.clear();
+  state.expanded.add(target.id);
+  state.current = target.id;
+  renderIncidents();
+  const row = $(`#incident-table tr.row[data-id="${CSS.escape(target.id)}"]`);
+  row?.scrollIntoView({ block: "start", behavior: "smooth" });
+  $("button", row)?.focus({ preventScroll: true });
+}
+
+// ------------------------------------------------------------ Löschen mit „Rückgängig“
+// Der Einsatz verschwindet sofort; gelöscht wird erst nach UNDO_MS (beim Schließen der Seite sofort).
+const UNDO_MS = 8000;
+const pendingDeletes = new Map();             // id -> { incident, timer }
+const deleteUrl = (incident) => `/api/incidents/${encodeURIComponent(incident.id)}?revision=${incident.revision}`;
+
+function deleteIncident(id) {
+  const list = state.incidents.incidents, incident = list.find((x) => x.id === id);
+  state.incidents.incidents = list.filter((x) => x.id !== id);
+  state.expanded.delete(id);
+  if (state.editing === id) { state.editing = null; state.editSnapshot = null; }
+  pendingDeletes.set(id, { incident, timer: setTimeout(() => commitDelete(id), UNDO_MS) });
+  renderIncidents();
+  toast(`Einsatz ${incident.number ?? ""} vom ${formatDate(incident.started_at)} gelöscht`,
+    { action: "Rückgängig", onAction: () => undoDelete(id), duration: UNDO_MS });
+}
+
+function undoDelete(id) {
+  const pending = pendingDeletes.get(id);
+  if (!pending) return;
+  clearTimeout(pending.timer);
+  pendingDeletes.delete(id);
+  if (state.incidents?.year === pending.incident.year) state.incidents.incidents.push(pending.incident);
+  state.expanded.add(id);
+  state.current = id;
+  if (state.view === "incidents") renderIncidents();
+  toast("Einsatz wiederhergestellt");
+}
+
+async function commitDelete(id) {
+  const pending = pendingDeletes.get(id);
+  if (!pending) return;
+  pendingDeletes.delete(id);
+  try {
+    await api(deleteUrl(pending.incident), { method: "DELETE" });
+    state.evaluation = null;                 // Kennzahlen und Jahre beim nächsten Zeichnen neu
+    await loadYears();
+    document.dispatchEvent(new Event("app:data"));
+  } catch (err) {
+    alert(`Einsatz ${pending.incident.number ?? ""} wurde nicht gelöscht: ${err.message}`);
+    state.incidents = null;
+    await showView();
+  }
+}
+window.addEventListener("pagehide", () => {
+  for (const { incident, timer } of pendingDeletes.values()) {
+    clearTimeout(timer);
+    fetch(deleteUrl(incident), { method: "DELETE", keepalive: true });
+  }
+  pendingDeletes.clear();
+});
+
 async function handleIncidentAction(action, id, el) {
-  if (action === "edit") { await startEditing(id); return; }
-  if (action === "cancel") { state.editing = null; renderIncidents(); return; }
+  if (action === "step") { stepIncident(Number(el.dataset.step), id); return; }
+  if (action === "edit") {
+    if (state.editing !== id && !confirmLeaveEdit()) return;
+    await startEditing(id);
+    return;
+  }
+  if (action === "cancel") { if (confirmLeaveEdit()) renderIncidents(); return; }
+  if (action === "delete") { deleteIncident(id); return; }
   if (action === "add-person") { addDraftPerson(formOf(el)); return; }
   if (action === "remove-person") {
     state.editDraft.people.splice(Number(el.dataset.index), 1);
@@ -796,18 +1055,12 @@ async function handleIncidentAction(action, id, el) {
     return;
   }
   try {
-    if (action === "delete") {
-      const incident = state.incidents.incidents.find((x) => x.id === id);
-      if (!confirm(`Einsatz ${incident.number ?? ""} vom ${formatDate(incident.started_at)} wirklich löschen?`)) return;
-      await api(`/api/incidents/${encodeURIComponent(id)}?revision=${incident.revision}`, { method: "DELETE" });
-      state.expanded.delete(id);
-      toast("Einsatz gelöscht");
-    }
     if (action === "save") {
       await apiJson(`/api/incidents/${encodeURIComponent(id)}`, "PUT", {
         ...readIncidentForm($(`[data-form="${id}"]`)), revision: state.editDraft.revision,
       });
       state.editing = null;
+      state.editSnapshot = null;
       toast("Gespeichert");
     }
     await reloadData();
@@ -903,12 +1156,19 @@ document.addEventListener("focusin", (e) => {
 document.addEventListener("focusout", hideTooltip);
 
 // ------------------------------------------------------------ Ereignisse
-window.addEventListener("hashchange", () => {
+window.addEventListener("hashchange", (e) => {
+  // Offenes, geändertes Formular: erst fragen, sonst zurück zur bisherigen Adresse
+  if (!confirmLeaveEdit()) { history.replaceState(null, "", new URL(e.oldURL).hash); return; }
+  applyListParams(parseHash().params);
   state.expanded.clear();
   if (state.scrollTo) state.expanded.add(state.scrollTo);   // Sprung zu einem Einsatz (openIncident)
   showView();
 });
+window.addEventListener("beforeunload", (e) => {
+  if (incidentDirty()) e.preventDefault();
+});
 $("#year").addEventListener("change", (e) => {
+  if (!confirmLeaveEdit()) { e.target.value = String(state.year); return; }
   state.year = Number(e.target.value);
   remember("year", state.year);
   state.expanded.clear();
@@ -928,11 +1188,16 @@ $("#view-evaluation").addEventListener("change", async (e) => {
     alert(err.message);
   }
 });
+$("#view-evaluation").addEventListener("keydown", (e) => {
+  const link = e.target.closest("[data-list-link]");
+  if (link && e.key === "Enter") location.hash = link.dataset.listLink;
+});
 $("#view-evaluation").addEventListener("click", (e) => {
   const toggle = e.target.closest("[data-toggle-table]");
   if (toggle) {
     const id = toggle.dataset.toggleTable;
     state.tableCards.has(id) ? state.tableCards.delete(id) : state.tableCards.add(id);
+    remember("table-cards", JSON.stringify([...state.tableCards]));
     renderEvaluation();
     return;
   }
@@ -952,6 +1217,8 @@ $("#view-evaluation").addEventListener("click", (e) => {
     showView();
     return;
   }
+  const link = e.target.closest("[data-list-link]");
+  if (link) { location.hash = link.dataset.listLink; return; }
   const action = e.target.closest("[data-action]")?.dataset.action;
   if (action === "print") window.print();
   if (action === "summary-export") {
@@ -965,7 +1232,30 @@ $("#category-filter").addEventListener("click", (e) => {
   const button = e.target.closest("button");
   if (!button) return;
   state.category = button.dataset.category;
+  remember("incident-category", state.category);
   renderIncidents();
+});
+$("#warn-filter").addEventListener("click", () => { state.warnOnly = !state.warnOnly; renderIncidents(); });
+$("#view-incidents").addEventListener("click", (e) => {
+  const remove = e.target.closest("[data-remove-filter]");
+  if (remove) {
+    if (remove.dataset.removeFilter) delete state.filters[remove.dataset.removeFilter];
+    else state.filters = {};
+    renderIncidents();
+    return;
+  }
+  if (e.target.closest("[data-clear-filters]")) { clearListFilters(); renderIncidents(); return; }
+  const th = e.target.closest("[data-sort-incidents]");
+  if (th && !e.target.closest(".help-btn")) {
+    const field = th.dataset.sortIncidents, { incidentSort: sort } = state;
+    // Erster Klick: Zahlen und Datum absteigend, Stichwort aufsteigend; weiterer Klick dreht um
+    state.incidentSort = { field, descending: sort.field === field ? !sort.descending : field !== "keyword" };
+    remember("incident-sort", `${field}-${state.incidentSort.descending ? "desc" : "asc"}`);
+    renderIncidents();
+  }
+});
+$("#incident-table thead").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && e.target.matches("[data-sort-incidents]")) e.target.click();
 });
 $("#search").addEventListener("input", (e) => { state.query = e.target.value; renderIncidents(); });
 $("#btn-export").addEventListener("click", () => { location.href = `/api/export?year=${state.year}`; });
@@ -980,10 +1270,11 @@ $("#incident-table tbody").addEventListener("click", (e) => {
   if (!row) return;
   const id = row.dataset.id;
   if (state.expanded.has(id)) {
+    if (state.editing === id && !confirmLeaveEdit()) return;
     state.expanded.delete(id);
-    if (state.editing === id) state.editing = null;
   } else {
     state.expanded.add(id);
+    state.current = id;
   }
   renderIncidents();
 });
@@ -1132,7 +1423,7 @@ const pdfDialog = $("#pdf-dialog");
 pdfDialog.addEventListener("cancel", (event) => {
   if (acceptingReports) { event.preventDefault(); toast("Bitte die laufende Übernahme abwarten."); }
 });
-$("#btn-pdf").addEventListener("click", async () => {
+async function openImport() {
   if (!state.incidents) { try { await loadIncidents(); } catch (e) { /* nur für Vorschläge */ } }
   updateDatalists();
   if (state.upload.reports.every((r) => r.saved || isUnchanged(r))) {
@@ -1140,8 +1431,9 @@ $("#btn-pdf").addEventListener("click", async () => {
     $("#pdf-error").hidden = true;
     renderPreviews();
   }
-  pdfDialog.showModal();
-});
+  if (!pdfDialog.open) pdfDialog.showModal();
+}
+$("#btn-pdf").addEventListener("click", openImport);
 pdfDialog.addEventListener("close", async () => {
   if (!acceptingReports) {
     try { await discardUpload(); } catch (e) { toast(e.message); }
@@ -1154,8 +1446,29 @@ const dropzone = $("#dropzone");
 dropzone.addEventListener("drop", (e) => { e.preventDefault(); readPdfs(e.dataTransfer.files); });
 dropzone.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("#pdf-input").click(); } });
 $("#pdf-input").addEventListener("change", (e) => { readPdfs(e.target.files); e.target.value = ""; });
+// Berichte überall aufs Fenster ziehen: öffnet den Import und liest sie ein (nur mit Recht zum Einlesen)
+const draggingFiles = (e) => [...(e.dataTransfer?.types || [])].includes("Files") && !$("#btn-pdf").hidden && !pdfDialog.open;
+let dragDepth = 0;
+window.addEventListener("dragenter", (e) => {
+  if (!draggingFiles(e)) return;
+  dragDepth++;
+  document.body.classList.add("drop-target");
+});
+window.addEventListener("dragleave", (e) => {
+  if (!draggingFiles(e)) return;
+  dragDepth = Math.max(0, dragDepth - 1);
+  if (!dragDepth) document.body.classList.remove("drop-target");
+});
 window.addEventListener("dragover", (e) => e.preventDefault());
-window.addEventListener("drop", (e) => e.preventDefault());
+window.addEventListener("drop", async (e) => {
+  e.preventDefault();
+  const files = draggingFiles(e) ? e.dataTransfer.files : null;
+  dragDepth = 0;
+  document.body.classList.remove("drop-target");
+  if (!files?.length) return;
+  await openImport();
+  readPdfs(files);
+});
 $("#previews").addEventListener("change", (e) => {
   const i = e.target.dataset.replace;
   if (i === undefined) return;
@@ -1175,14 +1488,55 @@ $("#scope").addEventListener("change", async (e) => {
   if (uploadBusy || acceptingReports) { e.target.value = config.scope; toast("Bitte den laufenden Import abwarten."); return; }
   if (state.upload.reports.some((r) => !r.saved && !isUnchanged(r)) &&
       !window.confirm("Offene Importvorschauen verwerfen und Ansicht wechseln?")) { e.target.value = config.scope; return; }
-  // Ungespeicherte Einstellungen (admin.js): erst fragen, sonst wechselte die Wehr auf dem Server trotzdem
+  // Ungespeicherte Einstellungen (admin.js) bzw. Einsatz: erst fragen, sonst wechselte die Wehr auf dem Server trotzdem
   if (typeof confirmDiscard === "function" && !confirmDiscard()) { e.target.value = config.scope; return; }
+  if (!confirmLeaveEdit()) { e.target.value = config.scope; return; }
   try {
     await discardUpload();
     await apiJson("/api/scope", "POST", { key: e.target.value });
     location.reload();
   } catch (err) {
     alert(err.message);
+  }
+});
+
+// ------------------------------------------------------------ Tastenkürzel (Übersicht in der Hilfe: sec_shortcuts)
+const typing = (el) => Boolean(el.closest?.("input, textarea, select, [contenteditable]"));
+
+function focusSearch() {
+  if (!allowedViews().includes("incidents")) return;
+  if (state.view === "incidents") { $("#search").focus(); $("#search").select(); return; }
+  document.addEventListener("app:view", () => $("#search").focus(), { once: true });
+  location.hash = "#incidents";
+}
+
+document.addEventListener("keydown", (e) => {
+  if (e.defaultPrevented || $("dialog[open]")) return;
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === "z" && !typing(e.target) && pendingDeletes.size) {
+    e.preventDefault();
+    undoDelete([...pendingDeletes.keys()].at(-1));
+    return;
+  }
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === "Escape") {
+    if (e.target.id === "search") { e.target.blur(); return; }
+    if (state.view !== "incidents") return;
+    if (state.editing != null) { if (confirmLeaveEdit()) renderIncidents(); return; }
+    if (state.expanded.size) { state.expanded.clear(); renderIncidents(); }
+    return;
+  }
+  if (typing(e.target)) return;
+  const incidents = state.view === "incidents" && state.incidents;
+  if (e.key === "/") { e.preventDefault(); focusSearch(); }
+  else if (e.key === "i" && !$("#btn-pdf").hidden) { e.preventDefault(); openImport(); }
+  else if (e.key === "?") { e.preventDefault(); openHelp("sec_shortcuts"); }
+  else if (incidents && (e.key === "j" || e.key === "k")) { e.preventDefault(); stepIncident(e.key === "j" ? 1 : -1); }
+  else if (incidents && e.key === "e") {
+    const incident = state.incidents.incidents.find((x) => x.id === state.current);
+    if (!incident?.can_edit || state.editing === incident.id || !confirmLeaveEdit()) return;
+    e.preventDefault();
+    state.expanded.add(incident.id);
+    startEditing(incident.id);
   }
 });
 
@@ -1225,6 +1579,7 @@ $("#scope").addEventListener("change", async (e) => {
     return;
   }
   state.limit = config.default_limit;
+  applyListParams(parseHash().params);       // Filter aus einem geteilten Link
   await showView();
   document.dispatchEvent(new Event("app:data"));
 })();

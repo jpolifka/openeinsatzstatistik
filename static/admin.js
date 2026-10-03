@@ -34,7 +34,12 @@ const admin = {
   vgSettings: null,           // Vorgaben der VG mit allen Wehren (Allgemein, BKS-Kennung, Orte & Bedarfsplan)
   vgFleet: null,              // Fahrzeuglisten aller Wehren der VG
   saved: null,                // Stand des gerade bearbeiteten Datensatzes beim Laden/Speichern – Vergleich für „ungespeichert“
+  fleetQuery: "",             // Suche in den Fahrzeugtabellen
+  keywordDeviationsOnly: false,   // Stichworte: nur Abweichungen (Wehr) bzw. Stichworte mit Abweichungen (VG)
 };
+// Fahrzeugtabelle kompakt (ohne Dienstzeitraum, Nachfolger, Bedarfsplan); gemerkt je Ansicht, VG standardmäßig kompakt
+const fleetCompactKey = () => admin.vg ? "fleet-compact-vg" : "fleet-compact";
+const fleetCompact = () => (recall(fleetCompactKey()) ?? (admin.vg ? "1" : "0")) === "1";
 
 // Hilfe zum gerade offenen Bereich der Verwaltung
 const ADMIN_HELP = { unit: () => admin.vg ? "admin_vg_defaults" : "admin_colors", fleet: () => admin.vg ? "admin_vg_vehicles" : "admin_fleet",
@@ -68,6 +73,7 @@ async function loadAdmin() {
     else if (!admin.slug && vgs.length) admin.vg = vgs[0].slug;
   }
   const sections = adminSections();
+  if (!admin.section) admin.section = recall("admin-section");          // zuletzt offener Bereich
   if (!sections.some((x) => x.key === admin.section)) admin.section = sections[0]?.key || null;
   const s = admin.section;
   const snapshot = () => { admin.saved = JSON.stringify(settingsPayload()); admin.check = null; };
@@ -151,6 +157,7 @@ function renderAdmin() {
     <div class="admin-body">${body}</div>
   </div>`;
   if (admin.section === "unit") updateThemePreview();
+  if (admin.section === "fleet") filterFleetRows();
   updateDirty();
 }
 
@@ -318,6 +325,9 @@ async function runAdminAction(button) {
       d.places.splice(i, 1);
       return rerender();
     }
+    case "fleet-compact":
+      remember(fleetCompactKey(), fleetCompact() ? "0" : "1");
+      return rerender();
     case "inherit":                          // Abweichung aufheben: Wert der VG übernehmen
       takeInherited(key);
       return rerender();
@@ -557,6 +567,7 @@ $("#view-admin").addEventListener("click", async (e) => {
       if (!confirmDiscard()) return;
       admin.saved = null;
     }
+    remember("admin-section", section.dataset.adminSection);
     adminGo({ section: section.dataset.adminSection, parseResult: null });
     return;
   }
@@ -604,6 +615,7 @@ function handleAdminInput(e) {
     adminData().response_limits = t.value.split(/[,;\s]+/).map(Number).filter((n) => n > 0);
     return;
   }
+  if (t.dataset.fleetSearch !== undefined) { admin.fleetQuery = t.value; filterFleetRows(); return; }
   if (t.dataset.keywordSearch !== undefined) {
     admin.keywordQuery = t.value;
     const position = t.selectionStart;
@@ -680,6 +692,7 @@ $("#view-admin").addEventListener("change", async (e) => {
         : (admin.vg ? "Stichwort deaktiviert" : "Stichwort gilt hier nicht"));
       return;
     }
+    if (t.dataset.keywordDeviations !== undefined) { admin.keywordDeviationsOnly = t.checked; renderAdmin(); return; }
     if (t.dataset.keywordFile !== undefined) {
       admin.importFile = t.files[0];
       const form = new FormData();

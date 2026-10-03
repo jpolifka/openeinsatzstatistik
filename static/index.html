@@ -51,24 +51,29 @@
     <section id="view-incidents" class="view" hidden>
       <div class="card list-card">
         <div class="toolbar">
-          <div class="segments" id="category-filter"></div>
+          <div class="toolbar-left">
+            <div class="segments" id="category-filter"></div>
+            <button type="button" class="btn btn-light btn-small warn-filter" id="warn-filter" aria-pressed="false"
+                    data-tip="Nur Einsätze mit aktuellen Prüfhinweisen, z. B. ohne Eintreffzeit oder Anwesenheit">Prüfhinweise <span class="count"></span></button>
+          </div>
           <div class="toolbar-right">
-            <input type="search" id="search" class="search" placeholder="Suchen: Nr., Ort, Stichwort, Name …">
+            <input type="search" id="search" class="search" placeholder="Suchen: Nr., Ort, Stichwort, Name …" data-tip="Taste /">
             <button type="button" class="btn btn-light" id="btn-export">Excel-Export</button>
           </div>
+          <div class="active-filters" id="active-filters" hidden></div>
         </div>
         <div class="table-wrap">
           <table class="table" id="incident-table">
             <thead>
               <tr>
-                <th class="col-number">Nr.</th>
-                <th>Datum</th>
-                <th>Stichwort</th>
+                <th class="col-number sortable" data-sort-incidents="number" tabindex="0">Nr.<span class="sort-mark"></span></th>
+                <th class="sortable" data-sort-incidents="started_at" tabindex="0">Datum<span class="sort-mark"></span></th>
+                <th class="sortable" data-sort-incidents="keyword" tabindex="0">Stichwort<span class="sort-mark"></span></th>
                 <th>Einsatz</th>
                 <th data-help-key="unit_leader">EHF</th>
                 <th>Fahrzeuge</th>
-                <th class="right" data-help-key="arrival_min">Ezeit</th>
-                <th class="right" data-help-key="crew_total">Stärke</th>
+                <th class="right sortable" data-sort-incidents="arrival_min" tabindex="0" data-help-key="arrival_min">Ezeit<span class="sort-mark"></span></th>
+                <th class="right sortable" data-sort-incidents="crew_total" tabindex="0" data-help-key="crew_total">Stärke<span class="sort-mark"></span></th>
                 <th class="col-toggle"></th>
               </tr>
             </thead>
