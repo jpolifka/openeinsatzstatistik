@@ -7,6 +7,11 @@ const CHANGELOG = [
   {
     date: "2026-10-02",
     items: [
+      "<b>Einsatz bearbeiten:</b> Ausrücken und Eintreffen zeigen die Sekunden. Beim Speichern bleiben die Zeiten aus dem Bericht genau erhalten.",
+      "<b>Kameraden mit gleichem Nachnamen</b> (z. B. Geschwister) werden beim Einlesen nicht mehr zusammengelegt.",
+      "<b>Bericht übernehmen</b> geht je Bericht nur einmal – ein Doppelklick legt keinen zweiten Einsatz an. Einen erfassten Einsatz aktualisiert, wer Einsätze bearbeiten darf.",
+      "<b>Einstellungen:</b> Ist inzwischen ein Fahrzeug dazugekommen (z. B. beim Einlesen), bittet die App, die Seite neu zu laden, statt es zu überschreiben. Der Tag darf bis 24 Uhr gehen.",
+      "<b>Hochladen:</b> höchstens 200 MB auf einmal, größere Mengen bitte in Teilen.",
       "<b>Rollen selbst gestalten:</b> Unter Verwaltung → <b>Rollen</b> steht, welche Rolle was darf. Der Wehrleiter kann eigene Rollen für seine VG anlegen – zum Beispiel einen „Gruppenführer“, der Einsätze einliest und bearbeitet, aber nicht löscht.",
       "<b>Feinere Rechte:</b> Ansehen, Exportieren, Einlesen, Bearbeiten und Löschen von Einsätzen sind getrennte Rechte. Schaltflächen, die man nicht nutzen darf, sind ausgeblendet.",
       "<b>Mehrere Rollen</b> je Person sind möglich. Unter Verwaltung → Benutzer zeigt <b>Rechte</b>, was jemand darf und woher; das <b>Protokoll</b> zeigt, wer wann Rollen vergeben oder geändert hat.",
