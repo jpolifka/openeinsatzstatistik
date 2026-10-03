@@ -122,6 +122,9 @@ def test_migration_fills_fleet_names(tmp_path):
     incident_id = con.execute("INSERT INTO incident (year, number, source) VALUES (2025, 1, 'pdf')").lastrowid
     con.execute("INSERT INTO vehicle (incident_id, call_sign, name) VALUES (?, '02/45', 'FL NR#.BHÖ 02/45-01')",
                 (incident_id,))
+    for number in (2, 3):                     # Ersatzfahrzeug öfter in der Spalte 02/24 als das eigene (nie)
+        other = con.execute("INSERT INTO incident (year, number, source) VALUES (2025, ?, 'pdf')", (number,)).lastrowid
+        con.execute("INSERT INTO vehicle (incident_id, call_sign, name) VALUES (?, '02/24', 'RP WW 01/23-06')", (other,))
     con.commit()
     db.migrate(con)
     assert dict(con.execute("SELECT call_sign, name FROM fleet").fetchall()) == {

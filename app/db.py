@@ -192,8 +192,10 @@ def _add_fleet_names(con):
     vorbelegt mit dem häufigsten Namen aus den Einsätzen; ohne solchen bleibt er leer (Zuordnung dann
     weiter über unit_prefix)."""
     con.execute("ALTER TABLE fleet ADD COLUMN name TEXT NOT NULL DEFAULT ''")
+    # Nur Namen, die den Kurznamen enthalten – nicht ein Ersatzfahrzeug, das oft in dieser Spalte stand
     con.execute("UPDATE fleet SET name = COALESCE((SELECT v.name FROM vehicle v WHERE v.call_sign = fleet.call_sign "
                 "AND v.name <> '' AND v.name NOT IN (SELECT name FROM fleet) "
+                "AND (v.name LIKE '%' || fleet.call_sign || '-%' OR v.name LIKE '% ' || fleet.call_sign) "
                 "GROUP BY v.name ORDER BY COUNT(*) DESC, v.name LIMIT 1), '')")
 
 
