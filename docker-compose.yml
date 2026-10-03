@@ -7,7 +7,6 @@ services:
       target: app
     image: pdf2einsatz-web
     container_name: einsatzberichte
-    user: "${APP_UID:-10001}:${APP_GID:-10001}"
     ports:
       - "${APP_BIND:-127.0.0.1}:${APP_PORT:?APP_PORT fehlt in .env (Vorlage: .env.example)}:8112"
     # Alle Einstellungen kommen aus .env (Vorlage: .env.example), hier stehen keine Standardwerte
@@ -18,6 +17,14 @@ services:
     volumes:
       - ./daten:/daten
     restart: unless-stopped
+    # Die App läuft als Besitzer von ./daten (oder APP_UID/APP_GID aus .env), nie als root.
+    # Der Einstieg braucht dafür nur den Wechsel der Benutzerkennung.
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETUID
+      - SETGID
+      - CHOWN
     mem_limit: 1g
     cpus: 2.0
     pids_limit: 128

@@ -47,7 +47,7 @@ Die echte Instanz und echte Einsatzdaten wurden nicht verändert. Kein Push und 
 
 - Sicherung der Zentral-Datenbank und **aller** Wehr-Datenbanken sowie Assets/AVV-Dateien als konsistenten Bestand anlegen und Wiederherstellung prüfen. Bei aktiven Schreibern nicht lediglich einzelne SQLite-Dateien kopieren.
 - Neue Migrationen erhöhen die Schema-Version. Ein Software-Downgrade ohne Rückspielen der passenden Sicherung wird absichtlich abgewiesen.
-- `APP_UID`/`APP_GID` so setzen, dass der Container auf den bestehenden Datenordner schreiben darf. Keine automatische Änderung des Besitzers echter Daten durch diesen Branch.
+- Der Container läuft automatisch als Besitzer des bestehenden Datenordners (`docker-entrypoint.sh`, Wechsel per `setpriv`); `APP_UID`/`APP_GID` übersteuern das nur bei Bedarf. Ein root-eigener Ordner mit Daten wird abgewiesen, außer er ist für UID 10001 beschreibbar (Docker Desktop). Der Besitzer echter Daten wird nicht geändert.
 - Standard-Portbindung ist jetzt `127.0.0.1`. Ein Proxy auf dem Host kann diese nutzen; Container-Proxys sollten das gemeinsame Docker-Netz nutzen. Eine absichtlich andere Bindung benötigt `APP_BIND`.
 - Öffentlich konfigurierte `BASE_URL` erfordert `ADMIN_EMAILS`; fehlende Anmeldung lässt sich damit nicht unbemerkt für eine öffentliche Domain starten.
 - Zuerst gegen eine Kopie testen, dann ausdrücklich freigegeben deployen. Es wurde weder ein Deployment noch ein Push ausgelöst.
