@@ -60,6 +60,11 @@ const HELP_SECTIONS = [
         short: "Bericht im BKS-Portal öffnen.",
         text: "Jeder Bericht im BKS-Portal hat eine eigene Nummer (Haupt- bzw. Nebenbericht einer Einheit). Alle Berichte eines Einsatzes verweisen auf denselben <i>Stammdatensatz</i>; darüber erkennt die App gemeinsame Einsätze mehrerer Wehren – auch selbst angelegte ohne Einsatznummer der Leitstelle, z. B. Brandsicherheitswachen. Der Link öffnet den Bericht im Portal (Anmeldung dort nötig).",
       },
+      dispatch_number: {
+        title: "Leitstellen-Nr.",
+        short: "Gemeinsame Einsatznummer der Leitstelle für beteiligte Wehren.",
+        text: "Die Einsatznummer der Leitstelle verbindet Berichte desselben Einsatzes über mehrere Wehren. Sie ist nicht die laufende Nummer der Wehr und nicht die BKS-Bericht-ID. Leer bedeutet unbekannt; bei Korrekturen den Originalbericht prüfen.",
+      },
       unit_leader: {
         title: "EHF",
         short: "Einheitsführer, Schreibweise „V. Nachname“.",
@@ -125,7 +130,7 @@ const HELP_SECTIONS = [
       warnings: {
         title: "Prüfhinweise",
         short: "Auffälligkeiten beim Einlesen – bitte kontrollieren.",
-        text: "Automatisch erzeugte Hinweise, z. B. fehlender Einheitsführer, nicht ermittelbarer Beginn/Ende oder Fahrzeuge, die keinem Block der Einsatzübersicht zugeordnet sind. Berichte ohne Prüfhinweise, ohne neue Personen und ohne Abweichungen werden beim Einlesen direkt übernommen; nur die übrigen erscheinen zur Kontrolle. Hinweise verhindern das Übernehmen nicht.",
+        text: "Beim Einlesen erzeugte Hinweise, z. B. fehlender Einheitsführer oder nicht ermittelbarer Beginn/Ende. Jeder neue oder geänderte Bericht muss ausdrücklich bestätigt werden, auch ohne Hinweise. Stammdatensätze und Weiterleitungen haben eigene Bestätigungsaktionen. Schließen verwirft offene Vorschauen, bereits bestätigte Berichte bleiben gespeichert. In den Einsatzdetails steht der aktuelle Datenstand getrennt von den historischen Importhinweisen; Korrekturen entfernen diese Historie nicht.",
       },
       attendance: {
         title: "Anwesenheit",

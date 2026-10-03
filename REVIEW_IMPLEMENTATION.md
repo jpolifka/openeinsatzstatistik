@@ -1,43 +1,47 @@
 # Umsetzung des Reviews
 
 Branch: `fix/comprehensive-review`, Ausgangspunkt: `de7b2cb`.
-Die echte Instanz und echte Einsatzdaten werden bei der Umsetzung nicht verändert.
+Die echte Instanz und echte Einsatzdaten wurden nicht verändert. Kein Push und kein Deployment.
 
-## Umgesetzt und geprüft
+## Umgesetzt
 
-- Anmeldeprüfung verwendet den ASGI-Pfad statt der aus dem Host konstruierten URL; die Rechte-Dependency weist fehlende Sitzungen zusätzlich ab.
-- FastAPI/Starlette, Multipart-, PDF- und Kryptografie-Abhängigkeiten aktualisiert. Der Audit der aktualisierten Anforderungen meldet keine bekannten Schwachstellen.
-- Neue Einsatzberichte werden in der Oberfläche ausdrücklich übernommen. Direkte Speicherung von Stammdatensätzen und Weiterleitung anderer Wehren werden vor dem Upload erklärt; diese Importwege sind noch nicht vollständig gestuft.
-- Importvergleich umfasst Beschreibung, Leitstellen-Nummer, Personen/Funktionen/Fahrzeugzuordnungen und Sekunden. Unbekannte Fahrzeugspalten fließen ebenfalls ein.
-- Nutzereingaben in Excel-Zellen bleiben Text; beabsichtigte Formeln bleiben Formeln. Einsatzdauer über 24 Stunden erhält vollständige Datumswerte und ein Stundenformat ohne Tagesumbruch.
-- Eine zukünftige Gebührenordnung wird nicht automatisch rückwirkend gewählt. Negative, nicht endliche und boolesche Gebührensätze sowie ungültige Kalenderdaten werden abgewiesen.
-- Negative Stärken, gelöschter Einsatzbeginn und Ende vor Beginn werden abgefangen. Fahrzeugstärke hat eine serverseitige Untergrenze.
-- Einsatzrevision schützt Speichervorgänge aus der Oberfläche. Alte API-Aufrufer ohne Revision bleiben kompatibel und müssen in einer weiteren API-Härtung auf eine verbindliche Vorbedingung umgestellt werden. Import-Aktualisierungen brauchen ebenfalls diesen Revisionsvertrag.
-- Verbrauchte Magic Links werden atomar und dauerhaft in der Zentral-Datenbank markiert.
-- Nacharbeit eines gespeicherten Imports wird in derselben Wehr-Transaktion dauerhaft eingereiht. Zentrale Änderungen haben eine idempotente Abschlussmarkierung. Fehlgeschlagene Aufträge bleiben für Wiederholung beim Neustart erhalten; ein Speichervorgang bleibt erfolgreich und meldet offene Nacharbeit.
-- Zusätzliche Stärke statt vermeintlicher kumulativer Stärke wird in UI, Hilfe und Excel eindeutig beschriftet.
-- Kennzahlen-Export berücksichtigt Wehr-Auswahl und Frist; fehlende Personalstunden erhalten Abdeckungshinweise.
-- Formularlabels sind explizit zugeordnet; Einsatzdetails haben einen Tastatur-Button. Importdialog hat einen zugänglichen Titel.
-- Historische Importhinweise werden als solche erklärt. Ladefehler erhalten die Seitenstruktur und eine Wiederholen-Aktion.
-- Gleichzeitiges Einlesen ist gesperrt; das Ersetzen offener Vorschauen benötigt eine Rückfrage.
-- Mobile Kopfzeile darf umbrechen. Die globale Auswahl heißt „Ansicht“ statt „Wehr“.
-- Prüfprotokoll bündelt das Laden von Einsatz-/Pending-Daten pro Wehr; eine Lastmessung steht noch aus.
-- Vorschauen haben Anzahl-, Benutzer- und Speicherbudgets; PDF-Seiten sowie Excel-Spalten/Blätter sind begrenzt.
-- Neuere Datenbankschemata verhindern einen Downgrade. Migrationen aus jeder historischen Schema-Version sowie erneute Starts werden getestet.
-- CI prüft Python 3.12/3.14, Abhängigkeiten und JavaScript-Syntax. Container verwendet einen unprivilegierten Benutzer, Healthcheck und Ressourcenlimits; Host-Port wird standardmäßig nur an Loopback gebunden.
-- Gemeinsame Personalstunden-/Abdeckungslogik ist zentralisiert, Import-Nacharbeit in ein eigenes Modul getrennt.
+- Anmeldung über den ASGI-Pfad; fehlende Sitzungen werden zusätzlich in der Rechteprüfung abgewiesen. Magic Links werden dauerhaft und atomar als verbraucht markiert.
+- Aktualisierte direkte und transitive Laufzeit-Abhängigkeiten mit `requirements.lock` und SHA256-Prüfsummen. Das Containerimage installiert mit verpflichtender Hash-Prüfung.
+- **Alle Importtypen werden zuerst nur gelesen.** Neue Einsätze, Stammdatensätze und Weiterleitungen haben eigene ausdrückliche Bestätigungsaktionen. Ein Stapel besteht aus unabhängigen Einzelentscheidungen; es wird keine gemeinsame Transaktion über mehrere Wehr-Datenbanken versprochen.
+- Benutzergebundene Vorschauen mit Ablauf, Speicher-/Anzahlbudgets und explizitem serverseitigem Abbruch. Beim Schließen werden offene Vorschauen verworfen, bestätigte Berichte bleiben bestehen. Verspätete Upload-Ergebnisse werden nicht in eine inzwischen geschlossene/neue Vorschau übernommen.
+- Aktualisieren und Löschen von Einsätzen benötigen eine Revision: fehlende Vorbedingung 428, zwischenzeitliche Änderung 409. Umnummerierung erhöht betroffene Revisionen. Import-Aktualisierung ist an die ursprünglich verglichene Einsatz-ID gebunden.
+- Importvergleich umfasst Beschreibung, Leitstellen-Nummer, Personen/Funktionen/Fahrzeugzuordnungen, Sekunden und unbekannte Fahrzeugspalten.
+- Dauerhafte Import-Nacharbeit in derselben Wehr-Transaktion, idempotente zentrale Abschlussmarkierung, Wiederholung jede Minute und beim Start. Offene Aufträge werden angezeigt; ein gespeicherter Einsatz muss bei einem zentralen Ausfall nicht erneut importiert werden.
+- Wiederaufnehmbare Archivierung: Wehr zunächst sperren, Archivauftrag dauerhaft speichern, erst nach erfolgreichem Verschieben zentrale Zuordnungen entfernen. Dateisystemausfälle und Absturz nach Verschieben werden getestet. Abgebrochene Anlagen werden beim Start in `deleted/incomplete-…` gesichert, nicht gelöscht.
+- Excel-Eingaben bleiben Text statt ungewollter Formeln. Lange Einsatz- und Anwesenheitsdauern erhalten Stundenformate ohne Tagesumbruch. Kennzahlen-Export berücksichtigt Auswahl und Frist.
+- Gebührenordnungen gelten erst ab ihrem Gültigkeitsbeginn. Negative/nicht endliche/boolsche Gebühren, ungültige Kalenderdaten, negative/fractionale/boolsche Stärken und Ende vor Beginn werden abgefangen. Zeitangaben verwenden die örtliche Uhrzeit ohne Zeitzonen-Zusatz.
+- Gemeinsame Personalstunden-/Abdeckungslogik; fehlende Anwesenheit wird nicht als belastbare Null dargestellt.
+- Aktuelle Datenprüfungen werden von historischen Importhinweisen getrennt. Zusatzstärken sind in Oberfläche, Hilfe und Export eindeutig beschriftet.
+- Explizite Formularlabels, Tastatur-Button für Einsatzdetails, zugänglicher Importtitel, korrekt als Auswahlgruppe ausgezeichnete Verwaltungsbereiche. Vorhandene Feld-IDs bleiben erhalten.
+- Ladefehler erhalten die Seitenstruktur und eine Wiederholen-Aktion. Import, Abbruch, Fehlerrückkehr und Revisionen sind zusätzlich durch Frontend-Zustandstests abgesichert.
+- Responsive Kopfzeile für Smartphone **und** Tablet; „Ansicht“ statt missverständlicher Wehr-Auswahl in der VG-Gesamtansicht.
+- Modularität: `imports.js`, `admin_views.js`, `preview_sessions.py`, `import_queue.py`, `tenant_lifecycle.py`, `parser_worker.py`, `request_limits.py`, `incident_schema.py` und `bks_common.py`. Formular, API und Speicherung teilen einen Feldkatalog; PDF und Excel teilen formatunabhängige BKS-Regeln. Kein Framework-Wechsel.
+- Prüfprotokoll lädt Einsatz-/Pending-Daten einmal je Wehr statt je Stammdatensatz. Synthetischer Test mit 500 Stammdatensätzen und 1.000 Beteiligungen: zwei Datenladungen, lokal ca. 0,02 Sekunden (keine Produktions-Leistungsgarantie).
+- Request-Limit bereits vor/während Multipart-Verarbeitung, einschließlich Requests ohne Content-Length. PDF/XLSX-Auswertung in kurzlebigen Prozessen: höchstens zwei gleichzeitig, 45 Sekunden, begrenzte Rückgabemenge und unter Linux CPU-/Speicherlimits. Administrative Excel-Kataloge verwenden dieselben Schutzgrenzen und schließen Arbeitsmappen zuverlässig.
+- Migrationen bleiben append-only; neuere Schemata verhindern Downgrades. Historische Schema-Versionen und Wiederholungsstarts werden getestet.
+- Container mit unprivilegiertem Benutzer, Healthcheck, Ressourcenlimits und standardmäßiger Loopback-Portbindung. CI prüft Python 3.12/3.14, Hash-Lock, Sicherheitsaudit, JavaScript-Syntax und Frontend-Zustandstests.
 
-## Noch offen – keine vollständige Freigabe
+## Prüfung
 
-1. Alle Importtypen vollständig als Vorschau/Bestätigung gestalten, einschließlich Stammdatensätzen und Weiterleitungen; atomare Stapelentscheidung und serverseitiger Abbruchvertrag.
-2. Revision für alle schreibenden API-Aufrufer verbindlich machen und Import-Aktualisierungen gegen inzwischen geänderte Einsätze absichern.
-3. Zeitgesteuerte Wiederholung der Nacharbeit im laufenden Betrieb und Übersicht offener Aufträge; momentan Wiederholung beim Neustart. Hintergrundverarbeitung benötigt einen klaren Lebenszyklus.
-4. Mandanten-Anlage/-Archivierung mit dauerhaften Lebenszykluszuständen und Wiederaufnahme nach Dateisystemfehlern absichern; reale Restore-Probe auf einer Kopie.
-5. Vollständiger Dependency-Lock mit Hashes; Docker-Build unter Linux/Python 3.12 wirklich ausführen. Die CI wurde hinzugefügt, aber noch nicht auf GitHub ausgeführt.
-6. Frontend in kleinere explizite Module schneiden; gemeinsames Feldschema und formatunabhängige BKS-Normalisierung. Kein unnötiger Framework-Wechsel.
-7. Vollständige Browser-Regressionen für Upload/Abbruch, Fehler → Retry, Exportparität, alle Dialoge und Tastaturbedienung. Aktuelle Browserprüfung ist manuell mit synthetischen Daten.
-8. Lastprofil des Prüfprotokolls; harte Request-/Parser-Laufzeitgrenzen und einheitliche Schutzregeln für administrative Excel-Importe. Die neuen Dateigrenzen ersetzen keine Prozess-Isolation.
-9. Aktuelle Prüfhinweise dynamisch berechnen, zusätzlich zur bereits getrennten Importhistorie; leere Zustände und Verwaltungskontext weiter vereinheitlichen.
+- Lokal Python 3.14: **309 Tests bestanden**; 7 zusätzliche JavaScript-Tests bestanden.
+- Linux/Python 3.12 mit Hash-Lock: **309 Tests bestanden**.
+- Dependency-Audit des Hash-Locks: keine bekannten Schwachstellen.
+- Produktionsimage gebaut; Start, Migration und Healthcheck unter UID 10001 mit leerem, containerinternem Datenordner erfolgreich geprüft.
+- Browserprüfung ausschließlich auf der lokalen synthetischen Instanz: Excel-Upload → Vorschau → ausdrückliche Übernahme, Einsatzdetails per Enter, Bearbeitungsformular, Verwaltungsbereiche und Feldzuordnungen. Kein Seitenüberlauf bei 390, 768 und 1440 Pixeln; keine Browserfehler in diesen Abläufen.
+- Synthetische Archiv-/Restore-Probe mit Einsatzdaten und SQLite-Integritätsprüfung bestanden.
+- Eine Deprecation-Warnung betrifft den TestClient mit httpx; sie verhindert keine Tests und ist kein bekannter Laufzeit-Sicherheitsbefund.
+
+## Grenzen der Freigabe
+
+- Die GitHub-CI wurde nicht ausgelöst, weil kein Push beauftragt wurde.
+- Browser-Abläufe wurden manuell geprüft; die automatisierten Frontend-Tests sind Zustands-/Render-Regressionen, keine lückenlose Browser-Ende-zu-Ende- oder formale WCAG-Zertifizierung.
+- Keine Restore-Probe mit einer echten Produktionskopie und kein Test des vorhandenen Reverse-Proxys/SMTP. Dafür sind eine ausdrücklich freigegebene Kopie und eine Rollout-Freigabe nötig.
+- Vorschauen liegen weiterhin im Speicher eines einzelnen Web-Workers. Ein Neustart verwirft offene Vorschauen, nicht gespeicherte Einsätze oder Nacharbeitsaufträge. Horizontale Skalierung benötigt einen gemeinsamen Vorschau-Speicher.
 
 ## Vor einem späteren Rollout
 

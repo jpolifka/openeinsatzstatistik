@@ -44,8 +44,10 @@ def central():
 def setup():
     """Zentrale Datenbank und alle Wehr-Datenbanken auf den aktuellen Stand bringen."""
     db.setup(central_path(), db.CENTRAL_MIGRATIONS)
+    from app import tenant_lifecycle
+    tenant_lifecycle.recover()
     with central() as con:
-        slugs = [r["slug"] for r in con.execute("SELECT slug FROM tenant")]
+        slugs = [r["slug"] for r in con.execute("SELECT slug FROM tenant WHERE slug NOT IN (SELECT slug FROM tenant_archive)")]
     for slug in slugs:
         db.setup(tenant_path(slug))
     _configs.clear()
@@ -175,6 +177,13 @@ def create_tenant(con, slug, name, vg_id, cfg=None):
                             "UNION ALL SELECT MAX(tenant_id) FROM role_event)").fetchone()[0] or 0
     tenant_id = con.execute("INSERT INTO tenant (id, slug, name, vg_id) VALUES (?, ?, ?, ?)",
                             (tenant_id + 1, slug, name.strip(), vg_id)).lastrowid
+    from app.tenant_lifecycle import CREATE_MARKER
+    directory = os.path.dirname(path)
+    os.makedirs(directory, exist_ok=False)
+    with open(os.path.join(directory, CREATE_MARKER), "x") as marker:
+        marker.write(slug)
+        marker.flush()
+        os.fsync(marker.fileno())
     db.setup(path)
     with db.connection(path) as tenant_con:
         save_config(tenant_con, cfg or TenantConfig(name=name))

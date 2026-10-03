@@ -269,11 +269,15 @@ def _add_completed_imports(con):
     con.execute("CREATE TABLE completed_import (id TEXT PRIMARY KEY)")
 
 
+def _add_tenant_archive(con):
+    con.execute("CREATE TABLE tenant_archive (slug TEXT PRIMARY KEY, target TEXT NOT NULL, email TEXT)")
+
+
 # Neue Schemaänderungen nur hinten anfügen; PRAGMA user_version zählt die erledigten Schritte.
 TENANT_MIGRATIONS = [_create_legacy_schema, _rename_to_english, _add_tenant_tables, _add_bks_ids,
                      _add_pending_reports, _add_fleet_names, _add_incident_revision, _add_import_jobs]
 CENTRAL_MIGRATIONS = [_create_central_schema, _add_dpa, _add_records, _add_notices, _add_fee_schedules, _add_roles,
-                      _records_per_vg, _add_consumed_magic_links, _add_completed_imports]
+                      _records_per_vg, _add_consumed_magic_links, _add_completed_imports, _add_tenant_archive]
 
 
 def migrate(con, steps=TENANT_MIGRATIONS):

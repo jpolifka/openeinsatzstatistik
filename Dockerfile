@@ -3,8 +3,8 @@ FROM python:3.12-slim AS base
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /srv
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.txt requirements.lock ./
+RUN pip install --no-cache-dir --require-hashes -r requirements.lock
 
 COPY app ./app
 COPY static ./static
@@ -23,5 +23,5 @@ USER 10001:10001
 EXPOSE 8112
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8112/health', timeout=3).close()"
-# Nur ein Worker: die PDF-Vorschau liegt bis zur Übernahme im Prozessspeicher (main.PreviewSessions)
+# Nur ein Worker: die Vorschau liegt bis zur Übernahme im Prozessspeicher (preview_sessions.py)
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8112"]

@@ -337,6 +337,11 @@ button.person:hover:not(.leader) { background: var(--brand-light); color: var(--
 .footer-logo { height: 30px; opacity: .8; }
 
 /* ------------------------------------------------------------ Schmal */
+@media (max-width: 1000px) {
+  .topbar-inner { flex-wrap: wrap; }
+  .topbar-actions { width: 100%; min-width: 0; flex-wrap: wrap; }
+  .topbar-actions label, .topbar-actions select { min-width: 0; max-width: 100%; }
+}
 @media (max-width: 1150px) {
   .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }

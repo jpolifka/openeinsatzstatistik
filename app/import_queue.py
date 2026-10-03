@@ -1,4 +1,5 @@
-"""Dauerhafte Nachverarbeitung gespeicherter Berichte; Wiederholung nach Neustart."""
+"""Dauerhafte, wiederholbare Nachverarbeitung gespeicherter Berichte."""
+import asyncio
 import datetime as dt
 import json
 import logging
@@ -55,3 +56,19 @@ def retry(tenant, after_import):
         jobs = [row[0] for row in con.execute("SELECT id FROM import_job")]
     for job_id in jobs:
         process(tenant, job_id, after_import)
+
+
+async def run_worker(stop, tenants, after_import, interval=60):
+    """Aufträge im laufenden Betrieb wiederholen; beim Beenden keine Threads zurücklassen."""
+    while not stop.is_set():
+        try:
+            for tenant in await asyncio.to_thread(tenants):
+                if stop.is_set():
+                    break
+                await asyncio.to_thread(retry, tenant, after_import)
+        except Exception:
+            log.exception("Import-Nachverarbeitung wird beim nächsten Durchlauf wiederholt")
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=interval)
+        except TimeoutError:
+            pass

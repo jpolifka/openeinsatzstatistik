@@ -18,7 +18,7 @@ import zipfile
 import openpyxl
 from openpyxl.utils.exceptions import InvalidFileException
 
-from app.pdf_report import KINDS, PERSON_VEHICLE, SHORT_CALL_SIGN, _call_sign_pattern, _parse_keyword, parse_number
+from app.bks_common import KINDS, PERSON_VEHICLE, SHORT_CALL_SIGN, _call_sign_pattern, _parse_keyword, parse_number
 
 MAIN_SHEET = "Einsatzbericht"
 VEHICLE_SHEET = "Ausger. Fahrzeuge"

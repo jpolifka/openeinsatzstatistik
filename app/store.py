@@ -4,6 +4,7 @@ import json
 import re
 
 from app import domain
+from app.incident_schema import FIELDS, INT_FIELDS
 from app.holidays import is_weekend_or_holiday
 from app.names import NameMatcher, leader_spelling, matches_leader, split_name
 from app.timeutil import normalize_iso, parse_iso, to_iso, year_of
@@ -12,9 +13,6 @@ from app.timeutil import normalize_iso, parse_iso, to_iso, year_of
 FULL_KEYWORD = re.compile(r"([A-Za-z]\d)\s*[.\s]?\s*(\d{0,2})")
 
 # Bearbeitbare Felder eines Einsatzes – Grundlage für Formular, Speichern und Abgleich
-FIELDS = ("number", "started_at", "ended_at", "keyword", "subcode", "description", "place",
-          "unit_leader", "station_staff", "dispatch_number")
-INT_FIELDS = ("number", "station_staff")
 # Datensätze im BKS-Portal (eigener Bericht, Stammdatensatz des Einsatzes): kommen aus der PDF, nicht aus dem Formular
 ID_FIELDS = ("bks_report_id", "bks_record_id")
 TEXT_FIELDS = tuple(name for name in FIELDS if name not in INT_FIELDS + ("started_at", "ended_at", "dispatch_number"))
@@ -57,6 +55,8 @@ def normalize_fields(fields, weekend_or_holiday=None):
         f[name] = str(f[name] or "").strip() or None
     start = parse_iso(f["started_at"])
     end = parse_iso(f["ended_at"])
+    if any(value and value.tzinfo is not None for value in (start, end)):
+        raise ValueError("Einsatzzeiten bitte als örtliche Uhrzeit ohne Zeitzonen-Zusatz angeben.")
     if start and end:
         if (start.tzinfo is None) != (end.tzinfo is None):
             raise ValueError("Beginn und Ende müssen dieselbe Zeitzonen-Konvention verwenden.")
@@ -224,9 +224,12 @@ def renumber(con, year):
     """
     if year is None:
         return
-    ids = [r[0] for r in con.execute("SELECT id FROM incident WHERE year = ? ORDER BY started_at, id", (year,))]
+    rows = con.execute("SELECT id, number FROM incident WHERE year = ? ORDER BY started_at, id", (year,)).fetchall()
+    ids = [r["id"] for r in rows]
+    changed = [r["id"] for n, r in enumerate(rows, start=1) if r["number"] != n]
     con.executemany("UPDATE incident SET number = ? WHERE id = ?", [(-n, i) for n, i in enumerate(ids, start=1)])
     con.executemany("UPDATE incident SET number = ? WHERE id = ?", [(n, i) for n, i in enumerate(ids, start=1)])
+    con.executemany("UPDATE incident SET revision = revision + 1 WHERE id = ?", [(i,) for i in changed])
 
 
 def is_empty(con):
@@ -393,8 +396,11 @@ def vehicles_with_data(con):
     return {r[0]: r[1] for r in con.execute("SELECT call_sign, COUNT(*) FROM vehicle GROUP BY call_sign")}
 
 
-def delete_incident(con, incident_id):
-    con.execute("DELETE FROM incident WHERE id = ?", (incident_id,))
+def delete_incident(con, incident_id, revision=None):
+    if revision is None:
+        con.execute("DELETE FROM incident WHERE id = ?", (incident_id,))
+    elif not con.execute("DELETE FROM incident WHERE id = ? AND revision = ?", (incident_id, revision)).rowcount:
+        raise StaleIncident("Der Einsatz wurde inzwischen geändert. Bitte neu laden und erneut prüfen.")
 
 
 # ---------------------------------------------------------------- Weitergegebene Berichte

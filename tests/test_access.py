@@ -68,8 +68,8 @@ def test_permission_matrix(world, email):
         client.get("/api/incidents?year=2025").status_code,
         client.get("/api/export?year=2025").status_code,
         client.post("/api/reports", files=[("pdfs", ("a.txt", b"x", "text/plain"))]).status_code,
-        client.put(f"/api/incidents/{ids['wehr-a1']}", json={"description": "geändert"}).status_code,
-        client.delete(f"/api/incidents/{ids['wehr-b1']}").status_code,
+        client.put(f"/api/incidents/{ids['wehr-a1']}", json={"revision": 0, "description": "geändert"}).status_code,
+        client.delete(f"/api/incidents/{ids['wehr-b1']}?revision=0").status_code,
         client.get("/api/members?tenant=wehr-a1").status_code,
     )
     assert statuses == MATRIX[email]
@@ -98,9 +98,9 @@ def test_foreign_scope_cookie_falls_back_to_own_tenant(world):
 def test_foreign_incidents_cannot_be_changed(world):
     client, ids = world
     _as(client, "lead@example.org")
-    assert client.put(f"/api/incidents/{ids['wehr-b1']}", json={"description": "fremd"}).status_code == 403
-    assert client.put(f"/api/incidents/{ids['wehr-a2']}", json={"description": "fremd"}).status_code == 403
-    assert client.put("/api/incidents/unbekannt:1", json={}).status_code == 403
+    assert client.put(f"/api/incidents/{ids['wehr-b1']}", json={"revision": 0, "description": "fremd"}).status_code == 403
+    assert client.put(f"/api/incidents/{ids['wehr-a2']}", json={"revision": 0, "description": "fremd"}).status_code == 403
+    assert client.put("/api/incidents/unbekannt:1", json={"revision": 0, }).status_code == 403
     with db.connection(tenancy.tenant_path("wehr-b1")) as con:
         assert store.load_incidents(con)[0]["description"] == ""
 
@@ -111,7 +111,7 @@ def test_vg_roles_see_only_their_vg(world):
     assert [s["key"] for s in config["scopes"]] == ["vg:vg-a", "t:wehr-a1", "t:wehr-a2"]
     assert config["vg"]["slug"] == "vg-a" and config["tenant"] is None      # Standard: Gesamtansicht der VG
     _as(client, "vglead@example.org", scope="t:wehr-a2")
-    assert client.put(f"/api/incidents/{ids['wehr-a2']}", json={"description": "VG"}).status_code == 200
+    assert client.put(f"/api/incidents/{ids['wehr-a2']}", json={"revision": 0, "description": "VG"}).status_code == 200
     assert client.get("/api/export?year=2025").status_code == 200
     _as(client, "vglead@example.org", scope="vg:vg-b")
     assert client.get("/api/config").json()["vg"]["slug"] == "vg-a"
@@ -165,10 +165,10 @@ def test_vg_lead_sees_no_attendance(world):
     sheets = openpyxl.load_workbook(io.BytesIO(export.content))
     assert not any(c == "M. Muster" for ws in sheets for row in ws.iter_rows(values_only=True) for c in row)
     # Bearbeiten ohne EHF im Formular lässt ihn unverändert
-    assert client.put(f"/api/incidents/{ids['wehr-a1']}", json={"unit_leader": "", "description": "x"}).status_code == 200
+    assert client.put(f"/api/incidents/{ids['wehr-a1']}", json={"revision": 0, "unit_leader": "", "description": "x"}).status_code == 200
     with db.connection(tenancy.tenant_path("wehr-a1")) as con:
         assert store.load_incidents(con)[0]["unit_leader"] == "M. Muster"
-    response = client.put(f"/api/incidents/{ids['wehr-a1']}", json={"people": []})
+    response = client.put(f"/api/incidents/{ids['wehr-a1']}", json={"revision": 0, "people": []})
     assert response.status_code == 403
     with db.connection(tenancy.tenant_path("wehr-a1")) as con:
         assert len(store.load_incidents(con)[0]["people"]) == 1
@@ -203,7 +203,7 @@ def test_fine_grained_rights_of_own_role(world):
     assert client.get("/api/incidents?year=2025").status_code == 200
     assert client.get("/api/export?year=2025").status_code == 403
     assert client.post("/api/reports", files=[("pdfs", ("a.txt", b"x", "text/plain"))]).status_code == 403
-    assert client.put(f"/api/incidents/{ids['wehr-a1']}", json={"description": "x"}).status_code == 403
+    assert client.put(f"/api/incidents/{ids['wehr-a1']}", json={"revision": 0, "description": "x"}).status_code == 403
     assert client.delete(f"/api/incidents/{ids['wehr-a1']}").status_code == 403
     assert client.get("/api/members?tenant=wehr-a1").status_code == 403
 

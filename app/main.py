@@ -8,6 +8,7 @@ ausgewählte Wehr (tenancy.Access) und arbeitet nur mit deren Datenbank und Fach
 Fachlogik liegt in report.py (PDF -> Einsatz), metrics.py (Auswertungen), store.py
 (Datenbank) und excel_export.py; die Fachkonfiguration der Wehr in tenant_config.py.
 """
+import asyncio
 import contextlib
 import datetime as dt
 import io
@@ -16,10 +17,7 @@ import logging
 import os
 import re
 import tempfile
-import threading
-import time
 import unicodedata
-import uuid
 import zipfile
 from typing import List, Optional
 
@@ -32,6 +30,8 @@ from pydantic import BaseModel, Field, create_model
 from app import admin, auth, db, domain, dpa, feedback, fees, import_queue, mail, excel_export, legacy, metrics, pdf_report, rbac, records, report, store, tenancy, tenant_config, theme
 from app.rbac import DELETE, EXPORT, IMPORT, INCIDENTS, PEOPLE, PEOPLE_EDIT, PLAN_VIEW, STATS, VG_RECORDS, WRITE
 from app.timeutil import year_of
+from app.request_limits import RequestSizeLimit
+from app.incident_schema import FORM_FIELDS
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("pdf2einsatz")
@@ -56,18 +56,26 @@ async def lifespan(_app):
     elif legacy.legacy_emails():
         log.warning("AUTH_EMAILS wird ignoriert – Benutzer werden in der Verwaltung den Wehren zugeordnet")
     tenancy.setup()
-    with tenancy.central() as con:
-        vg_ids = [row[0] for row in con.execute("SELECT id FROM vg")]
-    for vg_id in vg_ids:
-        for tenant in tenancy.vg_tenants(vg_id):
-            import_queue.retry(tenant, _after_import)
+    def active_tenants():
+        from app import tenant_lifecycle
+        tenant_lifecycle.retry_archives()
+        with tenancy.central() as con:
+            vg_ids = [row[0] for row in con.execute("SELECT id FROM vg")]
+        return [tenant for vg_id in vg_ids for tenant in tenancy.vg_tenants(vg_id)]
+    stop = asyncio.Event()
+    worker = asyncio.create_task(import_queue.run_worker(stop, active_tenants, _after_import))
     mail.log_check()
-    yield
+    try:
+        yield
+    finally:
+        stop.set()
+        await worker
 
 
 app = FastAPI(title="Einsatzstatistik", lifespan=lifespan)
 # JSON der Einsatzliste schrumpft komprimiert auf ca. 1/16
 app.add_middleware(GZipMiddleware, minimum_size=1000)
+app.add_middleware(RequestSizeLimit)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
@@ -111,71 +119,7 @@ async def forbidden(_request, exc):
 access = auth.access
 
 
-# ---------------------------------------------------------------- PDF-Vorschau im Speicher
-class PreviewSessions:
-    """Gelesene Berichte bis zur Übernahme. Liegt im Prozess – daher nur ein uvicorn-Worker.
-
-    Eine Vorschau gehört dem Benutzer, der sie angelegt hat, und der Wehr, für die gelesen wurde."""
-    TTL = 60 * 60
-    MAX_SESSIONS = 128
-    MAX_PER_OWNER = 8
-    MAX_BYTES = 64 * 1024 * 1024
-
-    def __init__(self):
-        self._sessions = {}
-        self._lock = threading.Lock()
-
-    def add(self, reports, owner):
-        """reports: [(bericht, slug der Wehr, für die er gelesen wurde)]."""
-        token = uuid.uuid4().hex
-        if not reports:
-            return token
-        size = len(json.dumps(reports, default=str, ensure_ascii=False).encode())
-        with self._lock:
-            self._expire()
-            if len(self._sessions) >= self.MAX_SESSIONS or sum(s["owner"] == owner for s in self._sessions.values()) >= self.MAX_PER_OWNER:
-                raise HTTPException(429, "Zu viele offene Vorschauen. Bitte vorhandene Berichte übernehmen oder später erneut versuchen.")
-            if size + sum(s.get("size", 0) for s in self._sessions.values()) > self.MAX_BYTES:
-                raise HTTPException(413, "Die Vorschauen sind zu groß. Bitte kleinere Mengen einlesen.")
-            self._sessions[token] = {"time": time.time(), "owner": owner,
-                                     "size": size,
-                                     "reports": {r["filename"]: (r, slug) for r, slug in reports}}
-        return token
-
-    def get(self, token, filename, owner):
-        """(bericht, slug) oder (None, None), auch wenn die Vorschau einem anderen Benutzer gehört."""
-        with self._lock:
-            self._expire()
-            session = self._sessions.get(token)
-        if not session or session["owner"] != owner or filename not in session["reports"] \
-                or session["time"] < time.time() - self.TTL:
-            return None, None
-        return session["reports"][filename]
-
-    @contextlib.contextmanager
-    def claim(self, token, filename, owner):
-        """Bericht zur Übernahme entnehmen: ein zweiter Aufruf (Doppelklick) findet ihn nicht mehr.
-        Scheitert die Übernahme, liegt er wieder bereit."""
-        entry = None
-        with self._lock:
-            session = self._sessions.get(token)
-            if session and session["owner"] == owner and session["time"] >= time.time() - self.TTL:
-                entry = session["reports"].pop(filename, None)
-                if not session["reports"]:
-                    del self._sessions[token]
-        try:
-            yield entry or (None, None)
-        except BaseException:
-            if entry:
-                with self._lock:
-                    session["reports"][filename] = entry
-                    self._sessions[token] = session
-            raise
-
-    def _expire(self):
-        cutoff = time.time() - self.TTL
-        for token in [t for t, s in self._sessions.items() if s["time"] < cutoff]:
-            del self._sessions[token]
+from app.preview_sessions import PreviewSessions
 
 
 previews = PreviewSessions()
@@ -225,6 +169,7 @@ def incident_json(incident, leaders, tenant, limit=None, cfg=None):
     return {
         "id": incident_key(tenant, incident.get("id")),
         "tenant": tenant.slug,
+        "current_warnings": report.current_warnings(incident),
         **{name: incident.get(name) for name in ("year", *store.FIELDS, *store.ID_FIELDS, "source", "filename",
                                                  "warnings", "revision")},
         **({} if tenant.can(PEOPLE) else {"unit_leader": None}),     # EHF ist ein Name
@@ -306,7 +251,7 @@ def api_config(a: tenancy.Access = Depends(access)):
     """
     tenants = a.selection
     cfg = _selection_config(tenants, a) if tenants else tenancy.TenantConfig(name="Einsatzstatistik")
-    return {**cfg.client_config(), "name": cfg.name, "user": a.email, "superadmin": a.superadmin, "roles": a.roles,
+    return {**cfg.client_config(), "incident_fields": FORM_FIELDS, "name": cfg.name, "user": a.email, "superadmin": a.superadmin, "roles": a.roles,
             "scope": a.scope_key, "vg": {"slug": a.vg, "name": a.vgs[a.vg]} if a.vg else None,
             "tenant": a.selected.json() if a.selected else None, "tenants": [t.json() for t in tenants],
             "branding": _branding(a.selected), "dpa_blocked": a.blocked,
@@ -442,7 +387,8 @@ def api_evaluation(year: Optional[int] = None, limit: Optional[int] = None, tena
 # ---------------------------------------------------------------- Einsätze
 IncidentFields = create_model(
     "IncidentFields",
-    **{name: (Optional[int] if name in store.INT_FIELDS else Optional[str], None) for name in store.FIELDS})
+    **{name: (Optional[int], Field(default=None, ge=0, strict=True)) if name in store.INT_FIELDS
+       else (Optional[str], None) for name in store.FIELDS})
 
 
 @app.get("/api/incidents")
@@ -462,7 +408,7 @@ def api_incidents(year: Optional[int] = None, a: tenancy.Access = Depends(access
 
 class VehicleEdit(BaseModel):
     call_sign: str
-    crew: Optional[int] = Field(default=None, ge=0)
+    crew: Optional[int] = Field(default=None, ge=0, le=99, strict=True)
     departed: Optional[str] = None
     arrived: Optional[str] = None
 
@@ -476,7 +422,7 @@ class PersonEdit(BaseModel):
 
 # Einsatz bearbeiten: Felder, dazu optional Fahrzeuge und Anwesenheit (fehlen sie, bleiben sie unverändert)
 IncidentUpdate = create_model("IncidentUpdate", __base__=IncidentFields,
-                              revision=(Optional[int], Field(default=None, ge=0)),
+                              revision=(Optional[int], Field(default=None, ge=0, strict=True)),
                               vehicles=(Optional[List[VehicleEdit]], None), people=(Optional[List[PersonEdit]], None))
 
 
@@ -500,7 +446,12 @@ def api_update_incident(key: str, update: IncidentUpdate, a: tenancy.Access = De
         raise HTTPException(422, "Unbekanntes Fahrzeug – Fahrzeuge der Wehr in der Verwaltung pflegen.")
     with tenant.connection() as con:
         try:
-            old_year = (store.load_incident(con, incident_id) or {}).get("year")
+            current = store.load_incident(con, incident_id)
+            if not current:
+                raise KeyError(incident_id)
+            if revision is None:
+                raise HTTPException(428, "Die Einsatzrevision ist erforderlich. Bitte neu laden und erneut speichern.")
+            old_year = current["year"]
             new_year = year_of(changes["started_at"]) if changes.get("started_at") else old_year
             if by_date and new_year and new_year != old_year:
                 changes["number"] = store.next_number(con, new_year)   # vorläufig ans Ende des neuen Jahres
@@ -531,12 +482,22 @@ def api_members(tenant: str, a: tenancy.Access = Depends(access)):
 
 
 @app.delete("/api/incidents/{key}")
-def api_delete_incident(key: str, a: tenancy.Access = Depends(access)):
+def api_delete_incident(key: str, revision: Optional[int] = None, a: tenancy.Access = Depends(access)):
     slug, incident_id = parse_incident_key(key)
     tenant = a.tenant(slug, DELETE)
     with tenant.connection() as con:
-        year = (store.load_incident(con, incident_id) or {}).get("year")
-        store.delete_incident(con, incident_id)
+        current = store.load_incident(con, incident_id)
+        if not current:
+            raise HTTPException(404, "Einsatz nicht gefunden.")
+        if revision is None:
+            raise HTTPException(428, "Zum Löschen ist die aktuelle Einsatzrevision erforderlich.")
+        if current["revision"] != revision:
+            raise HTTPException(409, "Der Einsatz wurde inzwischen geändert. Bitte neu laden und erneut prüfen.")
+        year = current["year"]
+        try:
+            store.delete_incident(con, incident_id, revision=revision)
+        except store.StaleIncident as error:
+            raise HTTPException(409, str(error))
         if tenant.config.numbering == "by_date":
             store.renumber(con, year)
     log.info("Einsatz %s gelöscht von %s", key, a.email or "lokal")
@@ -688,8 +649,7 @@ def _read_uploads(uploads, tenants, email=None):
 
 
 def _read_files(files, tenants, email=None):
-    """Berichte [(dateiname, inhalt)] lesen -> ([(bericht, wehr)], fehler, hinweise). Stammdatensätze werden
-    gleich bei der VG gespeichert, Berichte anderer Wehren der VG an diese weitergegeben."""
+    """Alle Berichtsarten ausschließlich lesen; Schreiben erfolgt erst nach Bestätigung."""
     reports, errors, notes = [], [], []
     taken = set()
     with tempfile.TemporaryDirectory() as tmp:
@@ -704,7 +664,8 @@ def _read_files(files, tenants, email=None):
                 notes.append({"file": filename, "message": str(e)})
                 continue
             except Forward as f:
-                notes.append({"file": filename, "message": _forward(f.tenant, f.head, filename, data, email)})
+                f.head.update(filename=filename, _action="forward", _target=f.tenant.slug, _data=data)
+                reports.append((f.head, tenants[0]))
                 continue
             except Exception as e:  # defekte oder fremde Datei: melden, Rest weiter lesen
                 log.exception("Bericht %s", filename)
@@ -713,8 +674,8 @@ def _read_files(files, tenants, email=None):
             if tenant:
                 reports.append((r, tenant))
                 continue
-            _save_master(r, tenants[0].vg_id, email)
-            notes.append({"file": filename, "message": f"Stammdatensatz {r['bks_record_id']} gespeichert."})
+            r.update(filename=filename, _action="master")
+            reports.append((r, tenants[0]))
     return reports, errors, notes
 
 
@@ -781,10 +742,19 @@ def _shared_with(r, tenant, a):
 
 
 def _preview_json(r, tenant, a):
+    if r.get("_action"):
+        action = r["_action"]
+        target = next((t for t in tenancy.vg_tenants(tenant.vg_id) if t.slug == r.get("_target")), None)
+        return {"filename": r["filename"], "action": action,
+                "title": f"Stammdatensatz {r.get('bks_record_id') or 'ohne Kennung'}" if action == "master"
+                else f"Bericht für {target.name if target else 'andere Wehr'}",
+                "message": "Nach Bestätigung zentral speichern und beteiligte Wehren informieren."
+                if action == "master" else "Nach Bestätigung zur Übernahme an die zuständige Wehr weitergeben."}
     cfg = tenant.config.with_new_vehicles(report.new_fleet_vehicles(r), r.get("day"))
     with tenant.connection() as con:
         incident, existing = report.preview(con, r, numbered=tenant.config.numbering != "by_date")
         result = incident_json(incident, store.LeaderNames(con), tenant, cfg=cfg)
+    r["_existing_id"] = existing["id"] if existing else None
     result["tenant_name"] = tenant.name
     result["new_vehicles"] = r.get("new_vehicles", [])
     result["reported_as"] = r["reported_as"]
@@ -792,6 +762,7 @@ def _preview_json(r, tenant, a):
     result["incident_commander"] = r["incident_commander"] if names else None
     differences = report.differences(existing, incident, tenant.config) if existing else []
     result["existing"] = {"id": incident_key(tenant, existing["id"]), "source": existing["source"],
+                          "revision": existing["revision"],
                           "differences": [d for d in differences if names or d["field"] != "EHF"]} \
         if existing else None
     result["shared_with"] = _shared_with(r, tenant, a)
@@ -817,6 +788,17 @@ class Acceptance(BaseModel):
     filename: str
     fields: IncidentFields
     replace: bool = False
+    revision: Optional[int] = Field(default=None, ge=0, strict=True)
+
+
+class PreviewCancellation(BaseModel):
+    token: str
+
+
+@app.post("/api/reports/cancel")
+def api_cancel_reports(cancellation: PreviewCancellation, a: tenancy.Access = Depends(access)):
+    previews.cancel(cancellation.token, a.email)
+    return {"ok": True}
 
 
 @app.post("/api/reports/accept")
@@ -830,6 +812,14 @@ def api_accept_report(acceptance: Acceptance, a: tenancy.Access = Depends(access
 
 def _accept_report(acceptance, a, r, slug):
     tenant = a.tenant(slug, IMPORT)
+    if r.get("_action") == "master":
+        _save_master(r, tenant.vg_id, a.email)
+        return {"message": "Stammdatensatz gespeichert."}
+    if r.get("_action") == "forward":
+        target = next((t for t in tenancy.vg_tenants(tenant.vg_id) if t.slug == r["_target"]), None)
+        if not target:
+            raise HTTPException(409, "Die zuständige Wehr ist nicht mehr verfügbar. Bitte erneut einlesen.")
+        return {"message": _forward(target, r, r["filename"], r["_data"], a.email)}
     if acceptance.replace:
         a.tenant(slug, WRITE)              # erfassten Einsatz überschreiben = bearbeiten
     corrected = acceptance.fields.model_dump(exclude_unset=True)
@@ -843,10 +833,14 @@ def _accept_report(acceptance, a, r, slug):
     by_date = tenant.config.numbering == "by_date"
     year = year_of(fields.get("started_at"))
     with tenant.connection() as con:
-        update_id = store.find_existing(con, fields.get("bks_report_id"), year,
-                                        None if by_date else store.to_int(fields.get("number"))) \
-            if acceptance.replace else None
-        old_year = store.load_incident(con, update_id)["year"] if update_id else None
+        update_id = r.get("_existing_id") if acceptance.replace else None
+        original = store.load_incident(con, update_id) if update_id else None
+        old_year = original["year"] if original else None
+        if acceptance.replace:
+            if acceptance.revision is None:
+                raise HTTPException(428, "Zum Aktualisieren ist die Revision der Vorschau erforderlich.")
+            if not original or original["revision"] != acceptance.revision:
+                raise HTTPException(409, "Der Einsatz wurde inzwischen geändert. Bitte erneut einlesen und vergleichen.")
         if by_date:
             # Vorläufig ans Ende, die richtige Stelle ergibt sich nach dem Speichern
             fields["number"] = store.next_number(con, year) if year else None
@@ -854,8 +848,11 @@ def _accept_report(acceptance, a, r, slug):
             fields["number"] = store.next_number(con, year)
             r["warnings"].append(f"Einsatzbericht-Nr. fehlt – nächste freie Nr. {fields['number']} vergeben")
         try:
-            incident_id = report.save(con, r, fields, update_id, modified_by=a.email)
+            incident_id = report.save(con, r, fields, update_id, modified_by=a.email,
+                                      revision=acceptance.revision)
         except store.DuplicateIncident as e:
+            raise HTTPException(409, str(e))
+        except store.StaleIncident as e:
             raise HTTPException(409, str(e))
         if by_date:
             for y in {year, old_year} - {None}:
@@ -876,12 +873,13 @@ def _accept_report(acceptance, a, r, slug):
 @app.get("/api/pending")
 def api_pending(a: tenancy.Access = Depends(access)):
     """Berichte, die jemand aus einer anderen Wehr für die ausgewählten Wehren eingelesen hat."""
-    result = []
+    result, jobs = [], []
     for tenant in a.selection_with(IMPORT):
         with tenant.connection() as con:
             result += [{**p, "id": incident_key(tenant, p["id"]), "tenant": tenant.slug, "tenant_name": tenant.name}
                        for p in store.pending_reports(con)]
-    return {"reports": result}
+            jobs += [{"tenant_name": tenant.name, "count": con.execute("SELECT COUNT(*) FROM import_job").fetchone()[0]}]
+    return {"reports": result, "postprocessing": [job for job in jobs if job["count"]]}
 
 
 class PendingSelection(BaseModel):

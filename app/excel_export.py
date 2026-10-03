@@ -183,7 +183,7 @@ def _write_attendance(ws, sheet, incidents, members, overview_title):
 
     # Spalten A–E verweisen auf die gleiche Zeile im Blatt Einsatzübersicht_Import
     linked = ((1, "number", "0"), (2, "date", "DD.MM.YYYY"), (3, "weekday", "@"), (4, "day_night", "@"),
-              (5, "duration", "h:mm"))
+              (5, "duration", "[h]:mm"))
     L = get_column_letter
     for r, incident in enumerate(incidents, start=FIRST_ROW):
         for column, key, number_format in linked:

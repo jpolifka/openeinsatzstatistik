@@ -56,6 +56,8 @@ def _upload(client, *names):
 
 
 def _accept(client, data, filename, **body):
+    if body.get("replace"):
+        body["revision"] = next(r for r in data["reports"] if r["filename"] == filename)["existing"]["revision"]
     return client.post("/api/reports/accept", json={"token": data["token"], "filename": filename, "fields": {},
                                                      **body}).json()
 
@@ -67,10 +69,11 @@ def _notices(client):
 def test_report_of_other_tenant_is_forwarded_and_notices_follow(vg):
     client = _as(vg, "lead1@example.org")
     data = _upload(client, "stamm.pdf", "a2.pdf", "a1.pdf", "fez.pdf")
-    assert [r["filename"] for r in data["reports"]] == ["a1.pdf"]
+    assert [r["filename"] for r in data["reports"]] == ["stamm.pdf", "a2.pdf", "a1.pdf"]
+    assert _notices(client) == []
+    assert _accept(client, data, "stamm.pdf")["message"] == "Stammdatensatz gespeichert."
+    assert "an Wehr wehr-a2 zur Übernahme weitergegeben" in _accept(client, data, "a2.pdf")["message"]
     notes = {n["file"]: n["message"] for n in data["notes"]}
-    assert "Stammdatensatz 9000001" in notes["stamm.pdf"]
-    assert "an Wehr wehr-a2 zur Übernahme weitergegeben" in notes["a2.pdf"]
     assert "übersprungen" in notes["fez.pdf"]
     # A1 hat den eigenen Bericht noch nicht übernommen: Hinweis aus dem Stammdatensatz
     assert [n["kind"] for n in _notices(client)] == ["missing"]
@@ -118,6 +121,7 @@ def test_import_by_vg_lead_is_shown_to_the_tenant(vg):
 def test_protocol_for_vg_lead(vg):
     client = _as(vg, "vglead@example.org", "vg:vg-a")
     data = _upload(client, "stamm.pdf", "a1.pdf", "a2.pdf")
+    _accept(client, data, "stamm.pdf")
     _accept(client, data, "a1.pdf")
     _accept(client, data, "a2.pdf")
     entries = client.get("/api/records?year=2025").json()["records"]
@@ -166,7 +170,7 @@ def test_edit_vehicles_and_people_survive_reimport(vg):
                          {"call_sign": "02/71", "crew": 3, "departed": "10:20", "arrived": None}],
             "people": [{"id": members["Muster, Max"], "role": "Einheitsführer", "vehicle": "02/45"},
                        {"name": "Neu, Nora", "role": "Maschinist", "vehicle": "02/71"}]}
-    edited = client.put(f"/api/incidents/{saved['id']}", json=body).json()
+    edited = client.put(f"/api/incidents/{saved['id']}", json={"revision": saved["revision"], **body}).json()
     vehicles = {v["call_sign"]: v for v in edited["vehicles"] if v["crew"] is not None}
     assert {cs: (v["crew"], v["departed"]) for cs, v in vehicles.items()} == \
         {"02/45": (4, "10:13:00"), "02/71": (3, "10:20:00")}           # 02/24 entfernt
@@ -185,9 +189,9 @@ def test_edit_rejects_invalid_values(vg):
     client = _as(vg, "lead1@example.org")
     saved = _accept(client, _upload(client, "a1.pdf"), "a1.pdf")
     url = f"/api/incidents/{saved['id']}"
-    assert client.put(url, json={"vehicles": [{"call_sign": "09/99"}]}).status_code == 422
-    assert client.put(url, json={"vehicles": [{"call_sign": "02/45", "departed": "25:00"}]}).status_code == 422
-    response = client.put(url, json={"description": "geändert", "vehicles": [{"call_sign": "02/45", "crew": 120}]})
+    assert client.put(url, json={"revision": saved["revision"], "vehicles": [{"call_sign": "09/99"}]}).status_code == 422
+    assert client.put(url, json={"revision": saved["revision"], "vehicles": [{"call_sign": "02/45", "departed": "25:00"}]}).status_code == 422
+    response = client.put(url, json={"revision": saved["revision"], "description": "geändert", "vehicles": [{"call_sign": "02/45", "crew": 120}]})
     assert response.status_code == 422
     # Nichts halb gespeichert
     incident = [i for i in client.get("/api/incidents?year=2025").json()["incidents"] if i["id"] == saved["id"]][0]
@@ -199,6 +203,7 @@ def test_other_vg_cannot_touch_master_record_or_review(vg):
     """Stammdatensatz und Prüfvermerk gelten je VG – eine andere VG belegt oder überschreibt sie nicht."""
     client = _as(vg, "vglead@example.org", "vg:vg-a")
     data = _upload(client, "stamm.pdf", "a1.pdf")
+    _accept(client, data, "stamm.pdf")
     _accept(client, data, "a1.pdf")
     assert client.post("/api/records/9000001/review", json={"done": True}).status_code == 200
 
@@ -224,7 +229,7 @@ def test_edit_keeps_seconds_of_unchanged_vehicle_times(vg):
     assert any(v["departed"][-2:] != "00" for v in before.values())
     body = {"vehicles": [{"call_sign": cs, "crew": v["crew"], "departed": v["departed"][:5],
                           "arrived": (v["arrived"] or "")[:5] or None} for cs, v in before.items()]}
-    edited = client.put(f"/api/incidents/{saved['id']}", json=body).json()
+    edited = client.put(f"/api/incidents/{saved['id']}", json={"revision": saved["revision"], **body}).json()
     after = {v["call_sign"]: v for v in edited["vehicles"] if v["departed"]}
     assert {cs: (v["departed"], v["arrived"]) for cs, v in after.items()} == \
         {cs: (v["departed"], v["arrived"]) for cs, v in before.items()}

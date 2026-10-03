@@ -13,12 +13,14 @@ Bericht eingelesen wird.
   differences()       Abweichungen zwischen erfasstem Einsatz und Bericht
 """
 import datetime as dt
+import copy
 import re
 
-from app import domain, pdf_report, store, xlsx_report
+from app import domain, pdf_report, store, xlsx_report, parser_worker
 from app.holidays import is_weekend_or_holiday
 from app.names import normalize, short_name
 from app.timeutil import parse_iso, time_text, to_iso, year_of
+from app.bks_common import _call_sign_pattern
 
 MAX_DURATION_HOURS = 24
 
@@ -30,10 +32,16 @@ def pdf_parser(texts, filename):
 
 def parser(path, filename):
     """Leser für eine Datei nach ihrer Endung: Excel-Export (.xlsx) oder PDF."""
-    if filename.lower().endswith(".xlsx"):
-        sheets = xlsx_report.read_workbook(path)
-        return lambda unit_prefix: xlsx_report.parse_report(sheets, filename, unit_prefix)
-    return pdf_parser(pdf_report.extract_text(path), filename)
+    kind = "xlsx_report" if filename.lower().endswith(".xlsx") else "pdf_report"
+    parsed = parser_worker.read(kind, (path, filename))
+    def for_unit(unit_prefix):
+        result = copy.deepcopy(parsed)
+        pattern = _call_sign_pattern(unit_prefix)
+        for vehicle in result["vehicles"]:
+            match = pattern.search(vehicle["name"])
+            vehicle["call_sign"] = match.group(1) if match else None
+        return result
+    return for_unit
 
 
 def read(parse, cfg):
@@ -233,6 +241,21 @@ def check_plausibility(report, cfg=None):
 
 
 # ---------------------------------------------------------------- Umwandlungen
+def current_warnings(incident):
+    """Aktuell gespeicherte Daten prüfen, unabhängig von historischen Importhinweisen."""
+    warnings = []
+    start, end = parse_iso(incident.get("started_at")), parse_iso(incident.get("ended_at"))
+    if not start:
+        warnings.append("Einsatzbeginn fehlt")
+    if not end:
+        warnings.append("Einsatzende fehlt – Dauer und Personalstunden sind unvollständig")
+    if start and end and end - start > dt.timedelta(hours=MAX_DURATION_HOURS):
+        warnings.append(f"Einsatzdauer über {MAX_DURATION_HOURS} Stunden – bitte prüfen")
+    if not incident.get("people"):
+        warnings.append("Anwesenheitsliste leer – Personalstunden sind unvollständig")
+    return warnings
+
+
 def to_fields(report):
     """Abgeleitete Felder in der Form der Datenbank (Zeiten als ISO-Text)."""
     fields = {name: report[name] for name in store.FIELDS}
@@ -277,7 +300,7 @@ def preview(con, report, numbered=True):
     return incident, (store.load_incident(con, existing_id) if existing_id else None)
 
 
-def save(con, report, fields, update_id=None, modified_by=None):
+def save(con, report, fields, update_id=None, modified_by=None, revision=None):
     """Bericht mit den (ggf. korrigierten) Feldern als Einsatz speichern; unbekannte Personen anlegen.
 
     update_id: erfasster Einsatz, der mit dem Bericht aktualisiert wird. Er behält seine ID und
@@ -285,6 +308,7 @@ def save(con, report, fields, update_id=None, modified_by=None):
     """
     if update_id:
         store.update_incident(con, update_id, fields, modified_by=modified_by,
+                              revision=revision,
                               source={"source": _source(report), "filename": report["filename"],
                                       "warnings": report["warnings"]})
         incident_id = update_id
