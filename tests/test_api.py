@@ -53,16 +53,98 @@ def test_incidents_update_and_conflict(client):
     assert [i["number"] for i in incidents] == [1, 2]
     assert [v["call_sign"] for v in incidents[0]["vehicles"]] == list(CFG.vehicles)
 
-    changed = client.put(f"/api/incidents/{second}", json={"unit_leader": "E. Beispiel"}).json()
+    changed = client.put(f"/api/incidents/{second}", json={"revision": 0, "unit_leader": "E. Beispiel"}).json()
     assert changed["unit_leader"] == "E. Beispiel"
-    assert client.put(f"/api/incidents/{second}", json={"number": 1}).status_code == 409
-    assert client.put("/api/incidents/wehr-a1:999", json={}).status_code == 404
-    assert client.delete(f"/api/incidents/{first}").json() == {"ok": True}
+    assert client.put(f"/api/incidents/{second}", json={"revision": changed["revision"], "number": 1}).status_code == 409
+    assert client.put("/api/incidents/wehr-a1:999", json={"revision": 0, }).status_code == 404
+    assert client.delete(f"/api/incidents/{first}?revision=0").json() == {"ok": True}
 
 
 def test_expired_preview(client):
     response = client.post("/api/reports/accept", json={"token": "x", "filename": "a.pdf", "fields": {}})
     assert response.status_code == 410
+
+
+@pytest.mark.parametrize("changes", [{"started_at": None}, {"station_staff": -1},
+    {"station_staff": True}, {"station_staff": 0.5},
+    {"vehicles": [{"call_sign": "02/45", "crew": True}]},
+    {"ended_at": "2025-03-12T09:00:00"}, {"vehicles": [{"call_sign": "02/45", "crew": -1}]}])
+def test_invalid_incident_changes_are_rejected(client, changes):
+    key = _create(client, 1)
+    assert client.put(f"/api/incidents/{key}", json={"revision": 0, **changes}).status_code == 422
+    incident = client.get("/api/incidents?year=2025").json()["incidents"][0]
+    assert incident["started_at"] == "2025-03-12T10:00:00"
+    assert incident["station_staff"] == 0
+
+
+def test_stale_incident_revision_is_rejected(client):
+    key = _create(client, 1)
+    original = client.get("/api/incidents?year=2025").json()["incidents"][0]
+    changed = client.put(f"/api/incidents/{key}", json={"revision": 0, "revision": original["revision"],
+                                                     "description": "Erste Änderung"})
+    assert changed.status_code == 200
+    assert changed.json()["revision"] == original["revision"] + 1
+    stale = client.put(f"/api/incidents/{key}", json={"revision": 0, "revision": original["revision"],
+                                                   "description": "Veraltete Änderung"})
+    assert stale.status_code == 409
+    assert client.get("/api/incidents?year=2025").json()["incidents"][0]["description"] == "Erste Änderung"
+
+
+def test_revision_is_required(client):
+    key = _create(client, 1)
+    assert client.put(f"/api/incidents/{key}", json={"description": "ohne Revision"}).status_code == 428
+    assert client.delete(f"/api/incidents/{key}").status_code == 428
+    assert client.put(f"/api/incidents/{key}", json={"revision": 0, "description": "geändert"}).status_code == 200
+    assert client.delete(f"/api/incidents/{key}?revision=0").status_code == 409
+    assert client.delete(f"/api/incidents/{key}?revision=1").status_code == 200
+
+
+def test_cancelled_preview_cannot_be_accepted(client):
+    data = client.post("/api/reports", files=[("pdfs", ("test.xlsx", make_workbook()))]).json()
+    assert client.post("/api/reports/cancel", json={"token": data["token"]}).status_code == 200
+    assert client.post("/api/reports/accept", json={"token": data["token"], "filename": "test.xlsx",
+                                                   "fields": {}}).status_code == 410
+    assert client.get("/api/incidents?year=2025").json()["incidents"] == []
+
+
+def test_import_revision_conflict_keeps_preview(client):
+    upload = lambda: client.post("/api/reports", files=[("pdfs", ("test.xlsx", make_workbook()))]).json()
+    data = upload()
+    body = {"token": data["token"], "filename": "test.xlsx", "fields": {}}
+    saved = client.post("/api/reports/accept", json=body).json()
+    data = upload()
+    assert client.put(f"/api/incidents/{saved['id']}", json={"revision": saved["revision"],
+                                                          "description": "Inzwischen bearbeitet"}).status_code == 200
+    body.update(token=data["token"], replace=True)
+    assert client.post("/api/reports/accept", json=body).status_code == 428
+    body["revision"] = data["reports"][0]["existing"]["revision"]
+    assert client.post("/api/reports/accept", json=body).status_code == 409
+    assert main.previews.get(data["token"], "test.xlsx", None)[0]
+    assert client.get("/api/incidents?year=2025").json()["incidents"][0]["description"] == "Inzwischen bearbeitet"
+
+
+def test_saved_import_survives_postprocessing_failure(client, monkeypatch):
+    from app import import_queue
+    from test_report import FULL, LEFT
+    monkeypatch.setattr(main.pdf_report, "extract_text", lambda _: (FULL, LEFT, ""))
+    preview = client.post("/api/reports", files=[("pdfs", ("test.pdf", b"test", "application/pdf"))]).json()
+    original = main._after_import
+    def fail(*args, **kwargs):
+        raise RuntimeError("simulierter Ausfall der Zentrale")
+    monkeypatch.setattr(main, "_after_import", fail)
+    payload = {"token": preview["token"], "filename": "test.pdf", "fields": {}}
+    result = client.post("/api/reports/accept", json=payload)
+    assert result.status_code == 200
+    assert result.json()["postprocessing_pending"] is True
+    assert client.post("/api/reports/accept", json=payload).status_code == 410
+    tenant = tenancy.access_for(None).tenant("wehr-a1", "reports.import")
+    with tenant.connection() as con:
+        job_id = con.execute("SELECT id FROM import_job").fetchone()[0]
+        assert con.execute("SELECT COUNT(*) FROM incident").fetchone()[0] == 1
+    assert import_queue.process(tenant, job_id, original) is True
+    assert import_queue.process(tenant, job_id, original) is True
+    with tenant.connection() as con:
+        assert con.execute("SELECT COUNT(*) FROM import_job").fetchone()[0] == 0
 
 
 def _zip(entries):

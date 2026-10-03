@@ -58,9 +58,11 @@ def test_numbering_by_date(make_client, monkeypatch):
     incidents = {i["id"]: i["number"] for i in client.get("/api/incidents?year=2025").json()["incidents"]}
     assert incidents[f"wehr-a1:{later}"] == 2
     # Bearbeiten ändert die Nr. nicht, ein neuer Beginn verschiebt den Einsatz
-    edited = client.put(f"/api/incidents/{saved['id']}", json={"number": 5, "started_at": "2025-07-01T10:00"}).json()
+    edited = client.put(f"/api/incidents/{saved['id']}", json={"revision": saved["revision"], "number": 5, "started_at": "2025-07-01T10:00",
+                                                           "ended_at": "2025-07-01T11:00"}).json()
     assert edited["number"] == 2
-    client.delete(f"/api/incidents/wehr-a1:{later}")
+    revision = next(i["revision"] for i in client.get("/api/incidents?year=2025").json()["incidents"] if i["id"] == f"wehr-a1:{later}")
+    assert client.delete(f"/api/incidents/wehr-a1:{later}?revision={revision}").status_code == 200
     assert [i["number"] for i in client.get("/api/incidents?year=2025").json()["incidents"]] == [1]
 
 
@@ -74,7 +76,7 @@ def test_by_date_moves_incident_to_other_year_and_preview_ignores_report_number(
             _incident(con, n, f"2025-02-{n:02d}T12:00:00")
     data = _read(client, monkeypatch, FULL)                     # Bericht Nr. 17/25
     assert data["reports"][0]["existing"] is None
-    moved = client.put(f"/api/incidents/wehr-a1:{first}", json={"started_at": "2026-02-01T10:00"})
+    moved = client.put(f"/api/incidents/wehr-a1:{first}", json={"revision": 0, "started_at": "2026-02-01T10:00"})
     assert moved.status_code == 200 and (moved.json()["year"], moved.json()["number"]) == (2026, 1)
     assert sorted(i["number"] for i in client.get("/api/incidents?year=2025").json()["incidents"]) == list(range(1, 17))
 

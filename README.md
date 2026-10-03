@@ -369,3 +369,9 @@ Bewusste Unterschiede zu den Formeln der Excel-Datei:
 Internes Werkzeug der Freiwilligen Feuerwehr Rheinbrohl – keine Lizenz zur Weitergabe.
 Die Schrift Sansation steht unter der SIL Open Font License; die Logos sind Eigentum der
 FF Rheinbrohl.
+# Review-Härtung und Rollout
+
+Der Branch `fix/comprehensive-review` enthält Sicherheits-, Daten- und UI-Korrekturen.
+Umsetzungsstand, verbleibende Arbeiten und wichtige Hinweise zu Datenbanksicherung,
+Schema-Versionen, Container-Benutzer und Portbindung stehen in
+[REVIEW_IMPLEMENTATION.md](REVIEW_IMPLEMENTATION.md).

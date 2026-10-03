@@ -138,7 +138,7 @@ def _keyword(item):
     return f"{item.get('keyword') or ''}.{item.get('subcode') or ''}".strip(".")
 
 
-def check(central_con, vg_id, bks_record_id, tenants):
+def check(central_con, vg_id, bks_record_id, tenants, loaded=None):
     """Abgleich eines Einsatzes über die Wehren der VG -> {record, incidents, findings}.
 
     findings: [{tenant, tenant_name, kind, vehicle, field, source, stored}] mit kind
@@ -154,9 +154,14 @@ def check(central_con, vg_id, bks_record_id, tenants):
 
     for t in tenants:
         cfg = t.config
-        with t.connection() as con:
-            incident = incident_of(con, bks_record_id)
-            pending = any(r.get("bks_record_id") == bks_record_id for r in store.pending_reports(con))
+        if loaded is not None:
+            by_record, pending_ids = loaded[t.slug]
+            incident = by_record.get(bks_record_id)
+            pending = bks_record_id in pending_ids
+        else:
+            with t.connection() as con:
+                incident = incident_of(con, bks_record_id)
+                pending = any(r.get("bks_record_id") == bks_record_id for r in store.pending_reports(con))
         moved = moved_vehicles(master["vehicles"], cfg) if master else []
         if not incident:
             if moved:
@@ -206,8 +211,17 @@ def protocol(central_con, vg_id, year, tenants):
     reviews = {r["bks_record_id"]: dict(r) for r in central_con.execute(
         "SELECT * FROM record_review WHERE vg_id = ?", (vg_id,))}
     entries = []
+    loaded = {}
+    for tenant in tenants:
+        with tenant.connection() as con:
+            by_record = {}
+            for incident in sorted(store.load_incidents(con), key=lambda i: i["id"]):
+                if incident.get("bks_record_id"):
+                    by_record.setdefault(incident["bks_record_id"], incident)
+            pending_ids = {r[0] for r in con.execute("SELECT bks_record_id FROM pending_report")}
+            loaded[tenant.slug] = by_record, pending_ids
     for record_id in record_ids(central_con, vg_id, year, tenants):
-        entry = check(central_con, vg_id, record_id, tenants)
+        entry = check(central_con, vg_id, record_id, tenants, loaded=loaded)
         review = reviews.get(record_id)
         entry["reviewed"] = {"by": review["reviewed_by"], "at": review["reviewed"]} \
             if review and review["findings_hash"] == findings_hash(entry["findings"]) else None

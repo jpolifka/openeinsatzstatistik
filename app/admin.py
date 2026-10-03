@@ -16,10 +16,9 @@ import json
 import logging
 import os
 import re
-import shutil
 from typing import List, Optional
 
-import openpyxl
+from app import tenant_lifecycle, parser_worker
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
@@ -575,13 +574,19 @@ def read_keyword_file(filename, data):
     """CSV (Semikolon oder Komma) oder XLSX mit den Spalten Stichwort, Bezeichnung, Suchbegriffe -> [(code, name, terms)].
     Eine Kopfzeile wird erkannt und übersprungen."""
     if filename.lower().endswith(".xlsx"):
-        sheet = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True).worksheets[0]
-        rows = [[str(c) if c is not None else "" for c in row] for row in sheet.iter_rows(values_only=True)]
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".xlsx") as file:
+            file.write(data)
+            file.flush()
+            sheets = parser_worker.read("xlsx", file.name)
+        rows = [[str(c) if c is not None else "" for c in row] for row in next(iter(sheets.values()), [])]
     else:
         text = data.decode("utf-8-sig", errors="replace")
         dialect = csv.Sniffer().sniff(text[:2048], delimiters=";,\t") if text.strip() else csv.excel
         rows = list(csv.reader(io.StringIO(text), dialect))
     entries, seen = [], set()
+    if len(rows) > 5000:
+        _invalid("Der Stichwortkatalog darf höchstens 5000 Zeilen enthalten.")
     for number, row in enumerate(rows, start=1):
         cells = [c.strip() for c in row] + ["", "", ""]
         code = cells[0].upper().replace(" ", "")
@@ -958,10 +963,14 @@ def super_overview(a: tenancy.Access = Depends(access)):
         tenants = [dict(r) for r in con.execute(
             "SELECT t.slug, t.name, t.active, t.created, v.slug AS vg FROM tenant t JOIN vg v ON v.id = t.vg_id "
             "ORDER BY v.name, t.name")]
+        archives = [r[0] for r in con.execute("SELECT slug FROM tenant_archive")]
     for t in tenants:
+        if t["slug"] in archives:
+            t["incidents"] = None
+            continue
         with db.connection(tenancy.tenant_path(t["slug"])) as con:
             t["incidents"] = con.execute("SELECT COUNT(*) FROM incident").fetchone()[0]
-    return {"vgs": vgs, "tenants": tenants}
+    return {"vgs": vgs, "tenants": tenants, "pending_archives": archives}
 
 
 class VgIn(BaseModel):
@@ -1029,6 +1038,8 @@ class TenantChange(BaseModel):
 def change_tenant(slug: str, t: TenantChange, a: tenancy.Access = Depends(access)):
     _superadmin(a)
     with tenancy.central() as con:
+        if con.execute("SELECT 1 FROM tenant_archive WHERE slug = ?", (slug,)).fetchone():
+            raise HTTPException(409, "Die Wehr wird archiviert und kann nicht mehr geändert werden.")
         if not con.execute("SELECT 1 FROM tenant WHERE slug = ?", (slug,)).fetchone():
             raise HTTPException(404, "Wehr nicht gefunden.")
         if t.name:
@@ -1055,14 +1066,8 @@ def delete_tenant(slug: str, confirm: str = "", a: tenancy.Access = Depends(acce
         row = con.execute("SELECT id, vg_id, name FROM tenant WHERE slug = ?", (slug,)).fetchone()
         if not row:
             raise HTTPException(404, "Wehr nicht gefunden.")
-        rbac.log(con, a.email, "Wehr entfernt", row["name"], row["vg_id"], row["id"])
-        con.execute("DELETE FROM membership WHERE scope = 'tenant' AND scope_id = ?", (row["id"],))
-        con.execute("DELETE FROM tenant WHERE id = ?", (row["id"],))
-        con.execute("DELETE FROM account WHERE NOT EXISTS (SELECT 1 FROM membership m WHERE m.email = account.email)")
-    source = os.path.dirname(tenancy.tenant_path(slug))
-    target = os.path.join(db.DATA_DIR, "deleted", f"{slug}-{dt.datetime.now():%Y%m%d-%H%M%S}")
-    os.makedirs(os.path.dirname(target), exist_ok=True)
-    shutil.move(source, target)
+        tenant_lifecycle.begin_archive(con, slug, a.email)
+    tenant_lifecycle.finish_archive(slug)
     tenancy.forget_config(slug)
-    log.warning("Wehr %s entfernt durch %s, Daten liegen in %s", slug, a.email or "lokal", target)
+    log.warning("Archivierung für Wehr %s beauftragt durch %s", slug, a.email or "lokal")
     return super_overview(a)

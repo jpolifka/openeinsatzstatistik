@@ -250,13 +250,20 @@ async function showView() {
   $("#page-title").textContent = view.noYear ? view.label : `${view.label} ${state.year}`;
   const section = $(`#view-${state.view}`), run = ++viewRun;
   section.classList.add("loading");
+  $(".view-load-error", section)?.remove();
   try {
     await view.load();
     if (run !== viewRun) return;                     // inzwischen neu angefordert: das spätere Laden zeichnet
     view.render();
     document.dispatchEvent(new Event("app:view"));    // Ansicht gezeichnet (z. B. Sprung zu einem Einsatz)
   } catch (e) {
-    if (run === viewRun) section.innerHTML = errorBox(e.message);
+    if (run === viewRun) {
+      const error = document.createElement("div");
+      error.className = "view-load-error";
+      error.innerHTML = errorBox(e.message) + '<button type="button" class="btn btn-light">Erneut versuchen</button>';
+      $("button", error).addEventListener("click", () => showView());
+      section.prepend(error);
+    }
   } finally {
     if (run === viewRun) section.classList.remove("loading");
   }
@@ -292,7 +299,8 @@ function renderEvaluation() {
     ${kpi(`Einsätze / Woche${helpButton("per_week")}`, num(s.per_week, 2), currentYear ? "bis zur aktuellen KW" : "im ganzen Jahr")}
     ${kpi(`Ø Einsatzdauer${helpButton("duration")}`, formatDuration(s.duration_avg_min), "Alarm bis Einsatzende")}
     ${kpi(`Einsatzstunden${helpButton("operation_hours")}`, formatHours(s.duration_total_min), "Summe aller Einsätze")}
-    ${kpi(`Personalstunden${helpButton("staff_hours")}`, `${num(s.staff_hours, 0)}<small>h</small>`, `Ø ${num(s.attendees_avg, 1)} Kameraden je Einsatz`)}
+    ${kpi(`Personalstunden${helpButton("staff_hours")}`, s.staff_hours == null ? "–" : `${num(s.staff_hours, 0)}<small>h</small>`,
+      s.staff_recorded < s.staff_total ? `Unvollständig: Anwesenheit und Dauer für ${s.staff_recorded} von ${s.staff_total} Einsätzen` : `Ø ${num(s.attendees_avg, 1)} Kameraden je Einsatz`)}
     ${plan ? kpi(`Eintreffen ≤ ${plan.limit} Min.${helpButton("on_time")}`, percent(plan.total.rate), `${plan.total.on_time} von ${plan.total.count} (Bedarfsplan)`) : ""}
   </div>`;
 
@@ -341,8 +349,8 @@ function responsePlanCard(plan, previousPlan) {
         <dt>Ø Ausrückezeit</dt><dd>${minutes(w.turnout_min)}</dd>
         <dt>Ø Eintreffzeit</dt><dd>${minutes(w.arrival_min)}</dd>
         <dt>Stärke bei Eintreffen</dt><dd>${num(w.crew_on_arrival)}</dd>
-        <dt>Stärke nach ${limit} Min.</dt><dd>${num(w.crew_within_limit)}</dd>
-        <dt>Stärke nach ${second} Min.</dt><dd>${num(w.crew_within_second)}</dd>
+        <dt>Zusätzlich bis ${limit} Min.</dt><dd>${num(w.crew_within_limit)}</dd>
+        <dt>Zusätzlich ${limit}–${second} Min.</dt><dd>${num(w.crew_within_second)}</dd>
         <dt>Gesamtstärke</dt><dd>${num(w.crew_total)}</dd>
       </dl>
       ${isTotal && previousPlan?.total?.count ? `<div class="small faint">${state.year - 1}: ${percent(previousPlan.total.rate)} (${previousPlan.total.on_time} / ${previousPlan.total.count})</div>` : ""}
@@ -351,7 +359,7 @@ function responsePlanCard(plan, previousPlan) {
     `${esc(w.day_type)} ${esc(w.hours)}`, w.count, num(w.turnout_min), num(w.arrival_min), w.on_time, w.late,
     percent(w.rate), num(w.crew_on_arrival), num(w.crew_within_limit), num(w.crew_within_second), num(w.crew_total)]);
   const table = dataTable(["Zeitfenster", "Einsätze", "Ø Azeit (min)", "Ø Ezeit (min)", `≤ ${limit} Min.`, `> ${limit} Min.`,
-    "Erreichungsgrad", "Stärke Eintreffen", `Stärke nach ${limit} Min.`, `Stärke nach ${second} Min.`, "Gesamtstärke"], rows);
+    "Erreichungsgrad", "Stärke Eintreffen", `Zusätzlich bis ${limit} Min.`, `Zusätzlich ${limit}–${second} Min.`, "Gesamtstärke"], rows);
   // Umschalter nur, wenn die Wehr mehrere Zeitgrenzen eingestellt hat
   const limitSwitch = config.limits.length > 1 ? `<div class="segments" role="group" aria-label="Zeitgrenze">
     ${config.limits.map((m) => `<button type="button" data-limit="${m}" class="${m === limit ? "active" : ""}">${m} Min.</button>`).join("")}
@@ -361,12 +369,13 @@ function responsePlanCard(plan, previousPlan) {
   const release = config.tenant && can("plan.release") ? `<label class="toggle no-print" data-tip="Ohne Freigabe sehen den Bedarfsplan nur Rollen mit dem Recht „Bedarfsplan ohne Freigabe sehen“ (z. B. Wehrführer, Wehrleiter)">
       <input type="checkbox" data-plan-release ${e.response_plan_public ? "checked" : ""}> für alle freigegeben</label>` : "";
   const hidden = e.response_plan_hidden.length ? ` Ohne ${esc(e.response_plan_hidden.join(", "))} (nicht freigegeben).` : "";
-  const footer = `<p class="plan-footer">${!e.response_plan_public && !hidden ? "<b>Nur für die Verwaltung sichtbar.</b> " : ""}Zeiten ab Einsatzbeginn (früheste Alarmierung). Gesamtstärke ohne ${esc(config.plan_excluded_vehicles.join(", "))}, wie in der Einsatzübersicht.
+  const exclusions = config.plan_excluded_vehicles.length ? `Gesamtstärke ohne ${esc(config.plan_excluded_vehicles.join(", "))}.` : "Keine Fahrzeuge ausgeschlossen.";
+  const footer = `<p class="plan-footer">${!e.response_plan_public && !hidden ? "<b>Nur für die Verwaltung sichtbar.</b> " : ""}Zeiten ab Einsatzbeginn (früheste Alarmierung). ${exclusions}
     ${plan.without_times ? `${plural(plan.without_times, "Einsatz", "Einsätze")} ohne Eintreffzeit nicht berücksichtigt (Excel zählte sie mit 0 min als erreicht).` : ""}${hidden}</p>`;
   return chartCard({
     id: "plan", heading: "h2", className: "plan grid", chartLabel: "Kacheln", controls: release + limitSwitch, extra: footer,
     title: `Feuerwehrbedarfsplan · Pos. 8.4${helpButton("response_plan")}`,
-    subtitle: `Einsätze ab Alarmstufe ${config.plan_min_level} in ${esc(plan.places.join(", "))} – Eintreffen des ersten Fahrzeugs innerhalb von ${limit} Minuten nach Alarmierung.`,
+    subtitle: plan.places.length ? `Einsätze ab Alarmstufe ${config.plan_min_level} in ${esc(plan.places.join(", "))} – Eintreffen des ersten Fahrzeugs innerhalb von ${limit} Minuten nach Alarmierung.` : "Noch kein Ausrückebereich konfiguriert. Bitte unter Verwaltung → Orte & Bedarfsplan einrichten.",
     chart: `<div class="plan-windows">${plan.windows.map((w) => windowTile(w, false)).join("")}${windowTile(plan.total, true)}</div>`,
     table,
   });
@@ -525,7 +534,7 @@ function renderIncidents() {
     const arrival = e.arrival_min == null ? `<span class="muted">–</span>`
       : `<span class="arrival ${e.on_time ? "" : "late"}" data-tip="${e.on_time ? "innerhalb" : "nicht innerhalb"} von ${limit} Minuten">${minutes(e.arrival_min)}</span>`;
     return `<tr class="row ${open ? "open" : ""}" data-id="${e.id}">
-      <td><span class="number">${orDash(e.number)}</span></td>
+      <td><button type="button" class="btn btn-light btn-small" aria-expanded="${open}" aria-label="Details zu Einsatz ${esc(e.number ?? "ohne Nummer")}">${orDash(e.number)}</button></td>
       <td><div>${formatDate(e.started_at)}</div><div class="time">${weekdayShort(e.started_at)} ${formatTime(e.started_at)}${e.weekend_or_holiday ? " · WE/FT" : ""}</div></td>
       <td><span class="keyword ${categoryOf(e.keyword).toLowerCase()}" ${keywordName(e) ? `data-tip="${esc(keywordName(e))}"` : ""}>${esc(e.keyword)}${e.subcode ? "." + esc(e.subcode) : ""}</span></td>
       <td><div class="incident-title">${esc(e.description)}</div><div class="incident-place">${withTenant ? `<span class="tenant-badge">${esc(tenantNames[e.tenant] || e.tenant)}</span>` : ""}${esc(e.place)}</div></td>
@@ -619,11 +628,12 @@ function incidentDetail(e) {
       <dt>Ezeit${helpButton("arrival_min")}</dt><dd>${minutes(e.arrival_min)}</dd>
       <dt>${limit} Min. erreicht${helpButton("on_time")}</dt><dd>${e.on_time == null ? "–" : e.on_time ? "ja" : "nein"}</dd>
       <dt>Stärke Eintreffen${helpButton("crew_on_arrival")}</dt><dd>${orDash(e.crew_on_arrival)}</dd>
-      <dt>nach ${limit} Min.${helpButton("crew_within_limit")}</dt><dd>${orDash(e.crew_within_limit)}</dd>
-      <dt>nach ${config.second_limit} Min.${helpButton("crew_within_second")}</dt><dd>${orDash(e.crew_within_second)}</dd>
+      <dt>zusätzlich bis ${limit} Min.${helpButton("crew_within_limit")}</dt><dd>${orDash(e.crew_within_limit)}</dd>
+      <dt>zusätzlich ${limit}–${config.second_limit} Min.${helpButton("crew_within_second")}</dt><dd>${orDash(e.crew_within_second)}</dd>
       <dt>Gesamtstärke${helpButton("crew_total")}</dt><dd>${e.crew_total}</dd>
     </dl>
-    ${e.warnings.length ? `<h4 class="section-gap">Prüfhinweise${helpButton("warnings")}</h4>${warningsList(e.warnings)}` : ""}
+    <h4 class="section-gap">Aktueller Datenstand</h4>${warningsList(e.current_warnings || [], "Keine aktuellen Prüfhinweise")}
+    ${e.warnings.length ? `<h4 class="section-gap">Hinweise beim Import${helpButton("warnings")}</h4><p class="small muted">Historische Hinweise aus dem Bericht; spätere Korrekturen sind hier nicht berücksichtigt.</p>${warningsList(e.warnings)}` : ""}
     </div>
     <div class="panel full">${attendancePanel(e)}</div>
     <div class="actions panel full bare">
@@ -633,29 +643,20 @@ function incidentDetail(e) {
   </div>`;
 }
 
-// Formularfelder: [name, Titel, Eingabetyp, Breite, weitere Attribute]. Die Namen sind die Felder der API.
-const FORM_FIELDS = [
-  ["number", "Nr.", "number", "", 'min="1"'],
-  ["started_at", "Beginn", "datetime-local", "span-2", 'step="1"'],
-  ["ended_at", "Ende", "datetime-local", "span-2", 'step="1"'],
-  ["station_staff", "Gerätehaus", "number", "", 'min="0"'],
-  ["keyword", "Stichwort", "text", "", 'placeholder="Suche" autocomplete="off" role="combobox" aria-autocomplete="list"'],
-  ["subcode", "Stufe", "text", "", 'maxlength="2"'],
-  ["description", "Einsatz", "text", "span-4", ""],
-  ["place", "Ort", "text", "span-3", 'list="place-options"'],
-  ["unit_leader", "EHF", "text", "span-3", 'list="leader-options" placeholder="z. B. M. Mustermann"'],
-];
 
+let formSequence = 0;
 function formFields(e) {
+  const prefix = `incident-form-${++formSequence}`;
   // EHF ist ein Name: nur mit Recht auf die Anwesenheit (sonst bleibt der gespeicherte Wert)
-  const fields = FORM_FIELDS.filter(([name]) => name !== "unit_leader" || e.people_visible !== false);
+  const fields = config.incident_fields.filter(([name]) => name !== "unit_leader" || e.people_visible !== false);
   return `<div class="form-grid">${fields.map(([name, title, type, span, attributes]) => {
     const value = type === "datetime-local" ? (e[name] || "").slice(0, 19) : e[name];
     const missing = name === "unit_leader" && !value;
     // Nummerierung nach Datum: die Nr. vergibt die App
     const extra = name === "number" && config.numbering === "by_date" ? ' readonly data-tip="Wird nach dem Einsatzbeginn vergeben"' : "";
-    return `<label class="field ${span}"><span>${title}${helpButton(name)}</span><input name="${name}" type="${type}" value="${esc(value ?? "")}" ${attributes}${extra}
-      class="${missing ? "missing" : ""}"></label>`;
+    const id = `${prefix}-${name}`;
+    return `<div class="field ${span}"><span><label for="${id}">${title}</label>${helpButton(name)}</span><input id="${id}" name="${name}" type="${type}" value="${esc(value ?? "")}" ${attributes}${extra}
+      class="${missing ? "missing" : ""}"></div>`;
   }).join("")}</div>`;
 }
 
@@ -744,7 +745,7 @@ async function startEditing(id) {
   const incident = state.incidents.incidents.find((x) => x.id === id);
   state.editing = id;
   state.editNode = null;
-  state.editDraft = { visible: incident.people_editable, people: incident.people.map((p) => ({ id: p.id, name: p.name,
+  state.editDraft = { revision: incident.revision, visible: incident.people_editable, people: incident.people.map((p) => ({ id: p.id, name: p.name,
     role: p.role || "", vehicle: p.vehicle || "", leader_name: p.leader_name })) };
   updateDatalists();
   renderIncidents();
@@ -798,12 +799,14 @@ async function handleIncidentAction(action, id, el) {
     if (action === "delete") {
       const incident = state.incidents.incidents.find((x) => x.id === id);
       if (!confirm(`Einsatz ${incident.number ?? ""} vom ${formatDate(incident.started_at)} wirklich löschen?`)) return;
-      await api(`/api/incidents/${encodeURIComponent(id)}`, { method: "DELETE" });
+      await api(`/api/incidents/${encodeURIComponent(id)}?revision=${incident.revision}`, { method: "DELETE" });
       state.expanded.delete(id);
       toast("Einsatz gelöscht");
     }
     if (action === "save") {
-      await apiJson(`/api/incidents/${encodeURIComponent(id)}`, "PUT", readIncidentForm($(`[data-form="${id}"]`)));
+      await apiJson(`/api/incidents/${encodeURIComponent(id)}`, "PUT", {
+        ...readIncidentForm($(`[data-form="${id}"]`)), revision: state.editDraft.revision,
+      });
       state.editing = null;
       toast("Gespeichert");
     }
@@ -870,166 +873,6 @@ function bksLink(e) {
     + (e.bks_record_id && e.bks_record_id !== e.bks_report_id ? ` · Stammdatensatz ${esc(e.bks_record_id)}` : "");
 }
 
-// ------------------------------------------------------------ Bericht einlesen (PDF oder Excel-Export)
-// Herkunft eines Einsatzes: Bericht als PDF bzw. Excel-Export des BKS-Portals oder frühere Einsatzübersicht
-const SOURCES = { pdf: "PDF", bks_xlsx: "Excel-Export BKS" };
-
-function sourceLabel(e) {
-  return SOURCES[e.source] ? `${SOURCES[e.source]} · ${esc(e.filename)}` : "Einsatzübersicht (Excel)";
-}
-
-function showUploadError(html) {
-  const el = $("#pdf-error");
-  el.innerHTML = html;
-  el.hidden = false;
-}
-
-async function readPdfs(files) {
-  files = [...files].filter((f) => /\.(pdf|xlsx|zip)$/i.test(f.name));
-  $("#pdf-error").hidden = true;
-  if (!files.length) { showUploadError("Bitte eine PDF-, Excel- oder ZIP-Datei wählen."); return; }
-  $("#progress").hidden = false;
-  const form = new FormData();
-  for (const f of files) form.append("pdfs", f, f.name.normalize("NFC"));
-  try {
-    await showUploadResult(await api("/api/reports", { method: "POST", body: form }));
-  } catch (e) {
-    showUploadError(esc(e.message));
-  } finally {
-    $("#progress").hidden = true;
-  }
-}
-
-// Gelesene Berichte (hochgeladen oder von einer anderen Wehr weitergegeben): saubere übernehmen, Rest zeigen
-async function showUploadResult(data) {
-  // Erfasster Einsatz: Aktualisieren ist vorausgewählt (manuell ergänzte Fahrzeuge und Personen bleiben)
-  state.upload = { token: data.token, reports: data.reports.map((r) => ({ ...r, replace: Boolean(r.existing && r.can_edit), saved: null })),
-                   errors: data.errors, notes: data.notes || [] };
-  if (data.errors.length) showUploadError(data.errors.map((e) => `${esc(e.file)}: ${esc(e.message)}`).join("<br>"));
-  await acceptCleanReports();
-  renderPreviews();
-}
-
-// Zu prüfen sind Berichte mit Prüfhinweisen, neuen Personen oder Abweichungen zu einem erfassten Einsatz
-function reviewReasons(r) {
-  const reasons = [];
-  if (r.warnings.length) reasons.push(plural(r.warnings.length, "Prüfhinweis", "Prüfhinweise"));
-  const newPeople = r.people.filter((p) => p.new).length;
-  if (newPeople) reasons.push(plural(newPeople, "neue Person", "neue Personen"));
-  if (r.existing?.differences.length) reasons.push(plural(r.existing.differences.length, "Abweichung", "Abweichungen"));
-  if (r.error) reasons.push(r.error);
-  return reasons;
-}
-
-// Unveränderter, schon erfasster Einsatz: nichts zu tun
-const isUnchanged = (r) => r.existing && !r.existing.differences.length && !reviewReasons(r).length;
-
-async function acceptCleanReports() {
-  // Nacheinander, damit doppelte Einsatznummern in einem Upload als Fehler beim zweiten Bericht auffallen
-  for (const r of state.upload.reports) {
-    if (r.existing || reviewReasons(r).length) continue;
-    try {
-      r.saved = await apiJson("/api/reports/accept", "POST", { token: state.upload.token, filename: r.filename, fields: {} });
-      r.auto = true;
-      state.dataChanged = true;
-    } catch (err) {
-      r.error = err.message;
-    }
-  }
-}
-
-// Übersprungene Berichte (z. B. FEZ) und gespeicherte Stammdatensätze
-function uploadNotes(notes) {
-  return notes.length ? `<div class="message message-info">${notes.map((n) => `${esc(n.file)}: ${esc(n.message)}`).join("<br>")}</div>` : "";
-}
-
-function uploadSummary(reports) {
-  const auto = reports.filter((r) => r.auto).length, unchanged = reports.filter(isUnchanged).length;
-  const open = reports.filter((r) => !r.saved && !isUnchanged(r)).length;
-  const parts = [];
-  if (auto) parts.push(`${plural(auto, "Einsatz", "Einsätze")} ohne Anmerkungen übernommen`);
-  if (unchanged) parts.push(`${plural(unchanged, "Einsatz", "Einsätze")} bereits unverändert erfasst`);
-  if (open) parts.push(`${plural(open, "Bericht", "Berichte")} zu prüfen`);
-  return parts.length ? `<div class="message message-info">${parts.join(" · ")}</div>` : "";
-}
-
-function previewStatus(r) {
-  const existing = r.existing;
-  const status = (cls, number, title, sub) =>
-    `<div class="preview-status ${cls}"><span class="number">${number}</span><div><strong>${title}</strong><span>${sub}</span></div></div>`;
-  if (r.saved) return status("done", "✓", `Einsatz ${r.saved.number ?? ""}/${r.saved.year} ist in der Statistik`, esc(r.filename));
-  if (existing) {
-    const origin = { pdf: "aus einer PDF", bks_xlsx: "aus einem Excel-Export" }[existing.source] || "aus der Einsatzübersicht (Excel)";
-    const diffs = existing.differences.length ? plural(existing.differences.length, "Abweichung", "Abweichungen") : "keine Abweichungen";
-    return status("existing", r.number ?? "?", `Einsatz ${r.number}/${r.year} ist bereits erfasst`, `${origin} · ${diffs}`);
-  }
-  return status("", r.number ?? "?", `Neuer Einsatz ${r.number ?? ""}${r.number ? "/" + r.year : ""}${config.vg ? ` · ${esc(r.tenant_name)}` : ""}`,
-    [esc(r.filename), ...reviewReasons(r).map(esc)].join(" · "));
-}
-
-function differencesTable(existing) {
-  if (!existing?.differences.length) return "";
-  return `<h4 class="section-gap">Abweichungen zur Statistik</h4>
-    <table class="mini-table diff-table"><thead><tr><th>Feld</th><th>erfasst</th><th>Bericht</th></tr></thead><tbody>
-    ${existing.differences.map((d) => `<tr><td>${esc(d.field)}</td><td>${esc(d.stored)}</td><td>${esc(d.report)}</td></tr>`).join("")}</tbody></table>`;
-}
-
-// Eingaben in den noch offenen Vorschauen vor dem Neuzeichnen übernehmen
-function keepPreviewInput() {
-  for (const card of $$(".preview-card[data-index]")) {
-    const r = state.upload.reports[Number(card.dataset.index)];
-    if (r && !r.saved && $("input[name]", card)) Object.assign(r, readForm(card));
-  }
-}
-
-function renderPreviews() {
-  const reports = state.upload.reports;
-  $("#dropzone").classList.toggle("compact", reports.length > 0);
-  $("#previews").innerHTML = uploadNotes(state.upload.notes || []) + uploadSummary(reports) + reports.map((r, i) => {
-    if (r.auto || isUnchanged(r)) return "";
-    const existing = r.existing;
-    return `<div class="preview-card" data-index="${i}">
-      ${previewStatus(r)}
-      ${r.saved ? "" : `<div class="preview-body">
-        ${formFields(r)}
-        <div class="preview-grid">
-          <div class="panel outlined"><h4>Fahrzeuge${helpButton("vehicles")}</h4>${vehicleTable(r)}
-            <p class="small muted section-gap">Ezeit erstes Fahrzeug: <b>${minutes(r.arrival_min)}</b> · Gesamtstärke ${r.crew_total}</p></div>
-          <div class="panel outlined"><h4>Prüfhinweise${helpButton("warnings")}</h4>${warningsList(r.warnings, "Keine Prüfhinweise")}${differencesTable(existing)}
-            ${r.shared_with?.length ? `<p class="small muted section-gap">Gemeinsamer Einsatz mit ${esc(r.shared_with.join(", "))} (gleicher Einsatz im BKS-Portal bzw. gleiche Einsatznummer der Leitstelle).</p>` : ""}
-            ${r.bks_url ? `<p class="small muted section-gap">BKS-Portal: ${bksLink(r)}</p>` : ""}</div>
-        </div>
-        <div class="panel outlined">${attendancePanel(r, { markNew: true, pickLeader: true })}</div>
-        <div class="preview-footer">
-          ${existing && r.can_edit ? `<label class="toggle"><input type="checkbox" data-replace="${i}" ${r.replace ? "checked" : ""}> erfassten Einsatz mit diesem Bericht aktualisieren
-            <span class="muted">(manuell ergänzte Fahrzeuge und Personen bleiben)</span></label>` : ""}
-          ${existing && !r.can_edit ? `<span class="muted">Einen erfassten Einsatz aktualisiert, wer Einsätze bearbeiten darf.</span>` : ""}
-          <button type="button" class="btn btn-primary" data-accept="${i}" ${existing && !r.replace ? "disabled" : ""}>
-            ${existing ? "Aktualisieren" : "In Statistik übernehmen"}</button>
-        </div>
-      </div>`}
-    </div>`;
-  }).join("");
-}
-
-async function acceptReport(i) {
-  const r = state.upload.reports[i];
-  const card = $(`.preview-card[data-index="${i}"]`);
-  const button = $("[data-accept]", card);
-  button.disabled = true;
-  try {
-    const saved = await apiJson("/api/reports/accept", "POST",
-      { token: state.upload.token, filename: r.filename, fields: readForm(card), replace: r.replace });
-    r.saved = saved;
-    state.dataChanged = true;
-    toast(`Einsatz ${saved.number ?? ""}/${saved.year} ${r.existing ? "aktualisiert" : "übernommen"}`);
-    keepPreviewInput();
-    renderPreviews();
-  } catch (err) {
-    button.disabled = false;
-    alert(err.message);
-  }
-}
 
 // ------------------------------------------------------------ Tooltip
 const tooltip = $("#tooltip");
@@ -1111,7 +954,11 @@ $("#view-evaluation").addEventListener("click", (e) => {
   }
   const action = e.target.closest("[data-action]")?.dataset.action;
   if (action === "print") window.print();
-  if (action === "summary-export") location.href = `/api/export/summary?year=${state.year}`;
+  if (action === "summary-export") {
+    const params = new URLSearchParams({ year: state.year, limit: state.limit });
+    if (state.tenantFilter.size) params.set("tenants", [...state.tenantFilter].sort().join(","));
+    location.href = `/api/export/summary?${params}`;
+  }
 });
 
 $("#category-filter").addEventListener("click", (e) => {
@@ -1276,9 +1123,15 @@ window.addEventListener("resize", closeKeywordSuggestions);
 // Dialoge
 for (const button of $$("[data-close]")) {
   button.innerHTML = ICON_CLOSE;
-  button.addEventListener("click", () => $(`#${button.dataset.close}`).close());
+  button.addEventListener("click", () => {
+    if (button.dataset.close === "pdf-dialog" && acceptingReports) { toast("Bitte die laufende Übernahme abwarten."); return; }
+    $(`#${button.dataset.close}`).close();
+  });
 }
 const pdfDialog = $("#pdf-dialog");
+pdfDialog.addEventListener("cancel", (event) => {
+  if (acceptingReports) { event.preventDefault(); toast("Bitte die laufende Übernahme abwarten."); }
+});
 $("#btn-pdf").addEventListener("click", async () => {
   if (!state.incidents) { try { await loadIncidents(); } catch (e) { /* nur für Vorschläge */ } }
   updateDatalists();
@@ -1290,6 +1143,9 @@ $("#btn-pdf").addEventListener("click", async () => {
   pdfDialog.showModal();
 });
 pdfDialog.addEventListener("close", async () => {
+  if (!acceptingReports) {
+    try { await discardUpload(); } catch (e) { toast(e.message); }
+  }
   if (state.dataChanged) { state.dataChanged = false; await reloadData(); }
 });
 const dropzone = $("#dropzone");
@@ -1316,9 +1172,13 @@ $("#previews").addEventListener("click", (e) => {
 });
 
 $("#scope").addEventListener("change", async (e) => {
+  if (uploadBusy || acceptingReports) { e.target.value = config.scope; toast("Bitte den laufenden Import abwarten."); return; }
+  if (state.upload.reports.some((r) => !r.saved && !isUnchanged(r)) &&
+      !window.confirm("Offene Importvorschauen verwerfen und Ansicht wechseln?")) { e.target.value = config.scope; return; }
   // Ungespeicherte Einstellungen (admin.js): erst fragen, sonst wechselte die Wehr auf dem Server trotzdem
   if (typeof confirmDiscard === "function" && !confirmDiscard()) { e.target.value = config.scope; return; }
   try {
+    await discardUpload();
     await apiJson("/api/scope", "POST", { key: e.target.value });
     location.reload();
   } catch (err) {

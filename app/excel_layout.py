@@ -45,8 +45,8 @@ class Layout:
                         for part, header in zip(VEHICLE_PARTS, self._vehicle_headers(call_sign, limit, second_limit))]
         columns += [("station_staff", "Personen Gerätehaus"), ("crew_total", "Gesamtstärke"), ("gap", ""),
                     ("turnout", "Azeit min."), ("arrival", "Ezeit"), ("on_time", f"{limit} Min. erreicht"),
-                    ("crew_on_arrival", "Stärke bei E-Treffen"), ("crew_within_limit", f"Stärke nach {limit} Min."),
-                    ("crew_within_second", f"Stärke nach {second_limit}Min."), ("crew_plan_total", "Gesamtstärke"),
+                    ("crew_on_arrival", "Stärke bei Eintreffen"), ("crew_within_limit", f"Zusätzlich bis {limit} Min."),
+                    ("crew_within_second", f"Zusätzlich {limit}–{second_limit} Min."), ("crew_plan_total", "Gesamtstärke"),
                     ("weekend_or_holiday", "Wochenende / Feiertag")]
         return columns
 

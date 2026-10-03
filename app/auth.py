@@ -21,8 +21,9 @@ import secrets
 import smtplib
 import threading
 import time
+from urllib.parse import urlsplit
 
-from fastapi import APIRouter, BackgroundTasks, Form, Request
+from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app import db, mail, tenancy, theme
@@ -41,7 +42,6 @@ MAIL_COOLDOWN = 60
 
 router = APIRouter()
 _lock = threading.Lock()
-_used_links = {}    # Token → Ablaufzeit; verhindert die zweite Benutzung eines Links
 _last_mail = {}     # Adresse → Zeitpunkt der letzten Mail
 _key = None
 
@@ -54,6 +54,8 @@ def check_config():
     """Bricht den Start ab, wenn die Anmeldung so nicht funktionieren kann."""
     if enabled() and not BASE_URL:
         raise RuntimeError("ADMIN_EMAILS ist gesetzt, BASE_URL fehlt (siehe README)")
+    if not enabled() and BASE_URL and urlsplit(BASE_URL).hostname not in ("localhost", "127.0.0.1", "::1"):
+        raise RuntimeError("Für eine nicht lokale BASE_URL muss ADMIN_EMAILS gesetzt sein.")
     if os.environ.get("RESEND_API_KEY"):
         # Nicht still ohne Mails starten, wenn noch die alte Konfiguration gesetzt ist
         raise RuntimeError("RESEND_API_KEY wird nicht mehr unterstützt – Versand per SMTP_* (siehe README)")
@@ -106,19 +108,25 @@ def access(request: Request) -> tenancy.Access:
     """Rechte des angemeldeten Benutzers und ausgewählte Wehr bzw. VG (ohne Anmeldung: Superadmin).
     Als FastAPI-Dependency für alle Endpunkte mit Einsatzdaten oder Verwaltung."""
     email = current_user(request) if enabled() else None
+    if enabled() and email is None:
+        raise HTTPException(401, "Anmeldung erforderlich")
     return tenancy.access_for(email, request.cookies.get(SCOPE_COOKIE))
 
 
 def _use_link(token):
     """Prüft den Link und entwertet ihn. Liefert die Adresse oder None."""
     email = _verify("link", token)
-    with _lock:
-        now = time.time()
-        for t in [t for t, exp in _used_links.items() if exp < now]:
-            del _used_links[t]
-        if not email or token in _used_links:
-            return None
-        _used_links[token] = now + LINK_TTL
+    if not email:
+        return None
+    # Atomar in SQLite entwerten: gilt auch nach Neustart und in anderen Prozessen.
+    now = time.time()
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    with tenancy.central() as con:
+        con.execute("DELETE FROM consumed_magic_link WHERE expires < ?", (now,))
+        used = con.execute("INSERT OR IGNORE INTO consumed_magic_link VALUES (?, ?)",
+                           (token_hash, now + LINK_TTL)).rowcount
+    if not used:
+        return None
     return email
 
 

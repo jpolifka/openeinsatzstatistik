@@ -4,6 +4,7 @@ import json
 import re
 
 from app import domain
+from app.incident_schema import FIELDS, INT_FIELDS
 from app.holidays import is_weekend_or_holiday
 from app.names import NameMatcher, leader_spelling, matches_leader, split_name
 from app.timeutil import normalize_iso, parse_iso, to_iso, year_of
@@ -12,9 +13,6 @@ from app.timeutil import normalize_iso, parse_iso, to_iso, year_of
 FULL_KEYWORD = re.compile(r"([A-Za-z]\d)\s*[.\s]?\s*(\d{0,2})")
 
 # Bearbeitbare Felder eines Einsatzes – Grundlage für Formular, Speichern und Abgleich
-FIELDS = ("number", "started_at", "ended_at", "keyword", "subcode", "description", "place",
-          "unit_leader", "station_staff", "dispatch_number")
-INT_FIELDS = ("number", "station_staff")
 # Datensätze im BKS-Portal (eigener Bericht, Stammdatensatz des Einsatzes): kommen aus der PDF, nicht aus dem Formular
 ID_FIELDS = ("bks_report_id", "bks_record_id")
 TEXT_FIELDS = tuple(name for name in FIELDS if name not in INT_FIELDS + ("started_at", "ended_at", "dispatch_number"))
@@ -46,6 +44,8 @@ def normalize_fields(fields, weekend_or_holiday=None):
     f = {name: fields.get(name) for name in FIELDS + ID_FIELDS}
     f["number"] = to_int(f["number"])
     f["station_staff"] = to_int(f["station_staff"]) or 0
+    if f["station_staff"] < 0 or (f["number"] is not None and f["number"] < 0):
+        raise ValueError("Einsatznummer und Stärke dürfen nicht negativ sein.")
     f["started_at"], f["ended_at"] = normalize_iso(f["started_at"]), normalize_iso(f["ended_at"])
     for name in TEXT_FIELDS:
         f[name] = (f[name] or "").strip()
@@ -54,6 +54,14 @@ def normalize_fields(fields, weekend_or_holiday=None):
     for name in ("dispatch_number", *ID_FIELDS):
         f[name] = str(f[name] or "").strip() or None
     start = parse_iso(f["started_at"])
+    end = parse_iso(f["ended_at"])
+    if any(value and value.tzinfo is not None for value in (start, end)):
+        raise ValueError("Einsatzzeiten bitte als örtliche Uhrzeit ohne Zeitzonen-Zusatz angeben.")
+    if start and end:
+        if (start.tzinfo is None) != (end.tzinfo is None):
+            raise ValueError("Beginn und Ende müssen dieselbe Zeitzonen-Konvention verwenden.")
+        if end < start:
+            raise ValueError("Das Einsatzende darf nicht vor dem Beginn liegen.")
     f["year"] = year_of(start)
     if weekend_or_holiday is None:
         weekend_or_holiday = bool(start and is_weekend_or_holiday(start.date()))
@@ -216,9 +224,12 @@ def renumber(con, year):
     """
     if year is None:
         return
-    ids = [r[0] for r in con.execute("SELECT id FROM incident WHERE year = ? ORDER BY started_at, id", (year,))]
+    rows = con.execute("SELECT id, number FROM incident WHERE year = ? ORDER BY started_at, id", (year,)).fetchall()
+    ids = [r["id"] for r in rows]
+    changed = [r["id"] for n, r in enumerate(rows, start=1) if r["number"] != n]
     con.executemany("UPDATE incident SET number = ? WHERE id = ?", [(-n, i) for n, i in enumerate(ids, start=1)])
     con.executemany("UPDATE incident SET number = ? WHERE id = ?", [(n, i) for n, i in enumerate(ids, start=1)])
+    con.executemany("UPDATE incident SET revision = revision + 1 WHERE id = ?", [(i,) for i in changed])
 
 
 def is_empty(con):
@@ -345,20 +356,30 @@ def all_members(con):
     return [dict(r) for r in con.execute("SELECT id, name FROM member ORDER BY name")]
 
 
-def update_incident(con, incident_id, changes, modified_by=None, source=None):
+class StaleIncident(ValueError):
+    """Der Einsatz wurde seit dem Öffnen geändert."""
+
+
+def update_incident(con, incident_id, changes, modified_by=None, source=None, revision=None):
     """Felder ändern; Jahr und Wochenende/Feiertag werden neu abgeleitet.
     source: {source, filename, warnings} beim Aktualisieren aus einem Bericht."""
     current = con.execute("SELECT * FROM incident WHERE id = ?", (incident_id,)).fetchone()
     if not current:
         raise KeyError(incident_id)
+    if revision is not None and current["revision"] != revision:
+        raise StaleIncident("Der Einsatz wurde inzwischen geändert. Bitte neu laden und Änderungen vergleichen.")
     f = normalize_fields({**dict(current), **changes})
     _check_unique(con, f, incident_id)
     if source:
         f.update(source=source["source"], filename=source["filename"],
                  warnings=json.dumps(list(source["warnings"]), ensure_ascii=False))
     assignments = ", ".join(f"{name} = ?" for name in f)
-    con.execute(f"UPDATE incident SET {assignments}, modified = datetime('now', 'localtime'), modified_by = ? "
-                "WHERE id = ?", [*f.values(), modified_by, incident_id])
+    changed = con.execute(f"UPDATE incident SET {assignments}, revision = revision + 1, "
+                          "modified = datetime('now', 'localtime'), modified_by = ? "
+                          "WHERE id = ? AND revision = ?",
+                          [*f.values(), modified_by, incident_id, current["revision"]]).rowcount
+    if not changed:
+        raise StaleIncident("Der Einsatz wurde inzwischen geändert. Bitte neu laden und Änderungen vergleichen.")
 
 
 def add_fleet_vehicles(con, vehicles, day):
@@ -375,8 +396,11 @@ def vehicles_with_data(con):
     return {r[0]: r[1] for r in con.execute("SELECT call_sign, COUNT(*) FROM vehicle GROUP BY call_sign")}
 
 
-def delete_incident(con, incident_id):
-    con.execute("DELETE FROM incident WHERE id = ?", (incident_id,))
+def delete_incident(con, incident_id, revision=None):
+    if revision is None:
+        con.execute("DELETE FROM incident WHERE id = ?", (incident_id,))
+    elif not con.execute("DELETE FROM incident WHERE id = ? AND revision = ?", (incident_id, revision)).rowcount:
+        raise StaleIncident("Der Einsatz wurde inzwischen geändert. Bitte neu laden und erneut prüfen.")
 
 
 # ---------------------------------------------------------------- Weitergegebene Berichte

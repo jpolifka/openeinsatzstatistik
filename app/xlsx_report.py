@@ -18,7 +18,7 @@ import zipfile
 import openpyxl
 from openpyxl.utils.exceptions import InvalidFileException
 
-from app.pdf_report import KINDS, PERSON_VEHICLE, SHORT_CALL_SIGN, _call_sign_pattern, _parse_keyword, parse_number
+from app.bks_common import KINDS, PERSON_VEHICLE, SHORT_CALL_SIGN, _call_sign_pattern, _parse_keyword, parse_number
 
 MAIN_SHEET = "Einsatzbericht"
 VEHICLE_SHEET = "Ausger. Fahrzeuge"
@@ -32,6 +32,8 @@ YES_NO = ("ja", "nein", "agt")
 # Ein Bericht hat wenige hundert Zeilen; mehr deutet auf eine fremde oder präparierte Datei
 MAX_UNPACKED_BYTES = 50 * 1024 * 1024
 MAX_ROWS = 5000
+MAX_COLUMNS = 128
+MAX_SHEETS = 32
 
 
 def read_workbook(source):
@@ -45,12 +47,16 @@ def read_workbook(source):
     except (InvalidFileException, zipfile.BadZipFile, KeyError, OSError):
         raise ValueError("Keine gültige Excel-Datei (xlsx).")
     try:
+        if len(wb.worksheets) > MAX_SHEETS:
+            raise ValueError("Die Excel-Datei hat zu viele Tabellenblätter für einen Einsatzbericht.")
         return {ws.title: _rows(ws) for ws in wb.worksheets}
     finally:
         wb.close()
 
 
 def _rows(ws):
+    if ws.max_column and ws.max_column > MAX_COLUMNS:
+        raise ValueError("Die Excel-Datei hat zu viele Spalten für einen Einsatzbericht.")
     rows = []
     for i, row in enumerate(ws.iter_rows(values_only=True)):
         if i >= MAX_ROWS:

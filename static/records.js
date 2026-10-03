@@ -4,7 +4,7 @@
 // Berichte) und das Prüfprotokoll des Wehrleiters je Stammdatensatz im BKS-Portal.
 // Wird nach app.js geladen und trägt sich in VIEWS ein. Rechte prüft das Backend (app/main.py, app/records.py).
 
-const records = { notices: [], showNotices: true, data: null, onlyOpen: true, expanded: new Set() };
+const records = { notices: [], postprocessing: [], showNotices: true, data: null, onlyOpen: true, expanded: new Set() };
 // Kostenersatz: Eingaben im Dialog und letztes Ergebnis (nur berechnet, nichts gespeichert)
 const feeCalc = { record: null, request: null, result: null, error: "" };
 
@@ -20,6 +20,7 @@ async function loadNotices() {
   if (!config.tenants.length || !can("incidents.view")) return;
   try {
     records.notices = (await api("/api/notices")).notices;
+    records.postprocessing = can("reports.import") ? (await api("/api/pending")).postprocessing || [] : [];
   } catch (e) {
     records.notices = [];
   }
@@ -40,10 +41,11 @@ function noticeActions(n) {
 
 function renderNotices() {
   const el = $("#notices"), list = records.notices;
-  el.hidden = !list.length;
-  if (!list.length) { el.innerHTML = ""; return; }
+  const jobs = records.postprocessing;
+  el.hidden = !list.length && !jobs.length;
+  if (el.hidden) { el.innerHTML = ""; return; }
   const several = new Set(list.map((n) => n.tenant)).size > 1 || config.vg;
-  el.innerHTML = `<div class="card notices no-print">
+  el.innerHTML = `${jobs.length ? `<div class="message message-info">Gespeichert, zentrale Nachverarbeitung noch offen: ${jobs.map((j) => `${esc(j.tenant_name)} (${j.count})`).join(" · ")}. Automatische Wiederholung jede Minute; nicht erneut importieren.</div>` : ""}<div class="card notices no-print">
     <div class="notices-head">
       <strong>${plural(list.length, "Hinweis", "Hinweise")}${helpButton("notices")}</strong>
       <button type="button" class="btn btn-light btn-small" data-notices-toggle>${records.showNotices ? "Ausblenden" : "Anzeigen"}</button>
@@ -61,6 +63,13 @@ function renderNotices() {
 
 // Weitergegebene Berichte einer Wehr lesen und wie hochgeladene PDFs zur Übernahme anzeigen
 async function readPendingReports(slug) {
+  if (uploadBusy || acceptingReports) { toast("Bitte den laufenden Import abwarten."); return; }
+  if (state.upload.reports.some((r) => !r.saved && !isUnchanged(r)) &&
+      !window.confirm("Offene Vorschauen verwerfen und bereitliegende Berichte prüfen?")) return;
+  await discardUpload();
+  uploadBusy = true;
+  const generation = uploadGeneration;
+  try {
   const pending = (await api("/api/pending")).reports.filter((p) => p.tenant === slug);
   if (!pending.length) { toast("Es liegt kein Bericht mehr zur Übernahme bereit."); await loadNotices(); return; }
   if (!state.incidents) { try { await loadIncidents(); } catch (e) { /* nur für Vorschläge */ } }
@@ -69,11 +78,19 @@ async function readPendingReports(slug) {
   $("#pdf-dialog").showModal();
   $("#progress").hidden = false;
   try {
-    await showUploadResult(await apiJson("/api/pending/read", "POST", { ids: pending.map((p) => p.id) }));
+    const data = await apiJson("/api/pending/read", "POST", { ids: pending.map((p) => p.id) });
+    if (generation !== uploadGeneration) {
+      await apiJson("/api/reports/cancel", "POST", { token: data.token });
+      return;
+    }
+    await showUploadResult(data);
   } catch (e) {
     showUploadError(esc(e.message));
   } finally {
     $("#progress").hidden = true;
+  }
+  } finally {
+    uploadBusy = false;
   }
 }
 

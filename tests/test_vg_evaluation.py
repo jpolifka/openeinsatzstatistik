@@ -102,6 +102,17 @@ def test_statistics_role_gets_summary_without_names(vg):
     assert "Wehr wehr-a1" in cells and not any("Muster" in c for c in cells)
 
 
+def test_summary_export_respects_selection_and_limit(vg):
+    response = vg.get("/api/export/summary?year=2025&tenants=wehr-a2&limit=10")
+    assert response.status_code == 200
+    workbook = openpyxl.load_workbook(io.BytesIO(response.content))
+    assert workbook["Übersicht"]["A4"].value == "Wehr wehr-a2"
+    assert workbook["Übersicht"]["A5"].value == "Summe (Beteiligungen)"
+    assert workbook["Übersicht"]["B5"].value == 1
+    assert vg.get("/api/export/summary?year=2025&limit=999").status_code == 422
+    assert vg.get("/api/export/summary?year=2025&tenants=wehr-b1").status_code == 400
+
+
 def test_reports_are_matched_to_the_reporting_tenant():
     candidates = [("wehr-a1", CFG), ("wehr-a2", OTHER)]
     texts = (FULL, LEFT, "")
@@ -153,14 +164,15 @@ def test_multi_report_is_distributed_and_updates_on_reimport(vg, monkeypatch):
     monkeypatch.setattr(main.pdf_report, "extract_text", lambda path: texts[path.rsplit("/", 1)[-1]])
     files = [("pdfs", (name, b"x", "application/pdf")) for name in texts]
     data = vg.post("/api/reports", files=files).json()
-    assert [(r["filename"], r["tenant"]) for r in data["reports"]] == [("a2.pdf", "wehr-a2"), ("a1.pdf", "wehr-a1")]
+    assert [(r["filename"], r["tenant"]) for r in data["reports"] if not r.get("action")] == [("a2.pdf", "wehr-a2"), ("a1.pdf", "wehr-a1")]
     assert data["errors"] == []
-    assert [n["file"] for n in data["notes"]] == ["stamm.pdf", "fez.pdf"]
-    assert "FEZ VG" in data["notes"][1]["message"]
-    a1 = data["reports"][1]
+    assert [n["file"] for n in data["notes"]] == ["fez.pdf"]
+    assert "FEZ VG" in data["notes"][0]["message"]
+    a1 = data["reports"][2]
     assert (a1["bks_report_id"], a1["bks_record_id"]) == ("9000003", "9000001")
     assert a1["bks_url"].endswith("/einsatzbericht/9000003")
     assert not any("Fahrzeuge im Bericht" in w for w in a1["warnings"])
+    assert vg.post("/api/reports/accept", json={"token": data["token"], "filename": "stamm.pdf", "fields": {}}).status_code == 200
     with tenancy.central() as con:
         master = records.load_master(con, con.execute("SELECT id FROM vg WHERE slug = 'vg-a'").fetchone()[0], "9000001")
     assert master["dispatch_number"] == "1250000009" and len(master["vehicles"]) == 4
@@ -173,7 +185,7 @@ def test_multi_report_is_distributed_and_updates_on_reimport(vg, monkeypatch):
     texts["a1.pdf"] = (texts["a1.pdf"][0].replace("17/25", "18/25"), LEFT.replace("17/25", "18/25"), "")
     data = vg.post("/api/reports", files=[("pdfs", ("a1.pdf", b"x", "application/pdf"))]).json()
     assert data["reports"][0]["existing"]["id"] == saved["id"]
-    body = {"token": data["token"], "filename": "a1.pdf", "fields": {}, "replace": True}
+    body = {"token": data["token"], "filename": "a1.pdf", "fields": {}, "replace": True, "revision": data["reports"][0]["existing"]["revision"]}
     updated = vg.post("/api/reports/accept", json=body).json()
     assert updated["id"] == saved["id"] and updated["number"] == 18
 

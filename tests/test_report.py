@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """PDF-Auswertung mit erfundenem Berichtstext im Aufbau des BKS-Portals."""
 import datetime as dt
+import copy
 
 from app import report, store
 from app.pdf_report import parse_report
@@ -116,3 +117,16 @@ def test_older_layout_with_incident_site_in_right_column():
     assert r["reported_as"] == "Zimmerbrand"
     assert r["place"] == "Rheinbrohl"
     assert r["description"] == "Zimmerbrand / Musterhaus"
+
+
+def test_comparison_detects_text_people_and_seconds(con):
+    r = read()
+    report.save(con, r, report.to_fields(r))
+    incident, existing = report.preview(con, r)
+    changed = copy.deepcopy(incident)
+    changed["description"] += " korrigiert"
+    changed["dispatch_number"] = "TEST-42"
+    changed["people"][0]["role"] = "Andere Funktion"
+    changed["vehicles"]["02/45"]["arrived"] = "10:16:26"
+    fields = {d["field"] for d in report.differences(existing, changed, CFG)}
+    assert {"Beschreibung", "Leitstellen-Nr.", "Anwesende", "Eintreffen 02/45"} <= fields

@@ -5,6 +5,21 @@
 // Ein neuer Eintrag mit neuem Datum markiert das ?-Symbol im Kopf, bis die Neuigkeiten gelesen sind.
 const CHANGELOG = [
   {
+    date: "2026-10-03",
+    items: [
+      "<b>Berichte prüfen:</b> Auch Stammdatensätze und Weiterleitungen werden erst nach Ihrer ausdrücklichen Bestätigung gespeichert. Schließen verwirft offene Vorschauen, nicht bereits bestätigte Berichte.",
+      "<b>Abgleich:</b> Änderungen an Beschreibung, Leitstellen-Nummer, Anwesenheit und Sekunden werden genauer erkannt.",
+      "<b>Smartphone:</b> Die Aktionen im Kopfbereich können umbrechen und bleiben erreichbar.",
+      "<b>Kostenersatz:</b> Ohne zum Einsatztag gültige Gebührenordnung erfolgt keine automatische Auswahl einer späteren Fassung.",
+      "<b>Gemeinsames Bearbeiten:</b> Die Oberfläche erkennt inzwischen geänderte Einsätze und verhindert das Überschreiben eines neueren Standes.",
+      "<b>Auswertung:</b> Fehlende Anwesenheit wird als unvollständige Datengrundlage kenntlich gemacht. Der Kennzahlen-Export berücksichtigt Auswahl und Frist.",
+      "<b>Importhinweise:</b> Hinweise aus dem ursprünglichen Bericht sind als historische Hinweise gekennzeichnet.",
+      "<b>Aktueller Datenstand:</b> Fehlende Einsatzzeiten und Anwesenheiten werden unabhängig von der Importhistorie erneut geprüft. Die Leitstellen-Nummer lässt sich im Formular korrigieren.",
+      "<b>Nachverarbeitung:</b> Offene zentrale Importarbeiten werden automatisch wiederholt und angezeigt. Bereits gespeicherte Einsätze müssen nicht erneut importiert werden.",
+      "<b>Ladefehler:</b> Mit „Erneut versuchen“ bleibt die Ansicht nutzbar.",
+    ],
+  },
+  {
     date: "2026-10-02",
     items: [
       "<b>Einsatz bearbeiten:</b> Ausrücken und Eintreffen zeigen die Sekunden. Beim Speichern bleiben die Zeiten aus dem Bericht genau erhalten.",

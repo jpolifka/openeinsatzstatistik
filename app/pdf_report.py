@@ -6,10 +6,11 @@ extract_text() holt den Text aus der PDF, parse_report() wertet ihn aus. Das Erg
 enthält nur, was im Bericht steht – abgeleitete Werte (Beginn, EHF, …) ergänzt report.py.
 """
 import datetime as dt
-import functools
 import re
 
 import pdfplumber
+
+from app.bks_common import KINDS, PERSON_VEHICLE, SHORT_CALL_SIGN, _call_sign_pattern, _parse_keyword, parse_number
 
 # Seite 1 ist zweispaltig; manche Felder sind nur im linken oder rechten Teil eindeutig
 COLUMN_SPLIT = 0.495
@@ -27,24 +28,17 @@ STATION = re.compile(r"^Feuerwehrhaus:\s*(FW NR#\.\S+ \d\d)\s*(.*?)(?:\s+Meldebi
 # Haupt- bzw. Nebenbericht, der mit "Datensatz: <ID>" auf den Stammdatensatz verweist
 REPORT_KIND = re.compile(r"^(Stammdatensatz|Hauptbericht|Nebenbericht) (\d+)", re.M)
 RECORD = re.compile(r"^Datensatz:\s*(\d+)", re.M)
-KINDS = {"Stammdatensatz": "master", "Hauptbericht": "main", "Nebenbericht": "secondary"}
 PERSON_ROW = re.compile(r"^(\S+) (\S+)(.*?)\s(nein|ja|AGT)\s(\d+)\s*(.*)$")
 # Fahrzeug einer Person: voller Funkrufname, z. B. „FL NR#.ABC 02/45-01“ oder „RP WW 01/23-06“
-PERSON_VEHICLE = re.compile(r"(?:[A-Z]{2} )?[A-Z][A-Z0-9#.ÄÖÜ]* \d\d/\d\d-\d\d")
 PERSON_NOISE = re.compile(PERSON_VEHICLE.pattern + r"|\d\d\.\d\d\.\d\d \d\d:\d\d")
-SHORT_CALL_SIGN = re.compile(r"(\d\d/\d\d)-\d\d$")
 NOT_A_PERSON = ("Name", "FW", "EINSATZBERICHT")
-
-
-@functools.lru_cache(maxsize=32)
-def _call_sign_pattern(unit_prefix):
-    """Funkrufname eines Fahrzeugs der Einheit, z. B. "FL NR#.ABC 02/45-01" -> 02/45."""
-    return re.compile("^" + re.escape(unit_prefix) + r"(\d\d/\d\d)-\d\d")
 
 
 def extract_text(path):
     """Text der ganzen PDF sowie linke und rechte Hälfte von Seite 1."""
     with pdfplumber.open(path) as pdf:
+        if not pdf.pages or len(pdf.pages) > 200:
+            raise ValueError("Ein Einsatzbericht muss zwischen 1 und 200 PDF-Seiten enthalten.")
         pages = [p.extract_text() or "" for p in pdf.pages]
         first = pdf.pages[0]
         split = first.width * COLUMN_SPLIT
@@ -65,22 +59,6 @@ def _page_one_field(left, right, label):
 
 def _timestamp(text):
     return dt.datetime.strptime(text, "%d.%m.%y %H:%M:%S") if text not in ("-", "Ja", "Nein") else None
-
-
-def _parse_keyword(text, report):
-    m = re.match(r"([A-Z])(\d)\.(\d\d)", text)
-    if m:
-        return m.group(1) + m.group(2), m.group(3)
-    if "sicherheitswache" in text.lower():
-        return "S1", "00"
-    report["warnings"].append(f"Stichwort '{text}' nicht erkannt")
-    return text, ""
-
-
-def parse_number(text):
-    """Laufende Nr. aus der Einsatzbericht-Nr. "34/26", auch mit Kürzel davor wie "B67/2026" oder "FEZ 36/2026"."""
-    m = re.match(r"[A-Za-zÄÖÜäöü]*\s*(\d+)\s*/\s*(\d+)", text)
-    return int(m.group(1)) if m else None
 
 
 def _parse_vehicles(text, report, unit_prefix):

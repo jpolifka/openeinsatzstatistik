@@ -11,7 +11,6 @@ from conftest import grant, make_tenant
 def client(make_client, monkeypatch):
     _, tenant_id = make_tenant("wehr-a1")
     grant("m.muster@example.org", "lead", tenant_id)
-    monkeypatch.setattr(auth, "_used_links", {})
     monkeypatch.setattr(auth, "_last_mail", {})
     return make_client(login=True)
 
@@ -28,6 +27,19 @@ def test_without_login_api_and_pages_are_closed(client):
     assert page.status_code == 303 and page.headers["location"] == "/login"
     assert client.get("/health").status_code == 200
     assert client.get("/login").status_code == 200
+
+
+@pytest.mark.parametrize("host", ["testserver/static/", "testserver/login?", "testserver/auth/#"])
+def test_host_cannot_turn_api_into_public_path(client, host):
+    assert client.get("/api/config", headers={"host": host}).status_code == 401
+
+
+def test_access_dependency_rejects_missing_session(client):
+    from fastapi import HTTPException
+    from starlette.requests import Request
+    with pytest.raises(HTTPException) as error:
+        auth.access(Request({"type": "http", "headers": []}))
+    assert error.value.status_code == 401
 
 
 def test_magic_link_logs_in_once(client, caplog):
@@ -47,6 +59,13 @@ def test_magic_link_logs_in_once(client, caplog):
 
 def test_unknown_address_gets_no_link(client, caplog):
     assert _link_token(caplog, client, "fremd@example.org") is None
+
+
+def test_used_magic_link_stays_consumed_after_process_cache_reset(client, caplog, monkeypatch):
+    token = _link_token(caplog, client)
+    assert auth._use_link(token) == "m.muster@example.org"
+    monkeypatch.setattr(auth, "_key", None)
+    assert auth._use_link(token) is None
 
 
 def test_removed_address_loses_session(client, caplog):
