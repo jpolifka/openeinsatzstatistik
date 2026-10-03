@@ -9,7 +9,7 @@ const state = {
   category: "all", query: "", expanded: new Set(), editing: null,
   tableCards: new Set(),                      // Diagramme, die gerade als Tabelle angezeigt werden
   memberSort: { field: "incidents", descending: true }, openMembers: new Set(),
-  editDraft: null, memberOptions: [], scrollTo: null,
+  editDraft: null, editNode: null, memberOptions: [], scrollTo: null,
   upload: { token: null, reports: [], errors: [], notes: [] }, dataChanged: false,
   tenantFilter: new Set(),                    // Gesamtansicht: ausgewählte Wehren (leer = alle)
 };
@@ -194,9 +194,12 @@ async function loadEvaluation() {
   const e = state.evaluation, filter = [...state.tenantFilter].sort().join(",");
   // Zeitgrenze der Anfrage merken: ohne Freigabe fehlt der Bedarfsplan (response_plan = null)
   if (!e || e.year !== state.year || e.limit !== state.limit || e.filter !== filter) {
-    const limit = state.limit;
-    state.evaluation = await api(`/api/evaluation?year=${state.year}&limit=${limit}${filter ? `&tenants=${encodeURIComponent(filter)}` : ""}`);
-    Object.assign(state.evaluation, { filter, limit });
+    const { year, limit } = state;
+    const data = await api(`/api/evaluation?year=${year}&limit=${limit}${filter ? `&tenants=${encodeURIComponent(filter)}` : ""}`);
+    // Inzwischen anderes Jahr bzw. andere Auswahl: die ältere Antwort verwerfen
+    if (year === state.year && limit === state.limit && filter === [...state.tenantFilter].sort().join(",")) {
+      state.evaluation = Object.assign(data, { filter, limit });
+    }
   }
 }
 
@@ -232,10 +235,12 @@ document.addEventListener("app:view", () => {
 
 async function loadIncidents() {
   if (!state.incidents || state.incidents.year !== state.year) {
-    state.incidents = await api(`/api/incidents?year=${state.year}`);
+    const year = state.year, data = await api(`/api/incidents?year=${year}`);
+    if (year === state.year) state.incidents = data;
   }
 }
 
+let viewRun = 0;
 async function showView() {
   const key = location.hash.slice(1), allowed = allowedViews();
   state.view = allowed.includes(key) ? key : allowed[0];
@@ -243,16 +248,17 @@ async function showView() {
   for (const a of $$("#tabs a")) a.classList.toggle("active", a.dataset.view === state.view);
   for (const k of Object.keys(VIEWS)) $(`#view-${k}`).hidden = k !== state.view;
   $("#page-title").textContent = view.noYear ? view.label : `${view.label} ${state.year}`;
-  const section = $(`#view-${state.view}`);
+  const section = $(`#view-${state.view}`), run = ++viewRun;
   section.classList.add("loading");
   try {
     await view.load();
+    if (run !== viewRun) return;                     // inzwischen neu angefordert: das spätere Laden zeichnet
     view.render();
     document.dispatchEvent(new Event("app:view"));    // Ansicht gezeichnet (z. B. Sprung zu einem Einsatz)
   } catch (e) {
-    section.innerHTML = errorBox(e.message);
+    if (run === viewRun) section.innerHTML = errorBox(e.message);
   } finally {
-    section.classList.remove("loading");
+    if (run === viewRun) section.classList.remove("loading");
   }
 }
 
@@ -511,6 +517,9 @@ function renderIncidents() {
   const visible = list.filter(matchesFilter).reverse();   // neueste zuerst
   const limit = config.default_limit, withTenant = Boolean(config.vg);
   const tenantNames = Object.fromEntries(config.tenants.map((t) => [t.slug, t.name]));
+  // Offenes Formular beim Neuzeichnen (Suche, Filter, andere Zeile) samt Eingaben behalten
+  const formSelector = state.editing ? `[data-form="${CSS.escape(state.editing)}"]` : null;
+  if (formSelector && $(formSelector)) state.editNode = $(formSelector);
   $("#incident-table tbody").innerHTML = visible.map((e) => {
     const open = state.expanded.has(e.id);
     const arrival = e.arrival_min == null ? `<span class="muted">–</span>`
@@ -527,6 +536,7 @@ function renderIncidents() {
       <td>${ICON_CHEVRON}</td>
     </tr>${open ? `<tr class="detail"><td colspan="9">${state.editing === e.id ? editForm(e) : incidentDetail(e)}</td></tr>` : ""}`;
   }).join("");
+  if (formSelector && state.editNode && $(formSelector)) $(formSelector).replaceWith(state.editNode);
   $("#incidents-empty").hidden = visible.length > 0;
 }
 
@@ -733,6 +743,7 @@ function redrawPeople(form) {
 async function startEditing(id) {
   const incident = state.incidents.incidents.find((x) => x.id === id);
   state.editing = id;
+  state.editNode = null;
   state.editDraft = { visible: incident.people_editable, people: incident.people.map((p) => ({ id: p.id, name: p.name,
     role: p.role || "", vehicle: p.vehicle || "", leader_name: p.leader_name })) };
   updateDatalists();
@@ -963,6 +974,14 @@ function differencesTable(existing) {
     ${existing.differences.map((d) => `<tr><td>${esc(d.field)}</td><td>${esc(d.stored)}</td><td>${esc(d.report)}</td></tr>`).join("")}</tbody></table>`;
 }
 
+// Eingaben in den noch offenen Vorschauen vor dem Neuzeichnen übernehmen
+function keepPreviewInput() {
+  for (const card of $$(".preview-card[data-index]")) {
+    const r = state.upload.reports[Number(card.dataset.index)];
+    if (r && !r.saved && $("input[name]", card)) Object.assign(r, readForm(card));
+  }
+}
+
 function renderPreviews() {
   const reports = state.upload.reports;
   $("#dropzone").classList.toggle("compact", reports.length > 0);
@@ -1004,6 +1023,7 @@ async function acceptReport(i) {
     r.saved = saved;
     state.dataChanged = true;
     toast(`Einsatz ${saved.number ?? ""}/${saved.year} ${r.existing ? "aktualisiert" : "übernommen"}`);
+    keepPreviewInput();
     renderPreviews();
   } catch (err) {
     button.disabled = false;
@@ -1284,7 +1304,8 @@ $("#previews").addEventListener("change", (e) => {
   const i = e.target.dataset.replace;
   if (i === undefined) return;
   // Eingaben behalten: Formularwerte vor dem Neuzeichnen übernehmen
-  Object.assign(state.upload.reports[i], readForm(e.target.closest(".preview-card")), { replace: e.target.checked });
+  keepPreviewInput();
+  state.upload.reports[i].replace = e.target.checked;
   renderPreviews();
 });
 $("#previews").addEventListener("click", (e) => {
@@ -1295,6 +1316,8 @@ $("#previews").addEventListener("click", (e) => {
 });
 
 $("#scope").addEventListener("change", async (e) => {
+  // Ungespeicherte Einstellungen (admin.js): erst fragen, sonst wechselte die Wehr auf dem Server trotzdem
+  if (typeof confirmDiscard === "function" && !confirmDiscard()) { e.target.value = config.scope; return; }
   try {
     await apiJson("/api/scope", "POST", { key: e.target.value });
     location.reload();
