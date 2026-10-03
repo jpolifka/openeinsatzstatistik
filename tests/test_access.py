@@ -90,7 +90,10 @@ def test_foreign_scope_cookie_falls_back_to_own_tenant(world):
     client, ids = world
     _as(client, "lead@example.org", scope="t:wehr-b1")
     assert client.get("/api/config").json()["tenant"]["slug"] == "wehr-a1"
-    assert [i["id"] for i in client.get("/api/incidents?year=2025").json()["incidents"]] == [ids["wehr-a1"]]
+    incidents = client.get("/api/incidents?year=2025").json()["incidents"]
+    assert [i["id"] for i in incidents] == [ids["wehr-a1"]]
+    # Einsatzgebiet und Bedarfsplan je Einsatz: Filter der Einsatzliste aus der Auswertung heraus
+    assert incidents[0]["area"] == "Rheinbrohl" and incidents[0]["plan_relevant"] is True
     assert client.post("/api/scope", json={"key": "t:wehr-b1"}).status_code == 403
     assert client.post("/api/scope", json={"key": "t:wehr-a1"}).status_code == 200
 

@@ -7,6 +7,11 @@ const CHANGELOG = [
   {
     date: "2026-10-03",
     items: [
+      "<b>Aus der Auswertung in die Liste:</b> Ein Klick auf einen Balken oder eine Säule (Monat, Wochentag, Uhrzeit, Ort, Art, Alarmstufe, Wehr) oder auf die Zahlen im Bedarfsplan zeigt genau diese Einsätze.",
+      "<b>Einsatzliste:</b> Spalten sortierbar, neuer Filter „Prüfhinweise“ für unvollständige Einsätze, Filter und Suche bleiben beim Neuladen erhalten und lassen sich als Link weitergeben. Im geöffneten Einsatz blättern „Vorheriger“ und „Nächster“.",
+      "<b>Nichts mehr verlieren:</b> Bei ungespeicherten Änderungen an einem Einsatz fragt die App vor dem Wechsel von Reiter, Jahr oder Wehr. Ein gelöschter Einsatz lässt sich einige Sekunden lang mit „Rückgängig“ zurückholen.",
+      "<b>Schneller:</b> Tastenkürzel (<kbd>/</kbd> Suche, <kbd>i</kbd> Einlesen, <kbd>j</kbd>/<kbd>k</kbd> blättern, <kbd>e</kbd> bearbeiten, <kbd>?</kbd> Übersicht). Berichte lassen sich auf das ganze Fenster ziehen.",
+      "<b>Verwaltung:</b> Fahrzeugtabellen kompakt oder mit allen Spalten und mit Suche, Stichworte mit Filter „nur Abweichungen“, feste Tabellenköpfe beim Scrollen. Der zuletzt offene Bereich wird gemerkt.",
       "<b>Einstellungen für die ganze VG:</b> Bei gewählter Wehrleitung pflegen Sie Fahrzeuge, BKS-Kennung, Orte, Bedarfsplan, Farben und Stichworte einmal für alle Wehren der VG – Fahrzeuge aller Wehren in einer Tabelle, Standort und Ausrückebereich je Wehr in einer Übersicht. Eine Wehr übernimmt die Vorgaben und kann bei sich abweichen; die Verwaltung zeigt an jedem Wert „von der VG“ oder „abweichend“. Der Bereich „Fahrzeuge der VG“ ist in „Fahrzeuge“ aufgegangen.",
       "<b>Verwaltung:</b> Ein Klick auf einen Bereich wechselt nicht mehr zwischen Wehr und Wehrleitung; gewechselt wird nur über die Auswahl oben rechts.",
       "<b>Orte ohne Namensanfang:</b> Unter „Orte & Bedarfsplan“ genügt der Ortsname. Ein Einsatz gehört zu dem Ort, mit dessen Namen der Einsatzort beginnt (z. B. „Musterstadt-Nord“ → Musterstadt).",

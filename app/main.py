@@ -178,6 +178,7 @@ def incident_json(incident, leaders, tenant, limit=None, cfg=None):
         **{name: _rounded(m[name]) for name in ("daytime", "duration_min", "turnout_min", "arrival_min", "on_time",
                                                  "crew_on_arrival", "crew_within_limit", "crew_within_second",
                                                  "crew_total")},
+        "area": m["area"], "plan_relevant": m["plan_relevant"],     # Filter aus der Auswertung
         "vehicles": vehicles,
         "people": [{"id": p["id"], "name": p["name"], "role": p.get("role"), "vehicle": p.get("vehicle"),
                     "new": p.get("new", False), "leader_name": leaders.spelling(p),

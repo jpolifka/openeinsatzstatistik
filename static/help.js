@@ -236,6 +236,33 @@ const HELP_SECTIONS = [
     },
   },
   {
+    id: "sec_shortcuts",
+    title: "Tastenkürzel und Bedienhilfen",
+    intro: "Die Tasten wirken, solange kein Eingabefeld und kein Dialog aktiv ist.",
+    entries: {
+      shortcuts: {
+        title: "Tastenkürzel",
+        short: "/ Suche · i Bericht einlesen · j/k nächster/vorheriger Einsatz · e bearbeiten · Esc schließen · ? Hilfe",
+        text: "<kbd>/</kbd> Suche in der Einsatzliste · <kbd>i</kbd> Bericht einlesen · <kbd>j</kbd> / <kbd>k</kbd> nächsten bzw. vorherigen Einsatz der Liste aufklappen · <kbd>e</kbd> geöffneten Einsatz bearbeiten · <kbd>Esc</kbd> Bearbeiten abbrechen bzw. Details zuklappen · <kbd>Strg</kbd>+<kbd>Z</kbd> (Mac: <kbd>⌘</kbd>+<kbd>Z</kbd>) gerade gelöschten Einsatz zurückholen · <kbd>?</kbd> diese Hilfe.",
+      },
+      list_filters: {
+        title: "Filter und Links",
+        short: "Filter, Suche und Sortierung stehen in der Adresse – Link kopieren und weitergeben.",
+        text: "Kategorie, Suche, Sortierung und der Filter <b>Prüfhinweise</b> (nur Einsätze mit aktuellen Prüfhinweisen, z. B. ohne Eintreffzeit oder Anwesenheit) stehen in der Adresse der Seite: Sie bleiben beim Neuladen erhalten, und ein kopierter Link zeigt anderen dieselbe Liste. In der <b>Auswertung</b> öffnet ein Klick auf einen Balken, eine Säule oder die Zahlen im Bedarfsplan die passenden Einsätze; der Filter steht dann als Chip über der Liste und lässt sich mit × entfernen. Spaltenköpfe mit ▾/▴ sortieren die Liste. Kategorie, Sortierung und Tabellen-/Diagrammansicht merkt sich der Browser.",
+      },
+      undo_delete: {
+        title: "Löschen rückgängig machen",
+        short: "Nach dem Löschen bleibt ein Einsatz einige Sekunden wiederherstellbar.",
+        text: "Ein gelöschter Einsatz verschwindet sofort aus der Liste; endgültig gelöscht wird er erst nach einigen Sekunden. Bis dahin holt <b>Rückgängig</b> in der Meldung unten (oder <kbd>Strg</kbd>+<kbd>Z</kbd>) ihn zurück. Wer die Seite vorher schließt, löscht sofort. Ungespeicherte Änderungen an einem Einsatz gehen nicht verloren: Beim Wechsel von Reiter, Jahr oder Wehr und beim Schließen fragt die App nach.",
+      },
+      drop_files: {
+        title: "Berichte aufs Fenster ziehen",
+        short: "PDF- oder Excel-Berichte einfach ins Browserfenster ziehen.",
+        text: "Berichte (PDF, Excel-Export oder ZIP) lassen sich auf jede Stelle des Fensters ziehen; der Import öffnet sich und liest sie sofort ein.",
+      },
+    },
+  },
+  {
     id: "sec_admin",
     title: "Verwaltung",
     intro: "Je Bereich mit dem passenden Recht (siehe Rechte), im Startbestand für Wehrführer, Wehrleiter und Superadmins. Änderungen gelten sofort für alle Benutzer der Wehr.",
