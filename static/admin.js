@@ -11,7 +11,7 @@ const ADMIN_SECTIONS = [
   ["bks", "BKS-Kennung", true, false, "tenant", "tenant.settings"],
   ["places", "Orte & Bedarfsplan", true, false, "tenant", "tenant.settings"],
   ["keywords", "Stichworte", false, false, "tenant", "tenant.keywords"],
-  ["vehicles", "Fahrzeuge", false, false, "vg", "vg.fees"], ["fees", "Gebührenordnung", false, false, "vg", "vg.fees"],
+  ["vehicles", "Fahrzeuge der VG", false, false, "vg", "vg.fees"], ["fees", "Gebührenordnung", false, false, "vg", "vg.fees"],
   ["users", "Benutzer", false, false, "any"], ["roles", "Rollen", false, false, "any"],
   ["super", "Wehren & VGs", false, true, "any"],
 ];
@@ -81,13 +81,23 @@ function adminGranted() {
     : overview.tenants.find((t) => t.slug === admin.slug))?.permissions || [];
 }
 
+// VG der oben gewählten Wehr, falls der Benutzer sie verwalten darf (Bereiche der Wehrleitung auch bei gewählter Wehr)
+function adminTenantVg() {
+  const { overview } = admin;
+  const tenant = overview.tenants.find((t) => t.slug === admin.slug);
+  return overview.vgs.find((v) => v.slug === tenant?.vg_slug) || null;
+}
+
 function adminSections() {
   const { overview } = admin;
   const mode = admin.vg ? "vg" : "tenant";
   const granted = adminGranted();
+  const tenantVg = admin.vg ? null : adminTenantVg();
   return ADMIN_SECTIONS.filter(([, , , superOnly, scope, permission]) => {
     if (superOnly) return overview.superadmin;
     if (scope === "any") return overview.users || overview.superadmin;
+    // Bei gewählter Wehr führen die Bereiche der VG direkt zur Wehrleitung ihrer VG
+    if (scope === "vg" && tenantVg) return tenantVg.permissions.includes(permission);
     return scope === mode && granted.includes(permission);
   });
 }
@@ -475,7 +485,13 @@ function setFeePath(path, value) {
 // ------------------------------------------------------------ Ereignisse
 $("#view-admin").addEventListener("click", async (e) => {
   const section = e.target.closest("[data-admin-section]");
-  if (section) { adminGo({ section: section.dataset.adminSection, parseResult: null }); return; }
+  if (section) {
+    const key = section.dataset.adminSection;
+    const toVg = !admin.vg && ADMIN_SECTIONS.find((x) => x[0] === key)?.[4] === "vg";
+    if (toVg && !confirmDiscard()) return;
+    adminGo({ section: key, parseResult: null, ...(toVg ? { vg: adminTenantVg().slug, keywordEdit: null } : {}) });
+    return;
+  }
   const button = e.target.closest("[data-admin-action]");
   if (!button || button.disabled) return;
   try {
