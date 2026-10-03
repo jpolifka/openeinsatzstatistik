@@ -252,37 +252,56 @@ async function moveVehicle(select) {
 }
 
 // ------------------------------------------------------------ BKS-Kennung
-// Zuordnung einer Testzeile: zuerst über den Funkrufnamen der Fahrzeugliste, sonst über die Präfixe
+// Zuordnung eines erkannten Fahrzeugs: zuerst über den Funkrufnamen der Fahrzeugliste, sonst über die Präfixe
 function fleetMatch(v) {
   const listed = admin.settings.fleet.find((x) => x.name && x.name === v.name);
-  if (listed) return `Block ${esc(listed.call_sign || listed.name)} · <b>Fahrzeug der Liste</b>`;
-  if (!v.call_sign) return "nicht der Einheit zugeordnet";
-  return `Funkruf ${esc(v.call_sign)}${v.own ? " · <b>eigenes Fahrzeug</b>" : " · Fahrzeug der Einheit"}`;
+  if (listed) return `<b>eigenes Fahrzeug</b> (Fahrzeugliste, Block ${esc(listed.call_sign || listed.name)})`;
+  if (v.own) return `<b>eigenes Fahrzeug</b> (Block ${esc(v.call_sign)}, noch nicht in der Fahrzeugliste)`;
+  if (v.call_sign) return "Fahrzeug einer anderen Wehr der VG";
+  return "fremdes Fahrzeug";
+}
+
+// Präfixe wie admin.prefixes_of: „FW NR#.ABC 02“ -> „FL NR#.ABC “ und „02/“; ohne Einheit die gespeicherten
+function bksPrefixes(s) {
+  const m = /^FW (\S+) (\d\d)$/.exec((s.unit_marker || "").trim());
+  return m ? { unit: `FL ${m[1]} `, own: `${m[2]}/`, valid: true }
+    : { unit: s.unit_prefix, own: s.own_prefix, valid: !(s.unit_marker || "").trim() };
+}
+
+function bksDerived(s) {
+  const p = bksPrefixes(s);
+  if (!p.valid) return `<span class="message-error">Bitte wie in der Kopfzeile des Berichts angeben, z. B. FW NR#.ABC 02.</span>`;
+  if (!p.unit) return "Ohne Einheit zählen nur die Fahrzeuge der Fahrzeugliste als eigene.";
+  return `Eigene Fahrzeuge beginnen mit <b>${esc(p.unit + p.own)}</b>, Fahrzeuge der übrigen Wehren der VG mit <b>${esc(p.unit)}</b>. Fahrzeuge der Fahrzeugliste zählen immer als eigene.`;
 }
 
 function bksSection() {
   const s = admin.settings;
   const result = admin.parseResult;
-  const found = result ? (result.length ? `<ul class="plain-list">${result.map((v) =>
-    `<li><b>${esc(v.name)}</b> → ${fleetMatch(v)}</li>`).join("")}</ul>`
-    : `<p class="message message-error">Keine Fahrzeugzeile erkannt.</p>`) : "";
-  return `<p class="small muted">So erkennt die App im Einsatzbericht des BKS-Portals, welche Fahrzeuge zur Wehr gehören und von welcher Einheit ein Bericht stammt.${helpButton("admin_bks")}</p>
+  const items = result ? [
+    ...result.units.map((u) => `<li><b>${esc(u.unit)}</b> → ${u.own ? "<b>Bericht dieser Wehr</b>" : "Bericht einer anderen Einheit"}</li>`),
+    ...result.vehicles.map((v) => `<li><b>${esc(v.name)}</b> → ${fleetMatch(v)}${v.description ? `<br><span class="small muted">${esc(v.description)}</span>` : ""}</li>`),
+  ] : [];
+  const found = result ? (items.length ? `<ul class="plain-list">${items.join("")}</ul>`
+    : `<p class="message message-error">Kein Funkrufname (z. B. FL NR#.ABC 02/45-01) und keine Einheit (z. B. FW NR#.ABC 02) gefunden.</p>`) : "";
+  return `<p class="small muted">So erkennt die App im Einsatzbericht des BKS-Portals, von welcher Wehr ein Bericht stammt und welche Fahrzeuge dazugehören.${helpButton("admin_bks")}</p>
     <div class="form-grid">
-      ${adminField("Einheiten-Präfix", textInput("unit_prefix", s.unit_prefix, 'placeholder="FL NR#.ABC " spellcheck="false"'), "span-2")}
-      ${adminField("Eigener Präfix", textInput("own_prefix", s.own_prefix, 'placeholder="02/" maxlength="3"'))}
       ${adminField("Einheit im Bericht", textInput("unit_marker", s.unit_marker, 'placeholder="FW NR#.ABC 02" spellcheck="false"'), "span-2")}
       ${adminField("FEZ-Kennung", textInput("control_center", s.control_center, 'spellcheck="false"'))}
-      ${adminField("Einsatznummern", `<select data-bind="numbering">
+    </div>
+    <p class="small muted" id="bks-derived">${bksDerived(s)}</p>
+    <h3 class="section-gap">Testen</h3>
+    <label class="field"><span>Text aus einem Bericht</span>
+      <textarea rows="4" id="parse-line" spellcheck="false" placeholder="Funkrufnamen, Zeilen der Fahrzeugtabelle oder den ganzen Berichtstext einfügen, z. B. FL NR#.ABC 02/45-01"></textarea></label>
+    <button type="button" class="btn btn-light btn-small section-gap" data-admin-action="parse-test">Erkennung prüfen</button>
+    ${found}
+    <h3 class="section-gap">Einsatznummern</h3>
+    <div class="form-grid">
+      ${adminField("Nummerierung", `<select data-bind="numbering">
         <option value="bks" ${s.numbering === "bks" ? "selected" : ""}>aus dem Bericht (fehlt sie: nächste freie)</option>
         <option value="by_date" ${s.numbering === "by_date" ? "selected" : ""}>nach Datum durchnummerieren</option></select>`, "span-3")}
     </div>
     <p class="small muted">Nach Datum: Die App nummeriert alle Einsätze eines Jahres nach dem Beginn; ein später eingelesener Einsatz (z. B. eine selbst angelegte Brandsicherheitswache) rückt an seine Stelle, die folgenden Nummern verschieben sich. Beim Speichern werden alle Jahre neu nummeriert.</p>
-    <p class="small muted">Leerzeichen am Ende des Einheiten-Präfixes gehören dazu.</p>
-    <h3 class="section-gap">Testen</h3>
-    <label class="field"><span>Fahrzeugzeile aus einem Bericht</span>
-      <textarea rows="3" id="parse-line" spellcheck="false" placeholder="FL NR#.ABC 02/45-01 0 / 1 / 5 / 6 / 2 12.03.25 10:09:41 …"></textarea></label>
-    <button type="button" class="btn btn-light btn-small section-gap" data-admin-action="parse-test">Erkennung prüfen</button>
-    ${found}
     ${saveButton()}`;
 }
 

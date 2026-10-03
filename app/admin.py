@@ -24,7 +24,8 @@ from pydantic import BaseModel, Field
 
 from app import auth, db, domain, fees, rbac, store, tenancy, theme
 from app.rbac import KEYWORDS, PLAN_RELEASE, ROLES_MANAGE, SETTINGS, USERS_VIEW, VG_FEES
-from app.tenant_config import TenantConfig, Vehicle
+from app.bks_common import PERSON_VEHICLE
+from app.tenant_config import UNIT_MARKER, TenantConfig, Vehicle, prefixes_of
 
 log = logging.getLogger("pdf2einsatz")
 router = APIRouter()
@@ -260,11 +261,16 @@ def _check_settings(s: SettingsIn):
         _invalid("Tag: Beginn und Ende als volle Stunden, Beginn vor Ende.")
     if s.numbering not in NUMBERINGS:
         _invalid("Nummerierung: aus dem Bericht oder nach Datum.")
-    if s.own_prefix and not re.fullmatch(r"\d\d/", s.own_prefix):
+    unit_marker = s.unit_marker.strip()
+    if unit_marker and not prefixes_of(unit_marker):
+        _invalid("Einheit im Bericht: wie in der Kopfzeile des Berichts, z. B. FW NR#.ABC 02.")
+    # Präfixe ergeben sich aus der Einheit; ohne Einheit bleiben die bisherigen (ältere Einrichtungen)
+    unit_prefix, own_prefix = prefixes_of(unit_marker) or (s.unit_prefix, s.own_prefix)
+    if own_prefix and not re.fullmatch(r"\d\d/", own_prefix):
         _invalid("Eigener Präfix: zwei Ziffern und Schrägstrich, z. B. 02/.")
     return TenantConfig(
         name=s.name.strip(), colors=colors, substitutes=substitutes, fleet=fleet,
-        unit_prefix=s.unit_prefix, own_prefix=s.own_prefix, unit_marker=s.unit_marker.strip(),
+        unit_prefix=unit_prefix, own_prefix=own_prefix, unit_marker=unit_marker,
         control_center=s.control_center.strip() or domain.CONTROL_CENTER,
         places=tuple((p.name.strip(), p.prefix.strip().lower()) for p in s.places), plan_places=tuple(s.plan_places),
         plan_min_level=s.plan_min_level, response_limits=tuple(limits), default_limit=s.default_limit,
@@ -469,19 +475,22 @@ def theme_check(c: Colors, a: tenancy.Access = Depends(access)):
 
 
 class ParseTest(BaseModel):
-    line: str
-    unit_prefix: str
-    own_prefix: str
+    line: str = Field(max_length=100_000)     # beliebiger Text aus einem Bericht
+    unit_marker: str = ""
 
 
 @router.post("/api/admin/parse-test")
 def parse_test(t: ParseTest, a: tenancy.Access = Depends(access)):
-    """Testfeld BKS-Kennung: wie wird eine Fahrzeugzeile aus dem Bericht erkannt?"""
-    from app import pdf_report
-    report = pdf_report.parse_report(t.line, "", "", "test.pdf", t.unit_prefix)
-    return {"vehicles": [{"name": v["name"], "call_sign": v["call_sign"],
-                          "own": bool(t.own_prefix) and v["name"].startswith(t.unit_prefix + t.own_prefix)}
-                         for v in report["vehicles"]]}
+    """Testfeld BKS-Kennung: Funkrufnamen und Einheiten in einem Text aus dem Bericht finden und zuordnen,
+    wie es die Einstellungen (noch ungespeichert) täten."""
+    unit_marker = t.unit_marker.strip()
+    unit_prefix, own_prefix = prefixes_of(unit_marker) or ("", "")
+    cfg = TenantConfig(name="", unit_prefix=unit_prefix, own_prefix=own_prefix, unit_marker=unit_marker)
+    names = dict.fromkeys(PERSON_VEHICLE.findall(t.line))
+    units = dict.fromkeys(m.group(0) for m in re.finditer(UNIT_MARKER.pattern + r"\b", t.line))
+    return {"vehicles": [{"name": n, "call_sign": cfg.block_of(n), "own": cfg.is_own(n),
+                          "description": domain.call_sign_text(n)} for n in names],
+            "units": [{"unit": u, "own": u == unit_marker} for u in units]}
 
 
 # ---------------------------------------------------------------- Logos

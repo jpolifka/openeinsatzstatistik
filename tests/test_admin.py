@@ -84,7 +84,7 @@ def test_settings_roundtrip_changes_config(world):
     ({"response_limits": [8, 10], "default_limit": 12}, "Standardgrenze"),
     ({"second_limit": 9}, "zweite Zeitgrenze"),
     ({"day_hours": [18, 6]}, "Beginn vor Ende"),
-    ({"own_prefix": "02"}, "Schrägstrich"),
+    ({"unit_marker": "NR#.BHÖ 02"}, "Kopfzeile"),
     ({"name": "   "}, "Namen der Wehr"),
 ])
 def test_invalid_settings_are_rejected(world, change, message):
@@ -98,9 +98,23 @@ def test_theme_check_and_parse_test(world):
     check = world.post("/api/admin/theme-check", json={"colors": {"brand": "#FFD700"}}).json()
     assert check["problems"] and check["palette"]["--brand"] == "#FFD700"
     line = "FL NR#.BHÖ 02/45-01 0 / 1 / 1 / 2 / 0 12.03.25 10:09:41 - - Ja - 12.03.25 10:48:21"
-    found = world.post("/api/admin/parse-test", json={"line": line, "unit_prefix": "FL NR#.BHÖ ",
-                                                      "own_prefix": "02/"}).json()["vehicles"]
-    assert found == [{"name": "FL NR#.BHÖ 02/45-01", "call_sign": "02/45", "own": True}]
+    found = world.post("/api/admin/parse-test", json={"line": line, "unit_marker": "FW NR#.BHÖ 02"}).json()
+    assert [(v["name"], v["call_sign"], v["own"]) for v in found["vehicles"]] == [("FL NR#.BHÖ 02/45-01", "02/45", True)]
+    # nur Funkrufnamen oder ganzer Berichtstext: Fahrzeuge der VG, fremde und die berichtende Einheit
+    text = "FW NR#.BHÖ 02 Musterstadt Alarmierung: …\nFL NR#.BHÖ 01/46-01\nRP WW 01/23-06\nFL NR#.BHÖ 01/46-01"
+    found = world.post("/api/admin/parse-test", json={"line": text, "unit_marker": "FW NR#.BHÖ 02"}).json()
+    assert [(v["name"], v["call_sign"], v["own"]) for v in found["vehicles"]] == \
+        [("FL NR#.BHÖ 01/46-01", "01/46", False), ("RP WW 01/23-06", None, False)]
+    assert found["units"] == [{"unit": "FW NR#.BHÖ 02", "own": True}]
+
+
+def test_unit_marker_sets_prefixes(world):
+    _as(world, "lead@example.org")
+    saved = world.put("/api/admin/wehr-a1/settings", json={**_settings(world), "unit_marker": " FW NR#.XYZ 05 ",
+                                                           "unit_prefix": "egal", "own_prefix": "egal"})
+    assert saved.status_code == 200, saved.text
+    assert (saved.json()["unit_marker"], saved.json()["unit_prefix"], saved.json()["own_prefix"]) == \
+        ("FW NR#.XYZ 05", "FL NR#.XYZ ", "05/")
 
 
 def test_logo_upload(world):
