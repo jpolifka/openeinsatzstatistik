@@ -467,6 +467,9 @@ def api_update_incident(key: str, update: IncidentUpdate, a: tenancy.Access = De
     with tenant.connection() as con:
         try:
             old_year = (store.load_incident(con, incident_id) or {}).get("year")
+            new_year = year_of(changes["started_at"]) if changes.get("started_at") else old_year
+            if by_date and new_year and new_year != old_year:
+                changes["number"] = store.next_number(con, new_year)   # vorläufig ans Ende des neuen Jahres
             store.update_incident(con, incident_id, changes, modified_by=a.email)
             if by_date:
                 for y in {old_year, store.load_incident(con, incident_id)["year"]} - {None}:
@@ -740,7 +743,7 @@ def _shared_with(r, tenant, a):
 def _preview_json(r, tenant, a):
     cfg = tenant.config.with_new_vehicles(report.new_fleet_vehicles(r), r.get("day"))
     with tenant.connection() as con:
-        incident, existing = report.preview(con, r)
+        incident, existing = report.preview(con, r, numbered=tenant.config.numbering != "by_date")
         result = incident_json(incident, store.LeaderNames(con), tenant, cfg=cfg)
     result["tenant_name"] = tenant.name
     result["new_vehicles"] = r.get("new_vehicles", [])

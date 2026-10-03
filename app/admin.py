@@ -70,7 +70,8 @@ def admin_overview(a: tenancy.Access = Depends(access)):
             vgs[t.vg_slug] = {"slug": t.vg_slug, "name": t.vg_name, "permissions": granted}
     return {"superadmin": a.superadmin,
             "tenants": [{"slug": t.slug, "name": t.name, "vg": t.vg_name, "vg_slug": t.vg_slug,
-                         "permissions": sorted(p for p in TENANT_ADMIN if t.can(p))} for t in tenants],
+                         "permissions": sorted(p for p in (*TENANT_ADMIN, PLAN_RELEASE) if t.can(p))}
+                        for t in tenants],
             "vgs": list(vgs.values()),
             "users": a.superadmin or any(t.can(USERS_VIEW) for t in a.tenants.values()) or
             any(USERS_VIEW in granted for granted in a.vg_permissions.values()),

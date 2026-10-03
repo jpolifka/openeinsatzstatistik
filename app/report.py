@@ -261,8 +261,9 @@ def to_incident(report, fields, people):
             "weekend_or_holiday": report["weekend_or_holiday"], "vehicles": vehicle_rows(report), "people": people}
 
 
-def preview(con, report):
-    """(einsatz, erfasster_einsatz_oder_None). Personen ohne Treffer sind mit new=True markiert."""
+def preview(con, report, numbered=True):
+    """(einsatz, erfasster_einsatz_oder_None). Personen ohne Treffer sind mit new=True markiert.
+    numbered=False (Nummerierung nach Datum): die Nr. des Berichts sagt nichts über erfasste Einsätze."""
     members = store.MemberDirectory(con)
     people = []
     for p in report["people"]:
@@ -271,7 +272,8 @@ def preview(con, report):
         people.append({"id": member_id, "name": name, "last_name": p["last_name"], "first_name": p["first_name"],
                        "role": p["role"], "vehicle": p["vehicle"], "new": member_id is None})
     incident = to_incident(report, to_fields(report), people)
-    existing_id = store.find_existing(con, incident["bks_report_id"], incident["year"], incident["number"])
+    existing_id = store.find_existing(con, incident["bks_report_id"], incident["year"],
+                                      incident["number"] if numbered else None)
     return incident, (store.load_incident(con, existing_id) if existing_id else None)
 
 

@@ -64,6 +64,21 @@ def test_numbering_by_date(make_client, monkeypatch):
     assert [i["number"] for i in client.get("/api/incidents?year=2025").json()["incidents"]] == [1]
 
 
+def test_by_date_moves_incident_to_other_year_and_preview_ignores_report_number(make_client, monkeypatch):
+    make_tenant("wehr-a1", cfg=dataclasses.replace(CFG, numbering="by_date"))
+    client = make_client()
+    with db.connection(tenancy.tenant_path("wehr-a1")) as con:
+        first = _incident(con, 1, "2025-02-01T10:00:00")
+        _incident(con, 1, "2026-03-01T10:00:00")
+        for n in range(2, 18):                                   # Nr. 17/2025 gibt es, gehört aber zu einem anderen Einsatz
+            _incident(con, n, f"2025-02-{n:02d}T12:00:00")
+    data = _read(client, monkeypatch, FULL)                     # Bericht Nr. 17/25
+    assert data["reports"][0]["existing"] is None
+    moved = client.put(f"/api/incidents/wehr-a1:{first}", json={"started_at": "2026-02-01T10:00"})
+    assert moved.status_code == 200 and (moved.json()["year"], moved.json()["number"]) == (2026, 1)
+    assert sorted(i["number"] for i in client.get("/api/incidents?year=2025").json()["incidents"]) == list(range(1, 17))
+
+
 @pytest.fixture
 def roles(make_client):
     _, tenant_id = make_tenant("wehr-a1")
