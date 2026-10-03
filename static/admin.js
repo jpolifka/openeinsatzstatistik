@@ -259,7 +259,7 @@ async function runAdminAction(button) {
       delete s.substitutes[button.dataset.sub];
       return rerender();
     case "add-place":
-      s.places.push({ name: "", prefix: "" });
+      s.places.push({ name: "" });
       return rerender();
     case "remove-place":
       s.plan_places = s.plan_places.filter((p) => p !== s.places[i].name);

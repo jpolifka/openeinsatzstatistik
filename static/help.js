@@ -177,7 +177,7 @@ const HELP_SECTIONS = [
       area: {
         title: "Einsatzgebiet",
         short: "Einsätze je Ort anhand des Anfangs des Ortsnamens.",
-        text: () => `Zuordnung nach dem Anfang des Ortsnamens${config.places.length ? ` (z. B. „${esc(config.places[0])}-…“ → ${esc(config.places[0])})` : ""}. Orte außerhalb der bekannten Liste erscheinen als „sonstige“.`,
+        text: () => `Zuordnung nach dem Ortsnamen, mit dem der Einsatzort beginnt${config.places.length ? ` (z. B. „${esc(config.places[0])}-…“ → ${esc(config.places[0])})` : ""}. Orte außerhalb der bekannten Liste erscheinen als „sonstige“.`,
       },
       participations: {
         title: "Einsätze und Beteiligungen (alle Wehren)",
@@ -268,7 +268,7 @@ const HELP_SECTIONS = [
       admin_places: {
         title: "Orte und Bedarfsplan",
         short: "Einsatzgebiete und Ausrückebereich des Feuerwehrbedarfsplans.",
-        text: "Ein Einsatz gehört zu dem Ort, dessen <b>Namensanfang</b> zum Ortsnamen im Bericht passt (Groß-/Kleinschreibung egal). Nur Orte mit Haken bei <b>Bedarfsplan</b> zählen für den Erreichungsgrad. Dazu kommen die Mindest-Alarmstufe, die Zeitgrenzen (mehrere möglich, z. B. 8 und 10 Minuten), die zweite Grenze für „Stärke nach … Min.“ und die Stunden, die als Tag gelten.",
+        text: "Ein Einsatz gehört zu dem Ort, mit dessen <b>Namen</b> der Einsatzort beginnt (z. B. „Musterstadt-Nord“ → Musterstadt, Groß-/Kleinschreibung egal). Nur Orte mit Haken bei <b>Bedarfsplan</b> zählen für den Erreichungsgrad. Dazu kommen die Mindest-Alarmstufe, die Zeitgrenzen (mehrere möglich, z. B. 8 und 10 Minuten), die zweite Grenze für „Stärke nach … Min.“ und die Stunden, die als Tag gelten.",
       },
       admin_keywords: {
         title: "Stichwortkatalog",

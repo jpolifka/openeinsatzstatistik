@@ -79,7 +79,7 @@ def test_settings_roundtrip_changes_config(world):
     ({"substitutes": {"01/23": "09/99"}}, "Block"),
     ({"substitutes": {"01/23": ["02/45"]}}, "Fahrzeug der Liste"),
     ({"fleet": [{"call_sign": "<img src=x onerror=alert(1)>"}]}, "Kurzname"),
-    ({"places": [{"name": "<img src=x onerror=alert(1)>", "prefix": "x"}]}, "Ortsnamen"),
+    ({"places": [{"name": "<img src=x onerror=alert(1)>"}]}, "Ortsnamen"),
     ({"plan_places": ["Nirgendwo"]}, "Ortsliste"),
     ({"response_limits": [8, 10], "default_limit": 12}, "Standardgrenze"),
     ({"second_limit": 9}, "zweite Zeitgrenze"),

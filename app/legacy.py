@@ -39,8 +39,7 @@ def rheinbrohl_config():
         own_prefix="02/",                     # Fahrzeuge des Löschzugs Rheinbrohl
         unit_marker="FW NR#.BHÖ 02",
         control_center="FL NR#.LIN",
-        places=(("Rheinbrohl", "rhein"), ("Arienheller", "arienh"), ("Hammerstein", "hammer"),
-                ("Ariendorf", "ariend"), ("Bad Hönningen", "bad hönn"), ("Leutesdorf", "leutes")),
+        places=("Rheinbrohl", "Arienheller", "Hammerstein", "Ariendorf", "Bad Hönningen", "Leutesdorf"),
         # Ausrückebereich laut Feuerwehrbedarfsplan Pos. 8.4
         plan_places=("Rheinbrohl", "Hammerstein", "Arienheller"),
     )

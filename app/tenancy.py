@@ -71,6 +71,8 @@ def load_config(con, name):
     kwargs = {key: values[key] for key in _SETTINGS if key in values}
     for key in _TUPLES & set(kwargs):
         kwargs[key] = tuple(tuple(v) if isinstance(v, list) else v for v in kwargs[key])
+    if "places" in kwargs:                     # früher (Name, Namensanfang)
+        kwargs["places"] = tuple(p[0] if isinstance(p, tuple) else p for p in kwargs["places"])
     fleet = tuple(Vehicle(r["call_sign"], r["label"], r["in_service_from"], r["in_service_until"], r["replaced_by"],
                           bool(r["in_plan_crew"]), r["name"])
                   for r in con.execute("SELECT * FROM fleet ORDER BY sort_order, call_sign"))

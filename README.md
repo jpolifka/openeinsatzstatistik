@@ -160,7 +160,7 @@ gesperrt. Geprüft wird im Backend, die Oberfläche blendet nur aus.
   Zählung im Bedarfsplan, Ersatzfahrzeuge. Neue eigene Fahrzeuge aus BKS-Berichten nimmt die App beim
   Übernehmen automatisch auf.
 - *BKS-Kennung*: Präfixe und Einheit, an denen die App eigene Fahrzeuge und Berichte erkennt, mit Testfeld.
-- *Orte & Bedarfsplan*: Orte mit Namensanfang, Ausrückebereich, Alarmstufe, Zeitgrenzen, Tagesstunden.
+- *Orte & Bedarfsplan*: Orte, Ausrückebereich, Alarmstufe, Zeitgrenzen, Tagesstunden.
 - *Stichworte*: Vorlage der AAO oder eigener Katalog – einzelne Stichworte anlegen, ändern, deaktivieren;
   Import aus CSV/Excel mit Vorschau.
 - *Benutzer*: E-Mail-Adressen Rollen zuordnen – nach der Verteilung der eigenen Rolle, nie sich selbst.

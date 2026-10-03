@@ -310,13 +310,12 @@ function placesSection() {
   const s = admin.settings;
   const rows = s.places.map((p, i) => `<tr>
     <td>${textInput(`places.${i}.name`, p.name, 'placeholder="Musterstadt"')}</td>
-    <td>${textInput(`places.${i}.prefix`, p.prefix, 'placeholder="muster" class="narrow"')}</td>
     <td class="center"><input type="checkbox" data-plan-place="${i}" ${s.plan_places.includes(p.name) ? "checked" : ""} aria-label="Bedarfsplan"></td>
     <td><button type="button" class="icon-button" data-admin-action="remove-place" data-index="${i}" aria-label="entfernen">✕</button></td>
   </tr>`).join("");
   const options = (values, current) => values.map((v) => `<option ${v === current ? "selected" : ""}>${v}</option>`).join("");
-  return `<p class="small muted">Das Einsatzgebiet wird über den Anfang des Ortsnamens zugeordnet. Nur Orte mit Haken zählen zum Ausrückebereich des Feuerwehrbedarfsplans.${helpButton("admin_places")}</p>
-    <div class="table-wrap"><table class="mini-table admin-table"><thead><tr><th>Ort</th><th>Namensanfang</th><th>Bedarfsplan</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+  return `<p class="small muted">Das Einsatzgebiet ist der Ort, mit dessen Namen der Einsatzort beginnt (z. B. „Musterstadt-Nord“ → Musterstadt). Nur Orte mit Haken zählen zum Ausrückebereich des Feuerwehrbedarfsplans.${helpButton("admin_places")}</p>
+    <div class="table-wrap"><table class="mini-table admin-table"><thead><tr><th>Ort</th><th>Bedarfsplan</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
     <button type="button" class="btn btn-light btn-small section-gap" data-admin-action="add-place">Ort hinzufügen</button>
     <h3 class="section-gap">Feuerwehrbedarfsplan</h3>
     <div class="form-grid">

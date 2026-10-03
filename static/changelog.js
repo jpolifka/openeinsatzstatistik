@@ -7,6 +7,7 @@ const CHANGELOG = [
   {
     date: "2026-10-03",
     items: [
+      "<b>Orte ohne Namensanfang:</b> Unter „Orte & Bedarfsplan“ genügt der Ortsname. Ein Einsatz gehört zu dem Ort, mit dessen Namen der Einsatzort beginnt (z. B. „Musterstadt-Nord“ → Musterstadt).",
       "<b>BKS-Kennung vereinfacht:</b> Es genügt die Einheit aus der Kopfzeile des Berichts (z. B. „FW NR#.ABC 02“); die Funkrufnamen der eigenen Fahrzeuge leitet die App daraus ab. Das Testfeld nimmt jetzt beliebigen Text aus einem Bericht, auch einzelne Funkrufnamen.",
       "<b>Gebührenordnung leichter finden:</b> In der Verwaltung stehen „Fahrzeuge der VG“ und „Gebührenordnung“ jetzt auch bei ausgewählter Wehr; ein Klick wechselt zur Wehrleitung ihrer VG.",
       "<b>Berichte prüfen:</b> Auch Stammdatensätze und Weiterleitungen werden erst nach Ihrer ausdrücklichen Bestätigung gespeichert. Schließen verwirft offene Vorschauen, nicht bereits bestätigte Berichte.",

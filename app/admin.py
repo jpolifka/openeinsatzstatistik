@@ -91,7 +91,6 @@ class VehicleIn(BaseModel):
 
 class PlaceIn(BaseModel):
     name: str
-    prefix: str
 
 
 class SettingsIn(BaseModel):
@@ -142,7 +141,7 @@ def _settings_json(tenant, cfg):
         **{key: getattr(cfg, key) for key in ("unit_prefix", "own_prefix", "unit_marker", "control_center",
                                                "plan_places", "plan_min_level", "response_limits", "default_limit",
                                                "second_limit", "day_hours", "numbering", "response_plan_public")},
-        "places": [{"name": n, "prefix": p} for n, p in cfg.places],
+        "places": [{"name": n} for n in cfg.places],
         "known_vehicles": [{"name": n, "description": domain.call_sign_text(n), "types": types(n),
                             "label": fees.suggest_type(types(n), fee_types)} for n in _known_vehicles(tenant, cfg)],
         "fee_types": fee_types,
@@ -244,9 +243,9 @@ def _check_settings(s: SettingsIn):
             _invalid(f"Ersatzfahrzeug {sub}: der Block {block} muss ein Fahrzeug der Liste sein.")
         substitutes[sub] = block
     names = [p.name.strip() for p in s.places]
-    if any(not p.name.strip() or not p.prefix.strip() for p in s.places) or len(set(names)) != len(names):
-        _invalid("Jeder Ort braucht einen eindeutigen Namen und einen Namensanfang.")
-    if any(UNSAFE.search(p.name + p.prefix) for p in s.places):
+    if any(not name for name in names) or len({n.lower() for n in names}) != len(names):
+        _invalid("Jeder Ort braucht einen eindeutigen Namen.")
+    if any(UNSAFE.search(name) for name in names):
         _invalid("Ortsnamen ohne die Zeichen < > \" &.")
     if not set(s.plan_places) <= set(names):
         _invalid("Bedarfsplan-Orte müssen in der Ortsliste stehen.")
@@ -272,7 +271,7 @@ def _check_settings(s: SettingsIn):
         name=s.name.strip(), colors=colors, substitutes=substitutes, fleet=fleet,
         unit_prefix=unit_prefix, own_prefix=own_prefix, unit_marker=unit_marker,
         control_center=s.control_center.strip() or domain.CONTROL_CENTER,
-        places=tuple((p.name.strip(), p.prefix.strip().lower()) for p in s.places), plan_places=tuple(s.plan_places),
+        places=tuple(names), plan_places=tuple(s.plan_places),
         plan_min_level=s.plan_min_level, response_limits=tuple(limits), default_limit=s.default_limit,
         second_limit=s.second_limit, day_hours=tuple(s.day_hours), numbering=s.numbering,
         response_plan_public=s.response_plan_public)
