@@ -39,8 +39,7 @@ def rheinbrohl_config():
         own_prefix="02/",                     # Fahrzeuge des Löschzugs Rheinbrohl
         unit_marker="FW NR#.BHÖ 02",
         control_center="FL NR#.LIN",
-        places=(("Rheinbrohl", "rhein"), ("Arienheller", "arienh"), ("Hammerstein", "hammer"),
-                ("Ariendorf", "ariend"), ("Bad Hönningen", "bad hönn"), ("Leutesdorf", "leutes")),
+        places=("Rheinbrohl", "Arienheller", "Hammerstein", "Ariendorf", "Bad Hönningen", "Leutesdorf"),
         # Ausrückebereich laut Feuerwehrbedarfsplan Pos. 8.4
         plan_places=("Rheinbrohl", "Hammerstein", "Arienheller"),
     )
@@ -137,6 +136,7 @@ def migrate_single_install(data_dir):
     db.setup(staging, db.CENTRAL_MIGRATIONS)
     with db.connection(staging) as con:
         vg_id = tenancy.create_vg(con, VG_SLUG, VG_NAME)
+        con.execute("UPDATE vg SET defaults_lifted = 0 WHERE id = ?", (vg_id,))   # Werte der Wehr übernehmen
         tenant_id = con.execute("INSERT INTO tenant (slug, name, vg_id) VALUES (?, ?, ?)",
                                 (TENANT_SLUG, cfg.name, vg_id)).lastrowid
         emails = legacy_emails()

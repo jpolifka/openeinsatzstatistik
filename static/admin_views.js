@@ -1,14 +1,74 @@
 "use strict";
 
-// Darstellung der Verwaltungsbereiche; Zustand und Aktionen liegen in admin.js.
+// Darstellung der Verwaltungsbereiche; Zustand und Aktionen liegen in admin.js. Die Einstellungsbereiche gibt es
+// zweimal: für eine Wehr (mit Kennzeichen, wo sie von der VG abweicht) und für die Wehrleitung (vg…Section:
+// Vorgaben der VG und alle Wehren auf einmal).
 
-// ------------------------------------------------------------ Wehr: Name, Farben, Logos
+// ------------------------------------------------------------ Vererbung: von der VG / abweichend
+const INHERITED_LABELS = { bks_code: "Kennung der VG", control_center: "FEZ-Kennung", places: "Orte",
+  plan_min_level: "Alarmstufe", response_limits: "Zeitgrenzen", default_limit: "Standardgrenze",
+  second_limit: "zweite Grenze", day_hours: "Tag", numbering: "Nummerierung", colors: "Farben" };
+
+const sameValue = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+
+// Wert einer Vorgabe in den Einstellungen der Wehr, vergleichbar mit inherited
+function ownValue(key) {
+  const s = admin.settings;
+  if (key === "places") return s.places.map((p) => p.name);
+  if (key === "colors") return cleanColors();
+  return s[key] ?? null;
+}
+
+function inheritedValueText(key, value) {
+  if (value === null || value === undefined || (Array.isArray(value) && !value.length)) return "–";
+  if (key === "day_hours") return `${value[0]}–${value[1]} Uhr`;
+  if (key === "numbering") return value === "by_date" ? "nach Datum" : "aus dem Bericht";
+  if (key === "colors") return value.brand || "Standard";
+  if (key === "response_limits") return `${value.join(", ")} Min.`;
+  if (["default_limit", "second_limit"].includes(key)) return `${value} Min.`;
+  return Array.isArray(value) ? value.join(", ") : String(value);
+}
+
+// Kennzeichen hinter einem Feld der Wehr: „von der VG“ oder „abweichend“ mit „VG-Wert übernehmen“
+function inheritNote(...keys) {
+  const s = admin.settings;
+  const own = keys.filter((key) => !sameValue(ownValue(key), s.inherited[key]));
+  if (!own.length) return `<span class="inherit-badge" title="Vorgabe der ${esc(s.vg.name)}">von der VG</span>`;
+  return `<span class="inherit-badge own" title="VG: ${esc(own.map((k) => `${INHERITED_LABELS[k]} ${inheritedValueText(k, s.inherited[k])}`).join(" · "))}">abweichend von der VG</span>
+    ${own.map((key) => `<button type="button" class="btn btn-light btn-small" data-admin-action="inherit" data-key="${key}">${own.length > 1 ? `${INHERITED_LABELS[key]}: ` : ""}VG-Wert übernehmen</button>`).join("")}`;
+}
+
+// Abweichung aufheben: Wert der VG eintragen (gespeichert wird beim Speichern; gleich der VG = keine Abweichung)
+function takeInherited(key) {
+  const s = admin.settings, value = structuredClone(s.inherited[key]);
+  if (key === "places") {
+    s.places = value.map((name) => ({ name }));
+    s.plan_places = s.plan_places.filter((p) => value.includes(p));
+  } else if (key === "bks_code") {
+    setBks("code", value || "");
+  } else if (key === "colors") {
+    s.colors = { brand: "", brand_dark: "", ...value };
+    admin.check = null;
+    scheduleThemeCheck();
+  } else {
+    s[key] = value;
+  }
+}
+
+// Abweichungen der Wehren von den Vorgaben (VG-Ansicht), z. B. „Wehr A: Tag 8–20 Uhr“
+function overridesNote(...keys) {
+  const rows = admin.vgSettings.tenants.flatMap((t) => keys.filter((k) => k in t.overrides)
+    .map((k) => `<li><b>${esc(t.name)}</b>: ${INHERITED_LABELS[k]} ${esc(inheritedValueText(k, t.overrides[k]))}</li>`));
+  return rows.length ? `<div class="message message-info section-gap">Abweichend von der Vorgabe (ändert die Wehr selbst):<ul class="plain-list">${rows.join("")}</ul></div>` : "";
+}
+
+// ------------------------------------------------------------ Allgemein: Name, Farben, Logos
 const hexToRgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
 const rgbToHex = (rgb) => "#" + rgb.map((c) => Math.max(0, Math.min(255, Math.round(c || 0))).toString(16).padStart(2, "0")).join("").toUpperCase();
 const isHex = (value) => /^#[0-9A-Fa-f]{6}$/.test(value);
 
 function colorField(key, label, hint) {
-  const value = admin.settings.colors[key] || "";
+  const value = adminData().colors[key] || "";
   const rgb = value ? hexToRgb(value) : ["", "", ""];
   return `<div class="color-field">
     <span class="field-label">${label}</span>
@@ -22,6 +82,13 @@ function colorField(key, label, hint) {
     <p class="small muted">${hint}</p>
   </div>`;
 }
+
+const colorFields = () => `<div class="admin-colors">
+      <div>${colorField("brand", "Hauptfarbe", "Kopfzeile, Knöpfe, Überschriften und Diagramme. Weiße Schrift muss darauf lesbar sein.")}
+        ${colorField("brand_dark", "Dunkle Farbe (optional)", "Hervorgehobene Kacheln und Verlauf der Kopfzeile. Leer = aus der Hauptfarbe abgeleitet.")}
+        <div id="theme-problems"></div></div>
+      ${themePreview()}
+    </div>`;
 
 function unitSection() {
   const s = admin.settings, assets = admin.overview.assets;
@@ -41,22 +108,27 @@ function unitSection() {
       Farben und Logos von ${esc(s.name)} erscheinen, wenn diese Wehr ausgewählt ist.
       <button type="button" class="btn btn-light btn-small" data-admin-action="select-tenant">${esc(s.name)} auswählen</button></div>` : "";
   return `${elsewhere}<div class="form-grid">${adminField("Name der Wehr", textInput("name", s.name, 'maxlength="80"'), "span-4")}</div>
-    <h3 class="section-gap">Farben${helpButton("admin_colors")}</h3>
-    <div class="admin-colors">
-      <div>${colorField("brand", "Hauptfarbe", "Kopfzeile, Knöpfe, Überschriften und Diagramme. Weiße Schrift muss darauf lesbar sein.")}
-        ${colorField("brand_dark", "Dunkle Farbe (optional)", "Hervorgehobene Kacheln und Verlauf der Kopfzeile. Leer = aus der Hauptfarbe abgeleitet.")}
-        <div id="theme-problems"></div></div>
-      ${themePreview()}
-    </div>
+    <h3 class="section-gap">Farben${helpButton("admin_colors")} ${inheritNote("colors")}</h3>
+    ${colorFields()}
     <h3 class="section-gap">Logos${helpButton("admin_logos")}</h3>
     <p class="small muted">PNG, JPEG oder WebP, höchstens 512 KB. Wird sofort gespeichert.</p>
     <div class="logo-slots">${logos}</div>
     ${saveButton()}`;
 }
 
+function vgUnitSection() {
+  const d = admin.vgSettings;
+  return `<p class="small muted">Vorgaben der ${esc(d.vg.name)} für alle ihre Wehren. Eine Wehr kann bei sich abweichen; ihren Namen und ihre Logos pflegt jede Wehr selbst (oben die Wehr auswählen).${helpButton("admin_vg_defaults")}</p>
+    <h3 class="section-gap">Farben${helpButton("admin_colors")}</h3>
+    ${colorFields()}
+    ${overridesNote("colors")}
+    ${saveButton()}`;
+}
+
 function themePreview() {
+  const d = adminData();
   return `<div class="theme-preview" id="theme-preview" aria-label="Vorschau der Farben">
-    <div class="preview-bar"><span>${esc(admin.settings.name)}</span><b>Auswertung</b></div>
+    <div class="preview-bar"><span>${esc(d.name || d.vg?.name || "")}</span><b>Auswertung</b></div>
     <div class="preview-content">
       <div class="preview-kpi"><small>Einsätze</small><b>55</b></div>
       <div class="preview-chart"><span class="day" style="height:70%"></span><span class="night" style="height:45%"></span>
@@ -80,12 +152,12 @@ function scheduleThemeCheck() {
   }, 250);
 }
 
-const cleanColors = () => Object.fromEntries(Object.entries(admin.settings.colors).filter(([, v]) => v));
+const cleanColors = () => Object.fromEntries(Object.entries(adminData()?.colors || {}).filter(([, v]) => v));
 
 function updateThemePreview() {
   const preview = $("#theme-preview");
   if (!preview) return;
-  const palette = admin.check ? admin.check.palette : admin.settings.palette;
+  const palette = admin.check ? admin.check.palette : adminData().palette;
   for (const name of [...preview.style]) if (name.startsWith("--")) preview.style.removeProperty(name);
   for (const [name, value] of Object.entries(palette || {})) preview.style.setProperty(name, value);
   const problems = admin.check?.problems || [];
@@ -93,7 +165,7 @@ function updateThemePreview() {
 }
 
 function setColor(key, hex, source) {
-  admin.settings.colors[key] = hex;
+  adminData().colors[key] = hex;
   const valid = isHex(hex);
   if (source !== "picker" && valid) $(`[data-color-picker="${key}"]`).value = hex;
   if (source !== "hex") $(`[data-color-hex="${key}"]`).value = hex;
@@ -106,149 +178,179 @@ function setColor(key, hex, source) {
 // ------------------------------------------------------------ Fahrzeuge
 // Fahrzeug in Auswahllisten: Kurzname (Block), bei neuen Fahrzeugen bis zum Speichern der Funkrufname
 const vehicleKey = (v) => v.call_sign || v.name;
-const knownVehicle = (name) => admin.settings.known_vehicles.find((k) => k.name === name);
+const newVehicle = (fields = {}) => ({ call_sign: "", name: "", suggested_name: "", types: [], label: "", in_service_from: "",
+  in_service_until: "", replaced_by: "", in_plan_crew: true, incidents: 0, ...fields });
+
+// Funkrufnamen zur Auswahl: Wehr aus ihren Berichten; VG alle Fahrzeuge der Wehren und die noch nicht zugeordneten
+function knownVehicles() {
+  if (!admin.vg) return admin.settings.known_vehicles;
+  const f = admin.vgFleet;
+  const listed = f.tenants.flatMap((t) => t.fleet).map((v) => ({ name: v.name || v.suggested_name, description: v.description,
+    types: v.types, label: v.label }));
+  return [...listed, ...f.unassigned].filter((k) => k.name);
+}
+const knownVehicle = (name) => knownVehicles().find((k) => k.name === name);
 
 // Fahrzeugtyp vergleichen wie fees._type_key (ohne Leerzeichen und Satzzeichen)
 const typeKey = (text) => (text || "").replace(/[\s\-./]/g, "").toLowerCase();
 
+// Alle Fahrzeuglisten der Ansicht: die der Wehr bzw. die aller Wehren der VG
+const allFleets = () => admin.vg ? admin.vgFleet.tenants.map((t) => t.fleet) : [admin.settings.fleet];
+
 // Funkrufname, den ein anderer Eintrag schon hat (oder als Vorschlag für seinen alten Kurznamen)
 function takenBy(v) {
   if (!v.name) return null;
-  return admin.settings.fleet.find((x) => x !== v && (x.name === v.name || (!x.name && x.suggested_name === v.name)));
+  return allFleets().flat().find((x) => x !== v && (x.name === v.name || (!x.name && x.suggested_name === v.name)));
 }
 
 // Funkrufname mit Auflösung (Kennung, Standort, Fahrzeugart) und Block der Einsatzübersicht
-function callSignCell(v, i) {
-  const s = admin.settings;
+function callSignCell(v, i, path, id) {
   const known = knownVehicle(v.name);
   const other = takenBy(v);
   const block = v.call_sign ? `Block ${esc(v.call_sign)}` : "Block wird beim Speichern vergeben";
-  const hint = other ? `<span class="missing-name">Steht schon in der Liste (${esc(other.call_sign || other.name)})${other.name ? "" : " – bitte dort eintragen"}</span>`
+  const hint = other ? `<span class="missing-name">Steht schon in einer Liste (${esc(other.call_sign || other.name)})${other.name ? "" : " – bitte dort eintragen"}</span>`
     : v.name ? [block, known && esc(known.description)].filter(Boolean).join(" · ")
     : v.call_sign ? `<span class="missing-name">Funkrufnamen wie im BKS-Bericht eintragen (bisher nur ${esc(v.call_sign)})</span>`
     : "Funkrufnamen auswählen oder eintragen";
-  // Zur Auswahl nur Fahrzeuge, die noch nicht in der Liste stehen; der Vorschlag für diesen Eintrag zuerst
-  const used = new Set(s.fleet.filter((x) => x !== v).flatMap((x) => [x.name, x.name ? "" : x.suggested_name]).filter(Boolean));
-  const options = [...new Set([v.suggested_name, ...s.known_vehicles.map((k) => k.name)].filter((n) => n && !used.has(n)))];
+  // Zur Auswahl nur Fahrzeuge, die noch nicht in einer Liste stehen; der Vorschlag für diesen Eintrag zuerst
+  const used = new Set(allFleets().flat().filter((x) => x !== v).flatMap((x) => [x.name, x.name ? "" : x.suggested_name]).filter(Boolean));
+  const options = [...new Set([v.suggested_name, ...knownVehicles().map((k) => k.name)].filter((n) => n && !used.has(n)))];
   const placeholder = esc(v.suggested_name || "z. B. FL NR#.ABC 02/45-01");
-  return `${textInput(`fleet.${i}.name`, v.name, `list="vehicles-${i}" placeholder="${placeholder}" spellcheck="false" class="wide"`)}
-    <datalist id="vehicles-${i}">${options.map((n) => `<option value="${esc(n)}">${esc(knownVehicle(n)?.description || "")}</option>`).join("")}</datalist>
+  return `${textInput(`${path}.${i}.name`, v.name, `list="vehicles-${id}${i}" placeholder="${placeholder}" spellcheck="false" class="wide"`)}
+    <datalist id="vehicles-${id}${i}">${options.map((n) => `<option value="${esc(n)}">${esc(knownVehicle(n)?.description || "")}</option>`).join("")}</datalist>
     <div class="small muted">${hint}</div>`;
 }
 
 // Fahrzeugtyp: Auswahl aus den Typen der Kennzahl (Funkrufnamenverzeichnis) und der Gebührenordnung
-function vehicleTypeCell(v, i) {
-  const s = admin.settings;
+function vehicleTypeCell(v, i, path, id) {
+  const feeTypes = adminData().fee_types;
   const types = knownVehicle(v.name)?.types || v.types || [];
-  const fee = new Set(s.fee_types.map(typeKey));
-  const options = [...new Set([...types, ...s.fee_types])];
+  const fee = new Set(feeTypes.map(typeKey));
+  const options = [...new Set([...types, ...feeTypes])];
   let hint = "";
   if (!v.label && types.length > 1) hint = `laut Kennzahl: ${types.map(esc).join(" / ")}`;
-  else if (v.label && s.fee_types.length && !fee.has(typeKey(v.label))) hint = '<span class="missing-name">nicht in der Gebührenordnung</span>';
-  return `${textInput(`fleet.${i}.label`, v.label, `list="types-${i}" placeholder="${esc(types[0] || "z. B. HLF 20")}"`)}
-    <datalist id="types-${i}">${options.map((t) => `<option value="${esc(t)}">${types.includes(t) ? "laut Funkrufname" : "Gebührenordnung"}</option>`).join("")}</datalist>
+  else if (v.label && feeTypes.length && !fee.has(typeKey(v.label))) hint = '<span class="missing-name">nicht in der Gebührenordnung</span>';
+  return `${textInput(`${path}.${i}.label`, v.label, `list="types-${id}${i}" placeholder="${esc(types[0] || "z. B. HLF 20")}"`)}
+    <datalist id="types-${id}${i}">${options.map((t) => `<option value="${esc(t)}">${types.includes(t) ? "laut Funkrufname" : "Gebührenordnung"}</option>`).join("")}</datalist>
     ${hint ? `<div class="small muted">${hint}</div>` : ""}`;
 }
 
+// Zeilen einer Fahrzeugliste; path ist ihr Pfad im Datensatz (fleet bzw. tenants.<n>.fleet), tenant die Wehr in der VG
+function fleetRows(fleet, path, id, tenant = null) {
+  const others = (v) => fleet.filter((x) => vehicleKey(x) && x !== v);
+  const tenants = admin.vg ? admin.vgFleet.tenants : [];
+  return fleet.map((v, i) => `<tr>
+    <td class="order"><button type="button" class="icon-button" data-admin-action="move-vehicle" data-list="${path}" data-index="${i}" data-step="-1" ${i ? "" : "disabled"} aria-label="nach oben">↑</button><button type="button" class="icon-button" data-admin-action="move-vehicle" data-list="${path}" data-index="${i}" data-step="1" ${i < fleet.length - 1 ? "" : "disabled"} aria-label="nach unten">↓</button></td>
+    <td>${callSignCell(v, i, path, id)}</td>
+    ${tenant === null ? "" : `<td><select class="fleet-tenant" data-fleet-tenant="${tenant}:${i}" aria-label="Wehr">${tenants.map((t, j) =>
+      `<option value="${j}" ${j === tenant ? "selected" : ""}>${esc(t.name)}</option>`).join("")}<option value="">keiner Wehr</option></select></td>`}
+    <td>${vehicleTypeCell(v, i, path, id)}</td>
+    <td><input type="date" data-bind="${path}.${i}.in_service_from" value="${esc(v.in_service_from || "")}" aria-label="im Dienst ab"></td>
+    <td><input type="date" data-bind="${path}.${i}.in_service_until" value="${esc(v.in_service_until || "")}" aria-label="außer Dienst ab"></td>
+    <td><select data-bind="${path}.${i}.replaced_by" aria-label="ersetzt durch"><option value="">–</option>${others(v).map((x) =>
+      `<option value="${esc(vehicleKey(x))}" ${vehicleKey(x) === v.replaced_by ? "selected" : ""}>${esc(x.call_sign || x.name)}</option>`).join("")}</select></td>
+    <td class="center"><input type="checkbox" data-bind="${path}.${i}.in_plan_crew" ${v.in_plan_crew ? "checked" : ""} aria-label="zählt zur Gesamtstärke"></td>
+    <td class="right">${v.incidents || ""}</td>
+    <td><button type="button" class="icon-button" data-admin-action="remove-vehicle" data-list="${path}" data-index="${i}" aria-label="entfernen">✕</button></td>
+  </tr>`).join("");
+}
+
+const fleetHead = (withTenant) => `<thead><tr><th></th><th>Funkrufname</th>${withTenant ? "<th>Wehr</th>" : ""}<th>Fahrzeugtyp</th><th>im Dienst ab</th><th>außer Dienst ab</th><th>ersetzt durch</th><th>Bedarfsplan</th><th class="right">Einsätze</th><th></th></tr></thead>`;
+
+// Ersatzfahrzeuge einer Fahrzeugliste: werden im Block eines Stammfahrzeugs geführt
+function substituteRows(substitutes, fleet, subsPath, listPath) {
+  return Object.entries(substitutes).map(([sub, block], i) => `<div class="inline-row">
+    <input type="text" data-substitute="${i}" data-subs="${subsPath}" value="${esc(sub)}" list="known-vehicles" placeholder="z. B. FL NR#.ABC 01/23-01" spellcheck="false" class="wide" aria-label="Ersatzfahrzeug (Funkrufname)">
+    <span>wird geführt im Block</span>
+    <select data-substitute-block="${i}" data-subs="${subsPath}">${fleet.map((v) => `<option value="${esc(vehicleKey(v))}" ${vehicleKey(v) === block ? "selected" : ""}>${esc(v.call_sign || v.name)}</option>`).join("")}</select>
+    <button type="button" class="icon-button" data-admin-action="remove-substitute" data-subs="${subsPath}" data-sub="${esc(sub)}" aria-label="entfernen">✕</button></div>`).join("")
+    + `<button type="button" class="btn btn-light btn-small" data-admin-action="add-substitute" data-subs="${subsPath}" data-list="${listPath}" ${fleet.length ? "" : "disabled"}>Ersatzfahrzeug hinzufügen</button>`;
+}
+
+const unusedNote = (unused) => {
+  const entries = Object.entries(unused || {});
+  return entries.length ? `<div class="message message-info section-gap">Daten zu Fahrzeugen, die nicht (mehr) in der Liste stehen und daher nicht ausgewertet werden: ${entries.map(([cs, n]) => `${esc(cs)} (${n} Einsätze)`).join(", ")}.</div>` : "";
+};
+
+const knownDatalist = () => `<datalist id="known-vehicles">${knownVehicles().map((k) =>
+  `<option value="${esc(k.name)}">${esc(k.description || "")}</option>`).join("")}</datalist>`;
+
 function fleetSection() {
   const s = admin.settings;
-  const others = (v) => s.fleet.filter((x) => vehicleKey(x) && x !== v);
-  const rows = s.fleet.map((v, i) => `<tr>
-    <td class="order"><button type="button" class="icon-button" data-admin-action="move-vehicle" data-index="${i}" data-step="-1" ${i ? "" : "disabled"} aria-label="nach oben">↑</button><button type="button" class="icon-button" data-admin-action="move-vehicle" data-index="${i}" data-step="1" ${i < s.fleet.length - 1 ? "" : "disabled"} aria-label="nach unten">↓</button></td>
-    <td>${callSignCell(v, i)}</td>
-    <td>${vehicleTypeCell(v, i)}</td>
-    <td><input type="date" data-bind="fleet.${i}.in_service_from" value="${esc(v.in_service_from || "")}"></td>
-    <td><input type="date" data-bind="fleet.${i}.in_service_until" value="${esc(v.in_service_until || "")}"></td>
-    <td><select data-bind="fleet.${i}.replaced_by"><option value="">–</option>${others(v).map((x) =>
-      `<option value="${esc(vehicleKey(x))}" ${vehicleKey(x) === v.replaced_by ? "selected" : ""}>${esc(x.call_sign || x.name)}</option>`).join("")}</select></td>
-    <td class="center"><input type="checkbox" data-bind="fleet.${i}.in_plan_crew" ${v.in_plan_crew ? "checked" : ""} aria-label="zählt zur Gesamtstärke"></td>
-    <td class="right">${v.incidents || ""}</td>
-    <td><button type="button" class="icon-button" data-admin-action="remove-vehicle" data-index="${i}" aria-label="entfernen">✕</button></td>
-  </tr>`).join("");
-  const unused = Object.entries(s.unused_data);
-  const substitutes = Object.entries(s.substitutes).map(([sub, block], i) => `<div class="inline-row">
-    <input type="text" data-substitute="${i}" value="${esc(sub)}" list="known-vehicles" placeholder="z. B. FL NR#.ABC 01/23-01" spellcheck="false" class="wide" aria-label="Ersatzfahrzeug (Funkrufname)">
-    <span>wird geführt im Block</span>
-    <select data-substitute-block="${i}">${s.fleet.map((v) => `<option value="${esc(vehicleKey(v))}" ${vehicleKey(v) === block ? "selected" : ""}>${esc(v.call_sign || v.name)}</option>`).join("")}</select>
-    <button type="button" class="icon-button" data-admin-action="remove-substitute" data-sub="${esc(sub)}" aria-label="entfernen">✕</button></div>`).join("");
-  const datalist = `<datalist id="known-vehicles">${s.known_vehicles.map((k) =>
-    `<option value="${esc(k.name)}">${esc(k.description)}</option>`).join("")}</datalist>`;
   const emptyRow = s.fleet.some((v) => !v.name && !v.call_sign);
-  return `<p class="small muted">Reihenfolge wie in der Einsatzübersicht. Funkrufname genau wie im BKS-Bericht – zur Auswahl stehen die Fahrzeuge aus den bisher eingelesenen Berichten (<a href="${esc(s.call_sign_directory)}" target="_blank" rel="noopener">Funkrufnamenverzeichnis RLP</a>). Neue eigene Fahrzeuge aus BKS-Berichten werden beim Übernehmen automatisch hinten angefügt (im Dienst ab Einsatztag).${helpButton("admin_fleet")}</p>
-    ${datalist}
-    <div class="table-wrap"><table class="mini-table admin-table"><thead><tr><th></th><th>Funkrufname</th><th>Fahrzeugtyp</th><th>im Dienst ab</th><th>außer Dienst ab</th><th>ersetzt durch</th><th>Bedarfsplan</th><th class="right">Einsätze</th><th></th></tr></thead>
-    <tbody>${rows}</tbody></table></div>
-    <button type="button" class="btn btn-light btn-small section-gap" data-admin-action="add-vehicle" ${emptyRow ? 'disabled title="Erst den Funkrufnamen des neuen Fahrzeugs eintragen"' : ""}>Fahrzeug hinzufügen</button>
-    ${unused.length ? `<div class="message message-info section-gap">Daten zu Fahrzeugen, die nicht (mehr) in der Liste stehen und daher nicht ausgewertet werden: ${unused.map(([cs, n]) => `${esc(cs)} (${n} Einsätze)`).join(", ")}.</div>` : ""}
+  const vg = adminTenantVg();
+  return `<p class="small muted">Reihenfolge wie in der Einsatzübersicht. Funkrufname genau wie im BKS-Bericht – zur Auswahl stehen die Fahrzeuge aus den bisher eingelesenen Berichten (<a href="${esc(s.call_sign_directory)}" target="_blank" rel="noopener">Funkrufnamenverzeichnis RLP</a>). Neue eigene Fahrzeuge aus BKS-Berichten werden beim Übernehmen automatisch hinten angefügt (im Dienst ab Einsatztag).${vg ? ` Alle Fahrzeuge der VG auf einmal: oben „Wehrleitung · ${esc(vg.name)}“ wählen.` : ""}${helpButton("admin_fleet")}</p>
+    ${knownDatalist()}
+    <div class="table-wrap"><table class="mini-table admin-table">${fleetHead(false)}
+    <tbody>${fleetRows(s.fleet, "fleet", "")}</tbody></table></div>
+    <button type="button" class="btn btn-light btn-small section-gap" data-admin-action="add-vehicle" data-list="fleet" ${emptyRow ? 'disabled title="Erst den Funkrufnamen des neuen Fahrzeugs eintragen"' : ""}>Fahrzeug hinzufügen</button>
+    ${unusedNote(s.unused_data)}
     <h3 class="section-gap">Ersatzfahrzeuge</h3>
     <p class="small muted">Fährt ein Ersatzfahrzeug mit eigener Besatzung (Werkstatt), wird es im Block eines Stammfahrzeugs geführt.</p>
-    ${substitutes}
-    <button type="button" class="btn btn-light btn-small" data-admin-action="add-substitute" ${s.fleet.length ? "" : "disabled"}>Ersatzfahrzeug hinzufügen</button>
+    ${substituteRows(s.substitutes, s.fleet, "substitutes", "fleet")}
     ${saveButton()}`;
 }
 
-// ------------------------------------------------------------ Wehrleitung: Fahrzeuge der VG
-// Auswahl der Wehr für ein Fahrzeug; data-* trägt, was das Backend zum Verschieben braucht
-function vehicleTenantSelect(name, source = "", callSign = "") {
-  const { tenants } = admin.vgVehicles;
-  return `<select data-move-vehicle data-name="${esc(name)}" data-source="${esc(source)}" data-call-sign="${esc(callSign)}" aria-label="Wehr von ${esc(name)}">
-    <option value="">${source ? "keiner Wehr (aus der Liste nehmen)" : "– keiner Wehr –"}</option>
-    ${tenants.map((t) => `<option value="${esc(t.slug)}" ${t.slug === source ? "selected" : ""}>${esc(t.name)}</option>`).join("")}</select>`;
-}
-
-function vgVehiclesSection() {
-  const { tenants, vehicles, unassigned, fee_types } = admin.vgVehicles;
-  const fee = new Set(fee_types.map(typeKey));
-  const typeCell = (label) => label ? `${esc(label)}${fee_types.length && !fee.has(typeKey(label)) ? ' <span class="missing-name">nicht in der Gebührenordnung</span>' : ""}`
-    : '<span class="muted">–</span>';
-  const assigned = tenants.map((t) => {
-    const rows = vehicles.filter((v) => v.tenant === t.slug).map((v) => `<tr>
-      <td><b>${esc(v.name || v.suggested_name || v.call_sign)}</b>${v.name ? "" : ' <span class="missing-name">Funkrufname noch nicht bestätigt</span>'}
-        <div class="small muted">Block ${esc(v.call_sign)}${v.description ? ` · ${esc(v.description)}` : ""}</div></td>
-      <td>${typeCell(v.label)}</td>
-      <td class="right">${v.incidents || ""}</td>
-      <td>${v.name || v.suggested_name ? vehicleTenantSelect(v.name || v.suggested_name, t.slug, v.call_sign)
-        : '<span class="small muted">erst den Funkrufnamen bei der Wehr eintragen</span>'}</td>
-      <td><button type="button" class="btn btn-light btn-small" data-admin-action="edit-fleet" data-tenant="${esc(t.slug)}">Bearbeiten</button></td>
-    </tr>`).join("");
-    return `<tr class="group-row"><th colspan="5">${esc(t.name)}</th></tr>${rows || '<tr><td colspan="5" class="muted">Noch keine Fahrzeuge.</td></tr>'}`;
+// ------------------------------------------------------------ Wehrleitung: Fahrzeuge aller Wehren der VG
+function vgFleetSection() {
+  const f = admin.vgFleet;
+  const typeCell = (label) => label ? esc(label) : '<span class="muted">–</span>';
+  const groups = f.tenants.map((t, j) => {
+    const path = `tenants.${j}.fleet`;
+    const emptyRow = t.fleet.some((v) => !v.name && !v.call_sign);
+    return `<tr class="group-row"><th colspan="10">${esc(t.name)}</th></tr>
+      ${fleetRows(t.fleet, path, `${j}-`, j) || '<tr><td colspan="10" class="muted">Noch keine Fahrzeuge.</td></tr>'}
+      <tr><td></td><td colspan="9"><button type="button" class="btn btn-light btn-small" data-admin-action="add-vehicle" data-list="${path}" ${emptyRow ? "disabled" : ""}>Fahrzeug für ${esc(t.name)} hinzufügen</button>
+        ${unusedNote(t.unused_data)}
+        <details class="section-gap"><summary>Ersatzfahrzeuge von ${esc(t.name)} (${Object.keys(t.substitutes).length})</summary>
+          ${substituteRows(t.substitutes, t.fleet, `tenants.${j}.substitutes`, path)}</details></td></tr>`;
   }).join("");
-  const openRow = (v) => `<tr><td><b>${esc(v.name)}</b><div class="small muted">${esc(v.description)}</div></td>
-    <td>${typeCell(v.label)}</td><td></td><td>${vehicleTenantSelect(v.name)}</td><td></td></tr>`;
-  const own = unassigned.filter((v) => v.vg), others = unassigned.filter((v) => !v.vg);
-  return `<p class="small muted">Alle Fahrzeuge der VG auf einen Blick. Über „Wehr“ gehört ein Fahrzeug zu einer Wehr und wird in deren Berichten zugeordnet. Wechselt es die Wehr, bleiben Einsätze mit seinen Daten bei der bisherigen Wehr; dort wird es ab dann nicht mehr zugeordnet. Fahrzeugtyp und Dienstzeitraum pflegt die Wehr unter „Fahrzeuge“.${helpButton("admin_vg_vehicles")}</p>
-    <div class="table-wrap"><table class="mini-table admin-table"><thead><tr><th>Funkrufname</th><th>Fahrzeugtyp</th><th class="right">Einsätze</th><th>Wehr</th><th></th></tr></thead>
-    <tbody>${assigned}
-      <tr class="group-row"><th colspan="5">Noch keiner Wehr zugeordnet</th></tr>
-      ${own.map(openRow).join("") || '<tr><td colspan="5" class="muted">Alle Fahrzeuge der VG aus den Berichten sind zugeordnet.</td></tr>'}
-    </tbody></table></div>
+  const assign = (v) => `<select data-assign-vehicle="${esc(v.name)}" aria-label="Wehr von ${esc(v.name)}"><option value="">– keiner Wehr –</option>${f.tenants.map((t, j) =>
+    `<option value="${j}">${esc(t.name)}</option>`).join("")}</select>`;
+  const openRow = (v) => `<tr><td><b>${esc(v.name)}</b><div class="small muted">${esc(v.description)}</div></td><td>${typeCell(v.label)}</td><td>${assign(v)}</td></tr>`;
+  const own = f.unassigned.filter((v) => v.vg), others = f.unassigned.filter((v) => !v.vg);
+  return `<p class="small muted">Alle Fahrzeuge der VG in einer Tabelle, gruppiert nach Wehr. Über „Wehr“ wechselt ein Fahrzeug die Wehr; Einsätze mit seinen Daten bleiben bei der bisherigen Wehr, dort wird es ab dann nicht mehr zugeordnet. Gespeichert wird alles zusammen. (<a href="${esc(f.call_sign_directory)}" target="_blank" rel="noopener">Funkrufnamenverzeichnis RLP</a>)${helpButton("admin_vg_vehicles")}</p>
+    ${knownDatalist()}
+    <div class="table-wrap"><table class="mini-table admin-table">${fleetHead(true)}<tbody>${groups}</tbody></table></div>
+    <h3 class="section-gap">Noch keiner Wehr zugeordnet</h3>
+    <div class="table-wrap"><table class="mini-table admin-table"><thead><tr><th>Funkrufname</th><th>Fahrzeugtyp</th><th>Wehr</th></tr></thead>
+      <tbody>${own.map(openRow).join("") || '<tr><td colspan="3" class="muted">Alle Fahrzeuge der VG aus den Berichten sind zugeordnet.</td></tr>'}</tbody></table></div>
     ${others.length ? `<details class="section-gap"><summary>Weitere Fahrzeuge aus Berichten (${others.length}, z. B. Rettungsdienst, Fahrzeuge des Landes, Nachbarwehren)</summary>
       <div class="table-wrap"><table class="mini-table admin-table"><tbody>${others.map(openRow).join("")}</tbody></table></div></details>` : ""}
     <div class="inline-row section-gap">
-      <input type="text" id="vg-vehicle-name" list="vg-vehicle-names" placeholder="Funkrufname, z. B. FL NR#.ABC 01/10-01" spellcheck="false" class="wide" aria-label="Funkrufname">
-      <datalist id="vg-vehicle-names">${unassigned.map((v) => `<option value="${esc(v.name)}">${esc(v.description)}</option>`).join("")}</datalist>
-      <select id="vg-vehicle-tenant" aria-label="Wehr">${tenants.map((t) => `<option value="${esc(t.slug)}">${esc(t.name)}</option>`).join("")}</select>
+      <input type="text" id="vg-vehicle-name" list="known-vehicles" placeholder="Funkrufname, z. B. FL NR#.ABC 01/10-01" spellcheck="false" class="wide" aria-label="Funkrufname">
+      <select id="vg-vehicle-tenant" aria-label="Wehr">${f.tenants.map((t, j) => `<option value="${j}">${esc(t.name)}</option>`).join("")}</select>
       <button type="button" class="btn btn-light btn-small" data-admin-action="assign-vehicle">Fahrzeug zuordnen</button>
-    </div>`;
+    </div>
+    ${saveButton()}`;
 }
 
-// Fahrzeug einer Wehr zuordnen bzw. verschieben (Auswahl in der Übersicht der Wehrleitung)
-async function moveVehicle(select) {
-  const { name, source, callSign } = select.dataset;
-  const tenants = admin.vgVehicles.tenants, target = select.value;
-  const vehicle = admin.vgVehicles.vehicles.find((v) => v.tenant === source && v.call_sign === callSign);
-  const from = tenants.find((t) => t.slug === source)?.name, to = tenants.find((t) => t.slug === target)?.name;
-  if (vehicle?.incidents && !confirm(`${name} hat Daten in ${vehicle.incidents} Einsätzen von ${from}. Sie bleiben dort, ab jetzt wird ${name} aber ${to ? `${to} zugeordnet` : "keiner Wehr zugeordnet"}. Fortfahren?`)) {
-    select.value = source;
-    return;
+// Funkrufname (aus „noch keiner Wehr“ oder eingetippt) einer Wehr der VG zuordnen
+function assignVehicle(name, tenant) {
+  const f = admin.vgFleet;
+  const known = f.unassigned.find((v) => v.name === name);
+  f.tenants[tenant].fleet.push(newVehicle({ name, label: known?.label || "", types: known?.types || [], description: known?.description || "" }));
+  f.unassigned = f.unassigned.filter((v) => v.name !== name);
+}
+
+// Fahrzeug einer Wehr zu einer anderen (target: Index) bzw. aus den Listen nehmen (null); false = abgebrochen
+function moveFleetVehicle(from, i, target) {
+  const f = admin.vgFleet, source = f.tenants[from], v = source.fleet[i];
+  const name = v.name || v.suggested_name;
+  if (target !== null && !name) { alert("Bitte zuerst den Funkrufnamen eintragen."); return false; }
+  const to = target === null ? "keiner Wehr" : f.tenants[target].name;
+  if (v.incidents && !confirm(`${name || v.call_sign} hat Daten in ${v.incidents} Einsätzen von ${source.name}. Sie bleiben dort, ab dem Speichern wird es aber ${to} zugeordnet. Fortfahren?`)) return false;
+  source.fleet.splice(i, 1);
+  const keys = [v.call_sign, v.name].filter(Boolean);
+  for (const x of source.fleet) if (keys.includes(x.replaced_by)) x.replaced_by = "";
+  source.substitutes = Object.fromEntries(Object.entries(source.substitutes).filter(([, block]) => !keys.includes(block)));
+  if (target !== null) {
+    f.tenants[target].fleet.push(newVehicle({ name, label: v.label, types: v.types, description: v.description,
+      in_service_from: v.in_service_from, in_service_until: v.in_service_until, in_plan_crew: v.in_plan_crew }));
+  } else if (name) {
+    f.unassigned.unshift({ name, description: v.description, types: v.types, label: v.label, vg: true });
   }
-  if (admin.settings && [source, target].includes(admin.settings.slug) && !confirmDiscard()) { select.value = source; return; }
-  admin.vgVehicles = { vg: admin.vg, ...(await apiJson(`/api/admin/vgs/${encodeURIComponent(admin.vg)}/vehicles/move`, "POST",
-    { name, source: source || null, call_sign: callSign || null, target: target || null })) };
-  admin.settings = admin.savedSettings = null;            // Fahrzeuglisten der Wehren neu laden
-  if ([source, target].includes(config.tenant?.slug)) await refreshCurrentTenant();
-  toast(to ? `${name} gehört jetzt zu ${to}` : `${name} ist keiner Wehr mehr zugeordnet`);
-  renderAdmin();
+  return true;
 }
 
 // ------------------------------------------------------------ BKS-Kennung
@@ -261,19 +363,50 @@ function fleetMatch(v) {
   return "fremdes Fahrzeug";
 }
 
+// Kennung der VG und Standort ergeben die Einheit im Bericht: „NR#.ABC“ + „02“ -> „FW NR#.ABC 02“
+function setBks(part, value) {
+  const s = admin.settings;
+  if (part === "code") s.bks_code = value || null;
+  else s.station = value || null;
+  s.unit_marker = s.bks_code && s.station ? `FW ${s.bks_code} ${s.station}` : "";
+  if (!s.unit_marker) {                     // ohne Standort: nur die Fahrzeuge der VG erkennbar
+    s.unit_prefix = s.bks_code ? `FL ${s.bks_code} ` : "";
+    s.own_prefix = "";
+  }
+  const derived = $("#bks-derived");
+  if (derived) derived.innerHTML = bksDerived(s);
+}
+
 // Präfixe wie admin.prefixes_of: „FW NR#.ABC 02“ -> „FL NR#.ABC “ und „02/“; ohne Einheit die gespeicherten
 function bksPrefixes(s) {
   const m = /^FW (\S+) (\d\d)$/.exec((s.unit_marker || "").trim());
   return m ? { unit: `FL ${m[1]} `, own: `${m[2]}/`, valid: true }
-    : { unit: s.unit_prefix, own: s.own_prefix, valid: !(s.unit_marker || "").trim() };
+    : { unit: s.unit_prefix, own: s.own_prefix, valid: !(s.bks_code && s.station) };
 }
 
 function bksDerived(s) {
   const p = bksPrefixes(s);
-  if (!p.valid) return `<span class="message-error">Bitte wie in der Kopfzeile des Berichts angeben, z. B. FW NR#.ABC 02.</span>`;
-  if (!p.unit) return "Ohne Einheit zählen nur die Fahrzeuge der Fahrzeugliste als eigene.";
-  return `Eigene Fahrzeuge beginnen mit <b>${esc(p.unit + p.own)}</b>, Fahrzeuge der übrigen Wehren der VG mit <b>${esc(p.unit)}</b>. Fahrzeuge der Fahrzeugliste zählen immer als eigene.`;
+  if (s.station && !/^\d\d$/.test(s.station)) return `<span class="message-error">Standort zweistellig, z. B. 02.</span>`;
+  if (!p.valid) return `<span class="message-error">Kennung wie in der Kopfzeile des Berichts, z. B. NR#.ABC aus „FW NR#.ABC 02“.</span>`;
+  if (!p.unit) return "Ohne Kennung und Standort zählen nur die Fahrzeuge der Fahrzeugliste als eigene.";
+  return `Einheit im Bericht <b>${esc(s.unit_marker || "–")}</b>. Eigene Fahrzeuge beginnen mit <b>${esc(p.unit + p.own)}</b>, Fahrzeuge der übrigen Wehren der VG mit <b>${esc(p.unit)}</b>. Fahrzeuge der Fahrzeugliste zählen immer als eigene.`;
 }
+
+const parseTestField = () => `<h3 class="section-gap">Testen</h3>
+    <label class="field"><span>Text aus einem Bericht</span>
+      <textarea rows="4" id="parse-line" spellcheck="false" placeholder="Funkrufnamen, Zeilen der Fahrzeugtabelle oder den ganzen Berichtstext einfügen, z. B. FL NR#.ABC 02/45-01"></textarea></label>
+    <button type="button" class="btn btn-light btn-small section-gap" data-admin-action="parse-test">Erkennung prüfen</button>`;
+
+function parseResultList(items) {
+  if (!admin.parseResult) return "";
+  return items.length ? `<ul class="plain-list">${items.join("")}</ul>`
+    : `<p class="message message-error">Kein Funkrufname (z. B. FL NR#.ABC 02/45-01) und keine Einheit (z. B. FW NR#.ABC 02) gefunden.</p>`;
+}
+
+const numberingOptions = (value, bind) => `<select data-bind="${bind}">
+        <option value="bks" ${value === "bks" ? "selected" : ""}>aus dem Bericht (fehlt sie: nächste freie)</option>
+        <option value="by_date" ${value === "by_date" ? "selected" : ""}>nach Datum durchnummerieren</option></select>`;
+const NUMBERING_HINT = "Nach Datum: Die App nummeriert alle Einsätze eines Jahres nach dem Beginn; ein später eingelesener Einsatz (z. B. eine selbst angelegte Brandsicherheitswache) rückt an seine Stelle, die folgenden Nummern verschieben sich. Beim Speichern werden alle Jahre neu nummeriert.";
 
 function bksSection() {
   const s = admin.settings;
@@ -282,70 +415,141 @@ function bksSection() {
     ...result.units.map((u) => `<li><b>${esc(u.unit)}</b> → ${u.own ? "<b>Bericht dieser Wehr</b>" : "Bericht einer anderen Einheit"}</li>`),
     ...result.vehicles.map((v) => `<li><b>${esc(v.name)}</b> → ${fleetMatch(v)}${v.description ? `<br><span class="small muted">${esc(v.description)}</span>` : ""}</li>`),
   ] : [];
-  const found = result ? (items.length ? `<ul class="plain-list">${items.join("")}</ul>`
-    : `<p class="message message-error">Kein Funkrufname (z. B. FL NR#.ABC 02/45-01) und keine Einheit (z. B. FW NR#.ABC 02) gefunden.</p>`) : "";
   return `<p class="small muted">So erkennt die App im Einsatzbericht des BKS-Portals, von welcher Wehr ein Bericht stammt und welche Fahrzeuge dazugehören.${helpButton("admin_bks")}</p>
     <div class="form-grid">
-      ${adminField("Einheit im Bericht", textInput("unit_marker", s.unit_marker, 'placeholder="FW NR#.ABC 02" spellcheck="false"'), "span-2")}
-      ${adminField("FEZ-Kennung", textInput("control_center", s.control_center, 'spellcheck="false"'))}
+      ${adminField(`Kennung der VG ${inheritNote("bks_code")}`, `<input type="text" data-bks="code" value="${esc(s.bks_code || "")}" placeholder="NR#.ABC" spellcheck="false">`, "span-2")}
+      ${adminField("Standort", `<input type="text" data-bks="station" value="${esc(s.station || "")}" placeholder="02" maxlength="2" class="narrow">`)}
+      ${adminField(`FEZ-Kennung ${inheritNote("control_center")}`, textInput("control_center", s.control_center, 'spellcheck="false"'), "span-2")}
     </div>
     <p class="small muted" id="bks-derived">${bksDerived(s)}</p>
-    <h3 class="section-gap">Testen</h3>
-    <label class="field"><span>Text aus einem Bericht</span>
-      <textarea rows="4" id="parse-line" spellcheck="false" placeholder="Funkrufnamen, Zeilen der Fahrzeugtabelle oder den ganzen Berichtstext einfügen, z. B. FL NR#.ABC 02/45-01"></textarea></label>
-    <button type="button" class="btn btn-light btn-small section-gap" data-admin-action="parse-test">Erkennung prüfen</button>
-    ${found}
-    <h3 class="section-gap">Einsatznummern</h3>
+    ${parseTestField()}
+    ${parseResultList(items)}
+    <h3 class="section-gap">Einsatznummern ${inheritNote("numbering")}</h3>
+    <div class="form-grid">${adminField("Nummerierung", numberingOptions(s.numbering, "numbering"), "span-3")}</div>
+    <p class="small muted">${NUMBERING_HINT}</p>
+    ${saveButton()}`;
+}
+
+function vgBksSection() {
+  const d = admin.vgSettings;
+  const result = admin.parseResult;
+  const unit = (t) => "bks_code" in t.overrides ? t.unit_marker || "–" : d.bks_code && t.station ? `FW ${d.bks_code} ${t.station}` : "–";
+  const rows = d.tenants.map((t, j) => `<tr><td><b>${esc(t.name)}</b></td>
+    <td>${textInput(`tenants.${j}.station`, t.station || "", 'placeholder="02" maxlength="2" class="narrow" aria-label="Standort"')}</td>
+    <td>${esc(unit(t))}${"bks_code" in t.overrides ? ` <span class="inherit-badge own">eigene Kennung ${esc(t.overrides.bks_code || "–")}</span>` : ""}</td></tr>`).join("");
+  const owner = (tenant) => tenant ? `<b>${esc(tenant)}</b>` : "keiner Wehr der VG";
+  const items = result ? [
+    ...result.units.map((u) => `<li><b>${esc(u.unit)}</b> → Bericht von ${owner(u.tenant)}</li>`),
+    ...result.vehicles.map((v) => `<li><b>${esc(v.name)}</b> → ${v.tenant ? `Fahrzeug von ${owner(v.tenant)}`
+      : v.block ? `geführt bei <b>${esc(v.block.tenant)}</b> im Block ${esc(v.block.call_sign)}` : `Fahrzeug von ${owner(null)}`}${v.description ? `<br><span class="small muted">${esc(v.description)}</span>` : ""}</li>`),
+  ] : [];
+  return `<p class="small muted">Kennung der VG und Standort jeder Wehr ergeben die Einheit in der Kopfzeile des Berichts (z. B. „FW NR#.ABC 02“) und die Funkrufnamen ihrer Fahrzeuge. Das Testfeld zeigt, welcher Wehr die App einen Bericht bzw. ein Fahrzeug zuordnet (gespeicherter Stand).${helpButton("admin_bks")}</p>
     <div class="form-grid">
-      ${adminField("Nummerierung", `<select data-bind="numbering">
-        <option value="bks" ${s.numbering === "bks" ? "selected" : ""}>aus dem Bericht (fehlt sie: nächste freie)</option>
-        <option value="by_date" ${s.numbering === "by_date" ? "selected" : ""}>nach Datum durchnummerieren</option></select>`, "span-3")}
+      ${adminField("Kennung der VG", textInput("bks_code", d.bks_code || "", 'placeholder="NR#.ABC" spellcheck="false"'), "span-2")}
+      ${adminField("FEZ-Kennung", textInput("control_center", d.control_center, 'spellcheck="false"'), "span-2")}
     </div>
-    <p class="small muted">Nach Datum: Die App nummeriert alle Einsätze eines Jahres nach dem Beginn; ein später eingelesener Einsatz (z. B. eine selbst angelegte Brandsicherheitswache) rückt an seine Stelle, die folgenden Nummern verschieben sich. Beim Speichern werden alle Jahre neu nummeriert.</p>
+    <div class="table-wrap section-gap"><table class="mini-table admin-table"><thead><tr><th>Wehr</th><th>Standort</th><th>Einheit im Bericht</th></tr></thead><tbody>${rows}</tbody></table></div>
+    ${overridesNote("bks_code", "control_center")}
+    ${parseTestField()}
+    ${parseResultList(items)}
+    <h3 class="section-gap">Einsatznummern</h3>
+    <div class="form-grid">${adminField("Nummerierung", numberingOptions(d.numbering, "numbering"), "span-3")}</div>
+    <p class="small muted">${NUMBERING_HINT}</p>
+    ${overridesNote("numbering")}
     ${saveButton()}`;
 }
 
 // ------------------------------------------------------------ Orte und Bedarfsplan
+const levelOptions = (current) => [1, 2, 3, 4].map((v) => `<option ${v === current ? "selected" : ""}>${v}</option>`).join("");
+
+function planFields(d) {
+  return `<div class="form-grid">
+      ${adminField("ab Alarmstufe", `<select data-bind="plan_min_level" data-number>${levelOptions(d.plan_min_level)}</select>`)}
+      ${adminField("Zeitgrenzen (Min.)", `<input type="text" data-limits value="${esc(d.response_limits.join(", "))}" placeholder="8, 10">`)}
+      ${adminField("Standard", `<select data-bind="default_limit" data-number>${d.response_limits.map((v) => `<option ${v === d.default_limit ? "selected" : ""}>${v}</option>`).join("")}</select>`)}
+      ${adminField("Zweite Grenze (Min.)", `<input type="number" min="1" max="120" data-bind="second_limit" value="${d.second_limit}">`)}
+      ${adminField("Tag ab (Uhr)", `<input type="number" min="0" max="23" data-bind="day_hours.0" value="${d.day_hours[0]}">`)}
+      ${adminField("Tag bis (Uhr)", `<input type="number" min="1" max="24" data-bind="day_hours.1" value="${d.day_hours[1]}">`)}
+    </div>`;
+}
+
+const PLAN_KEYS = ["plan_min_level", "response_limits", "default_limit", "second_limit", "day_hours"];
+
 function placesSection() {
   const s = admin.settings;
   const rows = s.places.map((p, i) => `<tr>
     <td>${textInput(`places.${i}.name`, p.name, 'placeholder="Musterstadt"')}</td>
-    <td>${textInput(`places.${i}.prefix`, p.prefix, 'placeholder="muster" class="narrow"')}</td>
     <td class="center"><input type="checkbox" data-plan-place="${i}" ${s.plan_places.includes(p.name) ? "checked" : ""} aria-label="Bedarfsplan"></td>
     <td><button type="button" class="icon-button" data-admin-action="remove-place" data-index="${i}" aria-label="entfernen">✕</button></td>
   </tr>`).join("");
-  const options = (values, current) => values.map((v) => `<option ${v === current ? "selected" : ""}>${v}</option>`).join("");
-  return `<p class="small muted">Das Einsatzgebiet wird über den Anfang des Ortsnamens zugeordnet. Nur Orte mit Haken zählen zum Ausrückebereich des Feuerwehrbedarfsplans.${helpButton("admin_places")}</p>
-    <div class="table-wrap"><table class="mini-table admin-table"><thead><tr><th>Ort</th><th>Namensanfang</th><th>Bedarfsplan</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+  return `<p class="small muted">Das Einsatzgebiet ist der Ort, mit dessen Namen der Einsatzort beginnt (z. B. „Musterstadt-Nord“ → Musterstadt). Nur Orte mit Haken zählen zum Ausrückebereich des Feuerwehrbedarfsplans.${helpButton("admin_places")}</p>
+    <h3 class="section-gap">Orte ${inheritNote("places")}</h3>
+    <div class="table-wrap"><table class="mini-table admin-table"><thead><tr><th>Ort</th><th>Bedarfsplan</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
     <button type="button" class="btn btn-light btn-small section-gap" data-admin-action="add-place">Ort hinzufügen</button>
-    <h3 class="section-gap">Feuerwehrbedarfsplan</h3>
-    <div class="form-grid">
-      ${adminField("ab Alarmstufe", `<select data-bind="plan_min_level" data-number>${options([1, 2, 3, 4], s.plan_min_level)}</select>`)}
-      ${adminField("Zeitgrenzen (Min.)", `<input type="text" data-limits value="${esc(s.response_limits.join(", "))}" placeholder="8, 10">`)}
-      ${adminField("Standard", `<select data-bind="default_limit" data-number>${options(s.response_limits, s.default_limit)}</select>`)}
-      ${adminField("Zweite Grenze (Min.)", `<input type="number" min="1" max="120" data-bind="second_limit" value="${s.second_limit}">`)}
-      ${adminField("Tag ab (Uhr)", `<input type="number" min="0" max="23" data-bind="day_hours.0" value="${s.day_hours[0]}">`)}
-      ${adminField("Tag bis (Uhr)", `<input type="number" min="1" max="24" data-bind="day_hours.1" value="${s.day_hours[1]}">`)}
-    </div>
+    <h3 class="section-gap">Feuerwehrbedarfsplan ${inheritNote(...PLAN_KEYS)}</h3>
+    ${planFields(s)}
     ${adminGranted().includes("plan.release") ? `<label class="toggle section-gap"><input type="checkbox" data-bind="response_plan_public" ${s.response_plan_public ? "checked" : ""}>
       Bedarfsplan für alle Rollen freigeben <span class="muted">(sonst nur mit dem Recht „Bedarfsplan ohne Freigabe sehen“)</span></label>`
       : `<p class="small muted section-gap">Bedarfsplan ${s.response_plan_public ? "ist für alle Rollen freigegeben" : "ist nicht freigegeben"} – freigeben darf, wer das Recht „Bedarfsplan freigeben“ hat.</p>`}
     ${saveButton()}`;
 }
 
+function vgPlacesSection() {
+  const d = admin.vgSettings;
+  const ownPlaces = (t) => "places" in t.overrides;
+  const head = d.tenants.map((t) => `<th class="center">${esc(t.name)}</th>`).join("");
+  const rows = d.places.map((p, i) => `<tr>
+    <td>${textInput(`places.${i}.name`, p.name, 'placeholder="Musterstadt"')}</td>
+    ${d.tenants.map((t, j) => `<td class="center">${ownPlaces(t) ? '<span class="small muted">eigene Orte</span>'
+      : `<input type="checkbox" data-plan-place="${j}:${i}" ${t.plan_places.includes(p.name) ? "checked" : ""} aria-label="${esc(p.name)} im Ausrückebereich von ${esc(t.name)}">`}</td>`).join("")}
+    <td><button type="button" class="icon-button" data-admin-action="remove-place" data-index="${i}" aria-label="entfernen">✕</button></td>
+  </tr>`).join("");
+  return `<p class="small muted">Orte der VG für die Zuordnung des Einsatzgebiets (ein Einsatz gehört zu dem Ort, mit dessen Namen der Einsatzort beginnt). Die Haken je Wehr bilden ihren Ausrückebereich laut Feuerwehrbedarfsplan.${helpButton("admin_places")}</p>
+    <div class="table-wrap"><table class="mini-table admin-table"><thead><tr><th>Ort</th>${head}<th></th></tr></thead><tbody>${rows}</tbody></table></div>
+    <button type="button" class="btn btn-light btn-small section-gap" data-admin-action="add-place">Ort hinzufügen</button>
+    ${overridesNote("places")}
+    <h3 class="section-gap">Feuerwehrbedarfsplan</h3>
+    ${planFields(d)}
+    ${overridesNote(...PLAN_KEYS)}
+    ${saveButton()}`;
+}
+
 // ------------------------------------------------------------ Stichworte
+// Herkunft eines Stichworts in einer Wehr: aus dem Katalog der VG, dort geändert bzw. „gilt hier nicht“, eigenes
+function keywordSource(x) {
+  if (x.source === "own") return '<span class="inherit-badge own">eigenes</span>';
+  if (x.source === "changed") return `<span class="inherit-badge own">${x.active ? "geändert" : "gilt hier nicht"}</span>`;
+  return '<span class="inherit-badge">von der VG</span>';
+}
+
+// Abweichungen der Wehren je Stichwort (Katalog der VG)
+function keywordDeviations(code) {
+  const kinds = { off: "gilt nicht", changed: "geändert", own: "eigenes" };
+  return (admin.keywords.deviations?.[code] || []).map((d) => `${esc(d.tenant)}: ${kinds[d.kind]}`).join("<br>");
+}
+
 function keywordsSection() {
   const k = admin.keywords;
   const query = fold(admin.keywordQuery);
   const list = k.keywords.filter((x) => !query || fold(`${x.code} ${x.name} ${x.terms}`).includes(query));
   const edit = admin.keywordEdit || { code: "", name: "", terms: "" };
   const preview = admin.importPreview;
+  const deviating = k.keywords.filter((x) => x.source !== "vg").length;
+  const status = admin.vg
+    ? `<span class="tenant-badge">${k.custom ? "Katalog der VG" : "Vorlage (AAO)"}</span>
+      <span class="small muted">${k.keywords.length} Stichworte für alle Wehren${k.custom && k.template_missing ? ` · ${k.template_missing} der Vorlage fehlen` : ""}${k.tenant_only?.length ? ` · eigene Stichworte einzelner Wehren: ${k.tenant_only.map(esc).join(", ")}` : ""}</span>`
+    : `<span class="tenant-badge">${deviating ? `${deviating} Abweichungen von der VG` : "wie die VG"}</span>
+      <span class="small muted">${k.keywords.filter((x) => x.active).length} Stichworte gelten hier</span>`;
+  const reset = admin.vg ? (k.custom ? "Zurück zur Vorlage" : "") : (deviating ? "Alle Abweichungen aufheben" : "");
+  // Löschen: in der VG und bei eigenen Stichworten; eine Abweichung aufheben; ein Stichwort der VG nur abschalten
+  const removeButton = (x) => admin.vg || x.source === "own"
+    ? `<button type="button" class="icon-button" data-admin-action="keyword-delete" data-code="${esc(x.code)}" aria-label="löschen">✕</button>`
+    : x.source === "changed" ? `<button type="button" class="icon-button" data-admin-action="keyword-delete" data-code="${esc(x.code)}" aria-label="wie bei der VG" title="Wie bei der VG">↺</button>` : "";
   return `<div class="admin-status">
-      <span class="tenant-badge">${k.custom ? "eigener Katalog" : "Vorlage (AAO)"}</span>
-      <span class="small muted">${k.keywords.length} Stichworte${k.custom && k.template_missing ? ` · ${k.template_missing} der Vorlage fehlen` : ""}</span>
+      ${status}
       <span class="toolbar-right">
         ${k.custom && k.template_missing ? `<button type="button" class="btn btn-light btn-small" data-admin-action="keywords-template">Fehlende aus der Vorlage ergänzen</button>` : ""}
-        ${k.custom ? `<button type="button" class="btn btn-outline btn-small" data-admin-action="keywords-reset">Zurück zur Vorlage</button>` : ""}
+        ${reset ? `<button type="button" class="btn btn-outline btn-small" data-admin-action="keywords-reset">${reset}</button>` : ""}
       </span>
     </div>
     <h3 class="section-gap">${edit.code && k.keywords.some((x) => x.code === edit.code) ? "Stichwort ändern" : "Stichwort hinzufügen"}${helpButton("admin_keywords")}</h3>
@@ -358,13 +562,14 @@ function keywordsSection() {
       ${admin.keywordEdit ? `<button type="button" class="btn btn-outline btn-small" data-admin-action="keyword-cancel">Abbrechen</button>` : ""}</div>
     <h3 class="section-gap">Katalog</h3>
     <input type="search" class="search" data-keyword-search value="${esc(admin.keywordQuery)}" placeholder="Suchen: Stichwort, Bezeichnung, Meldebild …">
-    <div class="table-wrap keyword-table"><table class="mini-table admin-table"><thead><tr><th>Stichwort</th><th>Bezeichnung</th><th>Suchbegriffe</th><th>aktiv</th><th></th></tr></thead><tbody>
+    <div class="table-wrap keyword-table"><table class="mini-table admin-table"><thead><tr><th>Stichwort</th><th>Bezeichnung</th><th>Suchbegriffe</th><th>${admin.vg ? "aktiv" : "gilt hier"}</th><th>${admin.vg ? "Wehren" : "Herkunft"}</th><th></th></tr></thead><tbody>
       ${list.map((x) => `<tr class="${x.active ? "" : "inactive"}"><td><b>${esc(x.code)}</b></td><td>${esc(x.name)}</td><td class="terms" title="${esc(x.terms)}">${esc(x.terms)}</td>
-        <td class="center"><input type="checkbox" data-keyword-active="${esc(x.code)}" ${x.active ? "checked" : ""} aria-label="aktiv"></td>
-        <td class="nowrap"><button type="button" class="icon-button" data-admin-action="keyword-edit" data-code="${esc(x.code)}" aria-label="bearbeiten">✎</button><button type="button" class="icon-button" data-admin-action="keyword-delete" data-code="${esc(x.code)}" aria-label="löschen">✕</button></td></tr>`).join("")}
+        <td class="center"><input type="checkbox" data-keyword-active="${esc(x.code)}" ${x.active ? "checked" : ""} aria-label="${admin.vg ? "aktiv" : "gilt hier"}"></td>
+        <td class="small">${admin.vg ? keywordDeviations(x.code) : keywordSource(x)}</td>
+        <td class="nowrap"><button type="button" class="icon-button" data-admin-action="keyword-edit" data-code="${esc(x.code)}" aria-label="bearbeiten">✎</button>${removeButton(x)}</td></tr>`).join("")}
     </tbody></table></div>
     <h3 class="section-gap">Import aus Datei</h3>
-    <p class="small muted">CSV (Semikolon oder Komma) oder Excel mit den Spalten Stichwort, Bezeichnung, Suchbegriffe; eine Kopfzeile ist erlaubt.</p>
+    <p class="small muted">CSV (Semikolon oder Komma) oder Excel mit den Spalten Stichwort, Bezeichnung, Suchbegriffe; eine Kopfzeile ist erlaubt.${admin.vg ? "" : " Stichworte der VG, die in der Datei fehlen, gelten nach „Katalog ersetzen“ in dieser Wehr nicht."}</p>
     <label class="btn btn-light btn-small file-button">Datei wählen<input type="file" accept=".csv,.xlsx,text/csv" data-keyword-file hidden></label>
     ${preview ? `<div class="message message-info section-gap">${esc(admin.importFile.name)}: ${preview.new.length} neu, ${preview.changed.length} geändert, ${preview.unchanged} unverändert, ${preview.missing.length} nicht in der Datei
       <div class="admin-actions left"><button type="button" class="btn btn-primary btn-small" data-admin-action="keywords-import" data-mode="merge">Ergänzen und ändern</button>

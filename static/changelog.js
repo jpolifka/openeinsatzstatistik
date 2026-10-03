@@ -7,8 +7,10 @@ const CHANGELOG = [
   {
     date: "2026-10-03",
     items: [
+      "<b>Einstellungen für die ganze VG:</b> Bei gewählter Wehrleitung pflegen Sie Fahrzeuge, BKS-Kennung, Orte, Bedarfsplan, Farben und Stichworte einmal für alle Wehren der VG – Fahrzeuge aller Wehren in einer Tabelle, Standort und Ausrückebereich je Wehr in einer Übersicht. Eine Wehr übernimmt die Vorgaben und kann bei sich abweichen; die Verwaltung zeigt an jedem Wert „von der VG“ oder „abweichend“. Der Bereich „Fahrzeuge der VG“ ist in „Fahrzeuge“ aufgegangen.",
+      "<b>Verwaltung:</b> Ein Klick auf einen Bereich wechselt nicht mehr zwischen Wehr und Wehrleitung; gewechselt wird nur über die Auswahl oben rechts.",
+      "<b>Orte ohne Namensanfang:</b> Unter „Orte & Bedarfsplan“ genügt der Ortsname. Ein Einsatz gehört zu dem Ort, mit dessen Namen der Einsatzort beginnt (z. B. „Musterstadt-Nord“ → Musterstadt).",
       "<b>BKS-Kennung vereinfacht:</b> Es genügt die Einheit aus der Kopfzeile des Berichts (z. B. „FW NR#.ABC 02“); die Funkrufnamen der eigenen Fahrzeuge leitet die App daraus ab. Das Testfeld nimmt jetzt beliebigen Text aus einem Bericht, auch einzelne Funkrufnamen.",
-      "<b>Gebührenordnung leichter finden:</b> In der Verwaltung stehen „Fahrzeuge der VG“ und „Gebührenordnung“ jetzt auch bei ausgewählter Wehr; ein Klick wechselt zur Wehrleitung ihrer VG.",
       "<b>Berichte prüfen:</b> Auch Stammdatensätze und Weiterleitungen werden erst nach Ihrer ausdrücklichen Bestätigung gespeichert. Schließen verwirft offene Vorschauen, nicht bereits bestätigte Berichte.",
       "<b>Abgleich:</b> Änderungen an Beschreibung, Leitstellen-Nummer, Anwesenheit und Sekunden werden genauer erkannt.",
       "<b>Smartphone:</b> Die Aktionen im Kopfbereich können umbrechen und bleiben erreichbar.",

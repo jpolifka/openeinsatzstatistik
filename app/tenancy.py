@@ -13,15 +13,18 @@ jeder Aufruf als Superadmin.
 import dataclasses
 import hashlib
 import json
+import logging
 import os
 import re
 import threading
 
 from app import db, domain, rbac
-from app.tenant_config import TenantConfig, Vehicle
+from app.tenant_config import UNIT_MARKER, TenantConfig, Vehicle, prefixes_of
 
 ADMIN_EMAILS = {e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").replace(";", ",").split(",")
                 if e.strip()}
+
+log = logging.getLogger("pdf2einsatz")
 
 SLUG = re.compile(r"[a-z0-9][a-z0-9-]{0,38}[a-z0-9]")
 
@@ -51,34 +54,195 @@ def setup():
     for slug in slugs:
         db.setup(tenant_path(slug))
     _configs.clear()
+    lift_vg_defaults()
 
 
 # ---------------------------------------------------------------- Fachkonfiguration
-# Schlüssel in der Tabelle setting; Fahrzeuge und Stichworte haben eigene Tabellen
-_SETTINGS = ("substitutes", "unit_prefix", "own_prefix", "unit_marker", "control_center", "places", "plan_places",
-             "plan_min_level", "response_limits", "default_limit", "second_limit", "day_hours", "colors",
-             "numbering", "response_plan_public")
+# Vorgaben der VG (Tabelle vg_setting in der Zentrale), von denen eine Wehr abweichen kann: Eine Zeile in
+# ihrer Tabelle setting ist eine Abweichung, ohne Zeile gilt der Wert der VG, ohne den der Standard.
+# bks_code ist die Kennung der VG im BKS-Bericht (NR#.ABC in „FW NR#.ABC 02“).
+INHERITED = ("bks_code", "control_center", "places", "plan_min_level", "response_limits", "default_limit",
+             "second_limit", "day_hours", "numbering", "colors")
+# Nur je Wehr: station ist die Standortnummer (02 in „FW NR#.ABC 02“). unit_prefix, own_prefix und unit_marker
+# stehen nur bei älteren Einrichtungen, deren Präfixe sich nicht aus Kennung und Standort ergeben.
+TENANT_ONLY = ("station", "plan_places", "substitutes", "response_plan_public", "unit_prefix", "own_prefix",
+               "unit_marker")
 _TUPLES = {"places", "plan_places", "response_limits", "day_hours"}
+_DEFAULTS = {f.name: f.default_factory() if f.default_factory is not dataclasses.MISSING else f.default
+             for f in dataclasses.fields(TenantConfig)}
+_DEFAULTS["bks_code"] = None
 
 _configs = {}
 _configs_lock = threading.Lock()
 
 
-def load_config(con, name):
-    """TenantConfig aus der Wehr-Datenbank. Fehlende Werte nehmen die Standardwerte, ein leerer
-    Stichwortkatalog die Vorlage aus domain.py."""
-    values = {r["key"]: json.loads(r["value"]) for r in con.execute("SELECT key, value FROM setting")}
-    kwargs = {key: values[key] for key in _SETTINGS if key in values}
-    for key in _TUPLES & set(kwargs):
-        kwargs[key] = tuple(tuple(v) if isinstance(v, list) else v for v in kwargs[key])
+def _same(a, b):
+    """Gleicher Wert unabhängig von Tupel/Liste (JSON aus der Datenbank)."""
+    return json.dumps(a, ensure_ascii=False, sort_keys=True) == json.dumps(b, ensure_ascii=False, sort_keys=True)
+
+
+def _template_keywords():
+    return [{"code": c, "name": n, "terms": t, "active": True} for c, n, t in domain.KEYWORD_CATALOG]
+
+
+@dataclasses.dataclass(frozen=True)
+class VgLayer:
+    """Vorgaben einer VG für ihre Wehren: settings {Schlüssel aus INHERITED: Wert}, keywords [{code, name,
+    terms, active}] oder None, solange die Vorlage aus domain.py gilt."""
+    settings: dict = dataclasses.field(default_factory=dict)
+    keywords: tuple = None
+
+    def value(self, key):
+        return self.settings.get(key, _DEFAULTS[key])
+
+    @property
+    def keyword_list(self):
+        return [dict(k) for k in self.keywords] if self.keywords is not None else _template_keywords()
+
+
+NO_LAYER = VgLayer()
+
+
+def load_vg_layer(con, vg_id):
+    """Vorgaben der VG aus der Zentrale (con)."""
+    settings = {r["key"]: json.loads(r["value"])
+                for r in con.execute("SELECT key, value FROM vg_setting WHERE vg_id = ?", (vg_id,))}
+    rows = con.execute("SELECT code, name, terms, active FROM vg_keyword WHERE vg_id = ? ORDER BY sort_order, code",
+                       (vg_id,)).fetchall()
+    return VgLayer(settings, tuple({**dict(r), "active": bool(r["active"])} for r in rows) if rows else None)
+
+
+def save_vg_settings(con, vg_id, values):
+    """Vorgaben der VG speichern {Schlüssel aus INHERITED: Wert}; None bzw. der Standard löscht die Vorgabe."""
+    for key, value in values.items():
+        if key not in INHERITED:
+            raise KeyError(key)
+        if value is None or _same(value, _DEFAULTS[key]):
+            con.execute("DELETE FROM vg_setting WHERE vg_id = ? AND key = ?", (vg_id, key))
+        else:
+            con.execute("INSERT INTO vg_setting (vg_id, key, value) VALUES (?, ?, ?) "
+                        "ON CONFLICT(vg_id, key) DO UPDATE SET value = excluded.value",
+                        (vg_id, key, json.dumps(value, ensure_ascii=False)))
+
+
+def save_vg_keywords(con, vg_id, entries):
+    """Stichwortkatalog der VG durch [{code, name, terms, active}] ersetzen; None = zurück zur Vorlage."""
+    con.execute("DELETE FROM vg_keyword WHERE vg_id = ?", (vg_id,))
+    con.executemany("INSERT INTO vg_keyword (vg_id, code, name, terms, active, sort_order) VALUES (?, ?, ?, ?, ?, ?)",
+                    [(vg_id, k["code"], k["name"], k["terms"], int(k["active"]), i)
+                     for i, k in enumerate(entries or [], 1)])
+
+
+def _tenant_keyword_rows(con):
+    return [{**dict(r), "active": bool(r["active"])}
+            for r in con.execute("SELECT code, name, terms, active FROM keyword ORDER BY sort_order, code")]
+
+
+def merge_keywords(inherited, rows):
+    """Katalog einer Wehr: Stichworte der VG mit den Abweichungen der Wehr (eigene Bezeichnung, „gilt hier
+    nicht“ = inaktiv), dahinter die eigenen Zusatz-Stichworte. Jeder Eintrag mit source vg/changed/own."""
+    own = {r["code"]: r for r in rows}
+    result = [{**own[k["code"]], "source": "changed"} if k["code"] in own else {**k, "source": "vg"}
+              for k in inherited]
+    known = {k["code"] for k in inherited}
+    return result + [{**r, "source": "own"} for r in rows if r["code"] not in known]
+
+
+def tenant_keywords(con, layer):
+    """Wirksamer Stichwortkatalog einer Wehr (siehe merge_keywords)."""
+    return merge_keywords(layer.keyword_list, _tenant_keyword_rows(con))
+
+
+def save_tenant_keywords(con, desired, layer):
+    """Katalog der Wehr so speichern, dass er wirksam desired [{code, name, terms, active}] ergibt: nur die
+    Abweichungen von der VG. Stichworte der VG, die fehlen, gelten in der Wehr nicht (inaktiv)."""
+    inherited = {k["code"]: k for k in layer.keyword_list}
+    wanted = {k["code"]: k for k in desired}
+    rows = []
+    for k in desired:
+        base = inherited.get(k["code"])
+        if not base or (base["name"], base["terms"], bool(base["active"])) != (k["name"], k["terms"], bool(k["active"])):
+            rows.append(k)
+    rows += [{**k, "active": False} for code, k in inherited.items() if code not in wanted and k["active"]]
+    con.execute("DELETE FROM keyword")
+    con.executemany("INSERT INTO keyword (code, name, terms, active, sort_order) VALUES (?, ?, ?, ?, ?)",
+                    [(k["code"], k["name"], k["terms"], int(k["active"]), i) for i, k in enumerate(rows, 1)])
+
+
+def _setting_values(cfg):
+    """Werte einer TenantConfig, wie sie gespeichert werden: Kennung und Standort statt der Präfixe, wenn sich
+    diese daraus ergeben."""
+    values = {key: getattr(cfg, key) for key in (*INHERITED, *TENANT_ONLY) if key not in ("bks_code", "station")}
+    m = UNIT_MARKER.fullmatch(cfg.unit_marker.strip())
+    if m and prefixes_of(cfg.unit_marker) == (cfg.unit_prefix, cfg.own_prefix):
+        values.update(bks_code=m.group(1), station=m.group(2))
+        for key in ("unit_prefix", "own_prefix", "unit_marker"):
+            del values[key]
+    for key in ("unit_prefix", "own_prefix", "unit_marker"):
+        if not values.get(key, True):
+            del values[key]
+    return values
+
+
+def _write_settings(con, values, layer):
+    """Vorgaben der VG nur als Abweichung speichern, Werte der Wehr immer."""
+    for key in INHERITED + TENANT_ONLY:
+        value = values.get(key)
+        if value is None or (key in INHERITED and _same(value, layer.value(key))):
+            con.execute("DELETE FROM setting WHERE key = ?", (key,))
+        else:
+            con.execute("INSERT INTO setting (key, value) VALUES (?, ?) "
+                        "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, json.dumps(value, ensure_ascii=False)))
+
+
+def load_config(con, name, layer=NO_LAYER):
+    """TenantConfig aus der Wehr-Datenbank und den Vorgaben ihrer VG (layer). Fehlende Werte nehmen die
+    Standardwerte, ein fehlender Stichwortkatalog die Vorlage aus domain.py."""
+    own = {r["key"]: json.loads(r["value"]) for r in con.execute("SELECT key, value FROM setting")}
+    values = {**layer.settings, **{k: v for k, v in own.items() if k in INHERITED or k in TENANT_ONLY}}
+    code, station = values.pop("bks_code", None), values.pop("station", None)
+    if code and station:
+        values["unit_marker"] = f"FW {code} {station}"
+        values["unit_prefix"], values["own_prefix"] = prefixes_of(values["unit_marker"])
+    elif code and not values.get("unit_prefix"):
+        values["unit_prefix"] = f"FL {code} "         # ohne Standort: Fahrzeuge der VG erkennbar
+    for key in _TUPLES & set(values):
+        values[key] = tuple(tuple(v) if isinstance(v, list) else v for v in values[key])
+    if "places" in values:                     # früher (Name, Namensanfang)
+        values["places"] = tuple(p[0] if isinstance(p, tuple) else p for p in values["places"])
     fleet = tuple(Vehicle(r["call_sign"], r["label"], r["in_service_from"], r["in_service_until"], r["replaced_by"],
                           bool(r["in_plan_crew"]), r["name"])
                   for r in con.execute("SELECT * FROM fleet ORDER BY sort_order, call_sign"))
-    rows = con.execute("SELECT code, name, terms, active FROM keyword ORDER BY sort_order, code").fetchall()
-    keywords = tuple((r["code"], r["name"], r["terms"]) for r in rows if r["active"])
-    inactive = tuple((r["code"], r["name"], r["terms"]) for r in rows if not r["active"])
-    return TenantConfig(name=name, fleet=fleet, keywords=keywords if rows else domain.KEYWORD_CATALOG,
-                        inactive_keywords=inactive, **kwargs)
+    catalog = tenant_keywords(con, layer)
+    keywords = tuple((k["code"], k["name"], k["terms"]) for k in catalog if k["active"])
+    inactive = tuple((k["code"], k["name"], k["terms"]) for k in catalog if not k["active"])
+    return TenantConfig(name=name, fleet=fleet, keywords=keywords, inactive_keywords=inactive, **values)
+
+
+def prune_overrides(con, layer):
+    """Abweichungen löschen, die (nach einer Änderung der VG) der Vorgabe entsprechen."""
+    for key, value in [(r[0], json.loads(r[1])) for r in con.execute("SELECT key, value FROM setting")]:
+        if key in INHERITED and _same(value, layer.value(key)):
+            con.execute("DELETE FROM setting WHERE key = ?", (key,))
+
+
+def save_tenant_values(con, values):
+    """Werte nur der Wehr (TENANT_ONLY) setzen; None löscht. Mit Standort gelten die alten Präfixe nicht mehr."""
+    for key, value in values.items():
+        if key not in TENANT_ONLY:
+            raise KeyError(key)
+        if value is None:
+            con.execute("DELETE FROM setting WHERE key = ?", (key,))
+        else:
+            con.execute("INSERT INTO setting (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET "
+                        "value = excluded.value", (key, json.dumps(value, ensure_ascii=False)))
+    if values.get("station"):
+        con.execute("DELETE FROM setting WHERE key IN ('unit_prefix', 'own_prefix', 'unit_marker')")
+
+
+def config_sources(con):
+    """Schlüssel aus INHERITED, in denen die Wehr von der VG abweicht."""
+    return {r[0] for r in con.execute("SELECT key FROM setting")} & set(INHERITED)
 
 
 def fleet_version(con):
@@ -88,12 +252,10 @@ def fleet_version(con):
     return hashlib.sha1(json.dumps(rows, ensure_ascii=False).encode()).hexdigest()[:16]
 
 
-def save_config(con, cfg, keywords=False):
-    """Fachkonfiguration und Fahrzeuge speichern; den Stichwortkatalog nur mit keywords=True
-    (solange keine eigene Liste gespeichert ist, gilt die Vorlage)."""
-    for key in _SETTINGS:
-        con.execute("INSERT INTO setting (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                    (key, json.dumps(getattr(cfg, key), ensure_ascii=False)))
+def save_config(con, cfg, layer=NO_LAYER, keywords=False):
+    """Fachkonfiguration und Fahrzeuge speichern – Vorgaben der VG (layer) nur, wo die Wehr abweicht; den
+    Stichwortkatalog nur mit keywords=True."""
+    _write_settings(con, _setting_values(cfg), layer)
     con.execute("DELETE FROM fleet")
     for order, v in enumerate(cfg.fleet, start=1):
         con.execute("INSERT INTO fleet (call_sign, name, label, sort_order, in_service_from, in_service_until, "
@@ -101,58 +263,87 @@ def save_config(con, cfg, keywords=False):
                     (v.call_sign, v.name, v.label, order, v.in_service_from, v.in_service_until, v.replaced_by,
                      int(v.in_plan_crew)))
     if keywords:
-        con.execute("DELETE FROM keyword")
-        con.executemany("INSERT INTO keyword (code, name, terms, sort_order) VALUES (?, ?, ?, ?)",
-                        [(code, name, terms, order) for order, (code, name, terms) in enumerate(cfg.keywords, 1)])
+        save_tenant_keywords(con, [{"code": c, "name": n, "terms": t, "active": True} for c, n, t in cfg.keywords] +
+                             [{"code": c, "name": n, "terms": t, "active": False} for c, n, t in cfg.inactive_keywords],
+                             layer)
 
 
-# ---------------------------------------------------------------- Stichwortkatalog der Wehr
-def keywords(con):
-    """Eigener Katalog [{code, name, terms, active}] oder None, solange die Vorlage gilt."""
-    rows = con.execute("SELECT code, name, terms, active FROM keyword ORDER BY sort_order, code").fetchall()
-    return [{**dict(r), "active": bool(r["active"])} for r in rows] or None
+# ---------------------------------------------------------------- Übernahme in die Vorgaben der VG
+def _majority(values):
+    """Häufigster Wert; bei Gleichstand der zuerst genannte."""
+    counts = []
+    for v in values:
+        for entry in counts:
+            if _same(entry[0], v):
+                entry[1] += 1
+                break
+        else:
+            counts.append([v, 1])
+    return max(counts, key=lambda e: e[1])[0] if counts else None
 
 
-def _own_keywords(con):
-    """Vor der ersten Änderung die Vorlage als eigenen Katalog übernehmen."""
-    if not con.execute("SELECT 1 FROM keyword LIMIT 1").fetchone():
-        add_template_keywords(con)
-
-
-def add_template_keywords(con):
-    """Stichworte der Vorlage ergänzen, die im eigenen Katalog fehlen -> Anzahl."""
-    known = {r[0] for r in con.execute("SELECT code FROM keyword")}
-    order = con.execute("SELECT COALESCE(MAX(sort_order), 0) FROM keyword").fetchone()[0]
-    missing = [k for k in domain.KEYWORD_CATALOG if k[0] not in known]
-    con.executemany("INSERT INTO keyword (code, name, terms, sort_order) VALUES (?, ?, ?, ?)",
-                    [(code, name, terms, order + i) for i, (code, name, terms) in enumerate(missing, 1)])
-    return len(missing)
-
-
-def save_keyword(con, code, name, terms="", active=True):
-    _own_keywords(con)
-    order = con.execute("SELECT COALESCE(MAX(sort_order), 0) + 1 FROM keyword").fetchone()[0]
-    con.execute("INSERT INTO keyword (code, name, terms, active, sort_order) VALUES (?, ?, ?, ?, ?) "
-                "ON CONFLICT(code) DO UPDATE SET name = excluded.name, terms = excluded.terms, active = excluded.active",
-                (code, name, terms, int(active), order))
-
-
-def delete_keyword(con, code):
-    _own_keywords(con)
-    con.execute("DELETE FROM keyword WHERE code = ?", (code,))
-
-
-def replace_keywords(con, entries):
-    """Katalog durch [(code, name, terms)] ersetzen; leer = zurück zur Vorlage."""
-    con.execute("DELETE FROM keyword")
-    con.executemany("INSERT INTO keyword (code, name, terms, sort_order) VALUES (?, ?, ?, ?)",
-                    [(code, name, terms, i) for i, (code, name, terms) in enumerate(entries, 1)])
+def lift_vg_defaults():
+    """Einmalig je VG: was ihre Wehren bisher einzeln gespeichert haben, wird Vorgabe der VG – je Wert der
+    häufigste unter den eingerichteten Wehren. Diese behalten jeden Wert genau so (anderer Wert = Abweichung).
+    Wehren, die noch nichts eingestellt haben (alles Standard), übernehmen künftig die Vorgaben."""
+    with central() as con:
+        vgs = [r[0] for r in con.execute("SELECT id FROM vg WHERE NOT defaults_lifted")]
+    for vg_id in vgs:
+        with central() as con:
+            rows = con.execute("SELECT slug, name FROM tenant WHERE vg_id = ? AND slug NOT IN "
+                               "(SELECT slug FROM tenant_archive) ORDER BY name", (vg_id,)).fetchall()
+        tenants = []
+        for r in rows:
+            with db.connection(tenant_path(r["slug"])) as con:
+                tenants.append((r["slug"], load_config(con, r["name"]), _tenant_keyword_rows(con)))
+        values = {slug: _setting_values(cfg) for slug, cfg, _ in tenants}
+        configured = [slug for slug, v in values.items()
+                      if any(not _same(v.get(key), _DEFAULTS[key]) for key in INHERITED)]
+        settings = {key: _majority([values[slug].get(key) for slug in configured]) for key in INHERITED}
+        settings = {key: v for key, v in settings.items() if v is not None and not _same(v, _DEFAULTS[key])}
+        catalogs = [kw for _, _, kw in tenants if kw]
+        keywords = None
+        if catalogs:
+            codes = list(dict.fromkeys(k["code"] for kw in catalogs for k in kw))
+            keywords = []
+            for code in codes:
+                entries = [k for kw in catalogs for k in kw if k["code"] == code]
+                if 2 * len(entries) >= len(catalogs):
+                    keywords.append(_majority([{key: k[key] for key in ("code", "name", "terms", "active")}
+                                               for k in entries]))
+        layer = VgLayer(settings, tuple(keywords) if keywords is not None else None)
+        with central() as con:
+            save_vg_settings(con, vg_id, settings)
+            save_vg_keywords(con, vg_id, keywords)
+            for slug, cfg, kw in tenants:
+                own = values[slug]
+                if slug not in configured:         # nichts eingestellt: künftig die Vorgaben
+                    own = {key: v for key, v in own.items() if key not in INHERITED}
+                elif "bks_code" not in own:        # ohne Kennung bisher: nicht die der VG erben
+                    own["bks_code"] = ""
+                with db.connection(tenant_path(slug)) as tenant_con:
+                    _write_settings(tenant_con, own, layer)
+                    if kw:                         # bisher: eigener Katalog vollständig in der Wehr
+                        save_tenant_keywords(tenant_con, kw, layer)
+                    else:
+                        tenant_con.execute("DELETE FROM keyword")
+                forget_config(slug)
+            con.execute("UPDATE vg SET defaults_lifted = 1 WHERE id = ?", (vg_id,))
+        log.info("Vorgaben der VG %s aus %d Wehren übernommen: %s", vg_id, len(tenants), ", ".join(settings) or "keine")
 
 
 def forget_config(slug):
     """Nach dem Speichern: Konfiguration beim nächsten Zugriff neu laden."""
     with _configs_lock:
         _configs.pop(slug, None)
+
+
+def forget_vg_config(vg_id):
+    """Nach dem Ändern der Vorgaben einer VG: Konfiguration aller ihrer Wehren neu laden."""
+    with central() as con:
+        slugs = [r[0] for r in con.execute("SELECT slug FROM tenant WHERE vg_id = ?", (vg_id,))]
+    for slug in slugs:
+        forget_config(slug)
 
 
 # ---------------------------------------------------------------- Verbandsgemeinden, Wehren, Zuordnungen
@@ -163,11 +354,14 @@ def check_slug(slug):
 
 
 def create_vg(con, slug, name):
-    return con.execute("INSERT INTO vg (slug, name) VALUES (?, ?)", (check_slug(slug), name.strip())).lastrowid
+    """Neue VG: ohne Wehren gibt es nichts in ihre Vorgaben zu übernehmen (defaults_lifted)."""
+    return con.execute("INSERT INTO vg (slug, name, defaults_lifted) VALUES (?, ?, 1)",
+                       (check_slug(slug), name.strip())).lastrowid
 
 
 def create_tenant(con, slug, name, vg_id, cfg=None):
-    """Wehr anlegen: Eintrag in der Zentrale, eigene Datenbank mit Fachkonfiguration."""
+    """Wehr anlegen: Eintrag in der Zentrale, eigene Datenbank. Ohne cfg übernimmt sie alle Vorgaben der VG,
+    mit cfg werden abweichende Werte als Abweichung gespeichert."""
     check_slug(slug)
     path = tenant_path(slug)
     if os.path.exists(path):
@@ -186,7 +380,8 @@ def create_tenant(con, slug, name, vg_id, cfg=None):
         os.fsync(marker.fileno())
     db.setup(path)
     with db.connection(path) as tenant_con:
-        save_config(tenant_con, cfg or TenantConfig(name=name))
+        if cfg:
+            save_config(tenant_con, cfg, load_vg_layer(con, vg_id))
     return tenant_id
 
 
@@ -267,12 +462,19 @@ class Tenant:
         return tenant_path(self.slug)
 
     @property
+    def layer(self):
+        """Vorgaben der VG dieser Wehr."""
+        with central() as con:
+            return load_vg_layer(con, self.vg_id)
+
+    @property
     def config(self):
         with _configs_lock:
             cfg = _configs.get(self.slug)
         if cfg is None or cfg.name != self.name:
+            layer = self.layer
             with db.connection(self.db_path) as con:
-                cfg = load_config(con, self.name)
+                cfg = load_config(con, self.name, layer)
             with _configs_lock:
                 _configs[self.slug] = cfg
         return cfg

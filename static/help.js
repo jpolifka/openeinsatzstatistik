@@ -177,7 +177,7 @@ const HELP_SECTIONS = [
       area: {
         title: "Einsatzgebiet",
         short: "Einsätze je Ort anhand des Anfangs des Ortsnamens.",
-        text: () => `Zuordnung nach dem Anfang des Ortsnamens${config.places.length ? ` (z. B. „${esc(config.places[0])}-…“ → ${esc(config.places[0])})` : ""}. Orte außerhalb der bekannten Liste erscheinen als „sonstige“.`,
+        text: () => `Zuordnung nach dem Ortsnamen, mit dem der Einsatzort beginnt${config.places.length ? ` (z. B. „${esc(config.places[0])}-…“ → ${esc(config.places[0])})` : ""}. Orte außerhalb der bekannten Liste erscheinen als „sonstige“.`,
       },
       participations: {
         title: "Einsätze und Beteiligungen (alle Wehren)",
@@ -257,23 +257,28 @@ const HELP_SECTIONS = [
       },
       admin_vg_vehicles: {
         title: "Fahrzeuge der VG",
-        short: "Alle Fahrzeuge der VG und ihre Wehr.",
-        text: "Die Wehrleitung sieht hier alle Fahrzeuge der VG: die der Fahrzeuglisten der Wehren und darunter die Funkrufnamen aus eingelesenen Berichten, die noch keiner Wehr gehören (weitere wie Rettungsdienst oder Fahrzeuge des Landes aufklappbar). Über die Auswahl <b>Wehr</b> gehört ein Fahrzeug zu einer Wehr – nur deren Berichte ordnen es als eigenes Fahrzeug zu (Einsatzbeginn, Kostenersatz). Wechselt ein Fahrzeug die Wehr, bleiben die bisherigen Einsätze mit seinen Daten bei der alten Wehr unverändert; dort erscheint es nur nicht mehr als Spalte. Einträge mit altem Kurznamen (z. B. 01/10) zeigen den vermuteten Funkrufnamen; mit dem Verschieben wird er übernommen. Fahrzeugtyp, Dienstzeitraum und Reihenfolge pflegt die Wehr unter „Fahrzeuge“ (Schaltfläche Bearbeiten).",
+        short: "Alle Fahrzeuge aller Wehren der VG in einer Tabelle.",
+        text: "Bei gewählter Wehrleitung stehen hier die Fahrzeuglisten aller Wehren der VG untereinander, mit denselben Spalten wie bei einer Wehr (Funkrufname, Fahrzeugtyp, Dienstzeitraum, Nachfolger, Bedarfsplan, Reihenfolge, Ersatzfahrzeuge). Über die Spalte <b>Wehr</b> wechselt ein Fahrzeug die Wehr – nur deren Berichte ordnen es als eigenes Fahrzeug zu (Einsatzbeginn, Kostenersatz). Die bisherigen Einsätze mit seinen Daten bleiben bei der alten Wehr unverändert; dort erscheint es nur nicht mehr als Spalte. Darunter stehen die Funkrufnamen aus eingelesenen Berichten, die noch keiner Wehr gehören (weitere wie Rettungsdienst oder Fahrzeuge des Landes aufklappbar). Gespeichert wird alles mit einem Klick; hat sich eine Liste inzwischen geändert (z. B. durch einen Import), bitte neu laden.",
+      },
+      admin_vg_defaults: {
+        title: "Vorgaben der VG",
+        short: "Einstellungen, die für alle Wehren der VG gelten.",
+        text: "Bei gewählter Wehrleitung legen <b>Allgemein</b>, <b>BKS-Kennung</b> und <b>Orte & Bedarfsplan</b> die Vorgaben für alle Wehren der VG fest: Farben, Kennung im BKS-Bericht, FEZ, Nummerierung, Orte, Alarmstufe, Zeitgrenzen und Tagesstunden. Je Wehr kommen ihr Standort und ihr Ausrückebereich dazu. Eine neue Wehr übernimmt alle Vorgaben. Eine Wehr kann bei sich abweichen – bei gewählter Wehr steht an jedem Wert „von der VG“ oder „abweichend von der VG“ mit „VG-Wert übernehmen“. Abweichungen sind in der Wehrleitung unter dem jeweiligen Wert aufgeführt; ändert die VG ihre Vorgabe auf denselben Wert, entfällt die Abweichung.",
       },
       admin_bks: {
         title: "BKS-Kennung",
         short: "Woran die App die eigenen Fahrzeuge und Berichte erkennt.",
-        text: "<b>Einheit im Bericht</b>: die Einheit aus der Kopfzeile des Berichts, z. B. „FW NR#.ABC 02“. Darüber werden Berichte der richtigen Wehr zugeordnet, und daraus ergeben sich die Funkrufnamen: „FL NR#.ABC 02/…“ sind eigene Fahrzeuge (deren früheste Alarmierung ist der Einsatzbeginn), „FL NR#.ABC …“ Fahrzeuge der übrigen Wehren der VG. Fahrzeuge der Fahrzeugliste zählen immer als eigene, auch mit anderem Funkrufnamen (z. B. „RP WW …“). <b>FEZ-Kennung</b>: die Feuerwehreinsatzzentrale, deren Einsatzende mitzählt. Ins <b>Testfeld</b> passt beliebiger Text aus einem Bericht – einzelne Funkrufnamen, Zeilen der Fahrzeugtabelle oder der ganze Bericht; die App zeigt, wie sie jedes gefundene Fahrzeug zuordnet.",
+        text: "<b>Kennung der VG</b> (gilt für alle Wehren der VG) und <b>Standort</b> der Wehr ergeben die Einheit aus der Kopfzeile des Berichts, z. B. „FW NR#.ABC 02“. Darüber werden Berichte der richtigen Wehr zugeordnet, und daraus ergeben sich die Funkrufnamen: „FL NR#.ABC 02/…“ sind eigene Fahrzeuge (deren früheste Alarmierung ist der Einsatzbeginn), „FL NR#.ABC …“ Fahrzeuge der übrigen Wehren der VG. Fahrzeuge der Fahrzeugliste zählen immer als eigene, auch mit anderem Funkrufnamen (z. B. „RP WW …“). <b>FEZ-Kennung</b>: die Feuerwehreinsatzzentrale, deren Einsatzende mitzählt. Ins <b>Testfeld</b> passt beliebiger Text aus einem Bericht – einzelne Funkrufnamen, Zeilen der Fahrzeugtabelle oder der ganze Bericht; die App zeigt, wie sie jedes gefundene Fahrzeug zuordnet.",
       },
       admin_places: {
         title: "Orte und Bedarfsplan",
         short: "Einsatzgebiete und Ausrückebereich des Feuerwehrbedarfsplans.",
-        text: "Ein Einsatz gehört zu dem Ort, dessen <b>Namensanfang</b> zum Ortsnamen im Bericht passt (Groß-/Kleinschreibung egal). Nur Orte mit Haken bei <b>Bedarfsplan</b> zählen für den Erreichungsgrad. Dazu kommen die Mindest-Alarmstufe, die Zeitgrenzen (mehrere möglich, z. B. 8 und 10 Minuten), die zweite Grenze für „Stärke nach … Min.“ und die Stunden, die als Tag gelten.",
+        text: "Ein Einsatz gehört zu dem Ort, mit dessen <b>Namen</b> der Einsatzort beginnt (z. B. „Musterstadt-Nord“ → Musterstadt, Groß-/Kleinschreibung egal). Nur Orte mit Haken bei <b>Bedarfsplan</b> zählen für den Erreichungsgrad. Dazu kommen die Mindest-Alarmstufe, die Zeitgrenzen (mehrere möglich, z. B. 8 und 10 Minuten), die zweite Grenze für „Stärke nach … Min.“ und die Stunden, die als Tag gelten. Orte und Bedarfsplan gibt die Wehrleitung für alle Wehren der VG vor; dort setzt sie auch je Wehr die Haken des Ausrückebereichs.",
       },
       admin_keywords: {
         title: "Stichwortkatalog",
         short: "Stichworte der AAO für die Suche im Feld Stichwort.",
-        text: "Standard ist die Vorlage der AAO. Sobald ein Stichwort ergänzt, geändert oder gelöscht wird, hat die Wehr ihren eigenen Katalog. <b>Deaktivierte</b> Stichworte erscheinen nicht mehr in der Suche, alte Einsätze behalten aber ihre Bezeichnung. Ein ganzer Katalog lässt sich als CSV oder Excel (Stichwort, Bezeichnung, Suchbegriffe) einlesen – vorher zeigt die App, was neu ist oder sich ändert.",
+        text: "Den Katalog pflegt die Wehrleitung für alle Wehren der VG; Standard ist die Vorlage der AAO. Bei gewählter Wehr zeigt die Spalte <b>Herkunft</b>, was von der VG kommt. Eine Wehr kann abweichen: Haken <b>gilt hier</b> entfernen (Stichwort gilt in dieser Wehr nicht), Bezeichnung oder Suchbegriffe ändern oder eigene Stichworte ergänzen; ↺ hebt eine Abweichung wieder auf. In der Wehrleitung steht je Stichwort, welche Wehren abweichen. <b>Deaktivierte</b> Stichworte erscheinen nicht mehr in der Suche, alte Einsätze behalten aber ihre Bezeichnung. Ein ganzer Katalog lässt sich als CSV oder Excel (Stichwort, Bezeichnung, Suchbegriffe) einlesen – vorher zeigt die App, was neu ist oder sich ändert.",
       },
       dpa: {
         title: "Auftragsverarbeitung (AVV)",
@@ -363,14 +368,14 @@ const HELP_SECTIONS = [
         text: "Anwesenheit eines Einsatzes ändern und Kameraden ergänzen. Nur für Rollen einer Wehr.",
       },
       perm_tenant_settings: {
-        title: "Einstellungen, Farben und Logos",
-        short: "Name, Farben, Logos, Fahrzeuge, BKS-Kennung, Orte und Zeitgrenzen der Wehr.",
-        text: "Name, Farben, Logos, Fahrzeuge, BKS-Kennung, Orte und Zeitgrenzen der Wehr.",
+        title: "Einstellungen, Fahrzeuge, Farben und Logos",
+        short: "Fahrzeuge, BKS-Kennung, Orte, Zeitgrenzen, Farben und Logos. In einer Rolle der VG: Vorgaben für alle Wehren der VG.",
+        text: "Name, Farben, Logos, Fahrzeuge, BKS-Kennung, Orte und Zeitgrenzen. In einer Rolle der Wehr: Werte und Abweichungen dieser Wehr von den Vorgaben der VG. In einer Rolle der VG: die Vorgaben für alle Wehren der VG und die Fahrzeuge aller Wehren.",
       },
       perm_tenant_keywords: {
         title: "Stichwortkatalog",
-        short: "Stichworte der Wehr ergänzen, ändern, deaktivieren oder einlesen.",
-        text: "Stichworte der Wehr ergänzen, ändern, deaktivieren oder einlesen.",
+        short: "Stichworte ergänzen, ändern, deaktivieren oder einlesen – in einer Rolle der VG für alle Wehren der VG.",
+        text: "Stichworte ergänzen, ändern, deaktivieren oder einlesen. In einer Rolle der Wehr: Abweichungen vom Katalog der VG (Stichwort gilt hier nicht, eigene Bezeichnung, eigene Stichworte). In einer Rolle der VG: der Katalog für alle Wehren der VG.",
       },
       perm_vg_overview: {
         title: "Gesamtansicht der VG",
@@ -383,9 +388,9 @@ const HELP_SECTIONS = [
         text: "Abgleich der Berichte aller Wehren je Einsatz und Kostenaufstellung. Nur für Rollen der VG.",
       },
       perm_vg_fees: {
-        title: "Gebührenordnung und Fahrzeuge der VG",
-        short: "Gebührenordnung pflegen und Fahrzeuge zwischen den Wehren der VG zuordnen. Nur für Rollen der VG.",
-        text: "Gebührenordnung pflegen und Fahrzeuge zwischen den Wehren der VG zuordnen. Nur für Rollen der VG.",
+        title: "Gebührenordnung der VG",
+        short: "Gebührenordnung (Kostenersatz) der VG pflegen. Nur für Rollen der VG.",
+        text: "Gebührenordnung (Kostenersatz) der VG in Fassungen mit Gültigkeitsbeginn pflegen. Nur für Rollen der VG.",
       },
       perm_dpa_view: {
         title: "Auftragsverarbeitung ansehen",
@@ -495,7 +500,7 @@ function markNews() {
 // ------------------------------------------------------------ Feedback (per Mail an die Superadmins)
 function feedbackView() {
   const view = VIEWS[state.view];
-  const section = state.view === "admin" ? ADMIN_SECTIONS.find(([key]) => key === admin.section)?.[1] : "";
+  const section = state.view === "admin" ? ADMIN_SECTIONS.find((x) => x.key === admin.section)?.label : "";
   return [view?.label, section, $("#pdf-dialog").open && "Bericht einlesen"].filter(Boolean).join(" · ");
 }
 

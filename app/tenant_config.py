@@ -63,7 +63,7 @@ class TenantConfig:
     own_prefix: str = ""                      # Funkrufnamen der eigenen Wehr, z. B. „02/“
     unit_marker: str = ""                     # Einheit im Bericht, z. B. „FW NR#.ABC 02“
     control_center: str = domain.CONTROL_CENTER
-    places: tuple = ()                        # (Name, Namensanfang) für die Zuordnung des Einsatzgebiets
+    places: tuple = ()                        # Orte für die Zuordnung des Einsatzgebiets
     plan_places: tuple = ()                   # Ausrückebereich laut Feuerwehrbedarfsplan
     plan_min_level: int = domain.PLAN_MIN_LEVEL
     response_limits: tuple = domain.RESPONSE_LIMITS
@@ -178,12 +178,12 @@ class TenantConfig:
     # ------------------------------------------------------------ Orte und Bedarfsplan
     @property
     def place_names(self):
-        return tuple(name for name, _ in self.places)
+        return self.places
 
     def area_of(self, place):
-        """Einsatzgebiet anhand des Anfangs des Ortsnamens."""
+        """Einsatzgebiet: der Ort, mit dessen Namen der Einsatzort beginnt (z. B. „Rheinbrohl-Nord“)."""
         text = (place or "").lower()
-        return next((name for name, prefix in self.places if text.startswith(prefix)), domain.OTHER_AREA)
+        return next((name for name in self.places if text.startswith(name.lower())), domain.OTHER_AREA)
 
     def is_plan_relevant(self, incident):
         """Einsatz zählt für den Bedarfsplan: ab Mindest-Alarmstufe im eigenen Ausrückebereich."""
@@ -244,7 +244,7 @@ def combine(name, cfgs):
         first, name=name,
         fleet=_unique((v for c in cfgs for v in c.fleet), key=lambda v: v.call_sign),
         substitutes={k: v for c in reversed(cfgs) for k, v in c.substitutes.items()},
-        places=_unique((p for c in cfgs for p in c.places), key=lambda p: p[0]),
+        places=_unique(p for c in cfgs for p in c.places),
         plan_places=_unique(p for c in cfgs for p in c.plan_places),
         plan_min_level=min(c.plan_min_level for c in cfgs),
         response_limits=tuple(sorted({limit for c in cfgs for limit in c.response_limits})),

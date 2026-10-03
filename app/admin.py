@@ -3,8 +3,9 @@
 Verwaltung: Fachkonfiguration, Farben und Logos einer Wehr, Stichwortkatalog, Benutzer und
 (für Superadmins) Verbandsgemeinden und Wehren.
 
-Rechte (rbac.py): Einstellungen, Logos und Bedarfsplan-Freigabe brauchen SETTINGS bzw. PLAN_RELEASE,
-der Stichwortkatalog KEYWORDS, Gebührenordnung und Fahrzeuge der VG VG_FEES. Rollen vergibt jeder nur
+Rechte (rbac.py): Einstellungen, Fahrzeuge, Logos und Bedarfsplan-Freigabe brauchen SETTINGS bzw. PLAN_RELEASE,
+der Stichwortkatalog KEYWORDS, die Gebührenordnung VG_FEES. SETTINGS und KEYWORDS in einer Rolle der VG
+erlauben die Vorgaben für alle Wehren der VG; in einer Rolle der Wehr die Abweichungen dieser Wehr. Rollen vergibt jeder nur
 nach der Verteilung seiner Rollen und nur in seinem Bereich, nie sich selbst; Rollen der VG pflegt, wer
 ROLES_MANAGE hat, System- und globale Rollen sowie VGs und Wehren nur der Superadmin.
 """
@@ -48,7 +49,7 @@ def _invalid(message):
 
 # ---------------------------------------------------------------- Übersicht
 TENANT_ADMIN = (SETTINGS, KEYWORDS, USERS_VIEW)
-VG_ADMIN = (VG_FEES, USERS_VIEW, ROLES_MANAGE)
+VG_ADMIN = (SETTINGS, KEYWORDS, VG_FEES, USERS_VIEW, ROLES_MANAGE)
 
 
 def has_admin(a):
@@ -91,7 +92,6 @@ class VehicleIn(BaseModel):
 
 class PlaceIn(BaseModel):
     name: str
-    prefix: str
 
 
 class SettingsIn(BaseModel):
@@ -115,36 +115,57 @@ class SettingsIn(BaseModel):
     fleet_version: Optional[str] = None   # Stand der Fahrzeugliste beim Laden (tenancy.fleet_version)
 
 
+def _types(name):
+    return domain.describe_call_sign(name).get("types", [])
+
+
+def _vehicle_json(v, cfg, used):
+    """Fahrzeug der Fahrzeugliste für die Oberfläche (Wehr und Fahrzeuge der VG)."""
+    return {"call_sign": v.call_sign, "name": v.name, "description": domain.call_sign_text(v.name),
+            "suggested_name": "" if v.name else _suggested_name(v.call_sign, cfg) or "",
+            "types": _types(v.name or _suggested_name(v.call_sign, cfg) or v.call_sign),
+            "label": v.label, "in_service_from": v.in_service_from,
+            "in_service_until": v.in_service_until, "replaced_by": v.replaced_by,
+            "in_plan_crew": v.in_plan_crew, "incidents": used.get(v.call_sign, 0)}
+
+
+def _bks_parts(cfg):
+    """(Kennung der VG, Standort) aus der Einheit im Bericht, z. B. („NR#.ABC“, „02“)."""
+    m = UNIT_MARKER.fullmatch(cfg.unit_marker.strip())
+    return (m.group(1), m.group(2)) if m else (None, None)
+
+
 def _settings_json(tenant, cfg):
+    layer = tenant.layer
     with tenant.connection() as con:
         used = store.vehicles_with_data(con)
         version = tenancy.fleet_version(con)
+        overrides = tenancy.config_sources(con)
         assets = {r["name"]: f"/api/branding/{tenant.slug}/{r['name']}?v={r['modified'].replace(' ', 'T')}"
                   for r in con.execute("SELECT name, modified FROM asset")}
     with tenancy.central() as con:
         fee_types = fees.vehicle_types(con, tenant.vg_id)
-
-    def types(name):
-        return domain.describe_call_sign(name).get("types", [])
-
+    bks_code, station = _bks_parts(cfg)
+    if not bks_code and "bks_code" not in overrides:   # noch ohne Standort: die Kennung der VG
+        bks_code = layer.value("bks_code")
     return {
         "assets": {name: assets.get(name) for name in theme.ASSETS},
         "slug": tenant.slug, "name": cfg.name, "colors": cfg.colors, "fleet_version": version,
         "palette": theme.palette(cfg.colors) if cfg.colors else None,
-        "fleet": [{"call_sign": v.call_sign, "name": v.name, "description": domain.call_sign_text(v.name),
-                   "suggested_name": "" if v.name else _suggested_name(v.call_sign, cfg) or "",
-                   "types": types(v.name or _suggested_name(v.call_sign, cfg) or v.call_sign),
-                   "label": v.label, "in_service_from": v.in_service_from,
-                   "in_service_until": v.in_service_until, "replaced_by": v.replaced_by,
-                   "in_plan_crew": v.in_plan_crew, "incidents": used.get(v.call_sign, 0)} for v in cfg.fleet],
+        "fleet": [_vehicle_json(v, cfg, used) for v in cfg.fleet],
         "unused_data": {cs: n for cs, n in used.items() if cs not in cfg.vehicles},
         "substitutes": cfg.substitutes,
         **{key: getattr(cfg, key) for key in ("unit_prefix", "own_prefix", "unit_marker", "control_center",
                                                "plan_places", "plan_min_level", "response_limits", "default_limit",
                                                "second_limit", "day_hours", "numbering", "response_plan_public")},
-        "places": [{"name": n, "prefix": p} for n, p in cfg.places],
-        "known_vehicles": [{"name": n, "description": domain.call_sign_text(n), "types": types(n),
-                            "label": fees.suggest_type(types(n), fee_types)} for n in _known_vehicles(tenant, cfg)],
+        "bks_code": bks_code, "station": station,
+        "places": [{"name": n} for n in cfg.places],
+        # Vorgaben der VG und die Schlüssel, in denen die Wehr davon abweicht
+        "vg": {"slug": tenant.vg_slug, "name": tenant.vg_name},
+        "inherited": {key: layer.value(key) for key in tenancy.INHERITED},
+        "overrides": sorted(overrides),
+        "known_vehicles": [{"name": n, "description": domain.call_sign_text(n), "types": _types(n),
+                            "label": fees.suggest_type(_types(n), fee_types)} for n in _known_vehicles(tenant, cfg)],
         "fee_types": fee_types,
         "call_sign_directory": domain.CALL_SIGN_DIRECTORY_URL,
     }
@@ -176,13 +197,13 @@ def get_settings(slug: str, a: tenancy.Access = Depends(access)):
     return _settings_json(tenant, tenant.config)
 
 
-def _check_fleet(s: SettingsIn):
+def _check_fleet(vehicles, unit_prefix):
     """Fahrzeugliste prüfen; neue Fahrzeuge bekommen ihren Kurznamen aus dem Funkrufnamen."""
-    rows = [(v, v.name.strip(), v.call_sign.strip()) for v in s.fleet]
+    rows = [(v, v.name.strip(), v.call_sign.strip()) for v in vehicles]
     names = [name for _, name, _ in rows if name]
     if len(set(names)) != len(names):
         _invalid("Ein Funkrufname steht doppelt in der Fahrzeugliste.")
-    derive = TenantConfig(name="", unit_prefix=s.unit_prefix)
+    derive = TenantConfig(name="", unit_prefix=unit_prefix)
     taken = {call_sign for _, _, call_sign in rows if call_sign}
     result = []
     for v, name, call_sign in rows:
@@ -221,35 +242,42 @@ def _check_fleet(s: SettingsIn):
     return tuple(fleet)
 
 
-def _check_settings(s: SettingsIn):
-    """Fachliche Prüfung -> TenantConfig; Meldungen auf Deutsch (422)."""
-    if len(s.name.strip()) < 2:
-        _invalid("Bitte den Namen der Wehr angeben.")
-    try:
-        colors = theme.normalize(s.colors)
-    except ValueError as e:
-        _invalid(str(e))
-    problems = theme.check(colors)
-    if problems:
-        _invalid(" ".join(problems))
-    fleet = _check_fleet(s)
+def _check_substitutes(substitutes, fleet):
     call_signs = [v.call_sign for v in fleet]
     by_name = {v.name: v.call_sign for v in fleet if v.name}
-    substitutes = {}
-    for sub, block in s.substitutes.items():
+    result = {}
+    for sub, block in substitutes.items():
         if not isinstance(block, str):
             _invalid(f"Ersatzfahrzeug {sub}: bitte ein Fahrzeug der Liste wählen.")
         sub, block = sub.strip(), by_name.get(block, block)
         if not VEHICLE_NAME.fullmatch(sub) or block not in call_signs:
             _invalid(f"Ersatzfahrzeug {sub}: der Block {block} muss ein Fahrzeug der Liste sein.")
-        substitutes[sub] = block
-    names = [p.name.strip() for p in s.places]
-    if any(not p.name.strip() or not p.prefix.strip() for p in s.places) or len(set(names)) != len(names):
-        _invalid("Jeder Ort braucht einen eindeutigen Namen und einen Namensanfang.")
-    if any(UNSAFE.search(p.name + p.prefix) for p in s.places):
+        result[sub] = block
+    return result
+
+
+def _check_colors(colors):
+    try:
+        colors = theme.normalize(colors)
+    except ValueError as e:
+        _invalid(str(e))
+    problems = theme.check(colors)
+    if problems:
+        _invalid(" ".join(problems))
+    return colors
+
+
+def _check_places(places):
+    names = [p.name.strip() for p in places]
+    if any(not name for name in names) or len({n.lower() for n in names}) != len(names):
+        _invalid("Jeder Ort braucht einen eindeutigen Namen.")
+    if any(UNSAFE.search(name) for name in names):
         _invalid("Ortsnamen ohne die Zeichen < > \" &.")
-    if not set(s.plan_places) <= set(names):
-        _invalid("Bedarfsplan-Orte müssen in der Ortsliste stehen.")
+    return tuple(names)
+
+
+def _check_plan(s):
+    """Bedarfsplan, Tag und Nummerierung (Wehr wie VG) -> dict für die TenantConfig."""
     limits = sorted(set(s.response_limits))
     if not limits or any(not 1 <= m <= 60 for m in limits) or s.default_limit not in limits:
         _invalid("Zeitgrenzen: 1 bis 60 Minuten, die Standardgrenze muss dabei sein.")
@@ -261,6 +289,20 @@ def _check_settings(s: SettingsIn):
         _invalid("Tag: Beginn und Ende als volle Stunden, Beginn vor Ende.")
     if s.numbering not in NUMBERINGS:
         _invalid("Nummerierung: aus dem Bericht oder nach Datum.")
+    return {"plan_min_level": s.plan_min_level, "response_limits": tuple(limits), "default_limit": s.default_limit,
+            "second_limit": s.second_limit, "day_hours": tuple(s.day_hours), "numbering": s.numbering}
+
+
+def _check_settings(s: SettingsIn):
+    """Fachliche Prüfung -> TenantConfig; Meldungen auf Deutsch (422)."""
+    if len(s.name.strip()) < 2:
+        _invalid("Bitte den Namen der Wehr angeben.")
+    colors = _check_colors(s.colors)
+    fleet = _check_fleet(s.fleet, s.unit_prefix)
+    substitutes = _check_substitutes(s.substitutes, fleet)
+    names = _check_places(s.places)
+    if not set(s.plan_places) <= set(names):
+        _invalid("Bedarfsplan-Orte müssen in der Ortsliste stehen.")
     unit_marker = s.unit_marker.strip()
     if unit_marker and not prefixes_of(unit_marker):
         _invalid("Einheit im Bericht: wie in der Kopfzeile des Berichts, z. B. FW NR#.ABC 02.")
@@ -272,10 +314,7 @@ def _check_settings(s: SettingsIn):
         name=s.name.strip(), colors=colors, substitutes=substitutes, fleet=fleet,
         unit_prefix=unit_prefix, own_prefix=own_prefix, unit_marker=unit_marker,
         control_center=s.control_center.strip() or domain.CONTROL_CENTER,
-        places=tuple((p.name.strip(), p.prefix.strip().lower()) for p in s.places), plan_places=tuple(s.plan_places),
-        plan_min_level=s.plan_min_level, response_limits=tuple(limits), default_limit=s.default_limit,
-        second_limit=s.second_limit, day_hours=tuple(s.day_hours), numbering=s.numbering,
-        response_plan_public=s.response_plan_public)
+        places=names, plan_places=tuple(s.plan_places), response_plan_public=s.response_plan_public, **_check_plan(s))
 
 
 @router.put("/api/admin/{slug}/settings")
@@ -288,7 +327,7 @@ def put_settings(slug: str, s: SettingsIn, a: tenancy.Access = Depends(access)):
         if s.fleet_version and s.fleet_version != tenancy.fleet_version(con):
             raise HTTPException(409, "Die Fahrzeugliste wurde inzwischen geändert (z. B. durch einen Import). "
                                      "Bitte die Seite neu laden und die Änderungen erneut eintragen.")
-        tenancy.save_config(con, cfg)
+        tenancy.save_config(con, cfg, tenant.layer)
         if cfg.numbering == "by_date":         # beim Umstellen alle Jahre nach Datum durchnummerieren
             for row in store.years(con):
                 store.renumber(con, row["year"])
@@ -307,12 +346,12 @@ class ScheduleIn(BaseModel):
     rates: dict
 
 
-def _managed_vg_id(a, vg_slug):
-    """VG, deren Gebührenordnung und Fahrzeuge der Benutzer pflegen darf (Recht VG_FEES)."""
+def _managed_vg_id(a, vg_slug, permission=VG_FEES):
+    """VG, in der der Benutzer das Recht auf Ebene der VG hat (Gebührenordnung, Vorgaben für die Wehren)."""
     with tenancy.central() as con:
         row = con.execute("SELECT id FROM vg WHERE slug = ?", (vg_slug,)).fetchone()
-    if not row or not a.vg_can(row["id"], VG_FEES):
-        raise tenancy.Forbidden("Keine Berechtigung für Fahrzeuge und Gebührenordnung dieser VG.")
+    if not row or not a.vg_can(row["id"], permission):
+        raise tenancy.Forbidden("Keine Berechtigung für diese VG.")
     return row["id"]
 
 
@@ -350,97 +389,194 @@ def delete_fee_schedule(vg_slug: str, schedule_id: int, a: tenancy.Access = Depe
     return _schedules_json(vg_id)
 
 
-# ---------------------------------------------------------------- Fahrzeuge der VG
-def _vg_vehicles_json(vg_id):
-    """Alle Fahrzeuge der VG auf einen Blick: die der Fahrzeuglisten der Wehren und die übrigen
-    Funkrufnamen aus den Berichten (Stammdatensätze und Einsätze), die noch keiner Wehr gehören."""
+# ---------------------------------------------------------------- Vorgaben der VG für ihre Wehren
+class VgTenantIn(BaseModel):
+    slug: str
+    station: Optional[str] = None          # Standortnummer, z. B. 02
+    plan_places: Optional[List[str]] = None
+
+
+class VgSettingsIn(BaseModel):
+    bks_code: str = ""
+    control_center: str = ""
+    places: List[PlaceIn] = []
+    plan_min_level: int = domain.PLAN_MIN_LEVEL
+    response_limits: List[int] = list(domain.RESPONSE_LIMITS)
+    default_limit: int = domain.DEFAULT_LIMIT
+    second_limit: int = domain.SECOND_LIMIT
+    day_hours: List[int] = [domain.DAY_START_HOUR, domain.DAY_END_HOUR]
+    numbering: str = "bks"
+    colors: dict = {}
+    tenants: List[VgTenantIn] = []
+
+
+def _vg_settings_json(vg_id):
+    """Vorgaben der VG und je Wehr ihre eigenen Werte und Abweichungen (Massenansicht)."""
+    with tenancy.central() as con:
+        layer = tenancy.load_vg_layer(con, vg_id)
+        vg = con.execute("SELECT slug, name FROM vg WHERE id = ?", (vg_id,)).fetchone()
+    defaults = {key: layer.value(key) for key in tenancy.INHERITED}
+    tenants = []
+    for t in tenancy.vg_tenants(vg_id):
+        cfg = t.config
+        with t.connection() as con:
+            overrides = tenancy.config_sources(con)
+        bks_code, station = _bks_parts(cfg)
+        tenants.append({"slug": t.slug, "name": t.name, "station": station, "unit_marker": cfg.unit_marker,
+                        "plan_places": list(cfg.plan_places), "response_plan_public": cfg.response_plan_public,
+                        "overrides": {key: _setting_value(cfg, key) for key in sorted(overrides)}})
+    return {"vg": {"slug": vg["slug"], "name": vg["name"]}, **defaults,
+            "places": [{"name": n} for n in defaults["places"]],
+            "palette": theme.palette(defaults["colors"]) if defaults["colors"] else None, "tenants": tenants}
+
+
+def _setting_value(cfg, key):
+    return _bks_parts(cfg)[0] if key == "bks_code" else getattr(cfg, key)
+
+
+@router.get("/api/admin/vgs/{vg_slug}/settings")
+def get_vg_settings(vg_slug: str, a: tenancy.Access = Depends(access)):
+    return _vg_settings_json(_managed_vg_id(a, vg_slug, SETTINGS))
+
+
+@router.put("/api/admin/vgs/{vg_slug}/settings")
+def put_vg_settings(vg_slug: str, s: VgSettingsIn, a: tenancy.Access = Depends(access)):
+    """Vorgaben der VG speichern; Abweichungen der Wehren, die jetzt der Vorgabe entsprechen, entfallen.
+    Standort und Ausrückebereich je Wehr gleich mit."""
+    vg_id = _managed_vg_id(a, vg_slug, SETTINGS)
+    bks_code = s.bks_code.strip()
+    if bks_code and not re.fullmatch(r"[^\s<>\"&]{1,30}", bks_code):
+        _invalid("Kennung der VG: wie in der Kopfzeile des Berichts, z. B. NR#.ABC aus „FW NR#.ABC 02“.")
+    places = _check_places(s.places)
+    values = {"bks_code": bks_code or None, "control_center": s.control_center.strip() or None,
+              "places": list(places), "colors": _check_colors(s.colors), **_check_plan(s)}
+    tenants = {t.slug: t for t in tenancy.vg_tenants(vg_id)}
+    if not bks_code and any((t.station or "").strip() for t in s.tenants):
+        _invalid("Für den Standort einer Wehr bitte zuerst die Kennung der VG angeben.")
+    for t in s.tenants:
+        if t.slug not in tenants:
+            raise HTTPException(404, "Wehr nicht in dieser VG.")
+        if t.station is not None and t.station.strip() and not re.fullmatch(r"\d\d", t.station.strip()):
+            _invalid(f"{tenants[t.slug].name}: Standort zweistellig, z. B. 02.")
+        with tenants[t.slug].connection() as con:     # eigene Orte der Wehr statt der Vorgabe?
+            own = "places" in tenancy.config_sources(con)
+        if t.plan_places is not None and not set(t.plan_places) <= set(tenants[t.slug].config.places if own else places):
+            _invalid(f"{tenants[t.slug].name}: Bedarfsplan-Orte müssen in der Ortsliste stehen.")
+    with tenancy.central() as con:
+        tenancy.save_vg_settings(con, vg_id, values)
+        layer = tenancy.load_vg_layer(con, vg_id)
+    changes = {t.slug: t for t in s.tenants}
+    for slug, tenant in tenants.items():
+        with tenant.connection() as con:
+            tenancy.prune_overrides(con, layer)
+            change = changes.get(slug)
+            if change:
+                tenancy.save_tenant_values(con, {
+                    **({"station": change.station.strip() or None} if change.station is not None else {}),
+                    **({"plan_places": list(change.plan_places)} if change.plan_places is not None else {})})
+    tenancy.forget_vg_config(vg_id)
+    log.info("Vorgaben der VG %s geändert durch %s", vg_slug, a.email or "lokal")
+    return _vg_settings_json(vg_id)
+
+
+# ---------------------------------------------------------------- Fahrzeuge aller Wehren der VG
+class VgFleetTenantIn(BaseModel):
+    slug: str
+    fleet: List[VehicleIn] = []
+    substitutes: dict = {}
+    fleet_version: Optional[str] = None
+
+
+class VgFleetIn(BaseModel):
+    tenants: List[VgFleetTenantIn]
+
+
+def _vg_fleet_json(vg_id):
+    """Alle Fahrzeuge der VG in einer Tabelle: die der Fahrzeuglisten der Wehren und die übrigen Funkrufnamen
+    aus den Berichten (Stammdatensätze und Einsätze), die noch keiner Wehr gehören."""
     tenants = tenancy.vg_tenants(vg_id)
     with tenancy.central() as con:
         fee_types = fees.vehicle_types(con, vg_id)
+        layer = tenancy.load_vg_layer(con, vg_id)
         seen = {v.get("name") or "" for (vehicles,) in con.execute(
             "SELECT vehicles FROM master_record WHERE vg_id = ?", (vg_id,)) for v in json.loads(vehicles)}
-    vehicles, assigned = [], set()
+    result, assigned = [], set()
     for t in tenants:
         cfg = t.config
         with t.connection() as con:
             used = store.vehicles_with_data(con)
+            version = tenancy.fleet_version(con)
             seen.update(r[0] for r in con.execute("SELECT DISTINCT name FROM vehicle WHERE name <> ''"))
-        for v in cfg.fleet:
-            name = v.name or _suggested_name(v.call_sign, cfg) or ""
-            assigned.add(name)
-            vehicles.append({"tenant": t.slug, "call_sign": v.call_sign, "name": v.name, "suggested_name": name,
-                             "description": domain.call_sign_text(name), "label": v.label,
-                             "in_service_from": v.in_service_from, "in_service_until": v.in_service_until,
-                             "incidents": used.get(v.call_sign, 0)})
+        vehicles = [_vehicle_json(v, cfg, used) for v in cfg.fleet]
+        assigned.update(v["name"] or v["suggested_name"] for v in vehicles)
+        assigned.update(cfg.substitutes)
+        result.append({"slug": t.slug, "name": t.name, "fleet_version": version, "fleet": vehicles,
+                       "substitutes": cfg.substitutes, "unit_prefix": cfg.unit_prefix,
+                       "unused_data": {cs: n for cs, n in used.items() if cs not in cfg.vehicles}})
     centers = {t.config.control_center for t in tenants}
-    prefixes = tuple(t.config.unit_prefix for t in tenants if t.config.unit_prefix)
-    unassigned = [{"name": n, "description": domain.call_sign_text(n), "vg": bool(prefixes) and n.startswith(prefixes),
-                   "label": fees.suggest_type(domain.describe_call_sign(n)["types"], fee_types)}
+    code = layer.value("bks_code")
+    prefixes = tuple({t["unit_prefix"] for t in result if t["unit_prefix"]} | ({f"FL {code} "} if code else set()))
+    unassigned = [{"name": n, "description": domain.call_sign_text(n), "types": _types(n),
+                   "vg": bool(prefixes) and n.startswith(prefixes),
+                   "label": fees.suggest_type(_types(n), fee_types)}
                   for n in sorted(seen - assigned - centers) if domain.describe_call_sign(n)]
-    return {"tenants": [{"slug": t.slug, "name": t.name} for t in tenants], "vehicles": vehicles,
-            "unassigned": unassigned, "fee_types": fee_types}
+    return {"tenants": result, "unassigned": unassigned, "fee_types": fee_types,
+            "call_sign_directory": domain.CALL_SIGN_DIRECTORY_URL}
 
 
-@router.get("/api/admin/vgs/{vg_slug}/vehicles")
-def get_vg_vehicles(vg_slug: str, a: tenancy.Access = Depends(access)):
-    return _vg_vehicles_json(_managed_vg_id(a, vg_slug))
+@router.get("/api/admin/vgs/{vg_slug}/fleet")
+def get_vg_fleet(vg_slug: str, a: tenancy.Access = Depends(access)):
+    return _vg_fleet_json(_managed_vg_id(a, vg_slug, SETTINGS))
 
 
-class VehicleMove(BaseModel):
-    name: str                          # Funkrufname wie im BKS-Bericht
-    source: Optional[str] = None       # Wehr, in deren Fahrzeugliste es steht (mit call_sign); None = keiner
-    call_sign: Optional[str] = None
-    target: Optional[str] = None       # Wehr, zu der es künftig gehört; None = aus der Liste nehmen
+def _with_legacy_names(vehicles, cfg):
+    """Fahrzeug, das aus einer anderen Wehr kommt (ohne Kurznamen), auf einen alten Eintrag dieser Wehr mit
+    gleichem Kurznamen, aber ohne Funkrufnamen legen: dort nur den Namen ergänzen."""
+    unnamed = {v.call_sign.strip(): v for v in vehicles if v.call_sign.strip() and not v.name.strip()}
+    result = []
+    for v in vehicles:
+        legacy = cfg.block_of(v.name.strip()) if v.name.strip() and not v.call_sign.strip() else None
+        if legacy in unnamed:
+            unnamed[legacy].name = v.name.strip()
+            continue
+        result.append(v)
+    return result
 
 
-def _save_fleet(tenant, cfg):
-    with tenant.connection() as con:
-        tenancy.save_config(con, cfg)
-    tenancy.forget_config(tenant.slug)
-
-
-@router.post("/api/admin/vgs/{vg_slug}/vehicles/move")
-def move_vehicle(vg_slug: str, m: VehicleMove, a: tenancy.Access = Depends(access)):
-    """Fahrzeug einer Wehr zuordnen bzw. zu einer anderen verschieben. Einsätze mit seinen Daten bleiben
-    bei der bisherigen Wehr; dort wird es ab jetzt nicht mehr zugeordnet."""
-    vg_id = _managed_vg_id(a, vg_slug)
+@router.put("/api/admin/vgs/{vg_slug}/fleet")
+def put_vg_fleet(vg_slug: str, f: VgFleetIn, a: tenancy.Access = Depends(access)):
+    """Fahrzeuglisten mehrerer Wehren der VG auf einmal: erst alle prüfen, dann je Wehr speichern. Wechselt ein
+    Fahrzeug die Wehr, bleiben Einsätze mit seinen Daten bei der bisherigen Wehr."""
+    vg_id = _managed_vg_id(a, vg_slug, SETTINGS)
     tenants = {t.slug: t for t in tenancy.vg_tenants(vg_id)}
-    name = m.name.strip()
-    if not VEHICLE_NAME.fullmatch(name):
-        _invalid(f"Funkrufname „{name}“: bitte wie im BKS-Bericht angeben, z. B. FL NR#.ABC 02/45-01.")
-    if any(t not in tenants for t in (m.source, m.target) if t):
-        raise HTTPException(404, "Wehr nicht in dieser VG.")
-    if m.source == m.target:
-        return _vg_vehicles_json(vg_id)
-    for slug, t in tenants.items():
-        if slug != m.source and any(v.name == name for v in t.config.fleet):
-            raise HTTPException(409, f"{name} steht schon in der Fahrzeugliste von {t.name}.")
-    with tenancy.central() as con:
-        label = fees.suggest_type(domain.describe_call_sign(name).get("types", []), fees.vehicle_types(con, vg_id))
-    vehicle = Vehicle("", label, name=name)
-    if m.source:
-        source = tenants[m.source]
-        cfg = source.config
-        vehicle = cfg.vehicle(m.call_sign or "")
-        if not vehicle:
-            raise HTTPException(404, "Fahrzeug nicht in der Fahrzeugliste.")
-        cs = vehicle.call_sign
-        fleet = tuple(dataclasses.replace(v, replaced_by=None) if v.replaced_by == cs else v
-                      for v in cfg.fleet if v is not vehicle)
-        _save_fleet(source, dataclasses.replace(cfg, fleet=fleet, substitutes={
-            k: b for k, b in cfg.substitutes.items() if b != cs}))
-        vehicle = dataclasses.replace(vehicle, name=name, replaced_by=None)
-    if m.target:
-        target = tenants[m.target]
-        cfg = target.config
-        existing = cfg.vehicle(cfg.block_of(name) or "")
-        if existing and not existing.name:      # alter Eintrag mit Kurznamen: nur den Funkrufnamen ergänzen
-            fleet = tuple(dataclasses.replace(v, name=name) if v is existing else v for v in cfg.fleet)
-        else:
-            fleet = cfg.fleet + (dataclasses.replace(vehicle, call_sign=cfg.new_call_sign(name)),)
-        _save_fleet(target, dataclasses.replace(cfg, fleet=fleet))
-    log.info("Fahrzeug %s: %s -> %s durch %s", name, m.source or "–", m.target or "–", a.email or "lokal")
-    return _vg_vehicles_json(vg_id)
+    checked, names = [], {}
+    for entry in f.tenants:
+        tenant = tenants.get(entry.slug)
+        if not tenant:
+            raise HTTPException(404, "Wehr nicht in dieser VG.")
+        cfg = tenant.config
+        try:
+            fleet = _check_fleet(_with_legacy_names(entry.fleet, cfg), cfg.unit_prefix)
+            substitutes = _check_substitutes(entry.substitutes, fleet)
+        except HTTPException as e:
+            raise HTTPException(e.status_code, f"{tenant.name}: {e.detail}")
+        for v in fleet:
+            if v.name and names.setdefault(v.name, tenant.name) != tenant.name:
+                _invalid(f"{v.name} steht in den Fahrzeuglisten von {names[v.name]} und {tenant.name}.")
+        checked.append((tenant, entry.fleet_version, dataclasses.replace(cfg, fleet=fleet, substitutes=substitutes)))
+    for tenant, version, _ in checked:
+        with tenant.connection() as con:
+            if version and version != tenancy.fleet_version(con):
+                raise HTTPException(409, f"Die Fahrzeugliste von {tenant.name} wurde inzwischen geändert (z. B. "
+                                         f"durch einen Import). Bitte die Seite neu laden und die Änderungen erneut eintragen.")
+    for tenant, _, cfg in checked:
+        layer = tenant.layer
+        with tenant.connection() as con:
+            tenancy.save_config(con, cfg, layer)
+        tenancy.forget_config(tenant.slug)
+    log.info("Fahrzeuge der VG %s geändert (%s) durch %s", vg_slug, ", ".join(t.slug for t, _, _ in checked),
+             a.email or "lokal")
+    return _vg_fleet_json(vg_id)
 
 
 class PlanRelease(BaseModel):
@@ -477,17 +613,27 @@ def theme_check(c: Colors, a: tenancy.Access = Depends(access)):
 class ParseTest(BaseModel):
     line: str = Field(max_length=100_000)     # beliebiger Text aus einem Bericht
     unit_marker: str = ""
+    vg: Optional[str] = None                  # Erkennung über alle Wehren dieser VG (gespeicherter Stand)
 
 
 @router.post("/api/admin/parse-test")
 def parse_test(t: ParseTest, a: tenancy.Access = Depends(access)):
     """Testfeld BKS-Kennung: Funkrufnamen und Einheiten in einem Text aus dem Bericht finden und zuordnen,
     wie es die Einstellungen (noch ungespeichert) täten."""
+    names = dict.fromkeys(PERSON_VEHICLE.findall(t.line))
+    units = dict.fromkeys(m.group(0) for m in re.finditer(UNIT_MARKER.pattern + r"\b", t.line))
+    if t.vg:
+        configs = [(x.name, x.config) for x in tenancy.vg_tenants(_managed_vg_id(a, t.vg, SETTINGS))]
+        owner = lambda n: next((name for name, cfg in configs if cfg.is_own(n)), None)
+        block = lambda n: next(({"tenant": name, "call_sign": cfg.block_of(n)} for name, cfg in configs
+                                if cfg.vehicle(cfg.block_of(n) or "")), None)
+        return {"vehicles": [{"name": n, "tenant": owner(n), "block": block(n), "description": domain.call_sign_text(n)}
+                             for n in names],
+                "units": [{"unit": u, "tenant": next((name for name, cfg in configs if cfg.unit_marker == u), None)}
+                          for u in units]}
     unit_marker = t.unit_marker.strip()
     unit_prefix, own_prefix = prefixes_of(unit_marker) or ("", "")
     cfg = TenantConfig(name="", unit_prefix=unit_prefix, own_prefix=own_prefix, unit_marker=unit_marker)
-    names = dict.fromkeys(PERSON_VEHICLE.findall(t.line))
-    units = dict.fromkeys(m.group(0) for m in re.finditer(UNIT_MARKER.pattern + r"\b", t.line))
     return {"vehicles": [{"name": n, "call_sign": cfg.block_of(n), "own": cfg.is_own(n),
                           "description": domain.call_sign_text(n)} for n in names],
             "units": [{"unit": u, "own": u == unit_marker} for u in units]}
@@ -526,57 +672,171 @@ class KeywordIn(BaseModel):
     active: bool = True
 
 
-def _keywords_json(tenant):
-    with tenant.connection() as con:
-        own = tenancy.keywords(con)
-    template = [{"code": c, "name": n, "terms": t, "active": True} for c, n, t in domain.KEYWORD_CATALOG]
-    return {"custom": own is not None, "keywords": own if own is not None else template,
-            "template_missing": len({c for c, _, _ in domain.KEYWORD_CATALOG} - {k["code"] for k in own or template})}
+class _Catalog:
+    """Stichwortkatalog einer Wehr (Abweichungen von der VG) oder einer VG (Vorgabe für ihre Wehren)."""
+
+    def __init__(self, tenant=None, vg_id=None):
+        self.tenant, self.vg_id = tenant, vg_id
+
+    def entries(self):
+        """Wirksamer Katalog [{code, name, terms, active, source}]."""
+        if self.tenant:
+            layer = self.tenant.layer
+            with self.tenant.connection() as con:
+                return tenancy.tenant_keywords(con, layer)
+        with tenancy.central() as con:
+            layer = tenancy.load_vg_layer(con, self.vg_id)
+        return [{**k, "source": "vg"} for k in layer.keyword_list]
+
+    def save(self, entries):
+        if self.tenant:
+            layer = self.tenant.layer
+            with self.tenant.connection() as con:
+                tenancy.save_tenant_keywords(con, entries, layer)
+            tenancy.forget_config(self.tenant.slug)
+        else:
+            with tenancy.central() as con:
+                tenancy.save_vg_keywords(con, self.vg_id, entries)
+            tenancy.forget_vg_config(self.vg_id)
+
+    def reset(self):
+        """Wehr: alle Abweichungen aufheben; VG: wieder die Vorlage."""
+        if self.tenant:
+            with self.tenant.connection() as con:
+                con.execute("DELETE FROM keyword")
+            tenancy.forget_config(self.tenant.slug)
+        else:
+            with tenancy.central() as con:
+                tenancy.save_vg_keywords(con, self.vg_id, None)
+            tenancy.forget_vg_config(self.vg_id)
+
+    def json(self):
+        entries = self.entries()
+        result = {"keywords": entries, "custom": any(k["source"] != "vg" for k in entries),
+                  "template_missing": len({c for c, _, _ in domain.KEYWORD_CATALOG} - {k["code"] for k in entries})}
+        if self.tenant:
+            result["slug"] = self.tenant.slug
+        else:                                   # je Stichwort die Wehren, die abweichen
+            with tenancy.central() as con:
+                result["custom"] = con.execute("SELECT 1 FROM vg_keyword WHERE vg_id = ? LIMIT 1",
+                                               (self.vg_id,)).fetchone() is not None
+            deviations = {}
+            for t in tenancy.vg_tenants(self.vg_id):
+                for k in _Catalog(t).entries():
+                    if k["source"] != "vg":
+                        deviations.setdefault(k["code"], []).append(
+                            {"tenant": t.name, "kind": "off" if not k["active"] and k["source"] == "changed"
+                             else k["source"]})
+            result["deviations"] = deviations
+            known = {k["code"] for k in entries}
+            result["tenant_only"] = sorted(c for c in deviations if c not in known)
+        return result
+
+    def put(self, code, name, terms, active):
+        entries = self.entries()
+        entry = {"code": code, "name": name, "terms": terms, "active": active}
+        if any(k["code"] == code for k in entries):
+            entries = [entry if k["code"] == code else k for k in entries]
+        else:
+            entries.append(entry)
+        self.save(entries)
+
+    def delete(self, code):
+        """Wehr: eigenes Stichwort löschen, eine Abweichung aufheben bzw. ein Stichwort der VG gilt hier nicht."""
+        if self.tenant:
+            with self.tenant.connection() as con:
+                own = con.execute("DELETE FROM keyword WHERE code = ?", (code,)).rowcount
+            if own:
+                return tenancy.forget_config(self.tenant.slug)
+        self.save([k for k in self.entries() if k["code"] != code])
 
 
-def _changed_keywords(tenant, change):
-    with tenant.connection() as con:
-        result = change(con)
-    tenancy.forget_config(tenant.slug)
-    return result
+def _catalog(a, slug):
+    return _Catalog(tenant=a.tenant(slug, KEYWORDS))
+
+
+def _vg_catalog(a, vg_slug):
+    return _Catalog(vg_id=_managed_vg_id(a, vg_slug, KEYWORDS))
+
+
+def _keyword_code(code):
+    code = code.strip().upper()
+    if not KEYWORD_CODE.fullmatch(code):
+        _invalid(f"Stichwort „{code}“: bitte wie B2 oder B2.07 angeben.")
+    return code
 
 
 @router.get("/api/admin/{slug}/keywords")
 def get_keywords(slug: str, a: tenancy.Access = Depends(access)):
-    return _keywords_json(a.tenant(slug, KEYWORDS))
+    return _catalog(a, slug).json()
+
+
+@router.get("/api/admin/vgs/{vg_slug}/keywords")
+def get_vg_keywords(vg_slug: str, a: tenancy.Access = Depends(access)):
+    return _vg_catalog(a, vg_slug).json()
 
 
 @router.put("/api/admin/{slug}/keywords/{code}")
 def put_keyword(slug: str, code: str, k: KeywordIn, a: tenancy.Access = Depends(access)):
-    tenant = a.tenant(slug, KEYWORDS)
-    code = code.strip().upper()
-    if not KEYWORD_CODE.fullmatch(code):
-        _invalid(f"Stichwort „{code}“: bitte wie B2 oder B2.07 angeben.")
-    _changed_keywords(tenant, lambda con: tenancy.save_keyword(con, code, k.name.strip(), k.terms.strip(), k.active))
-    return _keywords_json(tenant)
+    catalog = _catalog(a, slug)
+    catalog.put(_keyword_code(code), k.name.strip(), k.terms.strip(), k.active)
+    return catalog.json()
+
+
+@router.put("/api/admin/vgs/{vg_slug}/keywords/{code}")
+def put_vg_keyword(vg_slug: str, code: str, k: KeywordIn, a: tenancy.Access = Depends(access)):
+    catalog = _vg_catalog(a, vg_slug)
+    catalog.put(_keyword_code(code), k.name.strip(), k.terms.strip(), k.active)
+    return catalog.json()
 
 
 @router.delete("/api/admin/{slug}/keywords/{code}")
 def delete_keyword(slug: str, code: str, a: tenancy.Access = Depends(access)):
-    tenant = a.tenant(slug, KEYWORDS)
-    _changed_keywords(tenant, lambda con: tenancy.delete_keyword(con, code))
-    return _keywords_json(tenant)
+    catalog = _catalog(a, slug)
+    catalog.delete(code)
+    return catalog.json()
+
+
+@router.delete("/api/admin/vgs/{vg_slug}/keywords/{code}")
+def delete_vg_keyword(vg_slug: str, code: str, a: tenancy.Access = Depends(access)):
+    catalog = _vg_catalog(a, vg_slug)
+    catalog.delete(code)
+    return catalog.json()
+
+
+def _add_template(catalog):
+    """Fehlende Stichworte der Vorlage ergänzen."""
+    entries = catalog.entries()
+    known = {k["code"] for k in entries}
+    catalog.save(entries + [{"code": c, "name": n, "terms": t, "active": True}
+                            for c, n, t in domain.KEYWORD_CATALOG if c not in known])
+    return catalog.json()
 
 
 @router.post("/api/admin/{slug}/keywords/template")
 def keywords_from_template(slug: str, a: tenancy.Access = Depends(access)):
-    """Fehlende Stichworte der Vorlage ergänzen."""
-    tenant = a.tenant(slug, KEYWORDS)
-    _changed_keywords(tenant, tenancy.add_template_keywords)
-    return _keywords_json(tenant)
+    return _add_template(_catalog(a, slug))
+
+
+@router.post("/api/admin/vgs/{vg_slug}/keywords/template")
+def vg_keywords_from_template(vg_slug: str, a: tenancy.Access = Depends(access)):
+    return _add_template(_vg_catalog(a, vg_slug))
 
 
 @router.delete("/api/admin/{slug}/keywords")
 def reset_keywords(slug: str, a: tenancy.Access = Depends(access)):
-    """Eigenen Katalog verwerfen, wieder die Vorlage verwenden."""
-    tenant = a.tenant(slug, KEYWORDS)
-    _changed_keywords(tenant, lambda con: tenancy.replace_keywords(con, []))
-    return _keywords_json(tenant)
+    """Alle Abweichungen der Wehr aufheben: wieder der Katalog der VG."""
+    catalog = _catalog(a, slug)
+    catalog.reset()
+    return catalog.json()
+
+
+@router.delete("/api/admin/vgs/{vg_slug}/keywords")
+def reset_vg_keywords(vg_slug: str, a: tenancy.Access = Depends(access)):
+    """Katalog der VG verwerfen, wieder die Vorlage verwenden."""
+    catalog = _vg_catalog(a, vg_slug)
+    catalog.reset()
+    return catalog.json()
 
 
 def read_keyword_file(filename, data):
@@ -614,11 +874,8 @@ def read_keyword_file(filename, data):
     return entries
 
 
-@router.post("/api/admin/{slug}/keywords/import")
-def import_keywords(slug: str, mode: str = "preview", file: UploadFile = File(...),
-                    a: tenancy.Access = Depends(access)):
+def _import_keywords(catalog, mode, file, who):
     """Katalog aus CSV/XLSX: mode=preview zeigt die Änderungen, merge ergänzt/ändert, replace ersetzt."""
-    tenant = a.tenant(slug, KEYWORDS)
     data = file.file.read(MAX_KEYWORD_FILE + 1)
     if len(data) > MAX_KEYWORD_FILE:
         _invalid("Die Datei ist größer als 2 MB.")
@@ -628,7 +885,7 @@ def import_keywords(slug: str, mode: str = "preview", file: UploadFile = File(..
         raise
     except Exception as e:  # kaputte Datei
         _invalid(f"Die Datei lässt sich nicht lesen ({e or type(e).__name__}).")
-    current = {k["code"]: k for k in _keywords_json(tenant)["keywords"]}
+    current = {k["code"]: k for k in catalog.entries()}
     incoming = {code: (name, terms) for code, name, terms in entries}
     preview = {
         "new": [c for c in incoming if c not in current],
@@ -638,18 +895,30 @@ def import_keywords(slug: str, mode: str = "preview", file: UploadFile = File(..
     }
     if mode == "preview":
         return preview
+    rows = [{"code": code, "name": name, "terms": terms, "active": current.get(code, {}).get("active", True)}
+            for code, name, terms in entries]
     if mode == "replace":
-        _changed_keywords(tenant, lambda con: tenancy.replace_keywords(con, entries))
+        catalog.save(rows)
     elif mode == "merge":
-        def merge(con):
-            for code, name, terms in entries:
-                active = current.get(code, {}).get("active", True)
-                tenancy.save_keyword(con, code, name, terms, active)
-        _changed_keywords(tenant, merge)
+        new = {r["code"]: r for r in rows}
+        catalog.save([new.pop(k["code"], k) for k in current.values()] + list(new.values()))
     else:
         _invalid("mode: preview, merge oder replace.")
-    log.info("Stichwortkatalog von %s importiert (%s) durch %s", slug, mode, a.email or "lokal")
-    return {**preview, **_keywords_json(tenant)}
+    log.info("Stichwortkatalog %s importiert (%s) durch %s",
+             catalog.tenant.slug if catalog.tenant else f"der VG {catalog.vg_id}", mode, who or "lokal")
+    return {**preview, **catalog.json()}
+
+
+@router.post("/api/admin/{slug}/keywords/import")
+def import_keywords(slug: str, mode: str = "preview", file: UploadFile = File(...),
+                    a: tenancy.Access = Depends(access)):
+    return _import_keywords(_catalog(a, slug), mode, file, a.email)
+
+
+@router.post("/api/admin/vgs/{vg_slug}/keywords/import")
+def import_vg_keywords(vg_slug: str, mode: str = "preview", file: UploadFile = File(...),
+                       a: tenancy.Access = Depends(access)):
+    return _import_keywords(_vg_catalog(a, vg_slug), mode, file, a.email)
 
 
 # ---------------------------------------------------------------- Benutzer und Rollen

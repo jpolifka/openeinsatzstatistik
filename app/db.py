@@ -273,11 +273,31 @@ def _add_tenant_archive(con):
     con.execute("CREATE TABLE tenant_archive (slug TEXT PRIMARY KEY, target TEXT NOT NULL, email TEXT)")
 
 
+def _add_vg_defaults(con):
+    """Vorgaben der VG für die Fachkonfiguration ihrer Wehren (siehe tenancy.load_config); eine Wehr speichert
+    nur noch, wo sie abweicht. defaults_lifted: Werte der Wehren schon übernommen (tenancy.lift_vg_defaults)."""
+    con.execute("CREATE TABLE vg_setting (vg_id INTEGER NOT NULL REFERENCES vg(id) ON DELETE CASCADE, "
+                "key TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY (vg_id, key))")
+    con.execute("CREATE TABLE vg_keyword (vg_id INTEGER NOT NULL REFERENCES vg(id) ON DELETE CASCADE, "
+                "code TEXT NOT NULL, name TEXT NOT NULL, terms TEXT NOT NULL DEFAULT '', "
+                "active INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (vg_id, code))")
+    con.execute("ALTER TABLE vg ADD COLUMN defaults_lifted INTEGER NOT NULL DEFAULT 0")
+
+
+def _settings_for_fee_roles(con):
+    """Fahrzeuge der VG pflegt jetzt, wer in der VG das Recht tenant.settings hat (vg.fees nur noch für die
+    Gebührenordnung): Rollen der VG mit vg.fees bekommen es dazu, damit niemand die Fahrzeugpflege verliert."""
+    con.execute("INSERT OR IGNORE INTO role_permission (role_id, permission) "
+                "SELECT rp.role_id, 'tenant.settings' FROM role_permission rp JOIN role r ON r.id = rp.role_id "
+                "WHERE rp.permission = 'vg.fees' AND r.scope = 'vg'")
+
+
 # Neue Schemaänderungen nur hinten anfügen; PRAGMA user_version zählt die erledigten Schritte.
 TENANT_MIGRATIONS = [_create_legacy_schema, _rename_to_english, _add_tenant_tables, _add_bks_ids,
                      _add_pending_reports, _add_fleet_names, _add_incident_revision, _add_import_jobs]
 CENTRAL_MIGRATIONS = [_create_central_schema, _add_dpa, _add_records, _add_notices, _add_fee_schedules, _add_roles,
-                      _records_per_vg, _add_consumed_magic_links, _add_completed_imports, _add_tenant_archive]
+                      _records_per_vg, _add_consumed_magic_links, _add_completed_imports, _add_tenant_archive,
+                      _add_vg_defaults, _settings_for_fee_roles]
 
 
 def migrate(con, steps=TENANT_MIGRATIONS):

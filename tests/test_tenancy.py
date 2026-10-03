@@ -31,13 +31,16 @@ def test_config_roundtrip_with_fleet_and_keywords(data_dir):
     cfg = TenantConfig(name="Wehr wehr-a1", fleet=(Vehicle("03/11", "HLF 20", "2024-01-01", None, None, True),
                                                    Vehicle("03/44", "", None, "2025-06-30", "03/11", False)),
                        substitutes={"03/90": "03/11"}, unit_prefix="FL NR#.ABC ", own_prefix="03/",
-                       places=(("Musterstadt", "muster"),), plan_places=("Musterstadt",), day_hours=(7, 19),
+                       places=("Musterstadt",), plan_places=("Musterstadt",), day_hours=(7, 19),
                        keywords=(("B1", "Grundstufe", ""), ("B1.99", "Neues Stichwort", "Test")))
     with db.connection(tenancy.tenant_path("wehr-a1")) as con:
         tenancy.save_config(con, cfg)
         assert tenancy.load_config(con, cfg.name).keywords == domain.KEYWORD_CATALOG   # ohne eigene Liste: Vorlage
         tenancy.save_config(con, cfg, keywords=True)
-        assert tenancy.load_config(con, cfg.name) == cfg
+        loaded = tenancy.load_config(con, cfg.name)
+        # Stichworte der Vorlage, die im eigenen Katalog fehlen, gelten in der Wehr nicht (inaktiv)
+        assert dataclasses.replace(loaded, inactive_keywords=()) == cfg
+        assert {c for c, _, _ in loaded.inactive_keywords} == {c for c, _, _ in domain.KEYWORD_CATALOG} - {"B1"}
 
 
 def test_config_cache_follows_saves_and_renames(data_dir):

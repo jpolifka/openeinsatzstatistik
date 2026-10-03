@@ -410,6 +410,12 @@ h2 .help-btn, h3 .help-btn { color: var(--brand); }
 /* ------------------------------------------------------------ Verwaltung */
 .admin-head { display: flex; gap: 14px; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; margin-bottom: 18px; }
 .admin-tenant { min-width: 240px; }
+/* Vorgaben der VG: übernommen bzw. von der Wehr abweichend */
+.inherit-badge { display: inline-block; margin: 0 6px 0 4px; padding: 0 7px; border-radius: 999px; background: var(--light-gray);
+  color: var(--gray); font-size: .72rem; font-weight: 600; vertical-align: middle; white-space: nowrap; }
+.inherit-badge.own { background: var(--brand-light); color: var(--brand-dark); }
+.admin-switch { align-self: center; }
+.admin-table select.fleet-tenant { min-width: 160px; }
 .admin-body h3 { margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
 .admin-actions { display: flex; gap: 10px; justify-content: flex-end; align-items: center; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); }
 .admin-actions .unsaved-note { display: none; font-weight: 700; color: var(--brand-dark); }
