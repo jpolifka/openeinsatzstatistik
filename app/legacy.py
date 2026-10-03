@@ -136,6 +136,7 @@ def migrate_single_install(data_dir):
     db.setup(staging, db.CENTRAL_MIGRATIONS)
     with db.connection(staging) as con:
         vg_id = tenancy.create_vg(con, VG_SLUG, VG_NAME)
+        con.execute("UPDATE vg SET defaults_lifted = 0 WHERE id = ?", (vg_id,))   # Werte der Wehr übernehmen
         tenant_id = con.execute("INSERT INTO tenant (slug, name, vg_id) VALUES (?, ?, ?)",
                                 (TENANT_SLUG, cfg.name, vg_id)).lastrowid
         emails = legacy_emails()

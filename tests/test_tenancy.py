@@ -37,7 +37,10 @@ def test_config_roundtrip_with_fleet_and_keywords(data_dir):
         tenancy.save_config(con, cfg)
         assert tenancy.load_config(con, cfg.name).keywords == domain.KEYWORD_CATALOG   # ohne eigene Liste: Vorlage
         tenancy.save_config(con, cfg, keywords=True)
-        assert tenancy.load_config(con, cfg.name) == cfg
+        loaded = tenancy.load_config(con, cfg.name)
+        # Stichworte der Vorlage, die im eigenen Katalog fehlen, gelten in der Wehr nicht (inaktiv)
+        assert dataclasses.replace(loaded, inactive_keywords=()) == cfg
+        assert {c for c, _, _ in loaded.inactive_keywords} == {c for c, _, _ in domain.KEYWORD_CATALOG} - {"B1"}
 
 
 def test_config_cache_follows_saves_and_renames(data_dir):

@@ -287,7 +287,7 @@ def put_settings(slug: str, s: SettingsIn, a: tenancy.Access = Depends(access)):
         if s.fleet_version and s.fleet_version != tenancy.fleet_version(con):
             raise HTTPException(409, "Die Fahrzeugliste wurde inzwischen geändert (z. B. durch einen Import). "
                                      "Bitte die Seite neu laden und die Änderungen erneut eintragen.")
-        tenancy.save_config(con, cfg)
+        tenancy.save_config(con, cfg, tenant.layer)
         if cfg.numbering == "by_date":         # beim Umstellen alle Jahre nach Datum durchnummerieren
             for row in store.years(con):
                 store.renumber(con, row["year"])
@@ -306,12 +306,12 @@ class ScheduleIn(BaseModel):
     rates: dict
 
 
-def _managed_vg_id(a, vg_slug):
-    """VG, deren Gebührenordnung und Fahrzeuge der Benutzer pflegen darf (Recht VG_FEES)."""
+def _managed_vg_id(a, vg_slug, permission=VG_FEES):
+    """VG, in der der Benutzer das Recht auf Ebene der VG hat (Gebührenordnung, Vorgaben für die Wehren)."""
     with tenancy.central() as con:
         row = con.execute("SELECT id FROM vg WHERE slug = ?", (vg_slug,)).fetchone()
-    if not row or not a.vg_can(row["id"], VG_FEES):
-        raise tenancy.Forbidden("Keine Berechtigung für Fahrzeuge und Gebührenordnung dieser VG.")
+    if not row or not a.vg_can(row["id"], permission):
+        raise tenancy.Forbidden("Keine Berechtigung für diese VG.")
     return row["id"]
 
 
@@ -393,8 +393,9 @@ class VehicleMove(BaseModel):
 
 
 def _save_fleet(tenant, cfg):
+    layer = tenant.layer
     with tenant.connection() as con:
-        tenancy.save_config(con, cfg)
+        tenancy.save_config(con, cfg, layer)
     tenancy.forget_config(tenant.slug)
 
 
@@ -525,57 +526,171 @@ class KeywordIn(BaseModel):
     active: bool = True
 
 
-def _keywords_json(tenant):
-    with tenant.connection() as con:
-        own = tenancy.keywords(con)
-    template = [{"code": c, "name": n, "terms": t, "active": True} for c, n, t in domain.KEYWORD_CATALOG]
-    return {"custom": own is not None, "keywords": own if own is not None else template,
-            "template_missing": len({c for c, _, _ in domain.KEYWORD_CATALOG} - {k["code"] for k in own or template})}
+class _Catalog:
+    """Stichwortkatalog einer Wehr (Abweichungen von der VG) oder einer VG (Vorgabe für ihre Wehren)."""
+
+    def __init__(self, tenant=None, vg_id=None):
+        self.tenant, self.vg_id = tenant, vg_id
+
+    def entries(self):
+        """Wirksamer Katalog [{code, name, terms, active, source}]."""
+        if self.tenant:
+            layer = self.tenant.layer
+            with self.tenant.connection() as con:
+                return tenancy.tenant_keywords(con, layer)
+        with tenancy.central() as con:
+            layer = tenancy.load_vg_layer(con, self.vg_id)
+        return [{**k, "source": "vg"} for k in layer.keyword_list]
+
+    def save(self, entries):
+        if self.tenant:
+            layer = self.tenant.layer
+            with self.tenant.connection() as con:
+                tenancy.save_tenant_keywords(con, entries, layer)
+            tenancy.forget_config(self.tenant.slug)
+        else:
+            with tenancy.central() as con:
+                tenancy.save_vg_keywords(con, self.vg_id, entries)
+            tenancy.forget_vg_config(self.vg_id)
+
+    def reset(self):
+        """Wehr: alle Abweichungen aufheben; VG: wieder die Vorlage."""
+        if self.tenant:
+            with self.tenant.connection() as con:
+                con.execute("DELETE FROM keyword")
+            tenancy.forget_config(self.tenant.slug)
+        else:
+            with tenancy.central() as con:
+                tenancy.save_vg_keywords(con, self.vg_id, None)
+            tenancy.forget_vg_config(self.vg_id)
+
+    def json(self):
+        entries = self.entries()
+        result = {"keywords": entries, "custom": any(k["source"] != "vg" for k in entries),
+                  "template_missing": len({c for c, _, _ in domain.KEYWORD_CATALOG} - {k["code"] for k in entries})}
+        if self.tenant:
+            result["slug"] = self.tenant.slug
+        else:                                   # je Stichwort die Wehren, die abweichen
+            with tenancy.central() as con:
+                result["custom"] = con.execute("SELECT 1 FROM vg_keyword WHERE vg_id = ? LIMIT 1",
+                                               (self.vg_id,)).fetchone() is not None
+            deviations = {}
+            for t in tenancy.vg_tenants(self.vg_id):
+                for k in _Catalog(t).entries():
+                    if k["source"] != "vg":
+                        deviations.setdefault(k["code"], []).append(
+                            {"tenant": t.name, "kind": "off" if not k["active"] and k["source"] == "changed"
+                             else k["source"]})
+            result["deviations"] = deviations
+            known = {k["code"] for k in entries}
+            result["tenant_only"] = sorted(c for c in deviations if c not in known)
+        return result
+
+    def put(self, code, name, terms, active):
+        entries = self.entries()
+        entry = {"code": code, "name": name, "terms": terms, "active": active}
+        if any(k["code"] == code for k in entries):
+            entries = [entry if k["code"] == code else k for k in entries]
+        else:
+            entries.append(entry)
+        self.save(entries)
+
+    def delete(self, code):
+        """Wehr: eigenes Stichwort löschen, eine Abweichung aufheben bzw. ein Stichwort der VG gilt hier nicht."""
+        if self.tenant:
+            with self.tenant.connection() as con:
+                own = con.execute("DELETE FROM keyword WHERE code = ?", (code,)).rowcount
+            if own:
+                return tenancy.forget_config(self.tenant.slug)
+        self.save([k for k in self.entries() if k["code"] != code])
 
 
-def _changed_keywords(tenant, change):
-    with tenant.connection() as con:
-        result = change(con)
-    tenancy.forget_config(tenant.slug)
-    return result
+def _catalog(a, slug):
+    return _Catalog(tenant=a.tenant(slug, KEYWORDS))
+
+
+def _vg_catalog(a, vg_slug):
+    return _Catalog(vg_id=_managed_vg_id(a, vg_slug, KEYWORDS))
+
+
+def _keyword_code(code):
+    code = code.strip().upper()
+    if not KEYWORD_CODE.fullmatch(code):
+        _invalid(f"Stichwort „{code}“: bitte wie B2 oder B2.07 angeben.")
+    return code
 
 
 @router.get("/api/admin/{slug}/keywords")
 def get_keywords(slug: str, a: tenancy.Access = Depends(access)):
-    return _keywords_json(a.tenant(slug, KEYWORDS))
+    return _catalog(a, slug).json()
+
+
+@router.get("/api/admin/vgs/{vg_slug}/keywords")
+def get_vg_keywords(vg_slug: str, a: tenancy.Access = Depends(access)):
+    return _vg_catalog(a, vg_slug).json()
 
 
 @router.put("/api/admin/{slug}/keywords/{code}")
 def put_keyword(slug: str, code: str, k: KeywordIn, a: tenancy.Access = Depends(access)):
-    tenant = a.tenant(slug, KEYWORDS)
-    code = code.strip().upper()
-    if not KEYWORD_CODE.fullmatch(code):
-        _invalid(f"Stichwort „{code}“: bitte wie B2 oder B2.07 angeben.")
-    _changed_keywords(tenant, lambda con: tenancy.save_keyword(con, code, k.name.strip(), k.terms.strip(), k.active))
-    return _keywords_json(tenant)
+    catalog = _catalog(a, slug)
+    catalog.put(_keyword_code(code), k.name.strip(), k.terms.strip(), k.active)
+    return catalog.json()
+
+
+@router.put("/api/admin/vgs/{vg_slug}/keywords/{code}")
+def put_vg_keyword(vg_slug: str, code: str, k: KeywordIn, a: tenancy.Access = Depends(access)):
+    catalog = _vg_catalog(a, vg_slug)
+    catalog.put(_keyword_code(code), k.name.strip(), k.terms.strip(), k.active)
+    return catalog.json()
 
 
 @router.delete("/api/admin/{slug}/keywords/{code}")
 def delete_keyword(slug: str, code: str, a: tenancy.Access = Depends(access)):
-    tenant = a.tenant(slug, KEYWORDS)
-    _changed_keywords(tenant, lambda con: tenancy.delete_keyword(con, code))
-    return _keywords_json(tenant)
+    catalog = _catalog(a, slug)
+    catalog.delete(code)
+    return catalog.json()
+
+
+@router.delete("/api/admin/vgs/{vg_slug}/keywords/{code}")
+def delete_vg_keyword(vg_slug: str, code: str, a: tenancy.Access = Depends(access)):
+    catalog = _vg_catalog(a, vg_slug)
+    catalog.delete(code)
+    return catalog.json()
+
+
+def _add_template(catalog):
+    """Fehlende Stichworte der Vorlage ergänzen."""
+    entries = catalog.entries()
+    known = {k["code"] for k in entries}
+    catalog.save(entries + [{"code": c, "name": n, "terms": t, "active": True}
+                            for c, n, t in domain.KEYWORD_CATALOG if c not in known])
+    return catalog.json()
 
 
 @router.post("/api/admin/{slug}/keywords/template")
 def keywords_from_template(slug: str, a: tenancy.Access = Depends(access)):
-    """Fehlende Stichworte der Vorlage ergänzen."""
-    tenant = a.tenant(slug, KEYWORDS)
-    _changed_keywords(tenant, tenancy.add_template_keywords)
-    return _keywords_json(tenant)
+    return _add_template(_catalog(a, slug))
+
+
+@router.post("/api/admin/vgs/{vg_slug}/keywords/template")
+def vg_keywords_from_template(vg_slug: str, a: tenancy.Access = Depends(access)):
+    return _add_template(_vg_catalog(a, vg_slug))
 
 
 @router.delete("/api/admin/{slug}/keywords")
 def reset_keywords(slug: str, a: tenancy.Access = Depends(access)):
-    """Eigenen Katalog verwerfen, wieder die Vorlage verwenden."""
-    tenant = a.tenant(slug, KEYWORDS)
-    _changed_keywords(tenant, lambda con: tenancy.replace_keywords(con, []))
-    return _keywords_json(tenant)
+    """Alle Abweichungen der Wehr aufheben: wieder der Katalog der VG."""
+    catalog = _catalog(a, slug)
+    catalog.reset()
+    return catalog.json()
+
+
+@router.delete("/api/admin/vgs/{vg_slug}/keywords")
+def reset_vg_keywords(vg_slug: str, a: tenancy.Access = Depends(access)):
+    """Katalog der VG verwerfen, wieder die Vorlage verwenden."""
+    catalog = _vg_catalog(a, vg_slug)
+    catalog.reset()
+    return catalog.json()
 
 
 def read_keyword_file(filename, data):
@@ -613,11 +728,8 @@ def read_keyword_file(filename, data):
     return entries
 
 
-@router.post("/api/admin/{slug}/keywords/import")
-def import_keywords(slug: str, mode: str = "preview", file: UploadFile = File(...),
-                    a: tenancy.Access = Depends(access)):
+def _import_keywords(catalog, mode, file, who):
     """Katalog aus CSV/XLSX: mode=preview zeigt die Änderungen, merge ergänzt/ändert, replace ersetzt."""
-    tenant = a.tenant(slug, KEYWORDS)
     data = file.file.read(MAX_KEYWORD_FILE + 1)
     if len(data) > MAX_KEYWORD_FILE:
         _invalid("Die Datei ist größer als 2 MB.")
@@ -627,7 +739,7 @@ def import_keywords(slug: str, mode: str = "preview", file: UploadFile = File(..
         raise
     except Exception as e:  # kaputte Datei
         _invalid(f"Die Datei lässt sich nicht lesen ({e or type(e).__name__}).")
-    current = {k["code"]: k for k in _keywords_json(tenant)["keywords"]}
+    current = {k["code"]: k for k in catalog.entries()}
     incoming = {code: (name, terms) for code, name, terms in entries}
     preview = {
         "new": [c for c in incoming if c not in current],
@@ -637,18 +749,30 @@ def import_keywords(slug: str, mode: str = "preview", file: UploadFile = File(..
     }
     if mode == "preview":
         return preview
+    rows = [{"code": code, "name": name, "terms": terms, "active": current.get(code, {}).get("active", True)}
+            for code, name, terms in entries]
     if mode == "replace":
-        _changed_keywords(tenant, lambda con: tenancy.replace_keywords(con, entries))
+        catalog.save(rows)
     elif mode == "merge":
-        def merge(con):
-            for code, name, terms in entries:
-                active = current.get(code, {}).get("active", True)
-                tenancy.save_keyword(con, code, name, terms, active)
-        _changed_keywords(tenant, merge)
+        new = {r["code"]: r for r in rows}
+        catalog.save([new.pop(k["code"], k) for k in current.values()] + list(new.values()))
     else:
         _invalid("mode: preview, merge oder replace.")
-    log.info("Stichwortkatalog von %s importiert (%s) durch %s", slug, mode, a.email or "lokal")
-    return {**preview, **_keywords_json(tenant)}
+    log.info("Stichwortkatalog %s importiert (%s) durch %s",
+             catalog.tenant.slug if catalog.tenant else f"der VG {catalog.vg_id}", mode, who or "lokal")
+    return {**preview, **catalog.json()}
+
+
+@router.post("/api/admin/{slug}/keywords/import")
+def import_keywords(slug: str, mode: str = "preview", file: UploadFile = File(...),
+                    a: tenancy.Access = Depends(access)):
+    return _import_keywords(_catalog(a, slug), mode, file, a.email)
+
+
+@router.post("/api/admin/vgs/{vg_slug}/keywords/import")
+def import_vg_keywords(vg_slug: str, mode: str = "preview", file: UploadFile = File(...),
+                       a: tenancy.Access = Depends(access)):
+    return _import_keywords(_vg_catalog(a, vg_slug), mode, file, a.email)
 
 
 # ---------------------------------------------------------------- Benutzer und Rollen

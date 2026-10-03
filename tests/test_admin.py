@@ -142,8 +142,11 @@ def test_keyword_catalog(world):
     world.put("/api/admin/wehr-a1/keywords/B1.01", json={"name": "Müllbrand", "terms": "", "active": False})
     catalog = {k["code"]: k for k in world.get("/api/config").json()["keyword_catalog"]}
     assert catalog["B1.99"]["active"] and catalog["B1.01"]["active"] is False and catalog["B1.01"]["name"] == "Müllbrand"
-    deleted = world.delete("/api/admin/wehr-a1/keywords/B1.02").json()
-    assert deleted["template_missing"] == 1
+    # Stichwort der VG löschen heißt: gilt in dieser Wehr nicht; nochmals löschen hebt das auf
+    off = {k["code"]: k for k in world.delete("/api/admin/wehr-a1/keywords/B1.02").json()["keywords"]}["B1.02"]
+    assert off["active"] is False and off["source"] == "changed"
+    on = {k["code"]: k for k in world.delete("/api/admin/wehr-a1/keywords/B1.02").json()["keywords"]}["B1.02"]
+    assert on["active"] and on["source"] == "vg"
     assert world.post("/api/admin/wehr-a1/keywords/template").json()["template_missing"] == 0
     reset = world.delete("/api/admin/wehr-a1/keywords").json()
     assert not reset["custom"] and "B1.99" not in {k["code"] for k in reset["keywords"]}
@@ -163,7 +166,7 @@ def test_keyword_import(world):
     merged = send("merge").json()
     assert {k["code"]: k["name"] for k in merged["keywords"]}["B1.01"] == "Müllbrand neu" and merged["custom"]
     replaced = send("replace").json()
-    assert [k["code"] for k in replaced["keywords"]] == ["B1", "B1.01", "S9.01"]
+    assert [k["code"] for k in replaced["keywords"] if k["active"]] == ["B1", "B1.01", "S9.01"]
     assert send("preview", "Stichwort;Bezeichnung\nB1;\n").status_code == 422
 
 
