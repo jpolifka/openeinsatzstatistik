@@ -77,6 +77,9 @@ def test_form_document_upload_and_confirmation(pending, data_dir):
     _as(pending, "lead@example.org")
     assert pending.get("/api/years").status_code == 200
     assert _fill(pending).status_code == 409                                 # abgeschlossen
+    assert pending.post("/api/dpa/vg-neu/upload", files={"file": ("avv.pdf", PDF + b"3")}).status_code == 409
+    assert pending.put("/api/dpa/vg-neu/link", json={"link": ""}).status_code == 409
+    assert pending.get("/api/dpa/vg-neu/file").content == PDF + b"2"         # bestätigter Vertrag unverändert
     _as(pending, "admin@example.org").post("/api/dpa/vg-neu/status", json={"status": "revoked", "note": "Kündigung"})
     assert _as(pending, "lead@example.org").get("/api/years").status_code == 403
 
@@ -127,3 +130,30 @@ def test_generated_contract_keeps_its_template_version(pending):
     _fill(pending)
     page = pending.get("/api/dpa/vg-neu/document").text
     assert "Resend" not in page and "Vorlage Version 2" in page and "DKIM" in page
+
+
+def test_vg_roles_rest_until_dpa(pending):
+    """Ohne AVV ruhen auch die Rechte auf Ebene der VG: Fahrzeuge, Gebühren, Rollen, Vergaben."""
+    with tenancy.central() as con:
+        vg_id = con.execute("SELECT id FROM vg WHERE slug = 'vg-neu'").fetchone()[0]
+    grant("vglead@example.org", "vg_lead", vg_id)
+    client = _as(pending, "vglead@example.org")
+    config = client.get("/api/config").json()
+    assert config["dpa_blocked"] == [{"slug": "vg-neu", "name": "VG vg-neu"}] and not config.get("vg_permissions")
+    assert client.get("/api/admin/vgs/vg-neu/vehicles").status_code == 403
+    assert client.get("/api/admin/vgs/vg-neu/fees").status_code == 403
+    assert client.post("/api/admin/memberships", json={"email": "neu@example.org", "scope": "tenant",
+                                                        "slug": "wehr-n1", "role": "lead"}).status_code == 403
+    assert client.post("/api/admin/roles", json={"vg": "vg-neu", "label": "Kasse", "scope": "vg",
+                                                  "permissions": ["vg.fees"]}).status_code == 403
+    # VG-Rolle nur mit VG-Rechten (keine Wehr-Rechte) ist ebenso gesperrt
+    with tenancy.central() as con:
+        role_id = con.execute("INSERT INTO role (key, vg_id, scope, label) VALUES ('kasse', ?, 'vg', 'Kasse')",
+                              (vg_id,)).lastrowid
+        con.execute("INSERT INTO role_permission (role_id, permission) VALUES (?, 'vg.fees')", (role_id,))
+        tenancy.add_account(con, "kasse@example.org")
+        con.execute("INSERT INTO membership (email, scope, scope_id, role_id) VALUES ('kasse@example.org', 'vg', ?, ?)",
+                    (vg_id, role_id))
+    kasse = _as(pending, "kasse@example.org")
+    assert kasse.get("/api/config").json()["dpa_blocked"] == [{"slug": "vg-neu", "name": "VG vg-neu"}]
+    assert kasse.get("/api/admin/vgs/vg-neu/fees").status_code == 403

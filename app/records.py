@@ -33,20 +33,20 @@ def save_master(con, vg_id, report, email=None):
     con.execute(
         "INSERT INTO master_record (bks_record_id, vg_id, dispatch_number, first_alarm, keyword, subcode, reported_as, "
         "town, district, street, vehicles, filename, imported_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) "
-        "ON CONFLICT(bks_record_id) DO UPDATE SET dispatch_number = excluded.dispatch_number, "
+        "ON CONFLICT(bks_record_id, vg_id) DO UPDATE SET dispatch_number = excluded.dispatch_number, "
         "first_alarm = excluded.first_alarm, keyword = excluded.keyword, subcode = excluded.subcode, "
         "reported_as = excluded.reported_as, town = excluded.town, district = excluded.district, "
         "street = excluded.street, vehicles = excluded.vehicles, filename = excluded.filename, "
-        "imported_by = excluded.imported_by, imported = datetime('now', 'localtime') "
-        "WHERE master_record.vg_id = excluded.vg_id",
+        "imported_by = excluded.imported_by, imported = datetime('now', 'localtime')",
         (report["bks_record_id"], vg_id, report.get("dispatch_number"), to_iso(report.get("first_alarm")),
          report.get("keyword"), report.get("subcode"), report.get("reported_as"), report.get("town"),
          report.get("district"), report.get("street"), json.dumps(vehicles, ensure_ascii=False),
          report.get("filename"), email))
 
 
-def load_master(con, bks_record_id):
-    row = con.execute("SELECT * FROM master_record WHERE bks_record_id = ?", (bks_record_id,)).fetchone()
+def load_master(con, vg_id, bks_record_id):
+    row = con.execute("SELECT * FROM master_record WHERE bks_record_id = ? AND vg_id = ?",
+                      (bks_record_id, vg_id)).fetchone()
     if not row:
         return None
     return {**dict(row), "vehicles": json.loads(row["vehicles"])}
@@ -138,14 +138,14 @@ def _keyword(item):
     return f"{item.get('keyword') or ''}.{item.get('subcode') or ''}".strip(".")
 
 
-def check(central_con, bks_record_id, tenants):
+def check(central_con, vg_id, bks_record_id, tenants):
     """Abgleich eines Einsatzes über die Wehren der VG -> {record, incidents, findings}.
 
     findings: [{tenant, tenant_name, kind, vehicle, field, source, stored}] mit kind
     vehicle (Stammdatensatz ≠ Bericht), keyword, missing (kein Bericht trotz ausgerückter Fahrzeuge),
     unedited (Bericht ohne Anwesenheit) und no_number (Bericht ohne Nr.).
     """
-    master = load_master(central_con, bks_record_id)
+    master = load_master(central_con, vg_id, bks_record_id)
     findings, incidents = [], []
 
     def add(tenant, kind, **values):
@@ -207,7 +207,7 @@ def protocol(central_con, vg_id, year, tenants):
         "SELECT * FROM record_review WHERE vg_id = ?", (vg_id,))}
     entries = []
     for record_id in record_ids(central_con, vg_id, year, tenants):
-        entry = check(central_con, record_id, tenants)
+        entry = check(central_con, vg_id, record_id, tenants)
         review = reviews.get(record_id)
         entry["reviewed"] = {"by": review["reviewed_by"], "at": review["reviewed"]} \
             if review and review["findings_hash"] == findings_hash(entry["findings"]) else None
@@ -222,10 +222,10 @@ def review(central_con, vg_id, bks_record_id, tenants, email, done=True):
     if not done:
         central_con.execute("DELETE FROM record_review WHERE bks_record_id = ? AND vg_id = ?", (bks_record_id, vg_id))
         return
-    digest = findings_hash(check(central_con, bks_record_id, tenants)["findings"])
+    digest = findings_hash(check(central_con, vg_id, bks_record_id, tenants)["findings"])
     central_con.execute(
         "INSERT INTO record_review (bks_record_id, vg_id, findings_hash, reviewed_by) VALUES (?, ?, ?, ?) "
-        "ON CONFLICT(bks_record_id) DO UPDATE SET findings_hash = excluded.findings_hash, "
+        "ON CONFLICT(bks_record_id, vg_id) DO UPDATE SET findings_hash = excluded.findings_hash, "
         "reviewed_by = excluded.reviewed_by, reviewed = datetime('now', 'localtime')",
         (bks_record_id, vg_id, digest, email))
 

@@ -113,6 +113,19 @@ def _clock_minutes(start, end):
     return ((seconds(end) - seconds(start)) % 86400) / 60
 
 
+def _vehicle_minutes(v, start, end_of_incident):
+    """Minuten vom Ausrücken bis zum Ende des Fahrzeugs. Ohne eigenes Ende gilt das Einsatzende – dann mit
+    Datum gerechnet, also auch über 24 Stunden; die Uhrzeiten der Fahrzeuge allein haben kein Datum."""
+    if v.get("finished"):
+        return _clock_minutes(v["departed"], v["finished"])
+    if not (start and end_of_incident):
+        return None
+    departed = dt.datetime.combine(start.date(), dt.time.fromisoformat((v["departed"] + ":00")[:8]))
+    if departed < start:                         # nach Mitternacht ausgerückt
+        departed += dt.timedelta(days=1)
+    return max(0.0, (end_of_incident - departed).total_seconds() / 60)
+
+
 def _type_key(text):
     return re.sub(r"[\s\-./]", "", text or "").lower()
 
@@ -136,21 +149,36 @@ def calculate(central_con, vg_id, bks_record_id, tenants, schedule_id=None, bma_
     day = starts[0][:10] if starts else "9999-12-31"
     schedule = schedule_for(central_con, vg_id, day, schedule_id)
     if not schedule:
-        raise ValueError("Für die VG ist keine Gebührenordnung hinterlegt (Verwaltung → Gebührenordnung).")
+        raise ValueError("Diese Gebührenordnung gibt es nicht." if schedule_id is not None and schedules(
+            central_con, vg_id) else "Für die VG ist keine Gebührenordnung hinterlegt (Verwaltung → Gebührenordnung).")
     rates = schedule["rates"]
     by_type = {_type_key(v["code"]): v for v in rates["vehicles"]}
     fire_watch = any(domain.is_fire_watch(i["keyword"], i["subcode"]) for _, i in incidents)
     alarm_system = any(domain.is_fire_alarm_system(i["keyword"], i["subcode"]) for _, i in incidents)
     positions, hints = [], []
+    if schedule["valid_from"] > day:
+        hints.append(f"Der Einsatz liegt vor dem Gültigkeitsbeginn der Gebührenordnung „{schedule['name']}“ "
+                     f"({schedule['valid_from']}) – bitte prüfen, ob sie anzuwenden ist.")
+    # Fahrzeugtyp eines Ersatzfahrzeugs: aus der Fahrzeugliste, in der es steht, sonst aus dem Funkrufnamen
+    labels_by_name = {v.name: v.label for t in tenants for v in t.config.fleet if v.name and v.label}
+    fee_types = [v["code"] for v in rates["vehicles"]]
 
     for t, incident in incidents:
         labels = {v.call_sign: v.label for v in t.config.fleet}
-        end_of_incident = (incident["ended_at"] or "")[11:19] or None
+        start, end_of_incident = parse_iso(incident["started_at"]), parse_iso(incident["ended_at"])
         moved = [(cs, v) for cs, v in sorted(incident["vehicles"].items()) if v.get("departed")]
+        if start and end_of_incident and end_of_incident - start > dt.timedelta(hours=24) and \
+                any(v.get("finished") for _, v in moved):
+            hints.append(f"{t.name}: Einsatz länger als 24 Stunden – die Fahrzeugstunden aus den Uhrzeiten "
+                         "(ohne Datum) bitte prüfen.")
         for call_sign, v in moved:
-            end = v.get("finished") or end_of_incident
-            minutes = _clock_minutes(v["departed"], end) if end else None
+            minutes = _vehicle_minutes(v, start, end_of_incident)
+            substitute = t.config.substitute_label(v.get("name"), call_sign)
             label = labels.get(call_sign) or ""
+            if substitute:
+                label = labels_by_name.get(v["name"]) or \
+                    suggest_type(domain.describe_call_sign(v["name"]).get("types", []), fee_types)
+                call_sign = f"{call_sign} (Ersatz {substitute})"
             vehicle_type = by_type.get(_type_key(label))
             if not vehicle_type:
                 hints.append(f"{t.name}, {call_sign}: " + (f"Fahrzeugtyp „{label}“ steht nicht in der Gebührenordnung"
@@ -166,7 +194,7 @@ def calculate(central_con, vg_id, bks_record_id, tenants, schedule_id=None, bma_
         if not count:
             count = sum(v.get("crew") or 0 for _, v in moved)
             hints.append(f"{t.name}: keine Anwesenheit erfasst – Einsatzkräfte aus der Stärke der Fahrzeuge ({count}).")
-        start, end = parse_iso(incident["started_at"]), parse_iso(incident["ended_at"])
+        end = end_of_incident
         minutes = (end - start).total_seconds() / 60 if start and end and end > start else None
         if minutes is None:
             hints.append(f"{t.name}: Beginn oder Ende des Einsatzes fehlt – keine Personalstunden berechnet.")

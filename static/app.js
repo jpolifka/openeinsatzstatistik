@@ -9,7 +9,7 @@ const state = {
   category: "all", query: "", expanded: new Set(), editing: null,
   tableCards: new Set(),                      // Diagramme, die gerade als Tabelle angezeigt werden
   memberSort: { field: "incidents", descending: true }, openMembers: new Set(),
-  editDraft: null, memberOptions: [], scrollTo: null,
+  editDraft: null, editNode: null, memberOptions: [], scrollTo: null,
   upload: { token: null, reports: [], errors: [], notes: [] }, dataChanged: false,
   tenantFilter: new Set(),                    // Gesamtansicht: ausgewählte Wehren (leer = alle)
 };
@@ -192,9 +192,14 @@ async function loadYears() {
 
 async function loadEvaluation() {
   const e = state.evaluation, filter = [...state.tenantFilter].sort().join(",");
-  if (!e || e.year !== state.year || e.response_plan.limit !== state.limit || e.filter !== filter) {
-    state.evaluation = await api(`/api/evaluation?year=${state.year}&limit=${state.limit}${filter ? `&tenants=${encodeURIComponent(filter)}` : ""}`);
-    state.evaluation.filter = filter;
+  // Zeitgrenze der Anfrage merken: ohne Freigabe fehlt der Bedarfsplan (response_plan = null)
+  if (!e || e.year !== state.year || e.limit !== state.limit || e.filter !== filter) {
+    const { year, limit } = state;
+    const data = await api(`/api/evaluation?year=${year}&limit=${limit}${filter ? `&tenants=${encodeURIComponent(filter)}` : ""}`);
+    // Inzwischen anderes Jahr bzw. andere Auswahl: die ältere Antwort verwerfen
+    if (year === state.year && limit === state.limit && filter === [...state.tenantFilter].sort().join(",")) {
+      state.evaluation = Object.assign(data, { filter, limit });
+    }
   }
 }
 
@@ -230,10 +235,12 @@ document.addEventListener("app:view", () => {
 
 async function loadIncidents() {
   if (!state.incidents || state.incidents.year !== state.year) {
-    state.incidents = await api(`/api/incidents?year=${state.year}`);
+    const year = state.year, data = await api(`/api/incidents?year=${year}`);
+    if (year === state.year) state.incidents = data;
   }
 }
 
+let viewRun = 0;
 async function showView() {
   const key = location.hash.slice(1), allowed = allowedViews();
   state.view = allowed.includes(key) ? key : allowed[0];
@@ -241,16 +248,17 @@ async function showView() {
   for (const a of $$("#tabs a")) a.classList.toggle("active", a.dataset.view === state.view);
   for (const k of Object.keys(VIEWS)) $(`#view-${k}`).hidden = k !== state.view;
   $("#page-title").textContent = view.noYear ? view.label : `${view.label} ${state.year}`;
-  const section = $(`#view-${state.view}`);
+  const section = $(`#view-${state.view}`), run = ++viewRun;
   section.classList.add("loading");
   try {
     await view.load();
+    if (run !== viewRun) return;                     // inzwischen neu angefordert: das spätere Laden zeichnet
     view.render();
     document.dispatchEvent(new Event("app:view"));    // Ansicht gezeichnet (z. B. Sprung zu einem Einsatz)
   } catch (e) {
-    section.innerHTML = errorBox(e.message);
+    if (run === viewRun) section.innerHTML = errorBox(e.message);
   } finally {
-    section.classList.remove("loading");
+    if (run === viewRun) section.classList.remove("loading");
   }
 }
 
@@ -353,12 +361,12 @@ function responsePlanCard(plan, previousPlan) {
   const release = config.tenant && can("plan.release") ? `<label class="toggle no-print" data-tip="Ohne Freigabe sehen den Bedarfsplan nur Rollen mit dem Recht „Bedarfsplan ohne Freigabe sehen“ (z. B. Wehrführer, Wehrleiter)">
       <input type="checkbox" data-plan-release ${e.response_plan_public ? "checked" : ""}> für alle freigegeben</label>` : "";
   const hidden = e.response_plan_hidden.length ? ` Ohne ${esc(e.response_plan_hidden.join(", "))} (nicht freigegeben).` : "";
-  const footer = `<p class="plan-footer">${!e.response_plan_public && !hidden ? "<b>Nur für die Verwaltung sichtbar.</b> " : ""}Zeiten ab Einsatzbeginn (früheste Alarmierung). Gesamtstärke ohne ${config.plan_excluded_vehicles.join(", ")}, wie in der Einsatzübersicht.
+  const footer = `<p class="plan-footer">${!e.response_plan_public && !hidden ? "<b>Nur für die Verwaltung sichtbar.</b> " : ""}Zeiten ab Einsatzbeginn (früheste Alarmierung). Gesamtstärke ohne ${esc(config.plan_excluded_vehicles.join(", "))}, wie in der Einsatzübersicht.
     ${plan.without_times ? `${plural(plan.without_times, "Einsatz", "Einsätze")} ohne Eintreffzeit nicht berücksichtigt (Excel zählte sie mit 0 min als erreicht).` : ""}${hidden}</p>`;
   return chartCard({
     id: "plan", heading: "h2", className: "plan grid", chartLabel: "Kacheln", controls: release + limitSwitch, extra: footer,
     title: `Feuerwehrbedarfsplan · Pos. 8.4${helpButton("response_plan")}`,
-    subtitle: `Einsätze ab Alarmstufe ${config.plan_min_level} in ${plan.places.join(", ")} – Eintreffen des ersten Fahrzeugs innerhalb von ${limit} Minuten nach Alarmierung.`,
+    subtitle: `Einsätze ab Alarmstufe ${config.plan_min_level} in ${esc(plan.places.join(", "))} – Eintreffen des ersten Fahrzeugs innerhalb von ${limit} Minuten nach Alarmierung.`,
     chart: `<div class="plan-windows">${plan.windows.map((w) => windowTile(w, false)).join("")}${windowTile(plan.total, true)}</div>`,
     table,
   });
@@ -492,8 +500,8 @@ const isIdle = (v) => v.crew == null && !v.departed && !v.arrived;
 
 function vehicleChips(e) {
   return `<div class="vehicle-chips">${e.vehicles.map((v) => {
-    const short = v.call_sign.slice(3);
-    if (isIdle(v)) return `<span data-tip="${v.call_sign}: nicht im Einsatz">${short}</span>`;
+    const short = esc(v.call_sign.slice(3));
+    if (isIdle(v)) return `<span data-tip="${esc(v.call_sign)}: nicht im Einsatz">${short}</span>`;
     const tip = `${esc(v.substitute || v.call_sign)} · Stärke ${orDash(v.crew)}\nEintreffen ${minutes(v.arrival_min)}`;
     return `<span class="on" data-tip="${tip}">${short}<b>${orDash(v.crew)}</b></span>`;
   }).join("")}</div>`;
@@ -509,6 +517,9 @@ function renderIncidents() {
   const visible = list.filter(matchesFilter).reverse();   // neueste zuerst
   const limit = config.default_limit, withTenant = Boolean(config.vg);
   const tenantNames = Object.fromEntries(config.tenants.map((t) => [t.slug, t.name]));
+  // Offenes Formular beim Neuzeichnen (Suche, Filter, andere Zeile) samt Eingaben behalten
+  const formSelector = state.editing ? `[data-form="${CSS.escape(state.editing)}"]` : null;
+  if (formSelector && $(formSelector)) state.editNode = $(formSelector);
   $("#incident-table tbody").innerHTML = visible.map((e) => {
     const open = state.expanded.has(e.id);
     const arrival = e.arrival_min == null ? `<span class="muted">–</span>`
@@ -525,6 +536,7 @@ function renderIncidents() {
       <td>${ICON_CHEVRON}</td>
     </tr>${open ? `<tr class="detail"><td colspan="9">${state.editing === e.id ? editForm(e) : incidentDetail(e)}</td></tr>` : ""}`;
   }).join("");
+  if (formSelector && state.editNode && $(formSelector)) $(formSelector).replaceWith(state.editNode);
   $("#incidents-empty").hidden = visible.length > 0;
 }
 
@@ -533,8 +545,8 @@ function vehicleTable(e) {
   return `<div class="table-wrap"><table class="mini-table"><thead><tr>
     <th>Fzg.</th><th class="right">Stärke</th><th>Ausr.</th><th class="right">Azeit</th><th>Eintr.</th><th class="right">Ezeit</th></tr></thead>
     <tbody>${e.vehicles.map((v) => isIdle(v)
-      ? `<tr class="vehicle-idle"><td>${v.call_sign}</td><td colspan="5">nicht im Einsatz</td></tr>`
-      : `<tr><td><strong>${v.call_sign}</strong>${v.substitute ? `<br><span class="small muted">${esc(v.substitute)}</span>` : ""}</td>
+      ? `<tr class="vehicle-idle"><td>${esc(v.call_sign)}</td><td colspan="5">nicht im Einsatz</td></tr>`
+      : `<tr><td><strong>${esc(v.call_sign)}</strong>${v.substitute ? `<br><span class="small muted">${esc(v.substitute)}</span>` : ""}</td>
         <td class="right">${orDash(v.crew)}</td><td>${formatTime(v.departed)}</td><td class="right minutes">${num(v.turnout_min)}</td>
         <td>${formatTime(v.arrived)}</td><td class="right minutes ${v.arrival_min != null && v.arrival_min > limit ? "late" : ""}">${num(v.arrival_min)}</td></tr>`).join("")}
     </tbody></table></div>`;
@@ -596,7 +608,7 @@ function incidentDetail(e) {
       <dt>Dauer${helpButton("duration")}</dt><dd>${formatDuration(e.duration_min)}</dd>
       <dt>Zeitfenster${helpButton("time_window")}</dt><dd>${e.weekend_or_holiday ? "Sa/So/Feiertag" : "Werktag"}, ${e.daytime ? "Tag" : "Nacht"}</dd>
       <dt>Ort</dt><dd>${esc(e.place || "–")}</dd>
-      <dt>EHF${helpButton("unit_leader")}</dt><dd>${esc(e.unit_leader || "–")}</dd>
+      ${e.people_visible !== false ? `<dt>EHF${helpButton("unit_leader")}</dt><dd>${esc(e.unit_leader || "–")}</dd>` : ""}
       <dt>Gerätehaus${helpButton("station_staff")}</dt><dd>${e.station_staff}</dd>
       <dt>Quelle</dt><dd class="small">${sourceLabel(e)}</dd>
       ${e.bks_url ? `<dt>BKS-Portal${helpButton("bks_url")}</dt><dd class="small">${bksLink(e)}</dd>` : ""}
@@ -635,7 +647,9 @@ const FORM_FIELDS = [
 ];
 
 function formFields(e) {
-  return `<div class="form-grid">${FORM_FIELDS.map(([name, title, type, span, attributes]) => {
+  // EHF ist ein Name: nur mit Recht auf die Anwesenheit (sonst bleibt der gespeicherte Wert)
+  const fields = FORM_FIELDS.filter(([name]) => name !== "unit_leader" || e.people_visible !== false);
+  return `<div class="form-grid">${fields.map(([name, title, type, span, attributes]) => {
     const value = type === "datetime-local" ? (e[name] || "").slice(0, 19) : e[name];
     const missing = name === "unit_leader" && !value;
     // Nummerierung nach Datum: die Nr. vergibt die App
@@ -655,15 +669,15 @@ function readForm(el) {
 
 // Bearbeiten: Fahrzeuge direkt im Formular, Anwesenheit als Entwurf (state.editDraft) bis zum Speichern
 function vehicleEditTable(e) {
-  const time = (t) => t ? t.slice(0, 5) : "";
+  const time = (t) => t ? t.slice(0, 8) : "";   // mit Sekunden (step="1"), sonst ändern sich Azeit und Ezeit
   return `<div class="table-wrap"><table class="mini-table vehicle-edit"><thead><tr>
     <th>Fzg.</th><th>dabei</th><th>Stärke</th><th>Ausrücken</th><th>Eintreffen</th></tr></thead>
     <tbody>${e.vehicles.map((v) => `<tr data-vehicle="${esc(v.call_sign)}">
       <td><strong>${esc(v.call_sign)}</strong></td>
       <td><input type="checkbox" data-v="present" ${isIdle(v) ? "" : "checked"} aria-label="${esc(v.call_sign)} im Einsatz"></td>
       <td><input type="number" min="0" max="99" data-v="crew" value="${v.crew ?? ""}" aria-label="Stärke ${esc(v.call_sign)}"></td>
-      <td><input type="time" data-v="departed" value="${time(v.departed)}" aria-label="Ausrücken ${esc(v.call_sign)}"></td>
-      <td><input type="time" data-v="arrived" value="${time(v.arrived)}" aria-label="Eintreffen ${esc(v.call_sign)}"></td>
+      <td><input type="time" step="1" data-v="departed" value="${time(v.departed)}" aria-label="Ausrücken ${esc(v.call_sign)}"></td>
+      <td><input type="time" step="1" data-v="arrived" value="${time(v.arrived)}" aria-label="Eintreffen ${esc(v.call_sign)}"></td>
     </tr>`).join("")}</tbody></table></div>`;
 }
 
@@ -729,6 +743,7 @@ function redrawPeople(form) {
 async function startEditing(id) {
   const incident = state.incidents.incidents.find((x) => x.id === id);
   state.editing = id;
+  state.editNode = null;
   state.editDraft = { visible: incident.people_editable, people: incident.people.map((p) => ({ id: p.id, name: p.name,
     role: p.role || "", vehicle: p.vehicle || "", leader_name: p.leader_name })) };
   updateDatalists();
@@ -888,7 +903,7 @@ async function readPdfs(files) {
 // Gelesene Berichte (hochgeladen oder von einer anderen Wehr weitergegeben): saubere übernehmen, Rest zeigen
 async function showUploadResult(data) {
   // Erfasster Einsatz: Aktualisieren ist vorausgewählt (manuell ergänzte Fahrzeuge und Personen bleiben)
-  state.upload = { token: data.token, reports: data.reports.map((r) => ({ ...r, replace: Boolean(r.existing), saved: null })),
+  state.upload = { token: data.token, reports: data.reports.map((r) => ({ ...r, replace: Boolean(r.existing && r.can_edit), saved: null })),
                    errors: data.errors, notes: data.notes || [] };
   if (data.errors.length) showUploadError(data.errors.map((e) => `${esc(e.file)}: ${esc(e.message)}`).join("<br>"));
   await acceptCleanReports();
@@ -959,6 +974,14 @@ function differencesTable(existing) {
     ${existing.differences.map((d) => `<tr><td>${esc(d.field)}</td><td>${esc(d.stored)}</td><td>${esc(d.report)}</td></tr>`).join("")}</tbody></table>`;
 }
 
+// Eingaben in den noch offenen Vorschauen vor dem Neuzeichnen übernehmen
+function keepPreviewInput() {
+  for (const card of $$(".preview-card[data-index]")) {
+    const r = state.upload.reports[Number(card.dataset.index)];
+    if (r && !r.saved && $("input[name]", card)) Object.assign(r, readForm(card));
+  }
+}
+
 function renderPreviews() {
   const reports = state.upload.reports;
   $("#dropzone").classList.toggle("compact", reports.length > 0);
@@ -978,8 +1001,9 @@ function renderPreviews() {
         </div>
         <div class="panel outlined">${attendancePanel(r, { markNew: true, pickLeader: true })}</div>
         <div class="preview-footer">
-          ${existing ? `<label class="toggle"><input type="checkbox" data-replace="${i}" ${r.replace ? "checked" : ""}> erfassten Einsatz mit diesem Bericht aktualisieren
+          ${existing && r.can_edit ? `<label class="toggle"><input type="checkbox" data-replace="${i}" ${r.replace ? "checked" : ""}> erfassten Einsatz mit diesem Bericht aktualisieren
             <span class="muted">(manuell ergänzte Fahrzeuge und Personen bleiben)</span></label>` : ""}
+          ${existing && !r.can_edit ? `<span class="muted">Einen erfassten Einsatz aktualisiert, wer Einsätze bearbeiten darf.</span>` : ""}
           <button type="button" class="btn btn-primary" data-accept="${i}" ${existing && !r.replace ? "disabled" : ""}>
             ${existing ? "Aktualisieren" : "In Statistik übernehmen"}</button>
         </div>
@@ -999,6 +1023,7 @@ async function acceptReport(i) {
     r.saved = saved;
     state.dataChanged = true;
     toast(`Einsatz ${saved.number ?? ""}/${saved.year} ${r.existing ? "aktualisiert" : "übernommen"}`);
+    keepPreviewInput();
     renderPreviews();
   } catch (err) {
     button.disabled = false;
@@ -1279,7 +1304,8 @@ $("#previews").addEventListener("change", (e) => {
   const i = e.target.dataset.replace;
   if (i === undefined) return;
   // Eingaben behalten: Formularwerte vor dem Neuzeichnen übernehmen
-  Object.assign(state.upload.reports[i], readForm(e.target.closest(".preview-card")), { replace: e.target.checked });
+  keepPreviewInput();
+  state.upload.reports[i].replace = e.target.checked;
   renderPreviews();
 });
 $("#previews").addEventListener("click", (e) => {
@@ -1290,6 +1316,8 @@ $("#previews").addEventListener("click", (e) => {
 });
 
 $("#scope").addEventListener("change", async (e) => {
+  // Ungespeicherte Einstellungen (admin.js): erst fragen, sonst wechselte die Wehr auf dem Server trotzdem
+  if (typeof confirmDiscard === "function" && !confirmDiscard()) { e.target.value = config.scope; return; }
   try {
     await apiJson("/api/scope", "POST", { key: e.target.value });
     location.reload();

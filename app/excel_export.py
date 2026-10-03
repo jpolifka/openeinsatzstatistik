@@ -61,10 +61,10 @@ def formulas(sheet, r):
     crew = [f"{cs}.crew" for cs in vehicles]
     arrival_pairs = [(c[f"{cs}.crew"], c[f"{cs}.arrival"]) for cs in vehicles]
     limit, second = cfg.default_limit, cfg.second_limit
-    day_start, day_end = cfg.day_hours
+    day_start, day_end = (f"TIME({h},0,0)" if h < 24 else "1" for h in cfg.day_hours)
     f = {
         "weekday": f'=TEXT({c["date"]},"TTTT")',
-        "day_night": f'=IF(AND({c["start"]}>{day_start / 24:g},{c["start"]}<{day_end / 24:g}),"Tag","Nacht")',
+        "day_night": f'=IF(AND({c["start"]}>{day_start},{c["start"]}<{day_end}),"Tag","Nacht")',
         "duration": f'=MOD(({c["end"]}-{c["start"]}),1)',
         "crew_total": f'=SUM({_cells(column, crew + ["station_staff"], r)})',
         "turnout": f'=SUM(MIN({_cells(column, [f"{cs}.turnout" for cs in vehicles], r)}))',
@@ -78,7 +78,9 @@ def formulas(sheet, r):
         "crew_plan_total": "+".join(c[f"{cs}.crew"] for cs in vehicles if cs not in cfg.excluded_from_plan_crew),
     }
     for key in ("crew_on_arrival", "crew_within_limit", "crew_within_second", "crew_plan_total"):
-        f[key] = "=" + f[key]
+        f[key] = "=" + (f[key] or "0")       # ohne (Plan-)Fahrzeuge: 0 statt einer leeren Formel
+    if not vehicles:                          # MIN() ohne Argumente lehnt Excel ab; "" zählt nicht als erreicht
+        f["turnout"] = f["arrival"] = '=""'
     for cs in vehicles:
         for time_part, minutes_part in (("departed", "turnout"), ("arrived", "arrival")):
             f[f"{cs}.{minutes_part}"] = f'=IFERROR((MOD(({c[f"{cs}.{time_part}"]}-{c["start"]}),1))*24*60,"")'
@@ -159,6 +161,7 @@ def _write_overview(ws, sheet, incidents, year):
 
 def _write_attendance(ws, sheet, incidents, members, overview_title):
     ws["A1"] = "Anwesenheit – Spalten entsprechen 1:1 dem Blatt Anwesenheit (Werte kopieren)"
+    quoted = overview_title.replace("'", "''")       # Blattname in Formeln: Apostroph verdoppeln
     ws["A1"].font = Font(name="Calibri", size=14, bold=True)
     member_columns = {m["id"]: ATTENDANCE_FIRST_COLUMN + i for i, m in enumerate(members)}
     last = ATTENDANCE_FIRST_COLUMN + len(members) - 1
@@ -178,13 +181,13 @@ def _write_attendance(ws, sheet, incidents, members, overview_title):
     L = get_column_letter
     for r, incident in enumerate(incidents, start=FIRST_ROW):
         for column, key, number_format in linked:
-            cell = ws.cell(r, column, f"='{overview_title}'!{sheet.layout.column[key]}{r}")
+            cell = ws.cell(r, column, f"='{quoted}'!{sheet.layout.column[key]}{r}")
             cell.number_format, cell.fill, cell.border, cell.alignment = number_format, FORMULA_FILL, BORDER, CENTER
         for column in range(ATTENDANCE_FIRST_COLUMN, last + 1):
             ws.cell(r, column).border, ws.cell(r, column).alignment = BORDER, CENTER
         for person in incident["people"]:
             ws.cell(r, member_columns[person["id"]], 1)
-        total = ws.cell(r, total_column, f"=SUM({L(ATTENDANCE_FIRST_COLUMN)}{r}:{L(last)}{r})")
+        total = ws.cell(r, total_column, f"=SUM({L(ATTENDANCE_FIRST_COLUMN)}{r}:{L(last)}{r})" if members else 0)
         total.fill, total.border, total.alignment = FORMULA_FILL, BORDER, CENTER
         hours = ws.cell(r, hours_column, f"={L(total_column)}{r}*E{r}")
         hours.number_format, hours.fill, hours.border, hours.alignment = "[h]:mm", FORMULA_FILL, BORDER, CENTER
@@ -207,7 +210,9 @@ def _write_instructions(ws, sheet, last_member_column):
         f"2. Blatt '{ATTENDANCE_SHEET}': Spalten {get_column_letter(ATTENDANCE_FIRST_COLUMN)} bis "
         f"{get_column_letter(last_member_column)} der gleichen Zeilen kopieren und im Blatt Anwesenheit ab Spalte "
         f"{get_column_letter(ATTENDANCE_FIRST_COLUMN)} einfügen (Rechtsklick > Einfügeoptionen > Werte)."
-        if last_member_column else "2. Die Anwesenheit ist nur im Export für Rollen mit Recht auf die Anwesenheit enthalten.",
+        if last_member_column and last_member_column >= ATTENDANCE_FIRST_COLUMN
+        else "2. Im Jahr ist keine Anwesenheit erfasst." if last_member_column
+        else "2. Die Anwesenheit ist nur im Export für Rollen mit Recht auf die Anwesenheit enthalten.",
         f"3. Spalte 'Prüfhinweise' ({get_column_letter(sheet.warnings_column)}) beachten – gelb markierte Zeilen bitte "
         "kontrollieren.",
         "",
@@ -255,7 +260,8 @@ SUMMARY_COLUMNS = (("name", "Wehr", None), ("count", "Einsätze", "0"), ("plan_c
 
 def _sheet_title(prefix, name, taken):
     """Blattname (höchstens 31 Zeichen, ohne verbotene Zeichen), eindeutig in der Mappe."""
-    base = f"{prefix} {''.join(c for c in name if c not in '[]:*?/\\')}"[:31].rstrip()
+    allowed = "".join(c for c in name if c not in "[]:*?/\\")
+    base = f"{prefix} {allowed}"[:31].rstrip()
     title, n = base, 2
     while title in taken:
         title, n = f"{base[:28]} {n}", n + 1

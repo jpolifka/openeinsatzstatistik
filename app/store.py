@@ -5,7 +5,7 @@ import re
 
 from app import domain
 from app.holidays import is_weekend_or_holiday
-from app.names import NameMatcher, leader_spelling, matches_leader, normalize, split_name
+from app.names import NameMatcher, leader_spelling, matches_leader, split_name
 from app.timeutil import normalize_iso, parse_iso, to_iso, year_of
 
 # Ganzes Stichwort mit oder ohne Punkt: B2.07, B207, b2 07, S1.00, B2.
@@ -97,23 +97,14 @@ class MemberDirectory:
         self._load()
 
     def _load(self):
-        rows = self.con.execute("SELECT id, name, first_name FROM member").fetchall()
+        rows = self.con.execute("SELECT id, name FROM member").fetchall()
         self.names = {r["id"]: r["name"] for r in rows}
-        self.first_names = {r["id"]: r["first_name"] for r in rows}
         self.matcher = NameMatcher([(r["id"], r["name"]) for r in rows]) if rows else None
 
     def find(self, last_name, first_name):
         if not self.matcher:
             return None
-        member_id = self.matcher.match(last_name, first_name)
-        # Der Abgleich ordnet bei eindeutigem Nachnamen ohne Blick auf den Vornamen zu –
-        # ein neues Mitglied mit gleichem Nachnamen darf nicht beim Verwandten landen.
-        known_first = self.first_names.get(member_id)
-        if member_id is not None and first_name and known_first:
-            given, known = normalize(first_name)[:1], normalize(known_first)[:1]
-            if given and known and given != known and normalize(last_name)[:1] != known:
-                return None
-        return member_id
+        return self.matcher.match(last_name, first_name)
 
     def find_or_create(self, last_name, first_name, name=None):
         member_id = self.find(last_name, first_name)
@@ -300,7 +291,7 @@ def replace_vehicles(con, incident_id, rows):
     """Fahrzeuge aus dem Formular: [{call_sign, crew, departed, arrived}]. Nicht genannte Fahrzeuge entfallen;
     vorhandene behalten Name, Alarmierung und Ende, neue gelten als manuell ergänzt."""
     current = {r["call_sign"]: dict(r) for r in con.execute("SELECT * FROM vehicle WHERE incident_id = ?", (incident_id,))}
-    wanted = {}
+    wanted, rows_by_sign = {}, {row["call_sign"]: row for row in rows}
     for row in rows:
         crew = to_int(row.get("crew"))
         if crew is not None and not 0 <= crew <= 99:
@@ -311,6 +302,10 @@ def replace_vehicles(con, incident_id, rows):
         con.execute("DELETE FROM vehicle WHERE incident_id = ? AND call_sign = ?", (incident_id, call_sign))
     for call_sign, values in wanted.items():
         if call_sign in current:
+            for key in ("departed", "arrived"):    # nur Minuten im Formular: Sekunden aus dem Bericht behalten
+                stored, given = current[call_sign][key], (rows_by_sign[call_sign].get(key) or "").strip()
+                if stored and len(given) == 5 and stored[:5] == given:
+                    values[key] = stored
             con.execute("UPDATE vehicle SET crew = ?, departed = ?, arrived = ? WHERE incident_id = ? AND call_sign = ?",
                         (values["crew"], values["departed"], values["arrived"], incident_id, call_sign))
         else:

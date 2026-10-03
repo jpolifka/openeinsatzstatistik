@@ -53,3 +53,24 @@ def test_export_writes_overview_and_attendance(con, tmp_path):
     assert overview["AI3"].value == "PDF-Datei" and overview["AJ4"].value == "Bitte prüfen"
     assert attendance["F3"].value == "Muster, Max" and attendance["F4"].value == 1
     assert any("(03/..)" in (row[0] or "") for row in workbook["Anleitung"].iter_rows(values_only=True))
+
+
+def test_formulas_without_vehicles_are_valid():
+    """Ohne (Plan-)Fahrzeuge keine leeren Formeln und kein MIN() ohne Argumente – Excel lehnt beides ab."""
+    f = excel_export.formulas(excel_export.Sheet(TenantConfig(name="Neu")), 4)
+    assert f["turnout"] == f["arrival"] == '=""'
+    assert all(f[k] == "=0" for k in ("crew_on_arrival", "crew_within_limit", "crew_within_second", "crew_plan_total"))
+    only_excluded = TenantConfig(name="Neu", fleet=(Vehicle("03/11", in_plan_crew=False),))
+    assert excel_export.formulas(excel_export.Sheet(only_excluded), 4)["crew_plan_total"] == "=0"
+
+
+def test_attendance_without_members_and_apostrophe_in_name(con, tmp_path):
+    store.create_incident(con, {"number": 1, "started_at": "2025-03-12T10:00:00", "ended_at": "2025-03-12T11:00:00",
+                                "keyword": "B1"}, source="pdf")
+    cfg = TenantConfig(name="Wehr Muster's Hof", fleet=(Vehicle("03/11"),), own_prefix="03/")
+    target = tmp_path / "gesamt.xlsx"
+    excel_export.write_combined_workbook([(cfg, store.load_incidents(con, year=2025), [])], [], {}, 2025, 10, target)
+    workbook = openpyxl.load_workbook(target)
+    attendance = next(ws for ws in workbook if ws.title.startswith("Anwesenheit"))
+    assert attendance["A4"].value.startswith("='Einsätze Wehr Muster''s Hof'!")
+    assert attendance["F4"].value == 0                                   # Stärke ohne Kameraden

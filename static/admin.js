@@ -74,11 +74,17 @@ async function loadVgVehicles() {
   admin.vgVehicles = { vg: admin.vg, ...(await api(`/api/admin/vgs/${encodeURIComponent(admin.vg)}/vehicles`)) };
 }
 
+// Rechte in der ausgewählten Wehr bzw. VG der Verwaltung
+function adminGranted() {
+  const { overview } = admin;
+  return (admin.vg ? overview.vgs.find((v) => v.slug === admin.vg)
+    : overview.tenants.find((t) => t.slug === admin.slug))?.permissions || [];
+}
+
 function adminSections() {
   const { overview } = admin;
   const mode = admin.vg ? "vg" : "tenant";
-  const granted = (admin.vg ? overview.vgs.find((v) => v.slug === admin.vg)
-    : overview.tenants.find((t) => t.slug === admin.slug))?.permissions || [];
+  const granted = adminGranted();
   return ADMIN_SECTIONS.filter(([, , , superOnly, scope, permission]) => {
     if (superOnly) return overview.superadmin;
     if (scope === "any") return overview.users || overview.superadmin;
@@ -460,8 +466,9 @@ function placesSection() {
       ${adminField("Tag ab (Uhr)", `<input type="number" min="0" max="23" data-bind="day_hours.0" value="${s.day_hours[0]}">`)}
       ${adminField("Tag bis (Uhr)", `<input type="number" min="1" max="24" data-bind="day_hours.1" value="${s.day_hours[1]}">`)}
     </div>
-    <label class="toggle section-gap"><input type="checkbox" data-bind="response_plan_public" ${s.response_plan_public ? "checked" : ""}>
-      Bedarfsplan für alle Rollen freigeben <span class="muted">(sonst nur mit dem Recht „Bedarfsplan ohne Freigabe sehen“)</span></label>
+    ${adminGranted().includes("plan.release") ? `<label class="toggle section-gap"><input type="checkbox" data-bind="response_plan_public" ${s.response_plan_public ? "checked" : ""}>
+      Bedarfsplan für alle Rollen freigeben <span class="muted">(sonst nur mit dem Recht „Bedarfsplan ohne Freigabe sehen“)</span></label>`
+      : `<p class="small muted section-gap">Bedarfsplan ${s.response_plan_public ? "ist für alle Rollen freigegeben" : "ist nicht freigegeben"} – freigeben darf, wer das Recht „Bedarfsplan freigeben“ hat.</p>`}
     ${saveButton()}`;
 }
 

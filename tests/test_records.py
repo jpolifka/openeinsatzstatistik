@@ -162,14 +162,14 @@ def test_edit_vehicles_and_people_survive_reimport(vg):
     data = _upload(client, "a1.pdf")
     saved = _accept(client, data, "a1.pdf")
     members = {m["name"]: m["id"] for m in client.get("/api/members?tenant=wehr-a1").json()["members"]}
-    body = {"vehicles": [{"call_sign": "02/45", "crew": 4, "departed": "10:12", "arrived": "10:16"},
+    body = {"vehicles": [{"call_sign": "02/45", "crew": 4, "departed": "10:13", "arrived": "10:16"},
                          {"call_sign": "02/71", "crew": 3, "departed": "10:20", "arrived": None}],
             "people": [{"id": members["Muster, Max"], "role": "Einheitsführer", "vehicle": "02/45"},
                        {"name": "Neu, Nora", "role": "Maschinist", "vehicle": "02/71"}]}
     edited = client.put(f"/api/incidents/{saved['id']}", json=body).json()
     vehicles = {v["call_sign"]: v for v in edited["vehicles"] if v["crew"] is not None}
     assert {cs: (v["crew"], v["departed"]) for cs, v in vehicles.items()} == \
-        {"02/45": (4, "10:12:00"), "02/71": (3, "10:20:00")}           # 02/24 entfernt
+        {"02/45": (4, "10:13:00"), "02/71": (3, "10:20:00")}           # 02/24 entfernt
     assert sorted(p["name"] for p in edited["people"]) == ["Muster, Max", "Neu, Nora"]
     assert "Neu, Nora" in [m["name"] for m in client.get("/api/members?tenant=wehr-a1").json()["members"]]
 
@@ -193,3 +193,39 @@ def test_edit_rejects_invalid_values(vg):
     incident = [i for i in client.get("/api/incidents?year=2025").json()["incidents"] if i["id"] == saved["id"]][0]
     assert incident["description"] != "geändert"
     assert client.get("/api/members?tenant=wehr-a2").status_code == 403
+
+
+def test_other_vg_cannot_touch_master_record_or_review(vg):
+    """Stammdatensatz und Prüfvermerk gelten je VG – eine andere VG belegt oder überschreibt sie nicht."""
+    client = _as(vg, "vglead@example.org", "vg:vg-a")
+    data = _upload(client, "stamm.pdf", "a1.pdf")
+    _accept(client, data, "a1.pdf")
+    assert client.post("/api/records/9000001/review", json={"done": True}).status_code == 200
+
+    vg_b, _ = make_tenant("wehr-b1", "vg-b")
+    grant("vglead-b@example.org", "vg_lead", vg_b)
+    other = _as(vg, "vglead-b@example.org", "vg:vg-b")
+    assert other.post("/api/records/9000001/review", json={"done": True}).status_code == 200
+    assert other.post("/api/records/9000001/review", json={"done": False}).status_code == 200
+    with tenancy.central() as con:
+        assert records.load_master(con, vg_b, "9000001") is None             # nichts von VG A sichtbar
+        a_id = con.execute("SELECT id FROM vg WHERE slug = 'vg-a'").fetchone()[0]
+        assert records.load_master(con, a_id, "9000001")["dispatch_number"] == "1250000009"
+
+    client = _as(vg, "vglead@example.org", "vg:vg-a")
+    assert client.get("/api/records?year=2025").json()["records"][0]["reviewed"]["by"] == "vglead@example.org"
+
+
+def test_edit_keeps_seconds_of_unchanged_vehicle_times(vg):
+    """Formular mit Minuten (HH:MM): unveränderte Zeiten behalten die Sekunden aus dem Bericht."""
+    client = _as(vg, "lead1@example.org")
+    saved = _accept(client, _upload(client, "a1.pdf"), "a1.pdf")
+    before = {v["call_sign"]: v for v in saved["vehicles"] if v["departed"]}
+    assert any(v["departed"][-2:] != "00" for v in before.values())
+    body = {"vehicles": [{"call_sign": cs, "crew": v["crew"], "departed": v["departed"][:5],
+                          "arrived": (v["arrived"] or "")[:5] or None} for cs, v in before.items()]}
+    edited = client.put(f"/api/incidents/{saved['id']}", json=body).json()
+    after = {v["call_sign"]: v for v in edited["vehicles"] if v["departed"]}
+    assert {cs: (v["departed"], v["arrived"]) for cs, v in after.items()} == \
+        {cs: (v["departed"], v["arrived"]) for cs, v in before.items()}
+    assert edited["arrival_min"] == saved["arrival_min"]

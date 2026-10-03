@@ -77,11 +77,15 @@ def test_settings_roundtrip_changes_config(world):
     ({"fleet": [{"call_sign": "02/45"}, {"call_sign": "02/45"}]}, "doppelt"),
     ({"fleet": [{"call_sign": "02/45", "in_service_from": "2025-01-01", "in_service_until": "2024-01-01"}]}, "außer Dienst"),
     ({"substitutes": {"01/23": "09/99"}}, "Block"),
+    ({"substitutes": {"01/23": ["02/45"]}}, "Fahrzeug der Liste"),
+    ({"fleet": [{"call_sign": "<img src=x onerror=alert(1)>"}]}, "Kurzname"),
+    ({"places": [{"name": "<img src=x onerror=alert(1)>", "prefix": "x"}]}, "Ortsnamen"),
     ({"plan_places": ["Nirgendwo"]}, "Ortsliste"),
     ({"response_limits": [8, 10], "default_limit": 12}, "Standardgrenze"),
     ({"second_limit": 9}, "zweite Zeitgrenze"),
     ({"day_hours": [18, 6]}, "Beginn vor Ende"),
     ({"own_prefix": "02"}, "Schrägstrich"),
+    ({"name": "   "}, "Namen der Wehr"),
 ])
 def test_invalid_settings_are_rejected(world, change, message):
     _as(world, "lead@example.org")
@@ -194,6 +198,8 @@ def test_superadmin_manages_vgs_and_tenants(world, data_dir):
                                                      "email": "c1@example.org"})
     assert created.status_code == 200 and tenancy.is_allowed("c1@example.org")
     assert world.post("/api/super/tenants", json={"slug": "wehr-c1", "name": "x", "vg": "vg-c"}).status_code == 422
+    with tenancy.central() as con:
+        c1_id = con.execute("SELECT id FROM tenant WHERE slug = 'wehr-c1'").fetchone()[0]
     assert world.put("/api/super/tenants/wehr-c1", json={"active": False}).status_code == 200
     assert not tenancy.is_allowed("c1@example.org")
     assert world.delete("/api/super/tenants/wehr-c1", params={"confirm": "falsch"}).status_code == 422
@@ -201,6 +207,13 @@ def test_superadmin_manages_vgs_and_tenants(world, data_dir):
     assert "wehr-c1" not in [t["slug"] for t in overview["tenants"]]
     assert not os.path.exists(tenancy.tenant_path("wehr-c1"))
     assert len(os.listdir(data_dir / "deleted")) == 1
+    # Neue Wehr bekommt nicht die ID der gelöschten – sonst sähe ihre Wehrführung deren Rollen-Protokoll
+    world.post("/api/super/tenants", json={"slug": "wehr-c2", "name": "Wehr C2", "vg": "vg-c",
+                                           "email": "c2@example.org"})
+    with tenancy.central() as con:
+        assert con.execute("SELECT id FROM tenant WHERE slug = 'wehr-c2'").fetchone()[0] > c1_id
+    events = _as(world, "c2@example.org").get("/api/admin/role-events").json()["events"]
+    assert not any("c1@example.org" in e["detail"] for e in events)
 
 
 def test_fleet_with_full_call_signs(world):
@@ -270,3 +283,17 @@ def test_vg_vehicles_overview_and_move(world):
     assert world.post("/api/admin/vgs/vg-a/vehicles/move",
                       json={"name": "RP WW 01/23-06", "target": "wehr-b1"}).status_code == 404
     assert CFG.vehicles      # Konfiguration der Tests unverändert
+
+
+def test_settings_do_not_overwrite_newer_fleet(world):
+    """Fahrzeug kommt beim Import dazu, während die Einstellungen offen sind: Speichern wird abgelehnt (409)."""
+    _as(world, "lead@example.org")
+    s = _settings(world)
+    with db.connection(tenancy.tenant_path("wehr-a1")) as con:
+        con.execute("INSERT INTO fleet (call_sign, name, label, sort_order) VALUES ('02/99', 'FL NR#.BHÖ 02/99-01', '', 99)")
+    tenancy.forget_config("wehr-a1")
+    response = world.put("/api/admin/wehr-a1/settings", json=s)
+    assert response.status_code == 409 and "neu laden" in response.json()["detail"]
+    fresh = _settings(world)
+    assert "02/99" in [v["call_sign"] for v in fresh["fleet"]]
+    assert world.put("/api/admin/wehr-a1/settings", json=fresh).status_code == 200

@@ -160,7 +160,9 @@ class Roles:
         role = self.by_id.get(role_id)
         if not role:
             return frozenset()
-        return frozenset(allowed(set().union(*(self.by_id[i].own for i in self.chain(role_id))), role.scope))
+        # Voraussetzungen über die ganze Kette: gespeichert ist nur, was die Elternrolle beim Speichern nicht
+        # schon hatte – verliert sie später ein Recht, bleibt es für die erbende Rolle, die es voraussetzt
+        return frozenset(allowed(close(set().union(*(self.by_id[i].own for i in self.chain(role_id)))), role.scope))
 
     def grants(self, role_id):
         """Vergebbare Rollen – nur mit USERS_GRANT."""

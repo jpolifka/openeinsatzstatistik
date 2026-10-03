@@ -128,9 +128,27 @@ class PreviewSessions:
         """(bericht, slug) oder (None, None), auch wenn die Vorschau einem anderen Benutzer gehört."""
         with self._lock:
             session = self._sessions.get(token)
-        if not session or session["owner"] != owner or filename not in session["reports"]:
+        if not session or session["owner"] != owner or filename not in session["reports"] \
+                or session["time"] < time.time() - self.TTL:
             return None, None
         return session["reports"][filename]
+
+    @contextlib.contextmanager
+    def claim(self, token, filename, owner):
+        """Bericht zur Übernahme entnehmen: ein zweiter Aufruf (Doppelklick) findet ihn nicht mehr.
+        Scheitert die Übernahme, liegt er wieder bereit."""
+        entry = None
+        with self._lock:
+            session = self._sessions.get(token)
+            if session and session["owner"] == owner and session["time"] >= time.time() - self.TTL:
+                entry = session["reports"].pop(filename, None)
+        try:
+            yield entry or (None, None)
+        except BaseException:
+            if entry:
+                with self._lock:
+                    session["reports"][filename] = entry
+            raise
 
     def _expire(self):
         cutoff = time.time() - self.TTL
@@ -163,6 +181,11 @@ def parse_incident_key(key):
     return slug, int(number)
 
 
+def _names_for(tenant, incidents):
+    """Einsätze ohne EHF (Name), wenn der Benutzer in der Wehr keine Namen sehen darf (Recht PEOPLE)."""
+    return incidents if tenant.can(PEOPLE) else [{**i, "unit_leader": None} for i in incidents]
+
+
 def incident_json(incident, leaders, tenant, limit=None, cfg=None):
     """Einsatz mit Kennzahlen für die Oberfläche. leaders: store.LeaderNames für die EHF-Auswahl.
     cfg: abweichende Konfiguration (Vorschau mit neu entdeckten Fahrzeugen), sonst die der Wehr.
@@ -182,6 +205,7 @@ def incident_json(incident, leaders, tenant, limit=None, cfg=None):
         "tenant": tenant.slug,
         **{name: incident.get(name) for name in ("year", *store.FIELDS, *store.ID_FIELDS, "source", "filename",
                                                  "warnings")},
+        **({} if tenant.can(PEOPLE) else {"unit_leader": None}),     # EHF ist ein Name
         "bks_url": domain.BKS_REPORT_URL.format(incident["bks_report_id"]) if incident.get("bks_report_id") else None,
         "weekend_or_holiday": bool(incident.get("weekend_or_holiday")),
         **{name: _rounded(m[name]) for name in ("daytime", "duration_min", "turnout_min", "arrival_min", "on_time",
@@ -442,6 +466,8 @@ def api_update_incident(key: str, update: IncidentUpdate, a: tenancy.Access = De
     by_date = tenant.config.numbering == "by_date"
     if by_date:
         changes.pop("number", None)          # ergibt sich aus dem Beginn
+    if not tenant.can(PEOPLE):
+        changes.pop("unit_leader", None)     # sieht den EHF nicht (Name), ändert ihn also auch nicht
     if people is not None and not tenant.can(PEOPLE_EDIT):
         raise tenancy.Forbidden("Keine Berechtigung, die Anwesenheit zu bearbeiten.")
     if vehicles is not None and any(v["call_sign"] not in tenant.config.vehicles for v in vehicles):
@@ -449,6 +475,9 @@ def api_update_incident(key: str, update: IncidentUpdate, a: tenancy.Access = De
     with tenant.connection() as con:
         try:
             old_year = (store.load_incident(con, incident_id) or {}).get("year")
+            new_year = year_of(changes["started_at"]) if changes.get("started_at") else old_year
+            if by_date and new_year and new_year != old_year:
+                changes["number"] = store.next_number(con, new_year)   # vorläufig ans Ende des neuen Jahres
             store.update_incident(con, incident_id, changes, modified_by=a.email)
             if by_date:
                 for y in {old_year, store.load_incident(con, incident_id)["year"]} - {None}:
@@ -488,7 +517,8 @@ def api_delete_incident(key: str, a: tenancy.Access = Depends(access)):
 
 # ---------------------------------------------------------------- Berichte einlesen (PDF, Excel-Export)
 ZIP_MAX_PDFS = 500
-ZIP_MAX_BYTES = 50 * 1024 * 1024  # je entpacktem Bericht
+ZIP_MAX_BYTES = 50 * 1024 * 1024     # je entpacktem Bericht
+UPLOAD_MAX_BYTES = 200 * 1024 * 1024  # je Upload: hochgeladen bzw. entpackt zusammen (Speicher, Platte)
 REPORT_TYPES = (".pdf", ".xlsx")
 
 
@@ -506,13 +536,30 @@ def _unique_filename(filename, taken):
     return candidate
 
 
-def _unpack_zip(data, zip_name, errors):
-    """Berichte (PDF, xlsx) aus einer ZIP-Datei holen -> [(dateiname, inhalt)]. Andere Dateien werden übergangen."""
+class Budget:
+    """Bytes, die ein Upload insgesamt noch belegen darf (hochgeladen und entpackt)."""
+
+    def __init__(self, limit=None):
+        self.left = UPLOAD_MAX_BYTES if limit is None else limit
+
+    def take(self, size):
+        if size > self.left:
+            return False
+        self.left -= size
+        return True
+
+
+TOO_BIG = f"Zu groß – je Upload höchstens {UPLOAD_MAX_BYTES // (1024 * 1024)} MB, bitte in Teilen hochladen."
+
+
+def _unpack_zip(data, zip_name, errors, budget):
+    """Berichte (PDF, xlsx) aus einer ZIP-Datei holen -> erzeugt (dateiname, inhalt) einzeln, damit nicht alle
+    gleichzeitig im Speicher liegen. Andere Dateien werden übergangen."""
     try:
         archive = zipfile.ZipFile(io.BytesIO(data))
     except zipfile.BadZipFile:
         errors.append({"file": zip_name, "message": "Keine gültige ZIP-Datei."})
-        return []
+        return
     entries = [i for i in archive.infolist() if not i.is_dir() and i.filename.lower().endswith(REPORT_TYPES)
                and not i.filename.startswith("__MACOSX/") and not os.path.basename(i.filename).startswith("._")]
     if not entries:
@@ -520,17 +567,24 @@ def _unpack_zip(data, zip_name, errors):
     if len(entries) > ZIP_MAX_PDFS:
         errors.append({"file": zip_name, "message": f"Mehr als {ZIP_MAX_PDFS} Berichte, nur die ersten werden gelesen."})
         entries = entries[:ZIP_MAX_PDFS]
-    files = []
     for info in entries:
         name = _safe_filename(info.filename)
         if info.file_size > ZIP_MAX_BYTES:
             errors.append({"file": name, "message": "Bericht in der ZIP-Datei ist zu groß."})
             continue
         try:
-            files.append((name, archive.read(info)))
+            with archive.open(info) as fh:      # Größe aus dem Verzeichnis nicht trauen: begrenzt lesen
+                content = fh.read(ZIP_MAX_BYTES + 1)
         except Exception as e:  # verschlüsselt oder beschädigt
             errors.append({"file": name, "message": f"Nicht entpackbar ({e or type(e).__name__})."})
-    return files
+            continue
+        if len(content) > ZIP_MAX_BYTES:
+            errors.append({"file": name, "message": "Bericht in der ZIP-Datei ist zu groß."})
+            continue
+        if not budget.take(len(content)):
+            errors.append({"file": zip_name, "message": TOO_BIG})
+            return
+        yield name, content
 
 
 class Skipped(Exception):
@@ -588,11 +642,20 @@ def _read_report(path, filename, tenants):
 
 def _read_uploads(uploads, tenants, email=None):
     """Hochgeladene Berichte (PDF, xlsx) und ZIP-Dateien lesen -> ([(bericht, wehr)], fehler, hinweise)."""
-    errors, files = [], []
-    for upload in uploads:
-        filename, data = _safe_filename(upload.filename), upload.file.read()
-        files += _unpack_zip(data, filename, errors) if filename.lower().endswith(".zip") else [(filename, data)]
-    reports, more_errors, notes = _read_files(files, tenants, email)
+    errors, budget = [], Budget()
+
+    def files():
+        for upload in uploads:
+            filename, data = _safe_filename(upload.filename), upload.file.read(budget.left + 1)
+            if not budget.take(len(data)):
+                errors.append({"file": filename, "message": TOO_BIG})
+                return
+            if filename.lower().endswith(".zip"):
+                yield from _unpack_zip(data, filename, errors, budget)
+            else:
+                yield filename, data
+
+    reports, more_errors, notes = _read_files(files(), tenants, email)
     return reports, errors + more_errors, notes
 
 
@@ -688,14 +751,17 @@ def _shared_with(r, tenant, a):
 def _preview_json(r, tenant, a):
     cfg = tenant.config.with_new_vehicles(report.new_fleet_vehicles(r), r.get("day"))
     with tenant.connection() as con:
-        incident, existing = report.preview(con, r)
+        incident, existing = report.preview(con, r, numbered=tenant.config.numbering != "by_date")
         result = incident_json(incident, store.LeaderNames(con), tenant, cfg=cfg)
     result["tenant_name"] = tenant.name
     result["new_vehicles"] = r.get("new_vehicles", [])
     result["reported_as"] = r["reported_as"]
-    result["incident_commander"] = r["incident_commander"]
+    names = tenant.can(PEOPLE)                  # Einsatzleiter und EHF sind Namen
+    result["incident_commander"] = r["incident_commander"] if names else None
+    differences = report.differences(existing, incident, tenant.config) if existing else []
     result["existing"] = {"id": incident_key(tenant, existing["id"]), "source": existing["source"],
-                          "differences": report.differences(existing, incident, tenant.config)} if existing else None
+                          "differences": [d for d in differences if names or d["field"] != "EHF"]} \
+        if existing else None
     result["shared_with"] = _shared_with(r, tenant, a)
     return result
 
@@ -723,11 +789,21 @@ class Acceptance(BaseModel):
 
 @app.post("/api/reports/accept")
 def api_accept_report(acceptance: Acceptance, a: tenancy.Access = Depends(access)):
-    r, slug = previews.get(acceptance.token, acceptance.filename, a.email)
-    if not r:
-        raise HTTPException(410, "Die Vorschau ist abgelaufen – bitte den Bericht erneut einlesen.")
+    with previews.claim(acceptance.token, acceptance.filename, a.email) as (r, slug):
+        if not r:
+            raise HTTPException(410, "Die Vorschau ist abgelaufen oder der Bericht wurde schon übernommen – "
+                                     "bitte den Bericht erneut einlesen.")
+        return _accept_report(acceptance, a, r, slug)
+
+
+def _accept_report(acceptance, a, r, slug):
     tenant = a.tenant(slug, IMPORT)
-    fields = {**report.to_fields(r), **acceptance.fields.model_dump(exclude_unset=True)}
+    if acceptance.replace:
+        a.tenant(slug, WRITE)              # erfassten Einsatz überschreiben = bearbeiten
+    corrected = acceptance.fields.model_dump(exclude_unset=True)
+    if not tenant.can(PEOPLE):
+        corrected.pop("unit_leader", None)   # sieht den EHF nicht, also bleibt der aus dem Bericht
+    fields = {**report.to_fields(r), **corrected}
     by_date = tenant.config.numbering == "by_date"
     year = year_of(fields.get("started_at"))
     with tenant.connection() as con:
@@ -854,7 +930,7 @@ def api_review_record(bks_record_id: str, review: Review, a: tenancy.Access = De
     vg_id, tenants = _managed_vg(a)
     with tenancy.central() as con:
         records.review(con, vg_id, bks_record_id, tenants, a.email, review.done)
-        entry = records.check(con, bks_record_id, tenants)
+        entry = records.check(con, vg_id, bks_record_id, tenants)
     return {"ok": True, "findings": len(entry["findings"])}
 
 
@@ -930,7 +1006,7 @@ def api_export(year: Optional[int] = None, a: tenancy.Access = Depends(access)):
     if len(tenants) == 1 and not a.vg:
         tenant = tenants[0]
         with tenant.connection() as con:
-            incidents = store.load_incidents(con, year=year)
+            incidents = _names_for(tenant, store.load_incidents(con, year=year))
             members = store.members_of_year(con, year) if tenant.can(PEOPLE) else None
         if not incidents:
             raise HTTPException(404, "Keine Einsätze für den Export.")
@@ -941,7 +1017,7 @@ def api_export(year: Optional[int] = None, a: tenancy.Access = Depends(access)):
     workbook_parts = []
     for t, evaluated, _ in parts:
         with t.connection() as con:
-            workbook_parts.append((t.config, [i for i, _ in evaluated],
+            workbook_parts.append((t.config, _names_for(t, [i for i, _ in evaluated]),
                                    store.members_of_year(con, year) if t.can(PEOPLE) else None))
     if not any(incidents for _, incidents, _ in workbook_parts):
         raise HTTPException(404, "Keine Einsätze für den Export.")

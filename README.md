@@ -135,6 +135,7 @@ sofort; Vergaben und Rollenänderungen stehen im Protokoll (nur anhängbar).
 **Leitplanken** (fest im Code): Die Anwesenheit (Namen der Kameraden) gibt es nur für Rollen einer
 Wehr – der Wehrleiter sieht bei einem Einsatz nur die Anzahl der Anwesenden; der Excel-Export enthält
 für ihn kein Blatt Anwesenheit, Kameraden und die Anwesenheitsübersicht der Auswertung fehlen.
+Auch EHF und Einsatzleiter (Namen) sieht nur, wer die Anwesenheit sehen darf.
 Eigene Zuordnungen und Rollen, die man selbst hat (auch über Vererbung), ändert nur jemand anderes.
 Rollen nur mit Statistik sehen keine Namen: Einsatzliste und Excel-Export sind für sie ebenfalls
 gesperrt. Geprüft wird im Backend, die Oberfläche blendet nur aus.

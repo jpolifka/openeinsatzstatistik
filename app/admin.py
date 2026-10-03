@@ -32,6 +32,8 @@ router = APIRouter()
 
 # Funkrufname wie im BKS-Bericht; als Schlüssel eines Ersatzfahrzeugs auch der alte Kurzname (01/23)
 VEHICLE_NAME = re.compile(r"[A-ZÄÖÜ0-9][\w#./^ -]{0,59}")
+CALL_SIGN = re.compile(r"[\w#./ -]{1,40}")         # Kurzname eines Fahrzeugs (Block), z. B. 02/45
+UNSAFE = re.compile(r"[<>\"&]")                     # in Namen nicht nötig, in der Oberfläche heikel
 KEYWORD_CODE = re.compile(r"[A-Z]\d(\.\d\d)?")
 NUMBERINGS = ("bks", "by_date")
 MAX_KEYWORD_FILE = 2 * 1024 * 1024
@@ -68,7 +70,8 @@ def admin_overview(a: tenancy.Access = Depends(access)):
             vgs[t.vg_slug] = {"slug": t.vg_slug, "name": t.vg_name, "permissions": granted}
     return {"superadmin": a.superadmin,
             "tenants": [{"slug": t.slug, "name": t.name, "vg": t.vg_name, "vg_slug": t.vg_slug,
-                         "permissions": sorted(p for p in TENANT_ADMIN if t.can(p))} for t in tenants],
+                         "permissions": sorted(p for p in (*TENANT_ADMIN, PLAN_RELEASE) if t.can(p))}
+                        for t in tenants],
             "vgs": list(vgs.values()),
             "users": a.superadmin or any(t.can(USERS_VIEW) for t in a.tenants.values()) or
             any(USERS_VIEW in granted for granted in a.vg_permissions.values()),
@@ -109,11 +112,13 @@ class SettingsIn(BaseModel):
     day_hours: List[int] = [domain.DAY_START_HOUR, domain.DAY_END_HOUR]
     numbering: str = "bks"
     response_plan_public: bool = False
+    fleet_version: Optional[str] = None   # Stand der Fahrzeugliste beim Laden (tenancy.fleet_version)
 
 
 def _settings_json(tenant, cfg):
     with tenant.connection() as con:
         used = store.vehicles_with_data(con)
+        version = tenancy.fleet_version(con)
         assets = {r["name"]: f"/api/branding/{tenant.slug}/{r['name']}?v={r['modified'].replace(' ', 'T')}"
                   for r in con.execute("SELECT name, modified FROM asset")}
     with tenancy.central() as con:
@@ -124,7 +129,7 @@ def _settings_json(tenant, cfg):
 
     return {
         "assets": {name: assets.get(name) for name in theme.ASSETS},
-        "slug": tenant.slug, "name": cfg.name, "colors": cfg.colors,
+        "slug": tenant.slug, "name": cfg.name, "colors": cfg.colors, "fleet_version": version,
         "palette": theme.palette(cfg.colors) if cfg.colors else None,
         "fleet": [{"call_sign": v.call_sign, "name": v.name, "description": domain.call_sign_text(v.name),
                    "suggested_name": "" if v.name else _suggested_name(v.call_sign, cfg) or "",
@@ -189,6 +194,8 @@ def _check_fleet(s: SettingsIn):
         if not call_sign:
             call_sign = derive.new_call_sign(name, taken)
             taken.add(call_sign)
+        elif not CALL_SIGN.fullmatch(call_sign):
+            _invalid(f"Kurzname „{call_sign}“: nur Buchstaben, Ziffern und . / # -")
         if v.in_service_from and v.in_service_until and v.in_service_until < v.in_service_from:
             _invalid(f"{label}: „außer Dienst ab“ liegt vor „im Dienst ab“.")
         result.append((v, name, call_sign))
@@ -216,6 +223,8 @@ def _check_fleet(s: SettingsIn):
 
 def _check_settings(s: SettingsIn):
     """Fachliche Prüfung -> TenantConfig; Meldungen auf Deutsch (422)."""
+    if len(s.name.strip()) < 2:
+        _invalid("Bitte den Namen der Wehr angeben.")
     try:
         colors = theme.normalize(s.colors)
     except ValueError as e:
@@ -228,6 +237,8 @@ def _check_settings(s: SettingsIn):
     by_name = {v.name: v.call_sign for v in fleet if v.name}
     substitutes = {}
     for sub, block in s.substitutes.items():
+        if not isinstance(block, str):
+            _invalid(f"Ersatzfahrzeug {sub}: bitte ein Fahrzeug der Liste wählen.")
         sub, block = sub.strip(), by_name.get(block, block)
         if not VEHICLE_NAME.fullmatch(sub) or block not in call_signs:
             _invalid(f"Ersatzfahrzeug {sub}: der Block {block} muss ein Fahrzeug der Liste sein.")
@@ -235,6 +246,8 @@ def _check_settings(s: SettingsIn):
     names = [p.name.strip() for p in s.places]
     if any(not p.name.strip() or not p.prefix.strip() for p in s.places) or len(set(names)) != len(names):
         _invalid("Jeder Ort braucht einen eindeutigen Namen und einen Namensanfang.")
+    if any(UNSAFE.search(p.name + p.prefix) for p in s.places):
+        _invalid("Ortsnamen ohne die Zeichen < > \" &.")
     if not set(s.plan_places) <= set(names):
         _invalid("Bedarfsplan-Orte müssen in der Ortsliste stehen.")
     limits = sorted(set(s.response_limits))
@@ -267,6 +280,9 @@ def put_settings(slug: str, s: SettingsIn, a: tenancy.Access = Depends(access)):
     if not tenant.can(PLAN_RELEASE):            # Freigabe des Bedarfsplans ist ein eigenes Recht
         cfg = dataclasses.replace(cfg, response_plan_public=tenant.config.response_plan_public)
     with tenant.connection() as con:
+        if s.fleet_version and s.fleet_version != tenancy.fleet_version(con):
+            raise HTTPException(409, "Die Fahrzeugliste wurde inzwischen geändert (z. B. durch einen Import). "
+                                     "Bitte die Seite neu laden und die Änderungen erneut eintragen.")
         tenancy.save_config(con, cfg)
         if cfg.numbering == "by_date":         # beim Umstellen alle Jahre nach Datum durchnummerieren
             for row in store.years(con):
@@ -994,8 +1010,11 @@ def create_tenant(t: TenantIn, a: tenancy.Access = Depends(access)):
             tenant_id = tenancy.create_tenant(con, t.slug, t.name, row["id"])
         except ValueError as e:
             _invalid(str(e))
+        rbac.log(con, a.email, "Wehr angelegt", t.name, row["id"], tenant_id)
         if t.email:
-            tenancy.grant(con, t.email, "lead", tenant_id)
+            role = tenancy.grant(con, t.email, "lead", tenant_id)
+            rbac.log(con, a.email, "Rolle vergeben", f"{role.label} für {tenancy.normalize_email(t.email)} in {t.name}",
+                     row["id"], tenant_id)
     log.info("Wehr %s angelegt durch %s", t.slug, a.email or "lokal")
     return super_overview(a)
 
@@ -1033,9 +1052,10 @@ def delete_tenant(slug: str, confirm: str = "", a: tenancy.Access = Depends(acce
     if confirm != slug:
         _invalid("Zum Bestätigen den Kurznamen der Wehr eintippen.")
     with tenancy.central() as con:
-        row = con.execute("SELECT id FROM tenant WHERE slug = ?", (slug,)).fetchone()
+        row = con.execute("SELECT id, vg_id, name FROM tenant WHERE slug = ?", (slug,)).fetchone()
         if not row:
             raise HTTPException(404, "Wehr nicht gefunden.")
+        rbac.log(con, a.email, "Wehr entfernt", row["name"], row["vg_id"], row["id"])
         con.execute("DELETE FROM membership WHERE scope = 'tenant' AND scope_id = ?", (row["id"],))
         con.execute("DELETE FROM tenant WHERE id = ?", (row["id"],))
         con.execute("DELETE FROM account WHERE NOT EXISTS (SELECT 1 FROM membership m WHERE m.email = account.email)")
