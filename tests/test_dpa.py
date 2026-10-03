@@ -140,7 +140,7 @@ def test_vg_roles_rest_until_dpa(pending):
     client = _as(pending, "vglead@example.org")
     config = client.get("/api/config").json()
     assert config["dpa_blocked"] == [{"slug": "vg-neu", "name": "VG vg-neu"}] and not config.get("vg_permissions")
-    assert client.get("/api/admin/vgs/vg-neu/vehicles").status_code == 403
+    assert client.get("/api/admin/vgs/vg-neu/fleet").status_code == 403
     assert client.get("/api/admin/vgs/vg-neu/fees").status_code == 403
     assert client.post("/api/admin/memberships", json={"email": "neu@example.org", "scope": "tenant",
                                                         "slug": "wehr-n1", "role": "lead"}).status_code == 403

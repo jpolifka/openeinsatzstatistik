@@ -264,42 +264,87 @@ def test_fleet_with_full_call_signs(world):
     assert config["vehicle_names"]["01/23-06"] == "RP WW 01/23-06"
 
 
-def test_vg_vehicles_overview_and_move(world):
-    """Wehrleitung: alle Fahrzeuge der VG, Fahrzeug von einer Wehr zur anderen; Einsätze bleiben."""
+def _fleet_payload(data, **changes):
+    """Antwort von /fleet als Eingabe; changes: slug -> Funktion, die die Fahrzeugliste ändert."""
+    return {"tenants": [{"slug": t["slug"], "fleet_version": t["fleet_version"], "substitutes": t["substitutes"],
+                         "fleet": changes.get(t["slug"].replace("-", "_"), lambda f: f)(t["fleet"])}
+                        for t in data["tenants"]]}
+
+
+def test_vg_fleet_overview_and_move(world):
+    """Wehrleitung: alle Fahrzeuge der VG in einer Tabelle; Fahrzeug wechselt die Wehr, Einsätze bleiben."""
     from conftest import CFG
     with db.connection(tenancy.tenant_path("wehr-a1")) as con:
         incident_id = con.execute("INSERT INTO incident (year, number, source) VALUES (2025, 1, 'pdf')").lastrowid
         con.execute("INSERT INTO vehicle (incident_id, call_sign, name) VALUES (?, '01/10', 'FL NR#.BHÖ 01/10-01')",
                     (incident_id,))
         con.execute("INSERT INTO vehicle (incident_id, call_sign, name) VALUES (?, '-', 'RP WW 01/23-06')", (incident_id,))
-    assert _as(world, "lead@example.org").get("/api/admin/vgs/vg-a/vehicles").status_code == 403
-    assert _as(world, "other@example.org").get("/api/admin/vgs/vg-a/vehicles").status_code == 403
+    assert _as(world, "lead@example.org").get("/api/admin/vgs/vg-a/fleet").status_code == 403
+    assert _as(world, "other@example.org").get("/api/admin/vgs/vg-a/fleet").status_code == 403
     _as(world, "vglead@example.org")
-    data = world.get("/api/admin/vgs/vg-a/vehicles").json()
+    data = world.get("/api/admin/vgs/vg-a/fleet").json()
     assert [t["slug"] for t in data["tenants"]] == ["wehr-a1", "wehr-a2"]
-    kdow = next(v for v in data["vehicles"] if v["tenant"] == "wehr-a1" and v["call_sign"] == "01/10")
+    kdow = next(v for v in data["tenants"][0]["fleet"] if v["call_sign"] == "01/10")
     assert kdow["suggested_name"] == "FL NR#.BHÖ 01/10-01" and kdow["incidents"] == 1
     assert {"name": "RP WW 01/23-06", "vg": False} == {k: v for k, v in data["unassigned"][0].items() if k in ("name", "vg")}
 
-    moved = world.post("/api/admin/vgs/vg-a/vehicles/move", json={
-        "name": "FL NR#.BHÖ 01/10-01", "source": "wehr-a1", "call_sign": "01/10", "target": "wehr-a2"})
+    moved = world.put("/api/admin/vgs/vg-a/fleet", json=_fleet_payload(
+        data, wehr_a1=lambda f: [v for v in f if v["call_sign"] != "01/10"] + [{"name": "RP WW 01/23-06"}],
+        wehr_a2=lambda f: f + [{"name": "FL NR#.BHÖ 01/10-01"}]))
     assert moved.status_code == 200, moved.text
-    a2 = [v for v in moved.json()["vehicles"] if v["tenant"] == "wehr-a2"]
+    a1, a2 = (t["fleet"] for t in moved.json()["tenants"])
     # wehr-a2 führt 01/10 schon mit Kurznamen: der Eintrag bekommt den Funkrufnamen, kein zweiter Block
     assert [v["call_sign"] for v in a2] == list(CFG.vehicles)
     assert next(v["name"] for v in a2 if v["call_sign"] == "01/10") == "FL NR#.BHÖ 01/10-01"
-    assert not any(v["tenant"] == "wehr-a1" and v["call_sign"] == "01/10" for v in moved.json()["vehicles"])
+    assert "01/10" not in [v["call_sign"] for v in a1] and ("01/23-06", "RP WW 01/23-06") in [
+        (v["call_sign"], v["name"]) for v in a1]
     with db.connection(tenancy.tenant_path("wehr-a1")) as con:      # Einsatzdaten bleiben bei der alten Wehr
         assert con.execute("SELECT COUNT(*) FROM vehicle WHERE call_sign = '01/10'").fetchone()[0] == 1
 
-    assigned = world.post("/api/admin/vgs/vg-a/vehicles/move", json={"name": "RP WW 01/23-06", "target": "wehr-a1"})
-    assert ("01/23-06", "RP WW 01/23-06") in [(v["call_sign"], v["name"]) for v in assigned.json()["vehicles"]
-                                              if v["tenant"] == "wehr-a1"]
-    twice = world.post("/api/admin/vgs/vg-a/vehicles/move", json={"name": "RP WW 01/23-06", "target": "wehr-a2"})
-    assert twice.status_code == 409
-    assert world.post("/api/admin/vgs/vg-a/vehicles/move",
-                      json={"name": "RP WW 01/23-06", "target": "wehr-b1"}).status_code == 404
-    assert CFG.vehicles      # Konfiguration der Tests unverändert
+    data = moved.json()
+    twice = world.put("/api/admin/vgs/vg-a/fleet", json=_fleet_payload(data, wehr_a2=lambda f: f + [{"name": "RP WW 01/23-06"}]))
+    assert twice.status_code == 422 and "Wehr wehr-a1" in twice.json()["detail"]
+    foreign = _fleet_payload(data)
+    foreign["tenants"][0]["slug"] = "wehr-b1"
+    assert world.put("/api/admin/vgs/vg-a/fleet", json=foreign).status_code == 404
+    with db.connection(tenancy.tenant_path("wehr-a2")) as con:      # inzwischen per Import geändert
+        con.execute("INSERT INTO fleet (call_sign, name, label, sort_order) VALUES ('02/99', 'FL NR#.BHÖ 02/99-01', '', 99)")
+    tenancy.forget_config("wehr-a2")
+    assert world.put("/api/admin/vgs/vg-a/fleet", json=_fleet_payload(data)).status_code == 409
+
+
+def test_vg_settings_and_tenant_overrides(world):
+    """Vorgaben der VG gelten in allen Wehren; abweichende Werte der Wehr bleiben und werden angezeigt."""
+    assert _as(world, "lead@example.org").get("/api/admin/vgs/vg-a/settings").status_code == 403
+    _as(world, "vglead@example.org")
+    vg = world.get("/api/admin/vgs/vg-a/settings").json()
+    vg["day_hours"], vg["bks_code"] = [7, 19], "NR#.ABC"
+    vg["tenants"] = [{"slug": "wehr-a1", "station": "03", "plan_places": ["Rheinbrohl"]}]
+    saved = world.put("/api/admin/vgs/vg-a/settings", json=vg)
+    assert saved.status_code == 200, saved.text
+    a1 = next(t for t in saved.json()["tenants"] if t["slug"] == "wehr-a1")
+    # beide Wehren sind mit eigener Kennung NR#.BHÖ eingerichtet: Abweichung, nur der Standort ändert sich
+    assert a1["unit_marker"] == "FW NR#.BHÖ 03" and a1["plan_places"] == ["Rheinbrohl"]
+    a2 = next(t for t in saved.json()["tenants"] if t["slug"] == "wehr-a2")
+    assert a2["unit_marker"] == "FW NR#.BHÖ 02" and a2["overrides"]["bks_code"] == "NR#.BHÖ"
+
+    _as(world, "lead@example.org")
+    s = _settings(world)
+    assert s["day_hours"] == [7, 19] and "day_hours" not in s["overrides"] and s["inherited"]["day_hours"] == [7, 19]
+    s["day_hours"] = [8, 20]
+    assert world.put("/api/admin/wehr-a1/settings", json=s).status_code == 200
+    assert "day_hours" in _settings(world)["overrides"]
+    _as(world, "vglead@example.org")
+    vg["day_hours"], vg["tenants"] = [8, 20], []                # VG zieht nach: Abweichung entfällt
+    world.put("/api/admin/vgs/vg-a/settings", json=vg)
+    assert "day_hours" not in _as(world, "lead@example.org").get("/api/admin/wehr-a1/settings").json()["overrides"]
+    _as(world, "vglead@example.org")
+    assert world.put("/api/admin/vgs/vg-a/settings", json={**vg, "bks_code": "",
+                     "tenants": [{"slug": "wehr-a1", "station": "04"}]}).status_code == 422
+    found = world.post("/api/admin/parse-test", json={"line": "FW NR#.BHÖ 03 FL NR#.BHÖ 02/45-01 RP WW 01/23-06",
+                                                      "vg": "vg-a"}).json()
+    assert found["units"] == [{"unit": "FW NR#.BHÖ 03", "tenant": "Wehr wehr-a1"}]
+    assert [v["tenant"] for v in found["vehicles"]] == ["Wehr wehr-a2", None]
 
 
 def test_settings_do_not_overwrite_newer_fleet(world):

@@ -363,14 +363,14 @@ const HELP_SECTIONS = [
         text: "Anwesenheit eines Einsatzes ändern und Kameraden ergänzen. Nur für Rollen einer Wehr.",
       },
       perm_tenant_settings: {
-        title: "Einstellungen, Farben und Logos",
-        short: "Name, Farben, Logos, Fahrzeuge, BKS-Kennung, Orte und Zeitgrenzen der Wehr.",
-        text: "Name, Farben, Logos, Fahrzeuge, BKS-Kennung, Orte und Zeitgrenzen der Wehr.",
+        title: "Einstellungen, Fahrzeuge, Farben und Logos",
+        short: "Fahrzeuge, BKS-Kennung, Orte, Zeitgrenzen, Farben und Logos. In einer Rolle der VG: Vorgaben für alle Wehren der VG.",
+        text: "Name, Farben, Logos, Fahrzeuge, BKS-Kennung, Orte und Zeitgrenzen. In einer Rolle der Wehr: Werte und Abweichungen dieser Wehr von den Vorgaben der VG. In einer Rolle der VG: die Vorgaben für alle Wehren der VG und die Fahrzeuge aller Wehren.",
       },
       perm_tenant_keywords: {
         title: "Stichwortkatalog",
-        short: "Stichworte der Wehr ergänzen, ändern, deaktivieren oder einlesen.",
-        text: "Stichworte der Wehr ergänzen, ändern, deaktivieren oder einlesen.",
+        short: "Stichworte ergänzen, ändern, deaktivieren oder einlesen – in einer Rolle der VG für alle Wehren der VG.",
+        text: "Stichworte ergänzen, ändern, deaktivieren oder einlesen. In einer Rolle der Wehr: Abweichungen vom Katalog der VG (Stichwort gilt hier nicht, eigene Bezeichnung, eigene Stichworte). In einer Rolle der VG: der Katalog für alle Wehren der VG.",
       },
       perm_vg_overview: {
         title: "Gesamtansicht der VG",
@@ -383,9 +383,9 @@ const HELP_SECTIONS = [
         text: "Abgleich der Berichte aller Wehren je Einsatz und Kostenaufstellung. Nur für Rollen der VG.",
       },
       perm_vg_fees: {
-        title: "Gebührenordnung und Fahrzeuge der VG",
-        short: "Gebührenordnung pflegen und Fahrzeuge zwischen den Wehren der VG zuordnen. Nur für Rollen der VG.",
-        text: "Gebührenordnung pflegen und Fahrzeuge zwischen den Wehren der VG zuordnen. Nur für Rollen der VG.",
+        title: "Gebührenordnung der VG",
+        short: "Gebührenordnung (Kostenersatz) der VG pflegen. Nur für Rollen der VG.",
+        text: "Gebührenordnung (Kostenersatz) der VG in Fassungen mit Gültigkeitsbeginn pflegen. Nur für Rollen der VG.",
       },
       perm_dpa_view: {
         title: "Auftragsverarbeitung ansehen",

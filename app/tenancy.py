@@ -219,6 +219,27 @@ def load_config(con, name, layer=NO_LAYER):
     return TenantConfig(name=name, fleet=fleet, keywords=keywords, inactive_keywords=inactive, **values)
 
 
+def prune_overrides(con, layer):
+    """Abweichungen löschen, die (nach einer Änderung der VG) der Vorgabe entsprechen."""
+    for key, value in [(r[0], json.loads(r[1])) for r in con.execute("SELECT key, value FROM setting")]:
+        if key in INHERITED and _same(value, layer.value(key)):
+            con.execute("DELETE FROM setting WHERE key = ?", (key,))
+
+
+def save_tenant_values(con, values):
+    """Werte nur der Wehr (TENANT_ONLY) setzen; None löscht. Mit Standort gelten die alten Präfixe nicht mehr."""
+    for key, value in values.items():
+        if key not in TENANT_ONLY:
+            raise KeyError(key)
+        if value is None:
+            con.execute("DELETE FROM setting WHERE key = ?", (key,))
+        else:
+            con.execute("INSERT INTO setting (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET "
+                        "value = excluded.value", (key, json.dumps(value, ensure_ascii=False)))
+    if values.get("station"):
+        con.execute("DELETE FROM setting WHERE key IN ('unit_prefix', 'own_prefix', 'unit_marker')")
+
+
 def config_sources(con):
     """Schlüssel aus INHERITED, in denen die Wehr von der VG abweicht."""
     return {r[0] for r in con.execute("SELECT key FROM setting")} & set(INHERITED)
