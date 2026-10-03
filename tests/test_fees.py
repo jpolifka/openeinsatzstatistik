@@ -20,6 +20,13 @@ def test_billed_hours_round_up_to_half_hours(minutes, hours):
     assert fees.billed_hours(minutes) == hours
 
 
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), True, -1])
+def test_fee_rates_reject_nonfinite_and_invalid_values(value):
+    rates = {**legacy.FEE_SCHEDULE_2024["rates"], "personnel": value}
+    with pytest.raises(ValueError):
+        fees.check_rates(rates)
+
+
 @pytest.fixture
 def vg(make_client, monkeypatch):
     vg_id, tenant_id = make_tenant("wehr-a1", cfg=FLEET)
@@ -130,5 +137,7 @@ def test_substitute_and_schedule_hints(vg, monkeypatch):
     assert vehicle["label"].endswith("MTF") and vehicle["rate"] == 37.0
     with tenancy.central() as con:
         con.execute("UPDATE fee_schedule SET valid_from = '2026-01-01' WHERE vg_id = ? AND valid_from < '2030'", (vg_id,))
-    assert any("vor dem Gültigkeitsbeginn" in h for h in _fees(vg).json()["hints"])
+    response = _fees(vg)
+    assert response.status_code == 422
+    assert "keine gültige Gebührenordnung" in response.json()["detail"]
     assert _fees(vg, schedule_id=999999).status_code == 422

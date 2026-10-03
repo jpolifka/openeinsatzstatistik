@@ -58,7 +58,8 @@ def test_numbering_by_date(make_client, monkeypatch):
     incidents = {i["id"]: i["number"] for i in client.get("/api/incidents?year=2025").json()["incidents"]}
     assert incidents[f"wehr-a1:{later}"] == 2
     # Bearbeiten ändert die Nr. nicht, ein neuer Beginn verschiebt den Einsatz
-    edited = client.put(f"/api/incidents/{saved['id']}", json={"number": 5, "started_at": "2025-07-01T10:00"}).json()
+    edited = client.put(f"/api/incidents/{saved['id']}", json={"number": 5, "started_at": "2025-07-01T10:00",
+                                                           "ended_at": "2025-07-01T11:00"}).json()
     assert edited["number"] == 2
     client.delete(f"/api/incidents/wehr-a1:{later}")
     assert [i["number"] for i in client.get("/api/incidents?year=2025").json()["incidents"]] == [1]

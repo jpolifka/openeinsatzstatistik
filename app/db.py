@@ -251,15 +251,35 @@ def _records_per_vg(con):
         con.execute(f"ALTER TABLE {table}_new RENAME TO {table}")
 
 
+def _add_incident_revision(con):
+    con.execute("ALTER TABLE incident ADD COLUMN revision INTEGER NOT NULL DEFAULT 0")
+
+
+def _add_consumed_magic_links(con):
+    con.execute("CREATE TABLE consumed_magic_link (token_hash TEXT PRIMARY KEY, expires REAL NOT NULL)")
+
+
+def _add_import_jobs(con):
+    con.execute("CREATE TABLE import_job (id TEXT PRIMARY KEY, incident_id INTEGER NOT NULL "
+                "REFERENCES incident(id) ON DELETE CASCADE, report TEXT NOT NULL, email TEXT, "
+                "is_member INTEGER NOT NULL, updated INTEGER NOT NULL)")
+
+
+def _add_completed_imports(con):
+    con.execute("CREATE TABLE completed_import (id TEXT PRIMARY KEY)")
+
+
 # Neue Schemaänderungen nur hinten anfügen; PRAGMA user_version zählt die erledigten Schritte.
 TENANT_MIGRATIONS = [_create_legacy_schema, _rename_to_english, _add_tenant_tables, _add_bks_ids,
-                     _add_pending_reports, _add_fleet_names]
+                     _add_pending_reports, _add_fleet_names, _add_incident_revision, _add_import_jobs]
 CENTRAL_MIGRATIONS = [_create_central_schema, _add_dpa, _add_records, _add_notices, _add_fee_schedules, _add_roles,
-                      _records_per_vg]
+                      _records_per_vg, _add_consumed_magic_links, _add_completed_imports]
 
 
 def migrate(con, steps=TENANT_MIGRATIONS):
     done = con.execute("PRAGMA user_version").fetchone()[0]
+    if done > len(steps):
+        raise RuntimeError("Datenbankschema ist neuer als diese Anwendung – kein Downgrade möglich")
     for number, step in enumerate(steps[done:], start=done + 1):
         # sqlite3 öffnet vor DDL keine Transaktion von selbst – ohne BEGIN wäre ein Schritt nicht atomar
         con.execute("BEGIN")

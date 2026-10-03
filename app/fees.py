@@ -37,7 +37,7 @@ def schedule_for(con, vg_id, day, schedule_id=None):
     found = schedules(con, vg_id)
     if schedule_id is not None:
         return next((s for s in found if s["id"] == schedule_id), None)
-    return next((s for s in found if s["valid_from"] <= day), found[-1] if found else None)
+    return next((s for s in found if s["valid_from"] <= day), None)
 
 
 def vehicle_types(con, vg_id, day=None):
@@ -61,13 +61,13 @@ def check_rates(rates):
     clean = {}
     for key in RATE_KEYS:
         value = rates.get(key)
-        if not isinstance(value, (int, float)) or value < 0:
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
             raise ValueError("Alle Sätze müssen Zahlen ab 0 sein.")
         clean[key] = round(float(value), 2)
     vehicles, codes = [], set()
     for v in rates.get("vehicles", []):
         code, rate = str(v.get("code", "")).strip(), v.get("rate")
-        if not code or not isinstance(rate, (int, float)) or rate < 0:
+        if not code or isinstance(rate, bool) or not isinstance(rate, (int, float)) or not math.isfinite(rate) or rate < 0:
             raise ValueError("Jeder Fahrzeugtyp braucht ein Kürzel und einen Stundensatz ab 0.")
         if _type_key(code) in codes:
             raise ValueError(f"Fahrzeugtyp {code} steht doppelt in der Liste.")
@@ -80,6 +80,10 @@ def check_rates(rates):
 def save_schedule(con, vg_id, name, valid_from, rates, email, schedule_id=None):
     if not (name or "").strip() or not re.fullmatch(r"\d{4}-\d\d-\d\d", valid_from or ""):
         raise ValueError("Bezeichnung und „gültig ab“ (Datum) angeben.")
+    try:
+        dt.date.fromisoformat(valid_from)
+    except ValueError:
+        raise ValueError("„Gültig ab“ muss ein gültiges Kalenderdatum sein.")
     values = (name.strip(), valid_from, json.dumps(check_rates(rates), ensure_ascii=False), email)
     if schedule_id is None:
         return con.execute("INSERT INTO fee_schedule (vg_id, name, valid_from, rates, modified_by) VALUES (?, ?, ?, ?, ?)",
@@ -149,6 +153,8 @@ def calculate(central_con, vg_id, bks_record_id, tenants, schedule_id=None, bma_
     day = starts[0][:10] if starts else "9999-12-31"
     schedule = schedule_for(central_con, vg_id, day, schedule_id)
     if not schedule:
+        if schedule_id is None and schedules(central_con, vg_id):
+            raise ValueError(f"Für den Einsatztag {day} ist keine gültige Gebührenordnung hinterlegt.")
         raise ValueError("Diese Gebührenordnung gibt es nicht." if schedule_id is not None and schedules(
             central_con, vg_id) else "Für die VG ist keine Gebührenordnung hinterlegt (Verwaltung → Gebührenordnung).")
     rates = schedule["rates"]

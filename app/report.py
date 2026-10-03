@@ -301,18 +301,19 @@ def save(con, report, fields, update_id=None, modified_by=None):
 
 # ---------------------------------------------------------------- Abgleich
 COMPARED_FIELDS = {"number": "Nr.", "started_at": "Beginn", "ended_at": "Ende", "keyword": "Stichwort",
-                   "subcode": "Stufe", "place": "Ort", "unit_leader": "EHF", "station_staff": "Personen Gerätehaus"}
+                   "subcode": "Stufe", "place": "Ort", "unit_leader": "EHF", "station_staff": "Personen Gerätehaus",
+                   "description": "Beschreibung", "dispatch_number": "Leitstellen-Nr."}
 COMPARED_VEHICLE_FIELDS = {"crew": "Stärke", "departed": "Ausrücken", "arrived": "Eintreffen"}
 
 
 def _display(name, value):
-    """Wert für den Abgleich; Zeiten minutengenau."""
+    """Wert für den Abgleich; Zeiten mit Sekunden."""
     if value in (None, ""):
         return "–"
     if name in ("started_at", "ended_at"):
-        return parse_iso(value).strftime("%d.%m.%Y %H:%M")
+        return parse_iso(value).strftime("%d.%m.%Y %H:%M:%S")
     if name in ("departed", "arrived"):
-        return value[:5]
+        return value[:8]
     return str(value)
 
 
@@ -327,11 +328,18 @@ def differences(stored, incoming, cfg):
 
     for name, label in COMPARED_FIELDS.items():
         compare(label, name, stored.get(name), incoming.get(name))
-    for call_sign in cfg.vehicles:
+    for call_sign in sorted(set(cfg.vehicles) | set(stored["vehicles"]) | set(incoming["vehicles"])):
         old, new = stored["vehicles"].get(call_sign) or {}, incoming["vehicles"].get(call_sign) or {}
         for name, label in COMPARED_VEHICLE_FIELDS.items():
             compare(f"{label} {call_sign}", name, old.get(name), new.get(name))
-    if len(stored["people"]) != len(incoming["people"]):
+    def attendance(people):
+        def identity(person):
+            if person.get("id") is not None:
+                return f"id:{person['id']}"
+            return "name:" + "|".join(normalize(part) for part in store.person_names(person))
+        return sorted((identity(p), p.get("role") or "", p.get("vehicle") or "") for p in people)
+
+    if attendance(stored["people"]) != attendance(incoming["people"]):
         diffs.append({"field": "Anwesende", "stored": str(len(stored["people"])),
-                      "report": str(len(incoming["people"]))})
+                      "report": str(len(incoming["people"])) + " (Personen oder Zuordnungen geändert)"})
     return diffs

@@ -93,12 +93,12 @@ const HELP_SECTIONS = [
         text: "Summe der Besatzung aller Fahrzeuge, die zum Zeitpunkt der Ezeit eingetroffen sind.",
       },
       crew_within_limit: {
-        title: () => `Stärke nach ${helpLimit()} Min.`,
+        title: () => `Zusätzliche Kräfte bis ${helpLimit()} Min.`,
         short: "Zusätzliche Kräfte, die bis zur Zeitgrenze nachgekommen sind.",
         text: () => `Summe der Besatzung der Fahrzeuge, die nach dem ersten Fahrzeug, aber noch innerhalb der Zeitgrenze (${helpLimits()} Minuten) eingetroffen sind.`,
       },
       crew_within_second: {
-        title: () => `Stärke nach ${config.second_limit} Min.`,
+        title: () => `Zusätzliche Kräfte zwischen ${helpLimit()} und ${config.second_limit} Min.`,
         short: () => `Zusätzliche Kräfte zwischen Zeitgrenze und ${config.second_limit} Minuten.`,
         text: () => `Summe der Besatzung der Fahrzeuge, die nach der Zeitgrenze und bis ${config.second_limit} Minuten nach Einsatzbeginn eingetroffen sind.`,
       },

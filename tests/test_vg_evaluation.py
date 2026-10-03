@@ -102,6 +102,17 @@ def test_statistics_role_gets_summary_without_names(vg):
     assert "Wehr wehr-a1" in cells and not any("Muster" in c for c in cells)
 
 
+def test_summary_export_respects_selection_and_limit(vg):
+    response = vg.get("/api/export/summary?year=2025&tenants=wehr-a2&limit=10")
+    assert response.status_code == 200
+    workbook = openpyxl.load_workbook(io.BytesIO(response.content))
+    assert workbook["Übersicht"]["A4"].value == "Wehr wehr-a2"
+    assert workbook["Übersicht"]["A5"].value == "Summe (Beteiligungen)"
+    assert workbook["Übersicht"]["B5"].value == 1
+    assert vg.get("/api/export/summary?year=2025&limit=999").status_code == 422
+    assert vg.get("/api/export/summary?year=2025&tenants=wehr-b1").status_code == 400
+
+
 def test_reports_are_matched_to_the_reporting_tenant():
     candidates = [("wehr-a1", CFG), ("wehr-a2", OTHER)]
     texts = (FULL, LEFT, "")

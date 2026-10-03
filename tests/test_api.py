@@ -65,6 +65,53 @@ def test_expired_preview(client):
     assert response.status_code == 410
 
 
+@pytest.mark.parametrize("changes", [{"started_at": None}, {"station_staff": -1},
+    {"ended_at": "2025-03-12T09:00:00"}, {"vehicles": [{"call_sign": "02/45", "crew": -1}]}])
+def test_invalid_incident_changes_are_rejected(client, changes):
+    key = _create(client, 1)
+    assert client.put(f"/api/incidents/{key}", json=changes).status_code == 422
+    incident = client.get("/api/incidents?year=2025").json()["incidents"][0]
+    assert incident["started_at"] == "2025-03-12T10:00:00"
+    assert incident["station_staff"] == 0
+
+
+def test_stale_incident_revision_is_rejected(client):
+    key = _create(client, 1)
+    original = client.get("/api/incidents?year=2025").json()["incidents"][0]
+    changed = client.put(f"/api/incidents/{key}", json={"revision": original["revision"],
+                                                     "description": "Erste Änderung"})
+    assert changed.status_code == 200
+    assert changed.json()["revision"] == original["revision"] + 1
+    stale = client.put(f"/api/incidents/{key}", json={"revision": original["revision"],
+                                                   "description": "Veraltete Änderung"})
+    assert stale.status_code == 409
+    assert client.get("/api/incidents?year=2025").json()["incidents"][0]["description"] == "Erste Änderung"
+
+
+def test_saved_import_survives_postprocessing_failure(client, monkeypatch):
+    from app import import_queue
+    from test_report import FULL, LEFT
+    monkeypatch.setattr(main.pdf_report, "extract_text", lambda _: (FULL, LEFT, ""))
+    preview = client.post("/api/reports", files=[("pdfs", ("test.pdf", b"test", "application/pdf"))]).json()
+    original = main._after_import
+    def fail(*args, **kwargs):
+        raise RuntimeError("simulierter Ausfall der Zentrale")
+    monkeypatch.setattr(main, "_after_import", fail)
+    payload = {"token": preview["token"], "filename": "test.pdf", "fields": {}}
+    result = client.post("/api/reports/accept", json=payload)
+    assert result.status_code == 200
+    assert result.json()["postprocessing_pending"] is True
+    assert client.post("/api/reports/accept", json=payload).status_code == 410
+    tenant = tenancy.access_for(None).tenant("wehr-a1", "reports.import")
+    with tenant.connection() as con:
+        job_id = con.execute("SELECT id FROM import_job").fetchone()[0]
+        assert con.execute("SELECT COUNT(*) FROM incident").fetchone()[0] == 1
+    assert import_queue.process(tenant, job_id, original) is True
+    assert import_queue.process(tenant, job_id, original) is True
+    with tenant.connection() as con:
+        assert con.execute("SELECT COUNT(*) FROM import_job").fetchone()[0] == 0
+
+
 def _zip(entries):
     data = io.BytesIO()
     with zipfile.ZipFile(data, "w", zipfile.ZIP_DEFLATED) as archive:

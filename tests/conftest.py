@@ -24,6 +24,7 @@ def con():
 def data_dir(tmp_path, monkeypatch):
     """Leerer Datenordner mit migrierter Zentral-DB; Anmeldung aus (jeder ist Superadmin)."""
     monkeypatch.setattr(db, "DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(main, "previews", main.PreviewSessions())
     monkeypatch.setattr(tenancy, "ADMIN_EMAILS", set())
     monkeypatch.delenv("AUTH_EMAILS", raising=False)
     tenancy.setup()

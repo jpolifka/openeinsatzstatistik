@@ -45,6 +45,8 @@ def _call_sign_pattern(unit_prefix):
 def extract_text(path):
     """Text der ganzen PDF sowie linke und rechte Hälfte von Seite 1."""
     with pdfplumber.open(path) as pdf:
+        if not pdf.pages or len(pdf.pages) > 200:
+            raise ValueError("Ein Einsatzbericht muss zwischen 1 und 200 PDF-Seiten enthalten.")
         pages = [p.extract_text() or "" for p in pdf.pages]
         first = pdf.pages[0]
         split = first.width * COLUMN_SPLIT

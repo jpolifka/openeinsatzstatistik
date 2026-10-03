@@ -11,6 +11,7 @@ Fachlogik liegt in report.py (PDF -> Einsatz), metrics.py (Auswertungen), store.
 import contextlib
 import datetime as dt
 import io
+import json
 import logging
 import os
 import re
@@ -26,9 +27,9 @@ from fastapi import Depends, FastAPI, File, HTTPException, Request, Response, Up
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, create_model
+from pydantic import BaseModel, Field, create_model
 
-from app import admin, auth, db, domain, dpa, feedback, fees, mail, excel_export, legacy, metrics, pdf_report, rbac, records, report, store, tenancy, tenant_config, theme
+from app import admin, auth, db, domain, dpa, feedback, fees, import_queue, mail, excel_export, legacy, metrics, pdf_report, rbac, records, report, store, tenancy, tenant_config, theme
 from app.rbac import DELETE, EXPORT, IMPORT, INCIDENTS, PEOPLE, PEOPLE_EDIT, PLAN_VIEW, STATS, VG_RECORDS, WRITE
 from app.timeutil import year_of
 
@@ -55,6 +56,11 @@ async def lifespan(_app):
     elif legacy.legacy_emails():
         log.warning("AUTH_EMAILS wird ignoriert – Benutzer werden in der Verwaltung den Wehren zugeordnet")
     tenancy.setup()
+    with tenancy.central() as con:
+        vg_ids = [row[0] for row in con.execute("SELECT id FROM vg")]
+    for vg_id in vg_ids:
+        for tenant in tenancy.vg_tenants(vg_id):
+            import_queue.retry(tenant, _after_import)
     mail.log_check()
     yield
 
@@ -77,8 +83,9 @@ PUBLIC_PATHS = ("/health", "/login", "/logout", "/auth/", "/static/")
 @app.middleware("http")
 async def require_login(request: Request, call_next):
     """Anmeldung per Magic Link, wenn ADMIN_EMAILS gesetzt ist (siehe auth.py)."""
-    path = request.url.path
-    if auth.enabled() and not path.startswith(PUBLIC_PATHS) and not auth.current_user(request):
+    path = request.scope["path"]
+    public = path in ("/health", "/login", "/logout") or path.startswith(("/auth/", "/static/"))
+    if auth.enabled() and not public and not auth.current_user(request):
         # Direkt im Browser geöffnete API-Adressen (z. B. Export) auch zur Anmeldeseite
         if path.startswith("/api/") and "text/html" not in request.headers.get("accept", ""):
             return JSONResponse({"detail": "Anmeldung erforderlich"}, status_code=401)
@@ -110,6 +117,9 @@ class PreviewSessions:
 
     Eine Vorschau gehört dem Benutzer, der sie angelegt hat, und der Wehr, für die gelesen wurde."""
     TTL = 60 * 60
+    MAX_SESSIONS = 128
+    MAX_PER_OWNER = 8
+    MAX_BYTES = 64 * 1024 * 1024
 
     def __init__(self):
         self._sessions = {}
@@ -118,15 +128,24 @@ class PreviewSessions:
     def add(self, reports, owner):
         """reports: [(bericht, slug der Wehr, für die er gelesen wurde)]."""
         token = uuid.uuid4().hex
+        if not reports:
+            return token
+        size = len(json.dumps(reports, default=str, ensure_ascii=False).encode())
         with self._lock:
             self._expire()
+            if len(self._sessions) >= self.MAX_SESSIONS or sum(s["owner"] == owner for s in self._sessions.values()) >= self.MAX_PER_OWNER:
+                raise HTTPException(429, "Zu viele offene Vorschauen. Bitte vorhandene Berichte übernehmen oder später erneut versuchen.")
+            if size + sum(s.get("size", 0) for s in self._sessions.values()) > self.MAX_BYTES:
+                raise HTTPException(413, "Die Vorschauen sind zu groß. Bitte kleinere Mengen einlesen.")
             self._sessions[token] = {"time": time.time(), "owner": owner,
+                                     "size": size,
                                      "reports": {r["filename"]: (r, slug) for r, slug in reports}}
         return token
 
     def get(self, token, filename, owner):
         """(bericht, slug) oder (None, None), auch wenn die Vorschau einem anderen Benutzer gehört."""
         with self._lock:
+            self._expire()
             session = self._sessions.get(token)
         if not session or session["owner"] != owner or filename not in session["reports"] \
                 or session["time"] < time.time() - self.TTL:
@@ -142,12 +161,15 @@ class PreviewSessions:
             session = self._sessions.get(token)
             if session and session["owner"] == owner and session["time"] >= time.time() - self.TTL:
                 entry = session["reports"].pop(filename, None)
+                if not session["reports"]:
+                    del self._sessions[token]
         try:
             yield entry or (None, None)
         except BaseException:
             if entry:
                 with self._lock:
                     session["reports"][filename] = entry
+                    self._sessions[token] = session
             raise
 
     def _expire(self):
@@ -204,7 +226,7 @@ def incident_json(incident, leaders, tenant, limit=None, cfg=None):
         "id": incident_key(tenant, incident.get("id")),
         "tenant": tenant.slug,
         **{name: incident.get(name) for name in ("year", *store.FIELDS, *store.ID_FIELDS, "source", "filename",
-                                                 "warnings")},
+                                                 "warnings", "revision")},
         **({} if tenant.can(PEOPLE) else {"unit_leader": None}),     # EHF ist ein Name
         "bks_url": domain.BKS_REPORT_URL.format(incident["bks_report_id"]) if incident.get("bks_report_id") else None,
         "weekend_or_holiday": bool(incident.get("weekend_or_holiday")),
@@ -440,7 +462,7 @@ def api_incidents(year: Optional[int] = None, a: tenancy.Access = Depends(access
 
 class VehicleEdit(BaseModel):
     call_sign: str
-    crew: Optional[int] = None
+    crew: Optional[int] = Field(default=None, ge=0)
     departed: Optional[str] = None
     arrived: Optional[str] = None
 
@@ -454,6 +476,7 @@ class PersonEdit(BaseModel):
 
 # Einsatz bearbeiten: Felder, dazu optional Fahrzeuge und Anwesenheit (fehlen sie, bleiben sie unverändert)
 IncidentUpdate = create_model("IncidentUpdate", __base__=IncidentFields,
+                              revision=(Optional[int], Field(default=None, ge=0)),
                               vehicles=(Optional[List[VehicleEdit]], None), people=(Optional[List[PersonEdit]], None))
 
 
@@ -462,6 +485,9 @@ def api_update_incident(key: str, update: IncidentUpdate, a: tenancy.Access = De
     slug, incident_id = parse_incident_key(key)
     tenant = a.tenant(slug, WRITE)
     changes = update.model_dump(exclude_unset=True)
+    revision = changes.pop("revision", None)
+    if "started_at" in changes and not changes["started_at"]:
+        raise HTTPException(422, "Der Einsatzbeginn darf nicht gelöscht werden.")
     vehicles, people = changes.pop("vehicles", None), changes.pop("people", None)
     by_date = tenant.config.numbering == "by_date"
     if by_date:
@@ -478,7 +504,7 @@ def api_update_incident(key: str, update: IncidentUpdate, a: tenancy.Access = De
             new_year = year_of(changes["started_at"]) if changes.get("started_at") else old_year
             if by_date and new_year and new_year != old_year:
                 changes["number"] = store.next_number(con, new_year)   # vorläufig ans Ende des neuen Jahres
-            store.update_incident(con, incident_id, changes, modified_by=a.email)
+            store.update_incident(con, incident_id, changes, modified_by=a.email, revision=revision)
             if by_date:
                 for y in {old_year, store.load_incident(con, incident_id)["year"]} - {None}:
                     store.renumber(con, y)
@@ -489,6 +515,8 @@ def api_update_incident(key: str, update: IncidentUpdate, a: tenancy.Access = De
         except KeyError:
             raise HTTPException(404, "Einsatz nicht gefunden.")
         except store.DuplicateIncident as e:
+            raise HTTPException(409, str(e))
+        except store.StaleIncident as e:
             raise HTTPException(409, str(e))
         except ValueError as e:
             raise HTTPException(422, str(e))
@@ -714,10 +742,12 @@ def _forward(tenant, head, filename, data, email):
     return f"Bericht der Einheit {report.unit_label(head)} an {tenant.name} zur Übernahme weitergegeben."
 
 
-def _after_import(a, tenant, r, incident_id, updated):
+def _after_import(a, tenant, r, incident_id, updated, job_id=None):
     """Nach dem Speichern: Bericht im Verzeichnis vermerken, Hinweise an die eigene Wehr (eingelesen
     durch jemanden ohne eigene Rolle dort) und an andere Wehren (Abweichungen, fehlende Berichte)."""
     with tenancy.central() as con:
+        if job_id and con.execute("SELECT 1 FROM completed_import WHERE id = ?", (job_id,)).fetchone():
+            return
         records.register_report(con, tenant.id, r, a.email)
         records.close_notices(con, tenant.id, r.get("bks_record_id"), ("missing", "pending"))
         if a.email and not a.is_member(tenant):
@@ -730,6 +760,8 @@ def _after_import(a, tenant, r, incident_id, updated):
                            r["started_at"].year if r.get("started_at") else None, a.email)
         records.notify_others(con, r, r["vehicles"], f"Bericht von {tenant.name}", tenancy.vg_tenants(tenant.vg_id),
                               exclude=tenant.id, email=a.email)
+        if job_id:
+            con.execute("INSERT INTO completed_import (id) VALUES (?)", (job_id,))
 
 
 def _shared_with(r, tenant, a):
@@ -804,6 +836,10 @@ def _accept_report(acceptance, a, r, slug):
     if not tenant.can(PEOPLE):
         corrected.pop("unit_leader", None)   # sieht den EHF nicht, also bleibt der aus dem Bericht
     fields = {**report.to_fields(r), **corrected}
+    try:
+        store.normalize_fields(fields)
+    except ValueError as error:
+        raise HTTPException(422, str(error))
     by_date = tenant.config.numbering == "by_date"
     year = year_of(fields.get("started_at"))
     with tenant.connection() as con:
@@ -825,12 +861,15 @@ def _accept_report(acceptance, a, r, slug):
             for y in {year, old_year} - {None}:
                 store.renumber(con, y)
         store.delete_pending(con, r.get("pending_id"), r.get("bks_report_id"))
-    _after_import(a, tenant, r, incident_id, bool(update_id))
+        job_id = import_queue.enqueue(con, incident_id, r, a, tenant, bool(update_id))
+    processed = import_queue.process(tenant, job_id, _after_import)
     if r.get("new_vehicles"):
         tenancy.forget_config(tenant.slug)
         log.info("Fahrzeuge %s in die Liste von %s aufgenommen", ", ".join(r["new_vehicles"]), tenant.slug)
     with tenant.connection() as con:
-        return incident_json(store.load_incident(con, incident_id), store.LeaderNames(con), tenant)
+        result = incident_json(store.load_incident(con, incident_id), store.LeaderNames(con), tenant)
+        result["postprocessing_pending"] = not processed
+        return result
 
 
 # ---------------------------------------------------------------- Weitergegebene Berichte
@@ -1026,11 +1065,14 @@ def api_export(year: Optional[int] = None, a: tenancy.Access = Depends(access)):
 
 
 @app.get("/api/export/summary")
-def api_export_summary(year: Optional[int] = None, a: tenancy.Access = Depends(access)):
+def api_export_summary(year: Optional[int] = None, limit: Optional[int] = None,
+                       tenants: Optional[str] = None, a: tenancy.Access = Depends(access)):
     """Kennzahlen je Wehr als Excel – ohne Namen, daher auch für Rollen nur mit Statistik."""
-    tenants = a.selection_with(STATS)
+    tenants = _filtered(a.selection_with(STATS), tenants)
     year = year or _latest_year(tenants)
-    limit = tenants[0].config.default_limit
+    limit = limit if limit is not None else tenants[0].config.default_limit
+    if limit not in {value for t in tenants for value in t.config.response_limits}:
+        raise HTTPException(422, "Unbekannte Zeitgrenze.")
     _, rows, total, notes = _summary(tenants, year, limit)
     return _xlsx(lambda target: excel_export.write_summary_workbook(rows, total, year, limit, target, notes),
                  f"Kennzahlen_{a.vg or tenants[0].slug}_{year}")

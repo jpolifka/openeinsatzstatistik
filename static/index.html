@@ -20,8 +20,8 @@
       </div>
       <div class="topbar-actions">
         <label class="year-select" id="scope-select" hidden>
-          <span>Wehr</span>
-          <select id="scope" aria-label="Wehr wählen"></select>
+          <span>Ansicht</span>
+          <select id="scope" aria-label="Ansicht wählen"></select>
         </label>
         <label class="year-select">
           <span>Jahr</span>
@@ -89,11 +89,11 @@
   </main>
 
   <!-- Bericht einlesen (PDF oder Excel-Export) -->
-  <dialog id="pdf-dialog" class="dialog">
+  <dialog id="pdf-dialog" class="dialog" aria-labelledby="pdf-title">
     <div class="dialog-header">
       <div>
-        <h2>Einsatzbericht einlesen</h2>
-        <p class="muted">PDFs oder Excel-Exporte aus dem BKS-Portal, einzeln oder als ZIP – Daten prüfen, bei Bedarf korrigieren und übernehmen.</p>
+        <h2 id="pdf-title">Einsatzbericht einlesen</h2>
+        <p class="muted">PDFs oder Excel-Exporte aus dem BKS-Portal, einzeln oder als ZIP. Neue Einsatzberichte erst prüfen, dann ausdrücklich übernehmen. Stammdatensätze werden beim Einlesen direkt gespeichert; Berichte anderer Wehren werden direkt weitergeleitet.</p>
       </div>
       <button type="button" class="btn-close" data-close="pdf-dialog" aria-label="Schließen"></button>
     </div>

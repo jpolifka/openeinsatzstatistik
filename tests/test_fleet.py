@@ -117,7 +117,7 @@ def test_new_vehicle_gets_name_and_short_call_sign():
 
 def test_migration_fills_fleet_names(tmp_path):
     con = db.connect(str(tmp_path / "t.db"))
-    db.migrate(con, db.TENANT_MIGRATIONS[:-1])
+    db.migrate(con, db.TENANT_MIGRATIONS[:5])
     con.execute("INSERT INTO fleet (call_sign, sort_order) VALUES ('02/45', 1), ('02/24', 2)")
     incident_id = con.execute("INSERT INTO incident (year, number, source) VALUES (2025, 1, 'pdf')").lastrowid
     con.execute("INSERT INTO vehicle (incident_id, call_sign, name) VALUES (?, '02/45', 'FL NR#.BHÖ 02/45-01')",

@@ -143,7 +143,7 @@ def statistics(evaluated, year, cfg, previous=None, today=None):
         previous_to_date = sum(1 for s in previous_starts if s.date() <= cutoff)
 
     durations = [m["duration_min"] for _, m in evaluated if m["duration_min"] is not None]
-    staff_minutes = sum(m["duration_min"] * m["attendees"] for _, m in evaluated if m["duration_min"] is not None)
+    staff = staff_totals(evaluated)
     # Einsätze / Woche: laufendes Jahr wie Excel (=Gesamt/ISOKALENDERWOCHE(HEUTE())), sonst ganzes Jahr
     weeks = today.isocalendar()[1] if year == today.year else dt.date(year, 12, 28).isocalendar()[1]
     return {
@@ -154,7 +154,7 @@ def statistics(evaluated, year, cfg, previous=None, today=None):
         "per_week": round(count / weeks, 2) if weeks else None,
         "duration_total_min": round(sum(durations)),
         "duration_avg_min": round(sum(durations) / len(durations), 1) if durations else None,
-        "staff_hours": round(staff_minutes / 60, 1),
+        **staff,
         "attendees_avg": _average([m["attendees"] for _, m in evaluated if m["attendees"]]),
         "categories": categories,
         "fire_alarm_systems": sum(1 for i in incidents if domain.is_fire_alarm_system(i["keyword"], i["subcode"])),
@@ -258,14 +258,21 @@ def unique_incidents(incidents):
     return len({root(key) for key in parent}) + without, without
 
 
+def staff_totals(evaluated):
+    """Erfasste Personalstunden mit Datenabdeckung; fehlende Anwesenheit ist keine gesicherte Null."""
+    recorded = [m for _, m in evaluated if m["duration_min"] is not None and m["attendees"] > 0]
+    minutes = sum(m["duration_min"] * m["attendees"] for m in recorded)
+    return {"staff_hours": round(minutes / 60, 1) if recorded or not evaluated else None,
+            "staff_recorded": len(recorded), "staff_total": len(evaluated)}
+
+
 def summary(evaluated, limit, cfg):
     """Kennzahlen einer Wehr (oder der Summe) für Übersichten – ohne Personenbezug."""
     plan = response_plan(evaluated, limit, cfg)["total"]
     durations = [m["duration_min"] for _, m in evaluated if m["duration_min"] is not None]
-    staff_minutes = sum(m["duration_min"] * m["attendees"] for _, m in evaluated if m["duration_min"] is not None)
     return {"count": len(evaluated), "plan_count": plan["count"], "on_time": plan["on_time"], "rate": plan["rate"],
             "arrival_min": plan["arrival_min"], "duration_hours": round(sum(durations) / 60, 1),
-            "staff_hours": round(staff_minutes / 60, 1)}
+            **staff_totals(evaluated)}
 
 
 # ---------------------------------------------------------------- Blatt Anwesenheit

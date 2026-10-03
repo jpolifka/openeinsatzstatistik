@@ -122,8 +122,12 @@ function renderAdmin() {
   updateDirty();
 }
 
-const adminField = (label, input, span = "", help = "") =>
-  `<label class="field ${span}"><span>${label}${help ? helpButton(help) : ""}</span>${input}</label>`;
+let adminFieldSequence = 0;
+const adminField = (label, input, span = "", help = "") => {
+  const id = `admin-field-${++adminFieldSequence}`;
+  const control = input.replace(/<(input|select|textarea)\b/, `<$1 id="${id}"`);
+  return `<div class="field ${span}"><span><label for="${id}">${label}</label>${help ? helpButton(help) : ""}</span>${control}</div>`;
+};
 const textInput = (path, value, attributes = "") =>
   `<input type="text" data-bind="${path}" value="${esc(value ?? "")}" ${attributes}>`;
 // Speichern-Leiste der Einstellungen; bei ungespeicherten Änderungen klebt sie unten am Fenster

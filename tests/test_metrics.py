@@ -7,6 +7,12 @@ from app import metrics
 from conftest import CFG, make_incident, vehicle
 
 
+def test_missing_attendance_is_not_a_certified_zero():
+    incident = make_incident()
+    evaluated = [(incident, metrics.incident_metrics(incident, CFG))]
+    assert metrics.staff_totals(evaluated) == {"staff_hours": None, "staff_recorded": 0, "staff_total": 1}
+
+
 def test_incident_metrics_like_excel_formulas():
     incident = make_incident(station_staff=2, people=[{"id": 1, "name": "Muster, Max"}] * 4, vehicles={
         "02/45": vehicle("02/45", 6, "10:03:00", "10:07:00"),

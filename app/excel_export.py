@@ -28,7 +28,7 @@ CENTER = Alignment(horizontal="center", vertical="center")
 LEFT_ALIGNED = {"description", "place", "unit_leader"}
 UNFORMATTED = LEFT_ALIGNED | {"number", "on_time", "weekend_or_holiday"}
 NUMBER_FORMATS = {"date": "DD.MM.YYYY", "weekday": "@", "keyword": "@", "subcode": "@",
-                  "start": "h:mm;@", "end": "h:mm;@", "duration": "h:mm;@"}
+                  "start": "h:mm;@", "end": "h:mm;@", "duration": "[h]:mm;@"}
 WIDTHS = {"number": 6, "date": 11, "weekday": 11, "day_night": 8, "description": 48, "place": 15,
           "unit_leader": 16, "gap": 3}
 
@@ -64,8 +64,8 @@ def formulas(sheet, r):
     day_start, day_end = (f"TIME({h},0,0)" if h < 24 else "1" for h in cfg.day_hours)
     f = {
         "weekday": f'=TEXT({c["date"]},"TTTT")',
-        "day_night": f'=IF(AND({c["start"]}>{day_start},{c["start"]}<{day_end}),"Tag","Nacht")',
-        "duration": f'=MOD(({c["end"]}-{c["start"]}),1)',
+        "day_night": f'=IF(AND(MOD({c["start"]},1)>={day_start},MOD({c["start"]},1)<{day_end}),"Tag","Nacht")',
+        "duration": f'=IF(AND(ISNUMBER({c["start"]}),ISNUMBER({c["end"]}),{c["end"]}>={c["start"]}),{c["end"]}-{c["start"]},"")',
         "crew_total": f'=SUM({_cells(column, crew + ["station_staff"], r)})',
         "turnout": f'=SUM(MIN({_cells(column, [f"{cs}.turnout" for cs in vehicles], r)}))',
         "arrival": f'=SUM(MIN({_cells(column, [f"{cs}.arrival" for cs in vehicles], r)}))',
@@ -92,7 +92,7 @@ def values(incident, vehicles):
     start, end = parse_iso(incident["started_at"]), parse_iso(incident["ended_at"])
     v = {"number": incident["number"],
          "date": start.replace(hour=0, minute=0, second=0) if start else None,
-         "start": start.time() if start else None, "end": end.time() if end else None,
+         "start": start, "end": end,
          "keyword": incident["keyword"], "subcode": incident["subcode"], "description": incident["description"],
          "place": incident["place"], "unit_leader": incident["unit_leader"],
          "station_staff": incident["station_staff"], "weekend_or_holiday": incident["weekend_or_holiday"]}
@@ -145,9 +145,13 @@ def _write_overview(ws, sheet, incidents, year):
         row_values, row_formulas = values(incident, sheet.layout.vehicles), formulas(sheet, r)
         for i, (key, _) in enumerate(layout.columns, start=1):
             if key != "gap":
-                _format(sheet, ws.cell(r, i, row_formulas.get(key, row_values.get(key))), key)
-        ws.cell(r, sheet.file_column, incident["filename"] or "")
+                cell = ws.cell(r, i, row_formulas.get(key, row_values.get(key)))
+                if key not in row_formulas and isinstance(cell.value, str):
+                    cell.data_type = "s"
+                _format(sheet, cell, key)
+        ws.cell(r, sheet.file_column, incident["filename"] or "").data_type = "s"
         warnings = ws.cell(r, sheet.warnings_column, "; ".join(incident["warnings"]))
+        warnings.data_type = "s"
         if incident["warnings"]:
             warnings.fill = WARNING_FILL
 
@@ -171,7 +175,9 @@ def _write_attendance(ws, sheet, incidents, members, overview_title):
               total_column: ATTENDANCE_TOTALS[0], hours_column: ATTENDANCE_TOTALS[1]}
     for column, title in titles.items():
         is_member = ATTENDANCE_FIRST_COLUMN <= column <= last
-        _style_header(ws.cell(HEADER_ROW, column, title), horizontal="center", vertical="bottom",
+        cell = ws.cell(HEADER_ROW, column, title)
+        cell.data_type = "s"
+        _style_header(cell, horizontal="center", vertical="bottom",
                       text_rotation=90 if is_member else 0)
     ws.row_dimensions[HEADER_ROW].height = 120
 
@@ -278,13 +284,18 @@ def write_summary(ws, rows, total, year, limit, notes=()):
     for r, row in enumerate([*rows, total], start=FIRST_ROW):
         for i, (key, _, number_format) in enumerate(SUMMARY_COLUMNS, start=1):
             cell = ws.cell(r, i, row.get(key))
+            if isinstance(cell.value, str):
+                cell.data_type = "s"
             cell.border = BORDER
             if number_format:
                 cell.number_format = number_format
             if row is total:
                 cell.font = Font(name="Calibri", size=11, bold=True)
-    for i, note in enumerate(notes, start=FIRST_ROW + len(rows) + 2):
-        ws.cell(i, 1, note)
+    coverage = [f"Personalstunden {r.get('name', '')}: unvollständig, Anwesenheit und Dauer für "
+                f"{r['staff_recorded']} von {r['staff_total']} Einsätzen." for r in rows
+                if r.get("staff_recorded", 0) < r.get("staff_total", 0)]
+    for i, note in enumerate([*notes, *coverage], start=FIRST_ROW + len(rows) + 2):
+        ws.cell(i, 1, note).data_type = "s"
     ws.column_dimensions["A"].width = 30
     for i in range(2, len(SUMMARY_COLUMNS) + 1):
         ws.column_dimensions[get_column_letter(i)].width = 16

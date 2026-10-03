@@ -4,7 +4,29 @@ import openpyxl
 from app import excel_export, store
 from app.excel_layout import Layout
 from app.tenant_config import TenantConfig, Vehicle
-from conftest import CFG
+from conftest import CFG, make_incident
+
+
+def test_export_preserves_duration_over_24_hours():
+    incident = make_incident(started_at="2025-03-12T10:00:00", ended_at="2025-03-13T12:00:00")
+    values = excel_export.values(incident, [])
+    assert (values["end"] - values["start"]).total_seconds() == 26 * 3600
+    assert "MOD" not in excel_export.formulas(excel_export.Sheet(CFG), 4)["duration"]
+    assert excel_export.NUMBER_FORMATS["duration"].startswith("[h]")
+
+
+def test_user_text_is_not_exported_as_formula(con, tmp_path):
+    text = '=HYPERLINK("https://example.invalid","Test")'
+    store.create_incident(con, {"number": 1, "started_at": "2025-01-01T12:00:00",
+                               "description": text}, source="pdf", filename="=DATEI")
+    target = tmp_path / "safe.xlsx"
+    excel_export.write_workbook(store.load_incidents(con, year=2025), [], 2025, target, CFG)
+    wb = openpyxl.load_workbook(target)
+    cells = [c for ws in wb for row in ws for c in row if c.value in (text, "=DATEI")]
+    assert len(cells) == 2
+    assert all(c.data_type == "s" for c in cells)
+    assert any(c.data_type == "f" for ws in wb for row in ws for c in row)
+    wb.close()
 
 
 def test_layout_matches_einsatzuebersicht():

@@ -17,6 +17,11 @@ COPY tests ./tests
 CMD ["python", "-m", "pytest", "-q"]
 
 FROM base AS app
+RUN groupadd --gid 10001 einsatz && useradd --uid 10001 --gid 10001 --no-create-home einsatz \
+    && mkdir -p /daten && chown 10001:10001 /daten
+USER 10001:10001
 EXPOSE 8112
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8112/health', timeout=3).close()"
 # Nur ein Worker: die PDF-Vorschau liegt bis zur Übernahme im Prozessspeicher (main.PreviewSessions)
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8112"]
