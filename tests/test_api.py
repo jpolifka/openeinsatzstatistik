@@ -185,8 +185,9 @@ def test_zip_upload_unpacks_pdfs(client, monkeypatch):
     response = client.post("/api/reports", files=[("pdfs", ("berichte.zip", archive, "application/zip")),
                                                   ("pdfs", ("03-25.pdf", b"x", "application/pdf"))])
     assert response.status_code == 200
-    assert read == ["01-25.pdf", "01-25 (2).pdf", "02-25.PDF", "03-25.pdf"]
-    assert [e["file"] for e in response.json()["errors"]] == read
+    expected = ["01-25.pdf", "01-25 (2).pdf", "02-25.PDF", "03-25.pdf"]
+    assert sorted(read) == sorted(expected)                    # gelesen wird parallel, die Reihenfolge der Threads ist offen
+    assert [e["file"] for e in response.json()["errors"]] == expected     # gemeldet in der Reihenfolge der Dateien
 
 
 def test_xlsx_upload_preview_and_accept(client):
