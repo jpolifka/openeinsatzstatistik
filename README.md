@@ -356,12 +356,17 @@ app/
   excel_layout.py  Spaltenaufbau der Einsatzübersicht, aus der Fahrzeugliste der Wehr
   excel_export.py  Excel-Export im Format der Einsatzübersicht, Gesamtmappe, Kennzahlen
   theme.py         Farben (abgeleitete Töne, Kontrastprüfung) und Logos einer Wehr
-  admin.py         Verwaltung: Einstellungen, Logos, Stichworte, Rollen, VGs und Wehren
+  admin/           Verwaltung (ein Modul je Thema): Einstellungen, Logos, Stichworte, Rollen, VGs und Wehren
+  api/             Endpunkte mit Einsatzdaten: Auswertung, Einsätze, Berichte, Prüfprotokoll, Export
+  importing.py     Berichte einlesen (PDF, Excel, ZIP), Zuordnung zur Wehr, Weitergabe, Nachbearbeitung
   dpa.py           Auftragsverarbeitungsvertrag je VG (Vorlage in templates/)
   names.py, timeutil.py, holidays.py   Namensvergleich, Zeiten, Feiertage RLP
 static/
   index.html       Oberfläche
-  app.js           Ansichten und Bedienung
+  app.js           Kern: Zustand, Hilfsfunktionen, Diagramme, Reiter, Ereignisse, Tastenkürzel
+  evaluation.js    Ansicht Einsatzgeschehen
+  incident_list.js, incident_detail.js   Einsatzliste, Detail, Bearbeiten, Löschen
+  members.js, keyword_search.js          Personal, Stichwortsuche im Formular
   records.js       Hinweise an die Wehr, Ansicht Prüfprotokoll
   admin.js         Ansicht Verwaltung
   dpa.js           Ansicht Auftragsverarbeitung
