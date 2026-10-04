@@ -9,6 +9,7 @@ Fachlogik liegt in report.py (PDF -> Einsatz), metrics.py (Auswertungen), store.
 (Datenbank) und excel_export.py; die Fachkonfiguration der Wehr in tenant_config.py.
 """
 import asyncio
+import concurrent.futures
 import contextlib
 import datetime as dt
 import io
@@ -27,6 +28,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Stre
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, create_model
 
+from app import parser_worker
 from app import admin, auth, db, domain, dpa, feedback, fees, import_queue, mail, excel_export, legacy, metrics, pdf_report, rbac, records, report, store, tenancy, tenant_config, theme
 from app.rbac import DELETE, EXPORT, IMPORT, INCIDENTS, PEOPLE, PEOPLE_EDIT, PLAN_VIEW, STATS, VG_RECORDS, WRITE
 from app.timeutil import year_of
@@ -119,10 +121,11 @@ async def forbidden(_request, exc):
 access = auth.access
 
 
-from app.preview_sessions import PreviewSessions
+from app.preview_sessions import PreviewSessions, ReadJobs
 
 
 previews = PreviewSessions()
+read_jobs = ReadJobs()          # Berichte, die im Hintergrund gelesen werden
 
 
 # ---------------------------------------------------------------- Hilfsfunktionen
@@ -630,8 +633,8 @@ def _read_report(path, filename, tenants):
     return r, by_slug[slug]
 
 
-def _read_uploads(uploads, tenants, email=None):
-    """Hochgeladene Berichte (PDF, xlsx) und ZIP-Dateien lesen -> ([(bericht, wehr)], fehler, hinweise)."""
+def _collect_uploads(uploads):
+    """Hochgeladene Dateien und den Inhalt von ZIP-Dateien einsammeln -> ([(name, daten)], fehler)."""
     errors, budget = [], Budget()
 
     def files():
@@ -645,22 +648,40 @@ def _read_uploads(uploads, tenants, email=None):
             else:
                 yield filename, data
 
-    reports, more_errors, notes = _read_files(files(), tenants, email)
-    return reports, errors + more_errors, notes
+    return list(files()), errors
 
 
-def _read_files(files, tenants, email=None):
-    """Alle Berichtsarten ausschließlich lesen; Schreiben erfolgt erst nach Bestätigung."""
+def _read_files(files, tenants, email=None, progress=None):
+    """Alle Berichtsarten ausschließlich lesen; Schreiben erfolgt erst nach Bestätigung. Mehrere Dateien
+    gleichzeitig (parser_worker.WORKERS), Ergebnisse in der Reihenfolge der Dateien; progress() je Datei."""
     reports, errors, notes = [], [], []
     taken = set()
     with tempfile.TemporaryDirectory() as tmp:
+        jobs = []
         for filename, data in files:
             filename = _unique_filename(filename, taken)
             path = os.path.join(tmp, filename)
             with open(path, "wb") as fh:
                 fh.write(data)
+            jobs.append((filename, data, path))
+
+        def read(job):
+            filename, _, path = job
             try:
-                r, tenant = _read_report(path, filename, tenants)
+                return _read_report(path, filename, tenants), None
+            except Exception as e:
+                return None, e
+            finally:
+                if progress:
+                    progress()
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=parser_worker.WORKERS) as pool:
+            results = list(pool.map(read, jobs))
+        for (filename, data, _), (result, failure) in zip(jobs, results):
+            try:
+                if failure:
+                    raise failure
+                r, tenant = result
             except Skipped as e:
                 notes.append({"file": filename, "message": str(e)})
                 continue
@@ -770,18 +791,43 @@ def _preview_json(r, tenant, a):
     return result
 
 
+def _read_result(files, errors, tenants, a, progress=None):
+    """Dateien lesen und als Vorschau ablegen -> Antwort für die Oberfläche."""
+    reports, more_errors, notes = _read_files(files, tenants, a.email, progress)
+    previews_json = [_preview_json(r, tenant, a) for r, tenant in reports]
+    token = previews.add([(r, tenant.slug) for r, tenant in reports], a.email)
+    return {"token": token, "reports": previews_json, "errors": errors + more_errors, "notes": notes}
+
+
 @app.post("/api/reports")
-def api_read_reports(pdfs: List[UploadFile] = File(...), a: tenancy.Access = Depends(access)):
+def api_read_reports(pdfs: List[UploadFile] = File(...), background: bool = False,
+                     a: tenancy.Access = Depends(access)):
     """Berichte lesen – für die ausgewählte Wehr oder, in der Gesamtansicht, verteilt auf die passende
-    Wehr der VG (nur Wehren mit Schreibrecht)."""
+    Wehr der VG (nur Wehren mit Schreibrecht). Mit background=true antwortet die Anfrage sofort mit einem
+    Job ({job, total}); Fortschritt und Ergebnis über /api/reports/jobs/{job} – viele Berichte (ZIP)
+    brauchen sonst länger, als ein Proxy wartet."""
     tenants = a.selection_with(IMPORT) if a.vg else [a.current(IMPORT)]
     pdfs = [p for p in pdfs if _is_upload(p.filename)]
     if not pdfs:
         raise HTTPException(400, "Bitte eine PDF-, Excel- oder ZIP-Datei (Einsatzberichte aus dem BKS-Portal) auswählen.")
-    reports, errors, notes = _read_uploads(pdfs, tenants, a.email)
-    previews_json = [_preview_json(r, tenant, a) for r, tenant in reports]
-    token = previews.add([(r, tenant.slug) for r, tenant in reports], a.email)
-    return {"token": token, "reports": previews_json, "errors": errors, "notes": notes}
+    files, errors = _collect_uploads(pdfs)
+    if not background:
+        return _read_result(files, errors, tenants, a)
+    job = read_jobs.start(a.email, len(files), lambda progress: _read_result(files, errors, tenants, a, progress))
+    return JSONResponse({"job": job, "total": len(files)}, status_code=202)
+
+
+@app.get("/api/reports/jobs/{job}")
+def api_read_job(job: str, a: tenancy.Access = Depends(access)):
+    """Stand eines Lesevorgangs: {read, total, done}; fertig zusätzlich das Ergebnis wie bei /api/reports."""
+    status = read_jobs.status(job, a.email)
+    if status is None:
+        raise HTTPException(404, "Der Lesevorgang ist nicht mehr vorhanden. Bitte die Berichte erneut einlesen.")
+    if status["error"]:
+        code, detail = status["error"]
+        raise HTTPException(code, detail)
+    return {"read": status["read"], "total": status["total"], "done": status["done"],
+            **(status["result"] or {})}
 
 
 class Acceptance(BaseModel):

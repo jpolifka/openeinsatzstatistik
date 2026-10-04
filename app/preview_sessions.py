@@ -87,3 +87,57 @@ class PreviewSessions:
         for token in [t for t, s in self._sessions.items() if s["time"] < cutoff]:
             self._sessions[token]["cancelled"] = True
             del self._sessions[token]
+
+
+# ---------------------------------------------------------------- Lesen im Hintergrund
+class ReadJobs:
+    """Berichte, die im Hintergrund gelesen werden: Der Upload antwortet sofort, die Oberfläche fragt den
+    Fortschritt ab. So bleibt jede Anfrage kurz (Proxys wie Cloudflare brechen nach etwa 100 s ab).
+    Liegt im Prozess wie PreviewSessions; ein Job gehört dem Benutzer, der ihn gestartet hat."""
+    TTL = 60 * 60
+
+    def __init__(self):
+        self._jobs = {}
+        self._lock = threading.Lock()
+
+    def start(self, owner, total, work):
+        """work(progress) läuft in einem eigenen Thread und liefert das Ergebnis; progress() zählt gelesene Dateien."""
+        job_id = uuid.uuid4().hex
+        job = {"owner": owner, "time": time.time(), "total": total, "read": 0, "result": None, "error": None}
+        with self._lock:
+            cutoff = time.time() - self.TTL
+            for key in [k for k, j in self._jobs.items() if j["time"] < cutoff]:
+                del self._jobs[key]
+            self._jobs[job_id] = job
+
+        def progress():
+            with self._lock:
+                job["read"] += 1
+
+        def run():
+            try:
+                result = work(progress)
+                with self._lock:
+                    job["result"] = result
+            except HTTPException as e:
+                with self._lock:
+                    job["error"] = (e.status_code, e.detail)
+            except Exception as e:  # unerwartet: melden statt still hängen
+                with self._lock:
+                    job["error"] = (500, str(e) or type(e).__name__)
+
+        threading.Thread(target=run, daemon=True, name=f"read-{job_id[:8]}").start()
+        return job_id
+
+    def status(self, job_id, owner):
+        """{read, total, done, result|error} oder None (unbekannt oder fremder Job). Ein fertiger Job wird
+        mit der Abfrage entfernt."""
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if not job or job["owner"] != owner:
+                return None
+            done = job["result"] is not None or job["error"] is not None
+            if done:
+                del self._jobs[job_id]
+            return {"read": job["read"], "total": job["total"], "done": done,
+                    "result": job["result"], "error": job["error"]}

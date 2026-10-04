@@ -107,6 +107,25 @@ def test_cancelled_preview_cannot_be_accepted(client):
     assert client.get("/api/incidents?year=2025").json()["incidents"] == []
 
 
+def test_reports_read_in_background(client):
+    """Viele Berichte: Upload antwortet sofort, Fortschritt und Ergebnis über den Job (kein Proxy-Timeout)."""
+    import time
+    files = [("pdfs", (f"test{i}.xlsx", make_workbook())) for i in range(3)]
+    started = client.post("/api/reports?background=true", files=files)
+    assert started.status_code == 202 and started.json()["total"] == 3
+    job = started.json()["job"]
+    for _ in range(100):
+        status = client.get(f"/api/reports/jobs/{job}").json()
+        if status["done"]:
+            break
+        assert 0 <= status["read"] <= 3
+        time.sleep(0.05)
+    assert status["read"] == 3 and [r["filename"] for r in status["reports"]] == ["test0.xlsx", "test1.xlsx", "test2.xlsx"]
+    assert client.get(f"/api/reports/jobs/{job}").status_code == 404          # abgeholt: nicht noch einmal
+    body = {"token": status["token"], "filename": "test1.xlsx", "fields": {}}
+    assert client.post("/api/reports/accept", json=body).status_code == 200
+
+
 def test_import_revision_conflict_keeps_preview(client):
     upload = lambda: client.post("/api/reports", files=[("pdfs", ("test.xlsx", make_workbook()))]).json()
     data = upload()
