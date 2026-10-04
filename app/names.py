@@ -12,7 +12,7 @@ def normalize(text):
 
 
 def short_name(first_name, last_name):
-    """Schreibweise der Spalte EHF: 'M. Mustermann' (bei Ch… zwei Buchstaben)."""
+    """Schreibweise der Spalte Einheitsführung: 'M. Mustermann' (bei Ch… zwei Buchstaben)."""
     initial = "Ch" if first_name.lower().startswith("ch") else first_name[:1]
     return f"{initial}. {last_name}"
 
@@ -37,7 +37,7 @@ def split_name(text):
 
 
 def matches_leader(text, last_name, first_name):
-    """Passt eine EHF-Angabe zur Person? Erkannt werden u. a. 'M. Muster', 'Ch. Muster', 'Muster, M.',
+    """Passt eine Einheitsführung-Angabe zur Person? Erkannt werden u. a. 'M. Muster', 'Ch. Muster', 'Muster, M.',
     'Max Muster', 'Muster Max' und nur 'Muster'; bei Doppelnamen reicht ein Namensteil."""
     words = [w for w in (normalize(t) for t in re.split(r"[\s,]+", text or "")) if w]
     first = normalize(first_name)
@@ -54,7 +54,7 @@ def matches_leader(text, last_name, first_name):
 
 
 def leader_spelling(spellings, last_name, first_name):
-    """EHF-Schreibweise einer Person: die bisher am häufigsten für sie verwendete, sonst 'V. Nachname'.
+    """Einheitsführung-Schreibweise einer Person: die bisher am häufigsten für sie verwendete, sonst 'V. Nachname'.
 
     spellings: {schreibweise: anzahl} aus den vorhandenen Einsätzen.
     """

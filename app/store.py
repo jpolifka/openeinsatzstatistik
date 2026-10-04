@@ -78,8 +78,8 @@ def person_names(person):
 
 
 class LeaderNames:
-    """EHF-Schreibweisen der vorhandenen Einsätze, damit ein Anwesender per Klick als EHF eingetragen
-    und der eingetragene EHF in der Anwesenheit erkannt wird – unabhängig von der Namenskonvention."""
+    """Einheitsführung-Schreibweisen der vorhandenen Einsätze, damit ein Anwesender per Klick als Einheitsführung eingetragen
+    und der eingetragene Einheitsführung in der Anwesenheit erkannt wird – unabhängig von der Namenskonvention."""
 
     def __init__(self, con):
         self.spellings = {r[0]: r[1] for r in con.execute(

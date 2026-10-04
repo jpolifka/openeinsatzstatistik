@@ -199,7 +199,7 @@ def _unit_leader(report):
         normalize(p["last_name"]) == normalize(commander[-1]) and normalize(p["first_name"]) == normalize(commander[0])
         for p in report["people"])
     report["warnings"].append("Kein Einheitsführer im Bericht – " + (
-        "Einsatzleiter eingetragen, bitte prüfen" if present else "EHF bitte manuell eintragen"))
+        "Einsatzleiter eingetragen, bitte prüfen" if present else "Einheitsführung bitte manuell eintragen"))
     return short_name(commander[0], commander[-1]) if present else ""
 
 
@@ -325,7 +325,7 @@ def save(con, report, fields, update_id=None, modified_by=None, revision=None):
 
 # ---------------------------------------------------------------- Abgleich
 COMPARED_FIELDS = {"number": "Nr.", "started_at": "Beginn", "ended_at": "Ende", "keyword": "Stichwort",
-                   "subcode": "Stufe", "place": "Ort", "unit_leader": "EHF", "station_staff": "Personen Gerätehaus",
+                   "subcode": "Stufe", "place": "Ort", "unit_leader": "Einheitsführung", "station_staff": "Personen Gerätehaus",
                    "description": "Beschreibung", "dispatch_number": "Leitstellen-Nr."}
 COMPARED_VEHICLE_FIELDS = {"crew": "Stärke", "departed": "Ausrücken", "arrived": "Eintreffen"}
 

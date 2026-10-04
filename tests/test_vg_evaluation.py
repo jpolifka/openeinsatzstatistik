@@ -51,6 +51,10 @@ def test_vg_evaluation_sums_tenants_and_counts_joint_incidents_once(vg):
     assert set(e["response_plan"]["places"]) == {"Rheinbrohl", "Hammerstein", "Arienheller", "Bad Hönningen"}
     assert e["attendance"] is None                             # Kameraden nur je Wehr
     assert "Muster" not in str(e)
+    # Zeiten, Belastung und Datenabdeckung über alle Wehren; Überschneidungen je Wehr gerechnet
+    assert e["timing"]["total"] == 3 and e["timing"]["arrival"]["valid"] == 3
+    assert e["workload"]["total"] == 3 and e["workload"]["overlap"]["incidents_with_overlap"] == 2   # nur A1 hat zwei
+    assert e["coverage"]["total"] == 3
 
 
 def test_vg_evaluation_filter_by_tenant(vg):

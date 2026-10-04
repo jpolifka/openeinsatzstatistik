@@ -6,7 +6,7 @@
 
 const dpaState = { data: null, error: "" };
 
-VIEWS.dpa = { label: "Auftragsverarbeitung", load: loadDpa, render: renderDpa, noYear: true, help: "dpa",
+VIEWS.dpa = { label: "Datenschutz & Vertrag", sub: "Datenschutz & Vertrag", load: loadDpa, render: renderDpa, noYear: true, help: "dpa",
   visible: () => config.superadmin || config.dpa_blocked.length > 0 || can("dpa.edit") };
 
 async function loadDpa() {
@@ -58,7 +58,7 @@ function dpaCard(d) {
       ${dpaStep(Boolean(stored), "Vertrag drucken, vom Auftraggeber unterschreiben lassen und als PDF hochladen oder die Ablage verlinken")}
       ${dpaStep(false, "Bestätigung durch den Betreiber – danach sind die Wehren freigeschaltet")}
     </ol>` : ""}
-    ${d.open && !d.can_edit ? `<p class="muted">Den Vertrag füllt die Wehrleitung bzw. Wehrführung aus.</p>` : ""}
+    ${d.open && !d.can_edit ? `<p class="muted">Den Vertrag füllt die Verbandsgemeinde bzw. Wehrführung aus.</p>` : ""}
     ${form}${documentLinks}${upload}${admin}
   </div>`;
 }

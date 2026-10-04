@@ -15,7 +15,7 @@ test("Fehler erhält Seitenstruktur; Wiederholen lädt und zeichnet erneut", asy
   const context = vm.createContext({
     state: { year: 2025 }, location: { hash: "#incidents" },
     VIEWS: { incidents: { label: "Einsätze", load: async () => { if (++attempts === 1) throw Error("Ausfall"); }, render: () => renders++ } },
-    allowedViews: () => ["incidents"], $$: () => [],
+    allowedViews: () => ["incidents"], $$: () => [], navGroup: () => undefined, renderSubTabs: () => {},
     parseHash: () => ({ view: "incidents", params: new URLSearchParams() }), URLSearchParams,
     $: (key) => key === "button" ? { addEventListener: (_, fn) => { retry = fn; } }
       : key === ".view-load-error" ? section.children.find((v) => typeof v === "object") : elements[key],

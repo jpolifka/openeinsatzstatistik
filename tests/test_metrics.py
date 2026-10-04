@@ -106,3 +106,80 @@ def test_unique_incidents_over_record_and_dispatch_number():
                  make_incident(bks_record_id="2"),
                  make_incident(), make_incident()]
     assert metrics.unique_incidents(incidents) == (4, 2)
+
+
+# ---------------------------------------------------------------- Zeiten, Kräfte, Belastung
+def _timed(**overrides):
+    return make_incident(**overrides)
+
+
+def test_percentile_and_distribution_use_nearest_rank():
+    assert metrics.percentile([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 0.9) == 9
+    assert metrics.percentile([5], 0.9) == 5
+    assert metrics.percentile([], 0.9) is None
+    d = metrics.distribution([4, 6, None, 8], 5)
+    assert (d["valid"], d["total"], d["median"], d["average"]) == (3, 5, 6, 6)
+
+
+def test_travel_time_is_per_vehicle_not_first_departure_to_last_arrival():
+    incident = make_incident(vehicles={
+        "02/45": vehicle("02/45", 6, "10:03:00", "10:07:00"),     # 4 min Anfahrt
+        "02/24": vehicle("02/24", 3, "10:05:00", "10:12:00"),     # 7 min Anfahrt
+    })
+    t = metrics.timing(metrics.evaluate([incident], CFG), CFG)
+    assert t["travel"]["valid"] == 2 and t["travel"]["median"] == 5.5
+    assert t["turnout"]["median"] == 3 and t["arrival"]["median"] == 7
+
+
+def test_timing_counts_missing_times_as_not_evaluable():
+    with_times = make_incident(id=1, vehicles={"02/45": vehicle("02/45", 6, "10:03:00", "10:07:00")})
+    without = make_incident(id=2, vehicles={"02/45": vehicle("02/45", 6)})
+    t = metrics.timing(metrics.evaluate([with_times, without], CFG), CFG)
+    assert (t["arrival"]["valid"], t["arrival"]["total"]) == (1, 2)
+    assert (t["travel"]["valid"], t["travel"]["total"]) == (1, 1)
+
+
+def test_crew_build_up_after_alarm():
+    incident = make_incident(vehicles={
+        "02/45": vehicle("02/45", 6, "10:03:00", "10:07:00"),
+        "02/24": vehicle("02/24", 3, "10:05:00", "10:12:00"),
+    })
+    t = metrics.timing(metrics.evaluate([incident], CFG), CFG, (5, 10, 15))
+    assert [(b["minutes"], b["crew"]) for b in t["build_up"]] == [(5, 0), (10, 6), (15, 9)]
+
+
+def test_timing_groups_flag_small_samples():
+    incident = make_incident(vehicles={"02/45": vehicle("02/45", 6, "10:03:00", "10:07:00")})
+    t = metrics.timing(metrics.evaluate([incident], CFG), CFG)
+    assert t["by_area"][0]["count"] == 1 and t["by_area"][0]["small"] is True
+    assert {w["key"]: w["count"] for w in t["by_window"]}["weekday_day"] == 1
+
+
+def test_overlaps_ignore_touching_incidents_and_measure_overlap():
+    def at(id, start, end):
+        return make_incident(id=id, started_at=f"2025-03-12T{start}", ended_at=f"2025-03-12T{end}")
+    evaluated = metrics.evaluate([at(1, "10:00:00", "11:00:00"), at(2, "10:30:00", "11:30:00"),
+                                  at(3, "11:30:00", "12:00:00"), at(4, "14:00:00", "15:00:00")], CFG)
+    o = metrics.overlaps(evaluated)
+    assert (o["valid"], o["incidents_with_overlap"], o["max_concurrent"], o["overlap_minutes"]) == (4, 2, 2, 30)
+    assert metrics.combine_overlaps([o, o])["overlap_minutes"] == 60
+
+
+def test_workload_counts_long_night_and_weekend_incidents():
+    long_day = make_incident(id=1, started_at="2025-03-12T10:00:00", ended_at="2025-03-12T13:00:00")
+    night = make_incident(id=2, started_at="2025-03-12T23:00:00", ended_at="2025-03-12T23:30:00", weekend_or_holiday=1)
+    unknown_end = make_incident(id=3, ended_at=None)
+    evaluated = metrics.evaluate([long_day, night, unknown_end], CFG)
+    w = metrics.workload(evaluated, metrics.overlaps(evaluated))
+    assert (w["long"]["count"], w["night"]["count"], w["weekend"]["count"]) == (1, 1, 1)
+    assert w["duration"]["valid"] == 2 and w["duration"]["total"] == 3
+    assert sum(b["count"] for b in w["buckets"]) == 2
+
+
+def test_coverage_reports_available_data():
+    complete = make_incident(id=1, people=[{"id": 1, "name": "Muster, Max"}], unit_leader="M. Muster",
+                             vehicles={"02/45": vehicle("02/45", 6, "10:03:00", "10:07:00")})
+    bare = make_incident(id=2, vehicles={}, unit_leader=None)
+    c = metrics.coverage(metrics.evaluate([complete, bare], CFG))
+    assert c["total"] == 2 and {r["key"]: r["valid"] for r in c["rows"]} == {
+        "duration": 2, "turnout": 1, "arrival": 1, "crew": 1, "attendance": 1, "leader": 1}

@@ -95,6 +95,8 @@ def test_response_plan_needs_release(roles):
     viewer = login(roles, "viewer@example.org")
     data = viewer.get("/api/evaluation?year=2025").json()
     assert data["response_plan"] is None and data["response_plan_public"] is False
+    assert data["timing"] is None                      # Zeiten und Kräfte folgen der Freigabe des Plans
+    assert data["workload"]["total"] == 1 and data["coverage"]["total"] == 1
     assert viewer.put("/api/admin/wehr-a1/response-plan", json={"public": True}).status_code == 403
     lead = login(roles, "lead@example.org")
     assert lead.get("/api/evaluation?year=2025").json()["response_plan"] is not None
@@ -102,4 +104,5 @@ def test_response_plan_needs_release(roles):
     viewer = login(roles, "viewer@example.org")
     data = viewer.get("/api/evaluation?year=2025").json()
     assert data["response_plan"] is not None and data["response_plan_public"] is True
+    assert data["timing"]["total"] == 1
     assert viewer.get("/api/config").json()["response_plan_public"] is True

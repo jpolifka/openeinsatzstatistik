@@ -8,7 +8,7 @@ const records = { notices: [], postprocessing: [], showNotices: true, data: null
 // Kostenersatz: Eingaben im Dialog und letztes Ergebnis (nur berechnet, nichts gespeichert)
 const feeCalc = { record: null, request: null, result: null, error: "" };
 
-VIEWS.records = { label: "Prüfprotokoll", load: loadRecords, render: renderRecords, help: "records",
+VIEWS.records = { label: "Berichte abgleichen", sub: "Berichte abgleichen", load: loadRecords, render: renderRecords, help: "records",
   visible: () => Boolean(config.vg && config.vg_permissions.includes("vg.records")) };
 
 const NOTICE_KINDS = { import: "Eingelesen", deviation: "Abweichung", missing: "Bericht fehlt", pending: "Zur Übernahme" };

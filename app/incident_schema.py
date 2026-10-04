@@ -11,6 +11,6 @@ FORM_FIELDS = [
     ["subcode", "Stufe", "text", "", 'maxlength="2"'],
     ["description", "Einsatz", "text", "span-4", ""],
     ["place", "Ort", "text", "span-3", 'list="place-options"'],
-    ["unit_leader", "EHF", "text", "span-3", 'list="leader-options" placeholder="z. B. M. Muster"'],
+    ["unit_leader", "Einheitsführung", "text", "span-3", 'list="leader-options" placeholder="z. B. M. Muster"'],
     ["dispatch_number", "Leitstellen-Nr.", "text", "span-2", ""],
 ]

@@ -1,18 +1,18 @@
 "use strict";
 
-// Verwaltung: Einstellungen (Name, Farben, Logos, Fahrzeuge, BKS-Kennung, Orte, Bedarfsplan), Stichwortkatalog,
+// Verwaltung: Einstellungen (Name, Farben, Logos, Fahrzeuge, BKS-Kennung, Orte, Zeitgrenzen), Stichwortkatalog,
 // Benutzer, Rollen und – für Superadmins – Verbandsgemeinden und Wehren. Ist oben in der Verwaltung die
-// Wehrleitung einer VG gewählt, zeigen dieselben Bereiche die Vorgaben der VG und alle ihre Wehren auf einmal;
+// Verbandsgemeinde gewählt, zeigen dieselben Bereiche die Vorgaben der VG und alle ihre Wehren auf einmal;
 // bei einer Wehr deren Werte und wo sie von der VG abweicht. Ein Bereich wechselt nie die Auswahl.
 // Wird nach app.js geladen und trägt sich in VIEWS ein. Rechte prüft das Backend (app/admin.py).
 
-// Bereiche mit dem nötigen Recht (rbac.py) bei gewählter Wehr (tenant) bzw. Wehrleitung (vg);
+// Bereiche mit dem nötigen Recht (rbac.py) bei gewählter Wehr (tenant) bzw. Verbandsgemeinde (vg);
 // any: Benutzer und Rollen (entscheidet admin.overview.users), superOnly: nur Superadmin
 const ADMIN_SECTIONS = [
   { key: "unit", label: "Allgemein", tenant: "tenant.settings", vg: "tenant.settings" },
   { key: "fleet", label: "Fahrzeuge", tenant: "tenant.settings", vg: "tenant.settings" },
   { key: "bks", label: "BKS-Kennung", tenant: "tenant.settings", vg: "tenant.settings" },
-  { key: "places", label: "Orte & Bedarfsplan", tenant: "tenant.settings", vg: "tenant.settings" },
+  { key: "places", label: "Orte & Zeitgrenzen", tenant: "tenant.settings", vg: "tenant.settings" },
   { key: "keywords", label: "Stichworte", tenant: "tenant.keywords", vg: "tenant.keywords" },
   { key: "fees", label: "Gebührenordnung", vg: "vg.fees" },
   { key: "users", label: "Benutzer", any: true }, { key: "roles", label: "Rollen", any: true },
@@ -30,14 +30,14 @@ const admin = {
   events: null,               // Protokoll der Vergaben und Rollenänderungen
   roles: null,                // Rechtekatalog und Rollen (/api/admin/roles)
   roleDraft: null,            // Rolle im Editor (neu: id null)
-  vg: null,                   // ausgewählte Wehrleitung (Slug der VG) statt einer Wehr
-  vgSettings: null,           // Vorgaben der VG mit allen Wehren (Allgemein, BKS-Kennung, Orte & Bedarfsplan)
+  vg: null,                   // ausgewählte Verbandsgemeinde (Slug der VG) statt einer Wehr
+  vgSettings: null,           // Vorgaben der VG mit allen Wehren (Allgemein, BKS-Kennung, Orte & Zeitgrenzen)
   vgFleet: null,              // Fahrzeuglisten aller Wehren der VG
   saved: null,                // Stand des gerade bearbeiteten Datensatzes beim Laden/Speichern – Vergleich für „ungespeichert“
   fleetQuery: "",             // Suche in den Fahrzeugtabellen
   keywordDeviationsOnly: false,   // Stichworte: nur Abweichungen (Wehr) bzw. Stichworte mit Abweichungen (VG)
 };
-// Fahrzeugtabelle kompakt (ohne Dienstzeitraum, Nachfolger, Bedarfsplan); gemerkt je Ansicht, VG standardmäßig kompakt
+// Fahrzeugtabelle kompakt (ohne Dienstzeitraum, Nachfolger, Gesamtstärke); gemerkt je Ansicht, VG standardmäßig kompakt
 const fleetCompactKey = () => admin.vg ? "fleet-compact-vg" : "fleet-compact";
 const fleetCompact = () => (recall(fleetCompactKey()) ?? (admin.vg ? "1" : "0")) === "1";
 
@@ -46,7 +46,7 @@ const ADMIN_HELP = { unit: () => admin.vg ? "admin_vg_defaults" : "admin_colors"
   bks: "admin_bks", places: "admin_places", keywords: "admin_keywords", fees: "fees", users: "admin_users",
   roles: () => admin.roleDraft ? "admin_role_editor" : "admin_roles" };
 
-VIEWS.admin = { label: "Verwaltung", load: loadAdmin, render: renderAdmin, noYear: true,
+VIEWS.admin = { label: "Einstellungen", sub: "Einstellungen", load: loadAdmin, render: renderAdmin, noYear: true,
   visible: () => config.admin, help: () => helpValue(ADMIN_HELP[admin.section]) || "sec_admin" };
 
 // ------------------------------------------------------------ Laden
@@ -67,7 +67,7 @@ async function loadAdmin() {
     // Gewählte Wehr behalten (z. B. nach dem Speichern), sonst die oben ausgewählte, sonst die erste
     const pick = (slug) => admin.overview.tenants.find((t) => t.slug === slug);
     admin.slug = (pick(admin.slug) || pick(config.tenant?.slug) || admin.overview.tenants[0])?.slug || null;
-    // Oben die Wehrleitung gewählt (oder keine Wehr zu verwalten): in der Verwaltung ebenfalls
+    // Oben die Verbandsgemeinde gewählt (oder keine Wehr zu verwalten): in der Verwaltung ebenfalls
     const vgs = admin.overview.vgs;
     if (config.vg && vgs.some((v) => v.slug === config.vg.slug)) admin.vg = config.vg.slug;
     else if (!admin.slug && vgs.length) admin.vg = vgs[0].slug;
@@ -108,7 +108,7 @@ function adminGranted() {
     : overview.tenants.find((t) => t.slug === admin.slug))?.permissions || [];
 }
 
-// VG der gewählten Wehr, falls der Benutzer sie verwalten darf (Hinweis „zur Wehrleitung wechseln“)
+// VG der gewählten Wehr, falls der Benutzer sie verwalten darf (Hinweis „zur Verbandsgemeinde wechseln“)
 function adminTenantVg() {
   const { overview } = admin;
   const tenant = overview.tenants.find((t) => t.slug === admin.slug);
@@ -134,16 +134,16 @@ async function adminGo(changes) {
 // ------------------------------------------------------------ Rahmen
 function renderAdmin() {
   const { tenants, vgs } = admin.overview;
-  // Auswahl: Wehrleitung einer VG (Vorgaben und alle Wehren) oder eine Wehr – nur hier wechselt sie
-  const choices = [...vgs.map((v) => ({ key: `vg:${v.slug}`, label: `Wehrleitung · ${v.name}` })),
+  // Auswahl: Verbandsgemeinde (Vorgaben und alle Wehren) oder eine Wehr – nur hier wechselt sie
+  const choices = [...vgs.map((v) => ({ key: `vg:${v.slug}`, label: `Verbandsgemeinde · ${v.name}` })),
     ...tenants.map((t) => ({ key: t.slug, label: `${t.name} · ${t.vg}` }))];
   const current = admin.vg ? `vg:${admin.vg}` : admin.slug;
   const tenantSelect = choices.length > 1 && !["users", "roles", "super"].includes(admin.section)
-    ? `<label class="field admin-tenant"><span>${admin.vg ? "Wehrleitung" : "Wehr"}</span><select data-admin-tenant>${choices.map((c) =>
+    ? `<label class="field admin-tenant"><span>${admin.vg ? "Verbandsgemeinde" : "Feuerwehr"}</span><select data-admin-tenant>${choices.map((c) =>
       `<option value="${esc(c.key)}" ${c.key === current ? "selected" : ""}>${esc(c.label)}</option>`).join("")}</select></label>` : "";
   const sections = `<div class="segments" role="group" aria-label="Verwaltungsbereich">${adminSections().map(({ key, label }) =>
     `<button type="button" data-admin-section="${key}" aria-pressed="${key === admin.section}" class="${key === admin.section ? "active" : ""}">${label}</button>`).join("")}</div>`;
-  // Wer auch die VG verwaltet, wechselt bei gewählter Wehr ausdrücklich in deren Wehrleitung
+  // Wer auch die VG verwaltet, wechselt bei gewählter Wehr ausdrücklich in deren Verbandsgemeinde
   const vg = !admin.vg && !["users", "roles", "super"].includes(admin.section) && adminTenantVg();
   const toVg = vg ? `<button type="button" class="btn btn-light btn-small admin-switch" data-admin-action="go-vg">Alle Wehren der ${esc(vg.name)} bearbeiten</button>` : "";
   const body = ({
@@ -557,7 +557,7 @@ function setFeePath(path, value) {
 $("#view-admin").addEventListener("click", async (e) => {
   const section = e.target.closest("[data-admin-section]");
   if (section) {
-    // Ein Bereich wechselt nie die Auswahl (Wehr bzw. Wehrleitung). Bearbeitet er andere Daten (VG: Fahrzeuge
+    // Ein Bereich wechselt nie die Auswahl (Wehr bzw. Verbandsgemeinde). Bearbeitet er andere Daten (VG: Fahrzeuge
     // statt Vorgaben), ungespeicherte Änderungen nur nach Rückfrage verwerfen.
     const before = adminData(), previous = admin.section;
     admin.section = section.dataset.adminSection;

@@ -151,12 +151,12 @@ def parse_incident_key(key):
 
 
 def _names_for(tenant, incidents):
-    """Einsätze ohne EHF (Name), wenn der Benutzer in der Wehr keine Namen sehen darf (Recht PEOPLE)."""
+    """Einsätze ohne Einheitsführung (Name), wenn der Benutzer in der Wehr keine Namen sehen darf (Recht PEOPLE)."""
     return incidents if tenant.can(PEOPLE) else [{**i, "unit_leader": None} for i in incidents]
 
 
 def incident_json(incident, leaders, tenant, limit=None, cfg=None):
-    """Einsatz mit Kennzahlen für die Oberfläche. leaders: store.LeaderNames für die EHF-Auswahl.
+    """Einsatz mit Kennzahlen für die Oberfläche. leaders: store.LeaderNames für die Einheitsführung-Auswahl.
     cfg: abweichende Konfiguration (Vorschau mit neu entdeckten Fahrzeugen), sonst die der Wehr.
     Die Anwesenheit (Namen) nur mit Recht rbac.PEOPLE; sonst nur ihre Anzahl."""
     cfg = cfg or tenant.config
@@ -175,7 +175,7 @@ def incident_json(incident, leaders, tenant, limit=None, cfg=None):
         "current_warnings": report.current_warnings(incident),
         **{name: incident.get(name) for name in ("year", *store.FIELDS, *store.ID_FIELDS, "source", "filename",
                                                  "warnings", "revision")},
-        **({} if tenant.can(PEOPLE) else {"unit_leader": None}),     # EHF ist ein Name
+        **({} if tenant.can(PEOPLE) else {"unit_leader": None}),     # Einheitsführung ist ein Name
         "bks_url": domain.BKS_REPORT_URL.format(incident["bks_report_id"]) if incident.get("bks_report_id") else None,
         "weekend_or_holiday": bool(incident.get("weekend_or_holiday")),
         **{name: _rounded(m[name]) for name in ("daytime", "duration_min", "turnout_min", "arrival_min", "on_time",
@@ -378,6 +378,11 @@ def api_evaluation(year: Optional[int] = None, limit: Optional[int] = None, tena
               "response_plan_public": all(t.config.response_plan_public for t in selection),
               "response_plan_hidden": [t.name for t in selection if not _plan_visible(t)],
               "attendance": metrics.attendance_overview(current) if single and selection[0].can(PEOPLE) else None,
+              # Zeiten und Kräfte wie der Bedarfsplan nur aus Wehren, für die er sichtbar ist
+              "timing": metrics.timing(plan_current, plan_cfg, tuple(sorted({*metrics.BUILD_UP_MARKS, limit, plan_cfg.second_limit})))
+              if plan_parts else None,
+              "workload": metrics.workload(current, metrics.combine_overlaps([metrics.overlaps(e) for _, e, _ in parts])),
+              "coverage": metrics.coverage(current),
               "tenants": None}
     if not single:
         unique, without = metrics.unique_incidents([i for i, _ in current])
@@ -443,7 +448,7 @@ def api_update_incident(key: str, update: IncidentUpdate, a: tenancy.Access = De
     if by_date:
         changes.pop("number", None)          # ergibt sich aus dem Beginn
     if not tenant.can(PEOPLE):
-        changes.pop("unit_leader", None)     # sieht den EHF nicht (Name), ändert ihn also auch nicht
+        changes.pop("unit_leader", None)     # sieht den Einheitsführung nicht (Name), ändert ihn also auch nicht
     if people is not None and not tenant.can(PEOPLE_EDIT):
         raise tenancy.Forbidden("Keine Berechtigung, die Anwesenheit zu bearbeiten.")
     if vehicles is not None and any(v["call_sign"] not in tenant.config.vehicles for v in vehicles):
@@ -780,12 +785,12 @@ def _preview_json(r, tenant, a):
     result["tenant_name"] = tenant.name
     result["new_vehicles"] = r.get("new_vehicles", [])
     result["reported_as"] = r["reported_as"]
-    names = tenant.can(PEOPLE)                  # Einsatzleiter und EHF sind Namen
+    names = tenant.can(PEOPLE)                  # Einsatzleiter und Einheitsführung sind Namen
     result["incident_commander"] = r["incident_commander"] if names else None
     differences = report.differences(existing, incident, tenant.config) if existing else []
     result["existing"] = {"id": incident_key(tenant, existing["id"]), "source": existing["source"],
                           "revision": existing["revision"],
-                          "differences": [d for d in differences if names or d["field"] != "EHF"]} \
+                          "differences": [d for d in differences if names or d["field"] != "Einheitsführung"]} \
         if existing else None
     result["shared_with"] = _shared_with(r, tenant, a)
     return result
@@ -871,7 +876,7 @@ def _accept_report(acceptance, a, r, slug):
         a.tenant(slug, WRITE)              # erfassten Einsatz überschreiben = bearbeiten
     corrected = acceptance.fields.model_dump(exclude_unset=True)
     if not tenant.can(PEOPLE):
-        corrected.pop("unit_leader", None)   # sieht den EHF nicht, also bleibt der aus dem Bericht
+        corrected.pop("unit_leader", None)   # sieht den Einheitsführung nicht, also bleibt der aus dem Bericht
     fields = {**report.to_fields(r), **corrected}
     try:
         store.normalize_fields(fields)

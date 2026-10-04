@@ -3,9 +3,9 @@
 Aufbau der Excel-Einsatzübersicht einer Wehr.
 
 Blatt Einsatzübersicht: Kopf in Zeile 3, Einsätze ab Zeile 4. Die Fahrzeugblöcke (je Stärke,
-Ausrücken, Azeit, Eintreffen, Ezeit) werden aus der Fahrzeugliste der Wehr erzeugt – bei fünf
+Ausrücken, Ausrückdauer, Eintreffen, Zeit bis Eintreffen) werden aus der Fahrzeugliste der Wehr erzeugt – bei fünf
 Fahrzeugen sind das wie im Original die Spalten A:AV.
-Blatt Anwesenheit: Kameraden ab Spalte F, danach die Summenspalten Stärke und Gesamtstunden.
+Blatt Anwesenheit: Personen ab Spalte F, danach die Summenspalten Stärke und Gesamtstunden.
 """
 from openpyxl.utils import get_column_letter
 
@@ -31,20 +31,20 @@ class Layout:
     @staticmethod
     def _vehicle_headers(call_sign, limit, second_limit):
         short = call_sign.split("/")[-1]
-        return (f"Stärke ({short})", f"Ausrückezeit ({short})", f"Azeit ({short}) min.",
-                f"Eintreffzeit ({short})", f"Ezeit ({limit}/{second_limit} min)\n({short})")
+        return (f"Stärke ({short})", f"Ausrücken ({short})", f"Ausrückdauer ({short}) min.",
+                f"Eintreffen ({short})", f"Zeit bis Eintreffen ({limit}/{second_limit} min)\n({short})")
 
     def _columns(self, limit, second_limit):
         """[(schlüssel, Überschrift)] in Spaltenreihenfolge ab A."""
         columns = [("number", "Nr."), ("date", "Datum"), ("weekday", "Tag"), ("day_night", "Tag / Nacht"),
                    ("start", "Einsatzbeginn"), ("end", "Einsatzende"), ("duration", "Einsatzdauer"),
                    ("keyword", "Einsatzstichwort"), ("subcode", "Stufe"), ("description", "Einsatz"),
-                   ("place", "Ort"), ("unit_leader", "EHF")]
+                   ("place", "Ort"), ("unit_leader", "Einheitsführung")]
         for call_sign in self.vehicles:
             columns += [(f"{call_sign}.{part}", header)
                         for part, header in zip(VEHICLE_PARTS, self._vehicle_headers(call_sign, limit, second_limit))]
         columns += [("station_staff", "Personen Gerätehaus"), ("crew_total", "Gesamtstärke"), ("gap", ""),
-                    ("turnout", "Azeit min."), ("arrival", "Ezeit"), ("on_time", f"{limit} Min. erreicht"),
+                    ("turnout", "Ausrückdauer min."), ("arrival", "Zeit bis Eintreffen"), ("on_time", f"{limit} Min. erreicht"),
                     ("crew_on_arrival", "Stärke bei Eintreffen"), ("crew_within_limit", f"Zusätzlich bis {limit} Min."),
                     ("crew_within_second", f"Zusätzlich {limit}–{second_limit} Min."), ("crew_plan_total", "Gesamtstärke"),
                     ("weekend_or_holiday", "Wochenende / Feiertag")]
