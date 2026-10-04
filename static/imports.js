@@ -37,7 +37,7 @@ async function readPdfs(files) {
   const form = new FormData();
   for (const f of files) form.append("pdfs", f, f.name.normalize("NFC"));
   try {
-    const data = await api("/api/reports", { method: "POST", body: form });
+    const data = await readInBackground(form);
     if (generation !== uploadGeneration) {
       await apiJson("/api/reports/cancel", "POST", { token: data.token });
       return;
@@ -49,6 +49,24 @@ async function readPdfs(files) {
   } finally {
     $("#progress").hidden = true;
     uploadBusy = false;
+  }
+}
+
+// Hochladen, dann im Hintergrund lesen lassen und den Fortschritt abfragen: jede Anfrage bleibt kurz
+// (Proxys wie Cloudflare brechen lange Anfragen nach etwa 100 s ab).
+async function readInBackground(form) {
+  const label = $("#progress-label"), track = $("#progress .progress-bar"), bar = $("span", track);
+  label.textContent = "Berichte werden hochgeladen …";
+  track.classList.remove("determinate");
+  bar.style.width = "";
+  const { job, total } = await api("/api/reports?background=true", { method: "POST", body: form });
+  for (let wait = 400; ; wait = Math.min(wait * 1.5, 2000)) {
+    await new Promise((resolve) => setTimeout(resolve, wait));
+    const status = await api(`/api/reports/jobs/${encodeURIComponent(job)}`);
+    if (status.done) return status;            // verworfen (generation): readPdfs gibt die Vorschau gleich frei
+    label.textContent = `Berichte werden gelesen … ${status.read} von ${total}`;
+    track.classList.add("determinate");
+    bar.style.width = `${total ? (status.read / total) * 100 : 0}%`;
   }
 }
 

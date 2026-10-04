@@ -5,7 +5,8 @@ import threading
 
 MAX_SECONDS = 45
 MAX_RESULT_BYTES = 32 * 1024 * 1024
-_slots = threading.BoundedSemaphore(2)
+WORKERS = 2                                      # Dateien, die gleichzeitig gelesen werden
+_slots = threading.BoundedSemaphore(WORKERS)
 
 
 def read_local(kind, path):
@@ -33,7 +34,8 @@ def _child(connection, kind, path):
 
 
 def read(kind, path):
-    if not _slots.acquire(timeout=1):
+    # Mehrere Dateien eines Uploads (und mehrere Benutzer) warten auf einen der Plätze
+    if not _slots.acquire(timeout=MAX_SECONDS * 2):
         raise ValueError("Zu viele Dateien werden gleichzeitig gelesen. Bitte später erneut versuchen.")
     ctx = multiprocessing.get_context("spawn")
     parent, child = ctx.Pipe(duplex=False)

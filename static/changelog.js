@@ -5,6 +5,12 @@
 // Ein neuer Eintrag mit neuem Datum markiert das ?-Symbol im Kopf, bis die Neuigkeiten gelesen sind.
 const CHANGELOG = [
   {
+    date: "2026-10-04",
+    items: [
+      "<b>Viele Berichte auf einmal:</b> Größere Mengen (z. B. ein ZIP mit allen Berichten des Jahres) brechen nicht mehr mit einem Zeitfehler ab. Die Berichte werden im Hintergrund und schneller gelesen; die Anzeige zeigt, wie viele schon gelesen sind.",
+    ],
+  },
+  {
     date: "2026-10-03",
     items: [
       "<b>Aus der Auswertung in die Liste:</b> Ein Klick auf einen Balken oder eine Säule (Monat, Wochentag, Uhrzeit, Ort, Art, Alarmstufe, Wehr) oder auf die Zahlen im Bedarfsplan zeigt genau diese Einsätze.",

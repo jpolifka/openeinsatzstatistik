@@ -122,6 +122,16 @@ def test_vg_roles_see_only_their_vg(world):
     assert _as(client, "lead@example.org").post("/api/scope", json={"key": "vg:vg-a"}).status_code == 403
 
 
+def test_read_job_belongs_to_its_user(world):
+    """Ergebnis eines Lesevorgangs im Hintergrund (enthält Einsatzdaten) nur für den, der ihn gestartet hat."""
+    client, _ = world
+    job = main.read_jobs.start("lead@example.org", 0, lambda progress: {"token": "t", "reports": [], "errors": [], "notes": []})
+    import time
+    time.sleep(0.1)
+    assert _as(client, "editor@example.org").get(f"/api/reports/jobs/{job}").status_code == 404
+    assert _as(client, "lead@example.org").get(f"/api/reports/jobs/{job}").json()["done"] is True
+
+
 def test_preview_belongs_to_its_user_and_tenant(world):
     client, _ = world
     r = read()
