@@ -107,6 +107,30 @@ async def revalidate_frontend(request: Request, call_next):
     return response
 
 
+# Schutzheader für alle Antworten. Antworten mit eigener Richtlinie (Logos, AVV-Dokument) behalten sie.
+# Die Oberfläche hat keine Inline-Skripte; Inline-Styles werden genutzt (Wehr-Farben, style-Attribute).
+SECURITY_HEADERS = {
+    "Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+                               "img-src 'self' data:; font-src 'self'; connect-src 'self'; form-action 'self'; "
+                               "frame-ancestors 'none'; base-uri 'none'; object-src 'none'",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+    "Cross-Origin-Opener-Policy": "same-origin",
+}
+if auth.BASE_URL.startswith("https://"):
+    SECURITY_HEADERS["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    for name, value in SECURITY_HEADERS.items():
+        response.headers.setdefault(name, value)
+    return response
+
+
 @app.exception_handler(tenancy.Forbidden)
 async def forbidden(_request, exc):
     return JSONResponse({"detail": str(exc)}, status_code=403)
