@@ -6,6 +6,8 @@ Aufbau: VG A mit den Wehren A1 und A2, VG B mit der Wehr B1, in jeder ein Einsat
 import pytest
 
 from app import db, main, report, store, tenancy
+from app.api import common as api_common
+from app.preview_sessions import PreviewSessions
 from conftest import grant, login, make_tenant
 from test_report import read
 
@@ -125,7 +127,7 @@ def test_vg_roles_see_only_their_vg(world):
 def test_read_job_belongs_to_its_user(world):
     """Ergebnis eines Lesevorgangs im Hintergrund (enthält Einsatzdaten) nur für den, der ihn gestartet hat."""
     client, _ = world
-    job = main.read_jobs.start("lead@example.org", 0, lambda progress: {"token": "t", "reports": [], "errors": [], "notes": []})
+    job = api_common.read_jobs.start("lead@example.org", 0, lambda progress: {"token": "t", "reports": [], "errors": [], "notes": []})
     import time
     time.sleep(0.1)
     assert _as(client, "editor@example.org").get(f"/api/reports/jobs/{job}").status_code == 404
@@ -135,13 +137,13 @@ def test_read_job_belongs_to_its_user(world):
 def test_preview_belongs_to_its_user_and_tenant(world):
     client, _ = world
     r = read()
-    token = main.previews.add([(r, "wehr-a1")], "lead@example.org")
+    token = api_common.previews.add([(r, "wehr-a1")], "lead@example.org")
     body = {"token": token, "filename": r["filename"], "fields": {}}
     assert _as(client, "editor@example.org").post("/api/reports/accept", json=body).status_code == 410
     assert _as(client, "lead@example.org").post("/api/reports/accept", json=body).status_code == 200
     assert client.post("/api/reports/accept", json=body).status_code == 410      # Doppelklick: nur einmal
     # Vorschau einer fremden Wehr (z. B. nach Entzug der Rolle) wird nicht übernommen
-    token = main.previews.add([(read(), "wehr-b1")], "lead@example.org")
+    token = api_common.previews.add([(read(), "wehr-b1")], "lead@example.org")
     response = client.post("/api/reports/accept", json={**body, "token": token})
     assert response.status_code == 403
     with db.connection(tenancy.tenant_path("wehr-b1")) as con:
@@ -151,7 +153,7 @@ def test_preview_belongs_to_its_user_and_tenant(world):
 def test_saved_report_records_author(world):
     client, _ = world
     r = read()
-    token = main.previews.add([(r, "wehr-a1")], "editor@example.org")
+    token = api_common.previews.add([(r, "wehr-a1")], "editor@example.org")
     saved = _as(client, "editor@example.org").post(
         "/api/reports/accept", json={"token": token, "filename": r["filename"], "fields": {}}).json()
     slug, incident_id = saved["id"].split(":")
@@ -238,7 +240,7 @@ def test_import_right_alone_does_not_overwrite_incidents(world):
                                                 "slug": "wehr-a1", "role": "einleser"})
     _as(client, "einleser@example.org")
     r = read()
-    token = main.previews.add([(r, "wehr-a1")], "einleser@example.org")
+    token = api_common.previews.add([(r, "wehr-a1")], "einleser@example.org")
     body = {"token": token, "filename": r["filename"], "fields": {"number": 1}, "replace": True}
     assert client.post("/api/reports/accept", json=body).status_code == 403
     with db.connection(tenancy.tenant_path("wehr-a1")) as con:
@@ -251,8 +253,8 @@ def test_import_right_alone_does_not_overwrite_incidents(world):
 def test_expired_preview_is_not_accepted(world):
     client, _ = world
     r = read()
-    token = main.previews.add([(r, "wehr-a1")], "lead@example.org")
-    main.previews._sessions[token]["time"] -= main.PreviewSessions.TTL + 1
+    token = api_common.previews.add([(r, "wehr-a1")], "lead@example.org")
+    api_common.previews._sessions[token]["time"] -= PreviewSessions.TTL + 1
     response = _as(client, "lead@example.org").post(
         "/api/reports/accept", json={"token": token, "filename": r["filename"], "fields": {}})
     assert response.status_code == 410

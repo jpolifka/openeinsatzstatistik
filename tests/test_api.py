@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
+from app import pdf_report
 import io
 import zipfile
 
 import pytest
 
-from app import db, main, store, tenancy
+from app import db, importing, main, store, tenancy
+from app.api import common as api_common
 from conftest import CFG, make_tenant
 from test_xlsx_report import make_workbook
 
@@ -138,19 +140,19 @@ def test_import_revision_conflict_keeps_preview(client):
     assert client.post("/api/reports/accept", json=body).status_code == 428
     body["revision"] = data["reports"][0]["existing"]["revision"]
     assert client.post("/api/reports/accept", json=body).status_code == 409
-    assert main.previews.get(data["token"], "test.xlsx", None)[0]
+    assert api_common.previews.get(data["token"], "test.xlsx", None)[0]
     assert client.get("/api/incidents?year=2025").json()["incidents"][0]["description"] == "Inzwischen bearbeitet"
 
 
 def test_saved_import_survives_postprocessing_failure(client, monkeypatch):
     from app import import_queue
     from test_report import FULL, LEFT
-    monkeypatch.setattr(main.pdf_report, "extract_text", lambda _: (FULL, LEFT, ""))
+    monkeypatch.setattr(pdf_report, "extract_text", lambda _: (FULL, LEFT, ""))
     preview = client.post("/api/reports", files=[("pdfs", ("test.pdf", b"test", "application/pdf"))]).json()
-    original = main._after_import
+    original = importing.after_import
     def fail(*args, **kwargs):
         raise RuntimeError("simulierter Ausfall der Zentrale")
-    monkeypatch.setattr(main, "_after_import", fail)
+    monkeypatch.setattr(importing, "after_import", fail)
     payload = {"token": preview["token"], "filename": "test.pdf", "fields": {}}
     result = client.post("/api/reports/accept", json=payload)
     assert result.status_code == 200
@@ -179,7 +181,7 @@ def test_zip_upload_unpacks_pdfs(client, monkeypatch):
     def fake_extract_text(path):
         read.append(path.rsplit("/", 1)[-1])
         raise ValueError("kein Bericht")
-    monkeypatch.setattr(main.pdf_report, "extract_text", fake_extract_text)
+    monkeypatch.setattr(pdf_report, "extract_text", fake_extract_text)
     archive = _zip({"a/01-25.pdf": b"x", "b/01-25.pdf": b"x", "liesmich.txt": b"x",
                     "__MACOSX/a/._01-25.pdf": b"x", "02-25.PDF": b"x"})
     response = client.post("/api/reports", files=[("pdfs", ("berichte.zip", archive, "application/zip")),
@@ -217,15 +219,15 @@ def test_zip_upload_errors(client):
 def test_upload_size_is_limited(client, monkeypatch):
     """Upload und entpackte ZIP-Inhalte zusammen begrenzt; je Eintrag wird nur bis zur Grenze entpackt."""
     read = []
-    monkeypatch.setattr(main.pdf_report, "extract_text", lambda path: read.append(path) or (_ for _ in ()).throw(
+    monkeypatch.setattr(pdf_report, "extract_text", lambda path: read.append(path) or (_ for _ in ()).throw(
         ValueError("kein Bericht")))
-    monkeypatch.setattr(main, "UPLOAD_MAX_BYTES", 2500)
+    monkeypatch.setattr(importing, "UPLOAD_MAX_BYTES", 2500)
     archive = _zip({f"{n}.pdf": b"0" * 1000 for n in range(5)})          # stark komprimierbar
     data = client.post("/api/reports", files=[("pdfs", ("b.zip", archive, "application/zip"))]).json()
     assert len(archive) < 1000 and 1 <= len(read) < 5 and any("Zu groß" in e["message"] for e in data["errors"])
     big = client.post("/api/reports", files=[("pdfs", ("a.pdf", b"0" * 3000, "application/pdf"))]).json()
     assert big["errors"][0]["file"] == "a.pdf" and "Zu groß" in big["errors"][0]["message"]
-    monkeypatch.setattr(main, "ZIP_MAX_BYTES", 500)
+    monkeypatch.setattr(importing, "ZIP_MAX_BYTES", 500)
     data = client.post("/api/reports", files=[("pdfs", ("b.zip", _zip({"x.pdf": b"0" * 1000}), "application/zip"))])
     assert "zu groß" in data.json()["errors"][0]["message"]
 

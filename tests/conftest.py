@@ -5,6 +5,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import auth, db, main, tenancy
+from app.api import common as api_common
+from app.preview_sessions import PreviewSessions
 from app.legacy import rheinbrohl_config
 
 # Fachkonfiguration für die Tests: die Werte der ersten Wehr (keine personenbezogenen Daten)
@@ -24,7 +26,7 @@ def con():
 def data_dir(tmp_path, monkeypatch):
     """Leerer Datenordner mit migrierter Zentral-DB; Anmeldung aus (jeder ist Superadmin)."""
     monkeypatch.setattr(db, "DATA_DIR", str(tmp_path))
-    monkeypatch.setattr(main, "previews", main.PreviewSessions())
+    monkeypatch.setattr(api_common, "previews", PreviewSessions())
     from app import parser_worker
     # API-Tests ersetzen die Dateileser gezielt; echte Prozessgrenzen separat prüfen.
     monkeypatch.setattr(parser_worker, "read", parser_worker.read_local)

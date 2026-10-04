@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """Gesamtansicht einer VG: Summen über Wehren, gemeinsame Einsätze, Exporte und Verteilung der PDFs."""
+from app import pdf_report
 import dataclasses
 import io
 
@@ -139,7 +140,7 @@ def test_upload_in_vg_view_distributes_reports(vg, monkeypatch):
     header = "FW NR#.BHÖ 01 Bad Hönningen Alarmierung: 12.03.2025 10:05:00 Einsatznummer: 1\n" \
              "Einsatznummer Leitstelle: 1250000001\n"
     texts = {"a1.pdf": (FULL, LEFT, ""), "a2.pdf": (header + FULL, LEFT, ""), "fremd.pdf": ("", "", "")}
-    monkeypatch.setattr(main.pdf_report, "extract_text", lambda path: texts[path.rsplit("/", 1)[-1]])
+    monkeypatch.setattr(pdf_report, "extract_text", lambda path: texts[path.rsplit("/", 1)[-1]])
     data = vg.post("/api/reports", files=[("pdfs", (name, b"x", "application/pdf")) for name in texts]).json()
     assert [(r["filename"], r["tenant"], r["tenant_name"]) for r in data["reports"]] == \
         [("a1.pdf", "wehr-a1", "Wehr wehr-a1"), ("a2.pdf", "wehr-a2", "Wehr wehr-a2")]
@@ -165,7 +166,7 @@ def test_multi_report_is_distributed_and_updates_on_reimport(vg, monkeypatch):
              "a2.pdf": (_bks("Hauptbericht", "9000002", "FW NR#.BHÖ 01 Musterstadt") + FULL, LEFT, ""),
              "a1.pdf": (_bks("Nebenbericht", "9000003", "FW NR#.BHÖ 02 Musterdorf") + FULL, LEFT, ""),
              "fez.pdf": (_bks("Nebenbericht", "9000004", "FW NR#.BHÖ 00 FEZ VG") + FULL, LEFT, "")}
-    monkeypatch.setattr(main.pdf_report, "extract_text", lambda path: texts[path.rsplit("/", 1)[-1]])
+    monkeypatch.setattr(pdf_report, "extract_text", lambda path: texts[path.rsplit("/", 1)[-1]])
     files = [("pdfs", (name, b"x", "application/pdf")) for name in texts]
     data = vg.post("/api/reports", files=files).json()
     assert [(r["filename"], r["tenant"]) for r in data["reports"] if not r.get("action")] == [("a2.pdf", "wehr-a2"), ("a1.pdf", "wehr-a1")]
@@ -199,7 +200,7 @@ def test_single_tenant_skips_report_of_other_unit(make_client, monkeypatch):
     make_tenant("wehr-a1")
     client = make_client()
     texts = {"fez.pdf": (_bks("Nebenbericht", "9000004", "FW NR#.BHÖ 00 FEZ VG") + FULL, LEFT, "")}
-    monkeypatch.setattr(main.pdf_report, "extract_text", lambda path: texts[path.rsplit("/", 1)[-1]])
+    monkeypatch.setattr(pdf_report, "extract_text", lambda path: texts[path.rsplit("/", 1)[-1]])
     data = client.post("/api/reports", files=[("pdfs", ("fez.pdf", b"x", "application/pdf"))]).json()
     assert data["reports"] == [] and data["errors"] == []
     assert "gehört nicht zu Wehr wehr-a1" in data["notes"][0]["message"]

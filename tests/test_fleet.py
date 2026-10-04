@@ -3,7 +3,8 @@
 import dataclasses
 import datetime as dt
 
-from app import db, excel_export, main, report, store, tenancy
+from app import db, excel_export, importing, main, report, store, tenancy
+from app.api import common as api_common
 from app.pdf_report import parse_report
 from app.tenant_config import Vehicle
 from conftest import CFG, make_tenant
@@ -38,9 +39,9 @@ def test_accepting_report_adds_vehicle_to_fleet(make_client):
     make_tenant("wehr-a1")
     client = make_client()
     r = _read(full=FULL.replace("FL NR#.LIN", NEW_VEHICLE + "FL NR#.LIN"))
-    data = main._preview_json(r, tenancy.access_for(None).selected, tenancy.access_for(None))
+    data = importing.preview_json(r, tenancy.access_for(None).selected, tenancy.access_for(None))
     assert data["new_vehicles"] == ["02/99"] and "02/99" in [v["call_sign"] for v in data["vehicles"]]
-    token = main.previews.add([(r, "wehr-a1")], None)
+    token = api_common.previews.add([(r, "wehr-a1")], None)
     saved = client.post("/api/reports/accept", json={"token": token, "filename": r["filename"], "fields": {}}).json()
     assert [v["call_sign"] for v in saved["vehicles"]][-1] == "02/99"
     assert client.get("/api/config").json()["vehicles"][-1] == "02/99"

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """Kostenersatz nach der Gebührenordnung der VG (Satzung Bad Hönningen 2024 als Beispiel)."""
+from app import pdf_report
 import dataclasses
 
 import pytest
@@ -42,7 +43,7 @@ def vg(make_client, monkeypatch):
 
 
 def _incident(client, monkeypatch, text=FULL, left=LEFT):
-    monkeypatch.setattr(main.pdf_report, "extract_text", lambda path: (REPORT + text, left, ""))
+    monkeypatch.setattr(pdf_report, "extract_text", lambda path: (REPORT + text, left, ""))
     data = client.post("/api/reports", files=[("pdfs", ("a1.pdf", b"x", "application/pdf"))]).json()
     client.post("/api/reports/accept", json={"token": data["token"], "filename": "a1.pdf", "fields": {}})
 
