@@ -1,4 +1,6 @@
 """Echte Prozessgrenzen mit synthetischen Excel-Dateien."""
+import json
+
 import pytest
 from app import parser_worker
 from test_xlsx_report import make_workbook
@@ -37,3 +39,15 @@ def test_timeout_terminates_worker_and_releases_slot(tmp_path, monkeypatch):
         parser_worker.read("xlsx", str(path))
     monkeypatch.setattr(parser_worker, "MAX_SECONDS", 45)
     assert parser_worker.read("xlsx", str(path))
+
+
+def test_result_codec_keeps_types_and_rejects_unknown():
+    import datetime as dt
+    import decimal
+    value = {"rows": [(1, 2.5, "a", None, True, dt.datetime(2025, 3, 1, 10, 5), dt.date(2025, 3, 1), dt.time(7, 30),
+                       decimal.Decimal("1.50"))], ("k", 1): [[]]}
+    assert parser_worker.decode(json.loads(json.dumps(parser_worker.encode(value)))) == value
+    with pytest.raises(TypeError):
+        parser_worker.encode({1, 2})
+    with pytest.raises(ValueError):
+        parser_worker.decode({"$": "pickle", "v": "x"})

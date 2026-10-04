@@ -8,10 +8,14 @@ data="${DATA_DIR:-/daten}"
 
 if [ "$(id -u)" != 0 ]; then
     # Bereits mit festem Benutzer gestartet (z. B. docker run --user)
+    umask 077
     exec "$@"
 fi
 
+# Einsatzdaten enthalten Namen: nur der Besitzer darf lesen (neue Dateien und vorhandene)
+umask 077
 mkdir -p "$data"
+chmod -R go-rwx "$data" || true
 uid="${APP_UID:-$(stat -c %u "$data")}"
 gid="${APP_GID:-$(stat -c %g "$data")}"
 
