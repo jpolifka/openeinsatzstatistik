@@ -22,3 +22,9 @@ def test_own_policy_is_kept():
         return Response("x", headers={"Content-Security-Policy": "default-src 'none'; sandbox"})
     r = TestClient(main.app).get("/_own_csp", follow_redirects=False)
     assert r.headers["Content-Security-Policy"] == "default-src 'none'; sandbox"
+
+
+def test_api_docs_are_off():
+    client = TestClient(main.app)
+    for path in ("/docs", "/redoc", "/openapi.json"):
+        assert client.get(path, follow_redirects=False).status_code in (303, 404), path

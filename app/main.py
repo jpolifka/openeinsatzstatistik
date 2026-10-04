@@ -66,7 +66,8 @@ async def lifespan(_app):
         await worker
 
 
-app = FastAPI(title="Einsatzstatistik", lifespan=lifespan)
+# Keine API-Dokumentation: die Oberfläche braucht sie nicht, sie verriete nur die Endpunkte
+app = FastAPI(title="Einsatzstatistik", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 # JSON der Einsatzliste schrumpft komprimiert auf ca. 1/16
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(RequestSizeLimit)
