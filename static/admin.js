@@ -17,6 +17,7 @@ const ADMIN_SECTIONS = [
   { key: "fees", label: "Gebührenordnung", vg: "vg.fees" },
   { key: "users", label: "Benutzer", any: true }, { key: "roles", label: "Rollen", any: true },
   { key: "super", label: "Wehren & VGs", superOnly: true },
+  { key: "sessions", label: "Sitzungen", superOnly: true },
 ];
 // Bereiche, deren Eingaben über „Speichern“ gesichert werden (Einstellungen der Wehr bzw. Vorgaben der VG)
 const SETTINGS_SECTIONS = ["unit", "fleet", "bks", "places"];
@@ -44,7 +45,7 @@ const fleetCompact = () => (recall(fleetCompactKey()) ?? (admin.vg ? "1" : "0"))
 // Hilfe zum gerade offenen Bereich der Verwaltung
 const ADMIN_HELP = { unit: () => admin.vg ? "admin_vg_defaults" : "admin_colors", fleet: () => admin.vg ? "admin_vg_vehicles" : "admin_fleet",
   bks: "admin_bks", places: "admin_places", keywords: "admin_keywords", fees: "fees", users: "admin_users",
-  roles: () => admin.roleDraft ? "admin_role_editor" : "admin_roles" };
+  roles: () => admin.roleDraft ? "admin_role_editor" : "admin_roles", sessions: "admin_sessions" };
 
 VIEWS.admin = { label: "Einstellungen", sub: "Einstellungen", load: loadAdmin, render: renderAdmin, noYear: true,
   visible: () => config.admin, help: () => helpValue(ADMIN_HELP[admin.section]) || "sec_admin" };
@@ -94,6 +95,7 @@ async function loadAdmin() {
   }
   if (s === "users" && !admin.memberships) setMemberships(await api("/api/admin/memberships"));
   if (s === "roles" && !admin.roles) admin.roles = await api("/api/admin/roles");
+  if (s === "sessions") admin.sessions = await api("/api/super/sessions");     // immer frisch: ändert sich laufend
   if (s === "super" && !admin.superOverview) admin.superOverview = await api("/api/super/overview");
   if (s === "fees" && admin.fees?.vg !== admin.vg) {
     admin.fees = { vg: admin.vg, ...(await api(vgUrl("/fees"))) };
@@ -138,18 +140,18 @@ function renderAdmin() {
   const choices = [...vgs.map((v) => ({ key: `vg:${v.slug}`, label: `Verbandsgemeinde · ${v.name}` })),
     ...tenants.map((t) => ({ key: t.slug, label: `${t.name} · ${t.vg}` }))];
   const current = admin.vg ? `vg:${admin.vg}` : admin.slug;
-  const tenantSelect = choices.length > 1 && !["users", "roles", "super"].includes(admin.section)
+  const tenantSelect = choices.length > 1 && !["users", "roles", "super", "sessions"].includes(admin.section)
     ? `<label class="field admin-tenant"><span>${admin.vg ? "Verbandsgemeinde" : "Feuerwehr"}</span><select data-admin-tenant>${choices.map((c) =>
       `<option value="${esc(c.key)}" ${c.key === current ? "selected" : ""}>${esc(c.label)}</option>`).join("")}</select></label>` : "";
   const sections = `<div class="segments" role="group" aria-label="Verwaltungsbereich">${adminSections().map(({ key, label }) =>
     `<button type="button" data-admin-section="${key}" aria-pressed="${key === admin.section}" class="${key === admin.section ? "active" : ""}">${label}</button>`).join("")}</div>`;
   // Wer auch die VG verwaltet, wechselt bei gewählter Wehr ausdrücklich in deren Verbandsgemeinde
-  const vg = !admin.vg && !["users", "roles", "super"].includes(admin.section) && adminTenantVg();
+  const vg = !admin.vg && !["users", "roles", "super", "sessions"].includes(admin.section) && adminTenantVg();
   const toVg = vg ? `<button type="button" class="btn btn-light btn-small admin-switch" data-admin-action="go-vg">Alle Wehren der ${esc(vg.name)} bearbeiten</button>` : "";
   const body = ({
     unit: () => admin.vg ? vgUnitSection() : unitSection(), fleet: () => admin.vg ? vgFleetSection() : fleetSection(),
     bks: () => admin.vg ? vgBksSection() : bksSection(), places: () => admin.vg ? vgPlacesSection() : placesSection(),
-    keywords: keywordsSection, users: usersSection, roles: rolesSection, super: superSection, fees: feesSection,
+    keywords: keywordsSection, users: usersSection, roles: rolesSection, super: superSection, sessions: sessionsSection, fees: feesSection,
   }[admin.section] || (() => `<p class="muted">Hier gibt es für dich nichts zu verwalten.</p>`))();
   $("#view-admin").innerHTML = `<div class="card admin-card">
     <div class="admin-head">${sections}${toVg}${tenantSelect}</div>
@@ -428,6 +430,21 @@ async function runAdminAction(button) {
       admin.roleDraft = null;
       admin.memberships = admin.events = null;
       toast("Rolle gelöscht");
+      return rerender();
+    case "session-end":
+      if (!confirm(`Sitzung von ${email} beenden? Die Person ist sofort abgemeldet.`)) return;
+      admin.sessions = await api(`/api/super/sessions/${button.dataset.id}`, { method: "DELETE" });
+      toast("Sitzung beendet");
+      return rerender();
+    case "sessions-user":
+      if (!confirm(`Alle Sitzungen von ${email} beenden?`)) return;
+      admin.sessions = await api(`/api/super/sessions?email=${encodeURIComponent(email)}`, { method: "DELETE" });
+      toast("Sitzungen beendet");
+      return rerender();
+    case "sessions-others":
+      if (!confirm("Alle anderen Benutzer abmelden? Sie müssen sich neu per Anmeldelink anmelden.")) return;
+      admin.sessions = await api("/api/super/sessions?others=true", { method: "DELETE" });
+      toast("Alle anderen abgemeldet");
       return rerender();
     case "create-vg":
       admin.superOverview = await apiJson("/api/super/vgs", "POST", { slug: $("#vg-slug").value.trim(), name: $("#vg-name").value });

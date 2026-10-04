@@ -259,6 +259,14 @@ def _add_consumed_magic_links(con):
     con.execute("CREATE TABLE consumed_magic_link (token_hash TEXT PRIMARY KEY, expires REAL NOT NULL)")
 
 
+def _add_sessions(con):
+    """Serverseitige Sitzungen: im Cookie liegt nur ein Zufallswert, hier steht sein SHA-256."""
+    con.execute("CREATE TABLE session (id INTEGER PRIMARY KEY AUTOINCREMENT, token_hash TEXT NOT NULL UNIQUE, "
+                "email TEXT NOT NULL, created REAL NOT NULL, last_seen REAL NOT NULL, expires REAL NOT NULL, "
+                "user_agent TEXT NOT NULL DEFAULT '')")
+    con.execute("CREATE INDEX session_email ON session (email)")
+
+
 def _add_import_jobs(con):
     con.execute("CREATE TABLE import_job (id TEXT PRIMARY KEY, incident_id INTEGER NOT NULL "
                 "REFERENCES incident(id) ON DELETE CASCADE, report TEXT NOT NULL, email TEXT, "
@@ -297,7 +305,7 @@ TENANT_MIGRATIONS = [_create_legacy_schema, _rename_to_english, _add_tenant_tabl
                      _add_pending_reports, _add_fleet_names, _add_incident_revision, _add_import_jobs]
 CENTRAL_MIGRATIONS = [_create_central_schema, _add_dpa, _add_records, _add_notices, _add_fee_schedules, _add_roles,
                       _records_per_vg, _add_consumed_magic_links, _add_completed_imports, _add_tenant_archive,
-                      _add_vg_defaults, _settings_for_fee_roles]
+                      _add_vg_defaults, _settings_for_fee_roles, _add_sessions]
 
 
 def migrate(con, steps=TENANT_MIGRATIONS):

@@ -80,14 +80,14 @@ Code und `docker-compose.yml` enthalten keine Standardwerte. Ohne `.env` startet
 | `MAIL_FROM`    | mit `SMTP_HOST` | Absender, z. B. `Einsatzstatistik <statistik@example.org>` – Adresse des Postfachs oder ein Alias davon |
 | `DKIM_SELECTOR`, `DKIM_KEY_FILE` | empfohlen | DKIM-Signatur durch die App, siehe [Mailversand](#mailversand) |
 | `DPA_*`        | für den AVV | Angaben zum Auftragnehmer, Hosting, Datensicherung, Mail-Anbieter (siehe [Datenschutz](#datenschutz)) |
-| `SECRET_KEY`   | nein        | Schlüssel für Links und Sitzungen. Leer = wird als `daten/session.key` erzeugt |
+| `SECRET_KEY`   | nein        | Schlüssel für die Anmeldelinks. Leer = wird als `daten/session.key` erzeugt |
 
 **Reverse Proxy:** Die App muss an der Wurzel der Domain laufen (nicht unter einem Unterpfad).
 Weiterleitungen sind relative Pfade, `X-Forwarded-*`-Header werden nicht benötigt. Bei nginx
 `client_max_body_size` so setzen, dass die PDFs bzw. ZIP-Dateien durchpassen (Standard 1 MB).
 
 **Anmeldung:** Ist `ADMIN_EMAILS` gesetzt, fragt die App nach der E-Mail-Adresse und schickt
-einen Anmeldelink (15 Minuten gültig, nur einmal benutzbar). Die Sitzung hält 30 Tage.
+einen Anmeldelink (15 Minuten gültig, nur einmal benutzbar). Die Sitzung hält 30 Tage und liegt serverseitig: „Abmelden“ beendet sie sofort, Superadmins können Sitzungen unter Einstellungen → Sitzungen beenden.
 Wer keine Zuordnung zu einer aktiven Wehr mehr hat, ist beim nächsten Aufruf abgemeldet.
 Wird `daten/session.key` gelöscht, sind alle abgemeldet. Die früheren Variablen `APP_PASSWORD`
 und `AUTH_EMAILS` werden nicht mehr unterstützt; ist eine davon ohne `ADMIN_EMAILS` gesetzt,

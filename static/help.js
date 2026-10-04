@@ -378,6 +378,11 @@ const HELP_SECTIONS = [
         short: "Wer welche Rolle in welcher Wehr bzw. VG hat.",
         text: "Eine Zuordnung verbindet eine E-Mail-Adresse mit einer Rolle in einer Wehr oder in einer VG (dann gilt sie in allen Wehren der VG). Eine Person kann mehrere Rollen haben; ihre Rechte addieren sich. Vergeben und entziehen darf man nur die Rollen, die die eigene Rolle verteilen darf (siehe Rollen → Verteilung), nur im eigenen Bereich und nie bei sich selbst. <b>Rechte</b> zeigt, was eine Person darf und über welche Rolle. Wer keine Zuordnung mehr hat, ist beim nächsten Aufruf abgemeldet.",
       },
+      admin_sessions: {
+        title: "Sitzungen",
+        short: "Wer angemeldet ist – Sitzungen einsehen und beenden (nur Superadmin).",
+        text: "Zeigt alle gültigen Anmeldungen mit Browser, Anmeldezeit und letzter Aktivität. <b>Abmelden</b> beendet eine Sitzung sofort, auch wenn das Cookie kopiert wurde; <b>Alle dieser Person</b> beendet alle Geräte einer Adresse, <b>Alle anderen abmelden</b> alle außer deiner eigenen. Die Betroffenen können sich mit einem neuen Anmeldelink wieder anmelden. Wer den Zugang ganz verlieren soll, dem entziehst du die Zuordnung unter „Benutzer“. Sitzungen laufen nach 30 Tagen ab; Abmelden beendet die eigene Sitzung auch auf dem Server.",
+      },
       admin_roles: {
         title: "Rollen",
         short: "Welche Rolle welche Rechte hat – als Übersicht.",

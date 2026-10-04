@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
-"""Superadmin: VGs und Wehren anlegen, ändern, löschen.
+"""Superadmin: VGs und Wehren anlegen, ändern, löschen; Sitzungen einsehen und beenden.
 """
+import time
 from typing import Optional
 
 from app import tenant_lifecycle
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from app import db, rbac, tenancy
+from app import auth, db, rbac, tenancy
 
 from app.admin.common import _invalid, access, log
 
@@ -139,3 +140,52 @@ def delete_tenant(slug: str, confirm: str = "", a: tenancy.Access = Depends(acce
     log.warning("Archivierung für Wehr %s beauftragt durch %s", slug, a.email or "lokal")
     return super_overview(a)
 
+
+
+# ---------------------------------------------------------------- Superadmin: Sitzungen
+def _sessions(a, request):
+    """Gültige Sitzungen, zuletzt aktive zuerst; die eigene ist markiert."""
+    own = auth.current_session_id(request)
+    with tenancy.central() as con:
+        rows = [dict(r) for r in con.execute(
+            "SELECT id, email, created, last_seen, expires, user_agent FROM session WHERE expires > ? "
+            "ORDER BY last_seen DESC", (time.time(),))]
+    for r in rows:
+        r["current"] = r["id"] == own
+    return {"enabled": auth.enabled(), "sessions": rows}
+
+
+@router.get("/api/super/sessions")
+def list_sessions(request: Request, a: tenancy.Access = Depends(access)):
+    _superadmin(a)
+    return _sessions(a, request)
+
+
+@router.delete("/api/super/sessions/{session_id}")
+def end_one_session(session_id: int, request: Request, a: tenancy.Access = Depends(access)):
+    """Eine Sitzung beenden (erzwungene Abmeldung). Die eigene geht über „Abmelden“."""
+    _superadmin(a)
+    if session_id == auth.current_session_id(request):
+        _invalid("Die eigene Sitzung beendest du mit „Abmelden“.")
+    with tenancy.central() as con:
+        row = con.execute("DELETE FROM session WHERE id = ? RETURNING email", (session_id,)).fetchone()
+    if row:
+        log.info("Sitzung %s von %s beendet durch %s", session_id, row["email"], a.email or "lokal")
+    return _sessions(a, request)
+
+
+@router.delete("/api/super/sessions")
+def end_sessions(request: Request, email: str = "", others: bool = False, a: tenancy.Access = Depends(access)):
+    """Alle Sitzungen einer Adresse (email) oder aller anderen Benutzer (others) beenden – nie die eigene."""
+    _superadmin(a)
+    own = auth.current_session_id(request)
+    if bool(email) == others:
+        _invalid("Entweder eine Adresse oder „alle anderen“ angeben.")
+    with tenancy.central() as con:
+        if email:
+            count = con.execute("DELETE FROM session WHERE email = ? AND id IS NOT ?",
+                                (tenancy.normalize_email(email), own)).rowcount
+        else:
+            count = con.execute("DELETE FROM session WHERE id IS NOT ?", (own,)).rowcount
+    log.info("%s Sitzungen (%s) beendet durch %s", count, email or "alle anderen", a.email or "lokal")
+    return _sessions(a, request)

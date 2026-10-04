@@ -8,8 +8,9 @@ anmelden will, gibt seine Adresse ein und bekommt per Mail (mail.py, SMTP der ei
 und nur einmal benutzt werden kann. Danach hält ein signiertes Cookie die Sitzung (30 Tage).
 Wird die letzte Zuordnung einer Adresse entfernt, verliert sie beim nächsten Aufruf den Zugang.
 
-Links und Cookies sind mit HMAC signiert. Der Schlüssel kommt aus SECRET_KEY oder wird
-beim ersten Start im Datenordner als session.key angelegt.
+Links sind mit HMAC signiert (Schlüssel aus SECRET_KEY oder session.key im Datenordner). Sitzungen
+liegen serverseitig (Tabelle session, nur der SHA-256 des Cookie-Werts): Abmelden und das Beenden
+durch einen Superadmin machen ein kopiertes Cookie sofort wertlos.
 """
 import base64
 import hashlib
@@ -100,8 +101,58 @@ def _verify(purpose, token):
     return email if expires > time.time() and tenancy.is_allowed(email) else None
 
 
+# ---------------------------------------------------------------- Sitzungen
+SEEN_INTERVAL = 300      # „zuletzt aktiv“ höchstens alle 5 Minuten schreiben
+
+
+def _hash(token):
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def create_session(email, user_agent=""):
+    """Neue Sitzung für eine Adresse -> Wert für das Cookie. Räumt abgelaufene Sitzungen auf."""
+    token = secrets.token_urlsafe(32)
+    now = time.time()
+    with tenancy.central() as con:
+        con.execute("DELETE FROM session WHERE expires < ?", (now,))
+        con.execute("INSERT INTO session (token_hash, email, created, last_seen, expires, user_agent) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (_hash(token), tenancy.normalize_email(email), now, now, now + SESSION_TTL, (user_agent or "")[:200]))
+    return token
+
+
+def _session(request: Request):
+    """Gültige Sitzung des Cookies (Zeile) oder None; die Adresse muss noch berechtigt sein."""
+    token = request.cookies.get(COOKIE)
+    if not token or len(token) > 100:
+        return None
+    now = time.time()
+    with tenancy.central() as con:
+        row = con.execute("SELECT id, email, expires, last_seen FROM session WHERE token_hash = ?",
+                          (_hash(token),)).fetchone()
+        if not row or row["expires"] <= now:
+            return None
+        if now - row["last_seen"] > SEEN_INTERVAL:
+            con.execute("UPDATE session SET last_seen = ? WHERE id = ?", (now, row["id"]))
+    return row if tenancy.is_allowed(row["email"]) else None
+
+
 def current_user(request: Request):
-    return _verify("session", request.cookies.get(COOKIE))
+    row = _session(request)
+    return row["email"] if row else None
+
+
+def current_session_id(request: Request):
+    row = _session(request)
+    return row["id"] if row else None
+
+
+def end_session(request: Request):
+    """Sitzung des Cookies beenden (Abmelden)."""
+    token = request.cookies.get(COOKIE)
+    if token:
+        with tenancy.central() as con:
+            con.execute("DELETE FROM session WHERE token_hash = ?", (_hash(token),))
 
 
 def access(request: Request) -> tenancy.Access:
@@ -209,7 +260,7 @@ def verify_page(token: str = ""):
 
 
 @router.post("/auth/verify")
-def verify(token: str = Form("")):
+def verify(request: Request, token: str = Form("")):
     email = _use_link(token)
     if not email:
         return _login_form('<p class="message message-error">Der Link ist abgelaufen oder wurde schon benutzt. '
@@ -217,13 +268,14 @@ def verify(token: str = Form("")):
     log.info("Anmeldung: %s", email)
     tenancy.record_login(email)
     response = RedirectResponse("/", 303)
-    response.set_cookie(COOKIE, _sign("session", email, SESSION_TTL), max_age=SESSION_TTL, httponly=True,
+    response.set_cookie(COOKIE, create_session(email, request.headers.get("user-agent", "")), max_age=SESSION_TTL, httponly=True,
                         samesite="lax", secure=BASE_URL.startswith("https://"))
     return response
 
 
 @router.post("/logout")
-def logout():
+def logout(request: Request):
+    end_session(request)
     response = RedirectResponse("/login", 303)
     response.delete_cookie(COOKIE)
     response.delete_cookie(SCOPE_COOKIE)
