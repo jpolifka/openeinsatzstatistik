@@ -88,21 +88,41 @@ def test_superadmin_logs_in_without_membership(client, caplog):
     assert client.get("/api/config").json()["superadmin"] is True
 
 
-def test_tampered_or_wrong_purpose_token_is_rejected(client, caplog):
+def test_link_token_or_guessed_value_is_no_session(client, caplog):
     token = _link_token(caplog, client)
-    # Link-Token taugt nicht als Sitzungs-Cookie
-    client.cookies.set(auth.COOKIE, token)
-    assert client.get("/api/years").status_code == 401
-    session = auth._sign("session", "m.muster@example.org", 60)
-    client.cookies.set(auth.COOKIE, session[:-1] + ("0" if session[-1] != "0" else "1"))
-    assert client.get("/api/years").status_code == 401
-    client.cookies.set(auth.COOKIE, session)
+    # Link-Token taugt nicht als Sitzungs-Cookie, ein erratener Wert auch nicht
+    for value in (token, "x" * 43, "a" * 500):
+        client.cookies.set(auth.COOKIE, value)
+        assert client.get("/api/years").status_code == 401
+    client.cookies.set(auth.COOKIE, auth.create_session("m.muster@example.org"))
     assert client.get("/api/years").status_code == 200
+
+
+def test_session_cookie_is_random_and_stored_hashed(client):
+    first = auth.create_session("m.muster@example.org")
+    assert first != auth.create_session("m.muster@example.org")
+    with tenancy.central() as con:
+        hashes = [r[0] for r in con.execute("SELECT token_hash FROM session")]
+    assert first not in hashes and auth._hash(first) in hashes
+
+
+def test_expired_session_is_rejected_and_cleaned_up(client):
+    client.cookies.set(auth.COOKIE, auth.create_session("m.muster@example.org"))
+    with tenancy.central() as con:
+        con.execute("UPDATE session SET expires = 1")
+    assert client.get("/api/years").status_code == 401
+    auth.create_session("m.muster@example.org")
+    with tenancy.central() as con:
+        assert con.execute("SELECT COUNT(*) FROM session WHERE expires < 100").fetchone()[0] == 0
 
 
 def test_logout_clears_session(client, caplog):
     client.post("/auth/verify", data={"token": _link_token(caplog, client)})
+    stolen = client.cookies.get(auth.COOKIE)
     client.post("/logout")
+    assert client.get("/api/years").status_code == 401
+    # Ein vorher kopiertes Cookie ist ebenfalls wertlos (serverseitig beendet)
+    client.cookies.set(auth.COOKIE, stolen)
     assert client.get("/api/years").status_code == 401
 
 

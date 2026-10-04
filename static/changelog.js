@@ -5,6 +5,12 @@
 // Ein neuer Eintrag mit neuem Datum markiert das ?-Symbol im Kopf, bis die Neuigkeiten gelesen sind.
 const CHANGELOG = [
   {
+    date: "2026-10-05",
+    items: [
+      "<b>Sicherer abmelden:</b> „Abmelden“ beendet die Sitzung jetzt auch auf dem Server – ein kopiertes Anmelde-Cookie ist danach wertlos. Superadmins sehen unter <i>Einstellungen → Sitzungen</i>, wer angemeldet ist, und können einzelne Sitzungen, alle einer Person oder alle anderen beenden. <b>Einmalig nach dem Update:</b> alle melden sich neu an.",
+    ],
+  },
+  {
     date: "2026-10-04",
     items: [
       "<b>Kostenersatz leichter finden:</b> Unter „Einsätze“ gibt es jetzt den eigenen Unterreiter <i>Kostenersatz</i> (Verbandsgemeinde-Ansicht). Dort einen Einsatz wählen und die Kosten berechnen – nicht mehr nur versteckt im aufgeklappten Einsatz unter „Berichte abgleichen“.",

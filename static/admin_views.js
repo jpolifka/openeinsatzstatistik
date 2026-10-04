@@ -834,3 +834,36 @@ function superSection() {
     <p class="small muted">Neue VGs starten mit „AVV ausstehend“: Ihre Wehren sind gesperrt, bis der Vertrag unter „Auftragsverarbeitung“ bestätigt ist.
     Kurznamen: Kleinbuchstaben, Ziffern und Bindestrich; sie lassen sich später nicht ändern. Entfernte Wehren werden nicht gelöscht, sondern im Datenordner unter <code>deleted/</code> abgelegt.</p>`;
 }
+
+// ------------------------------------------------------------ Superadmin: Sitzungen
+const sessionTime = (seconds) => {
+  const d = new Date(seconds * 1000);
+  return `${formatDate(d.toISOString().slice(0, 10))} ${d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}`;
+};
+
+// Browser und System grob aus dem User-Agent, sonst der gekürzte Text
+function browserLabel(agent) {
+  if (!agent) return "–";
+  const browser = /Edg\//.test(agent) ? "Edge" : /OPR\//.test(agent) ? "Opera" : /Firefox\//.test(agent) ? "Firefox"
+    : /Chrome\//.test(agent) ? "Chrome" : /Safari\//.test(agent) ? "Safari" : null;
+  const system = /Windows/.test(agent) ? "Windows" : /Android/.test(agent) ? "Android" : /iPhone|iPad/.test(agent) ? "iOS"
+    : /Mac OS X/.test(agent) ? "macOS" : /Linux/.test(agent) ? "Linux" : null;
+  return browser ? [browser, system].filter(Boolean).join(" · ") : agent.slice(0, 40);
+}
+
+function sessionsSection() {
+  const { enabled, sessions } = admin.sessions;
+  if (!enabled) return `<p class="muted">Die Anmeldung ist nicht eingeschaltet (ADMIN_EMAILS), daher gibt es keine Sitzungen.</p>`;
+  const perEmail = {};
+  sessions.forEach((x) => { perEmail[x.email] = (perEmail[x.email] || 0) + 1; });
+  const rows = sessions.map((x) => `<tr class="${x.current ? "current" : ""}"><td>${esc(x.email)}${x.current ? ` <span class="tenant-badge">diese Sitzung</span>` : ""}</td>
+    <td>${esc(browserLabel(x.user_agent))}</td><td>${sessionTime(x.created)}</td><td>${sessionTime(x.last_seen)}</td><td>${sessionTime(x.expires)}</td>
+    <td class="right">${x.current ? "" : `<button type="button" class="btn btn-outline btn-small" data-admin-action="session-end" data-id="${x.id}" data-email="${esc(x.email)}">Abmelden</button>`}
+      ${perEmail[x.email] > 1 && !x.current ? `<button type="button" class="btn btn-light btn-small" data-admin-action="sessions-user" data-email="${esc(x.email)}">Alle dieser Person</button>` : ""}</td></tr>`).join("");
+  return `<h3>Angemeldete Sitzungen</h3>
+    <div class="table-wrap"><table class="mini-table admin-table"><thead><tr><th>Benutzer</th><th>Browser</th><th>Angemeldet</th><th>Zuletzt aktiv</th><th>Läuft ab</th><th></th></tr></thead>
+      <tbody>${rows || `<tr><td colspan="6" class="muted">Keine Sitzungen.</td></tr>`}</tbody></table></div>
+    <div class="admin-actions left"><button type="button" class="btn btn-outline" data-admin-action="sessions-others" ${sessions.some((x) => !x.current) ? "" : "disabled"}>Alle anderen abmelden</button></div>
+    <p class="small muted">Eine beendete Sitzung ist sofort ungültig, auch ein kopiertes Cookie. Die Person kann sich mit einem neuen Anmeldelink wieder anmelden.
+    Wer den Zugang ganz verlieren soll, dem entziehst du die Zuordnung unter „Benutzer“. „Zuletzt aktiv“ wird auf etwa 5 Minuten genau geführt.</p>`;
+}

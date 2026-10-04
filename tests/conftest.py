@@ -76,7 +76,7 @@ def make_client(data_dir, monkeypatch):
 
 def login(client, email):
     """Sitzungs-Cookie setzen, ohne Mail."""
-    client.cookies.set(auth.COOKIE, auth._sign("session", email, 600))
+    client.cookies.set(auth.COOKIE, auth.create_session(email))
     return client
 
 
