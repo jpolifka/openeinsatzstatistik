@@ -1,7 +1,7 @@
 "use strict";
 
 // Darstellung der Verwaltungsbereiche; Zustand und Aktionen liegen in admin.js. Die Einstellungsbereiche gibt es
-// zweimal: für eine Wehr (mit Kennzeichen, wo sie von der VG abweicht) und für die Wehrleitung (vg…Section:
+// zweimal: für eine Wehr (mit Kennzeichen, wo sie von der VG abweicht) und für die Verbandsgemeinde (vg…Section:
 // Vorgaben der VG und alle Wehren auf einmal).
 
 // ------------------------------------------------------------ Vererbung: von der VG / abweichend
@@ -256,13 +256,13 @@ function fleetRows(fleet, path, id, tenant = null) {
   </tr>`).join("");
 }
 
-const fleetHead = (withTenant) => `<thead><tr><th class="sticky-col"></th><th class="sticky-col name-col">Funkrufname</th>${withTenant ? "<th>Wehr</th>" : ""}<th>Fahrzeugtyp</th><th class="detail-col">im Dienst ab</th><th class="detail-col">außer Dienst ab</th><th class="detail-col">ersetzt durch</th><th class="detail-col">Bedarfsplan</th><th class="right">Einsätze</th><th></th></tr></thead>`;
+const fleetHead = (withTenant) => `<thead><tr><th class="sticky-col"></th><th class="sticky-col name-col">Funkrufname</th>${withTenant ? "<th>Wehr</th>" : ""}<th>Fahrzeugtyp</th><th class="detail-col">im Dienst ab</th><th class="detail-col">außer Dienst ab</th><th class="detail-col">ersetzt durch</th><th class="detail-col">Gesamtstärke</th><th class="right">Einsätze</th><th></th></tr></thead>`;
 
 // Suche und Umschalter kompakt / alle Spalten über einer Fahrzeugtabelle
 const fleetTools = () => `<div class="admin-status fleet-tools">
     <input type="search" class="search" data-fleet-search value="${esc(admin.fleetQuery)}" placeholder="Fahrzeug suchen: Funkrufname, Block, Typ …" aria-label="Fahrzeug suchen">
     <span class="toolbar-right"><button type="button" class="btn btn-light btn-small" data-admin-action="fleet-compact"
-      data-tip="Dienstzeitraum, Nachfolger und Bedarfsplan ${fleetCompact() ? "einblenden" : "ausblenden"}">${fleetCompact() ? "Alle Spalten" : "Kompakt"}</button></span>
+      data-tip="Dienstzeitraum, Nachfolger und Gesamtstärke ${fleetCompact() ? "einblenden" : "ausblenden"}">${fleetCompact() ? "Alle Spalten" : "Kompakt"}</button></span>
   </div>`;
 const fleetTableClass = () => `mini-table admin-table fleet-table ${fleetCompact() ? "compact" : ""}`;
 
@@ -307,7 +307,7 @@ function fleetSection() {
     ${saveButton()}`;
 }
 
-// ------------------------------------------------------------ Wehrleitung: Fahrzeuge aller Wehren der VG
+// ------------------------------------------------------------ Verbandsgemeinde: Fahrzeuge aller Wehren der VG
 function vgFleetSection() {
   const f = admin.vgFleet;
   const typeCell = (label) => label ? esc(label) : '<span class="muted">–</span>';
@@ -476,7 +476,7 @@ function vgBksSection() {
     ${saveButton()}`;
 }
 
-// ------------------------------------------------------------ Orte und Bedarfsplan
+// ------------------------------------------------------------ Orte und Zeitgrenzen
 const levelOptions = (current) => [1, 2, 3, 4].map((v) => `<option ${v === current ? "selected" : ""}>${v}</option>`).join("");
 
 function planFields(d) {
@@ -496,18 +496,18 @@ function placesSection() {
   const s = admin.settings;
   const rows = s.places.map((p, i) => `<tr>
     <td>${textInput(`places.${i}.name`, p.name, 'placeholder="Musterstadt"')}</td>
-    <td class="center"><input type="checkbox" data-plan-place="${i}" ${s.plan_places.includes(p.name) ? "checked" : ""} aria-label="Bedarfsplan"></td>
+    <td class="center"><input type="checkbox" data-plan-place="${i}" ${s.plan_places.includes(p.name) ? "checked" : ""} aria-label="Zählt zum Ausrückebereich"></td>
     <td><button type="button" class="icon-button" data-admin-action="remove-place" data-index="${i}" aria-label="entfernen">✕</button></td>
   </tr>`).join("");
-  return `<p class="small muted">Das Einsatzgebiet ist der Ort, mit dessen Namen der Einsatzort beginnt (z. B. „Musterstadt-Nord“ → Musterstadt). Nur Orte mit Haken zählen zum Ausrückebereich des Feuerwehrbedarfsplans.${helpButton("admin_places")}</p>
+  return `<p class="small muted">Das Einsatzgebiet ist der Ort, mit dessen Namen der Einsatzort beginnt (z. B. „Musterstadt-Nord“ → Musterstadt). Nur Orte mit Haken zählen zum Ausrückebereich der Auswertung „Eintreffen und verfügbare Kräfte“.${helpButton("admin_places")}</p>
     <h3 class="section-gap">Orte ${inheritNote("places")}</h3>
-    <div class="table-wrap"><table class="mini-table admin-table"><thead><tr><th>Ort</th><th>Bedarfsplan</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="table-wrap"><table class="mini-table admin-table"><thead><tr><th>Ort</th><th>Ausrückebereich</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
     <button type="button" class="btn btn-light btn-small section-gap" data-admin-action="add-place">Ort hinzufügen</button>
-    <h3 class="section-gap">Feuerwehrbedarfsplan ${inheritNote(...PLAN_KEYS)}</h3>
+    <h3 class="section-gap">Zeitgrenzen und Tageszeit ${inheritNote(...PLAN_KEYS)}</h3>
     ${planFields(s)}
     ${adminGranted().includes("plan.release") ? `<label class="toggle section-gap"><input type="checkbox" data-bind="response_plan_public" ${s.response_plan_public ? "checked" : ""}>
-      Bedarfsplan für alle Rollen freigeben <span class="muted">(sonst nur mit dem Recht „Bedarfsplan ohne Freigabe sehen“)</span></label>`
-      : `<p class="small muted section-gap">Bedarfsplan ${s.response_plan_public ? "ist für alle Rollen freigegeben" : "ist nicht freigegeben"} – freigeben darf, wer das Recht „Bedarfsplan freigeben“ hat.</p>`}
+      Eintreffen und Kräfte für alle Rollen freigeben <span class="muted">(sonst nur mit dem Recht „Eintreffen und Kräfte ohne Freigabe sehen“)</span></label>`
+      : `<p class="small muted section-gap">Die Auswertung des Eintreffens ${s.response_plan_public ? "ist für alle Rollen freigegeben" : "ist nicht freigegeben"} – freigeben darf, wer das Recht „Eintreffen und Kräfte freigeben“ hat.</p>`}
     ${saveButton()}`;
 }
 
@@ -521,11 +521,11 @@ function vgPlacesSection() {
       : `<input type="checkbox" data-plan-place="${j}:${i}" ${t.plan_places.includes(p.name) ? "checked" : ""} aria-label="${esc(p.name)} im Ausrückebereich von ${esc(t.name)}">`}</td>`).join("")}
     <td><button type="button" class="icon-button" data-admin-action="remove-place" data-index="${i}" aria-label="entfernen">✕</button></td>
   </tr>`).join("");
-  return `<p class="small muted">Orte der VG für die Zuordnung des Einsatzgebiets (ein Einsatz gehört zu dem Ort, mit dessen Namen der Einsatzort beginnt). Die Haken je Wehr bilden ihren Ausrückebereich laut Feuerwehrbedarfsplan.${helpButton("admin_places")}</p>
+  return `<p class="small muted">Orte der VG für die Zuordnung des Einsatzgebiets (ein Einsatz gehört zu dem Ort, mit dessen Namen der Einsatzort beginnt). Die Haken je Wehr bilden ihren Ausrückebereich für die Auswertung „Eintreffen und verfügbare Kräfte“.${helpButton("admin_places")}</p>
     <div class="table-wrap"><table class="mini-table admin-table"><thead><tr><th>Ort</th>${head}<th></th></tr></thead><tbody>${rows}</tbody></table></div>
     <button type="button" class="btn btn-light btn-small section-gap" data-admin-action="add-place">Ort hinzufügen</button>
     ${overridesNote("places")}
-    <h3 class="section-gap">Feuerwehrbedarfsplan</h3>
+    <h3 class="section-gap">Zeitgrenzen und Tageszeit</h3>
     ${planFields(d)}
     ${overridesNote(...PLAN_KEYS)}
     ${saveButton()}`;

@@ -20,8 +20,8 @@
       </div>
       <div class="topbar-actions">
         <label class="year-select" id="scope-select" hidden>
-          <span>Ansicht</span>
-          <select id="scope" aria-label="Ansicht wählen"></select>
+          <span>Feuerwehr / Verbandsgemeinde</span>
+          <select id="scope" aria-label="Feuerwehr oder Verbandsgemeinde wählen"></select>
         </label>
         <label class="year-select">
           <span>Jahr</span>
@@ -41,12 +41,16 @@
     </div>
     <!-- Reiter entstehen aus VIEWS in app.js -->
     <nav class="tabs"><div class="tabs-inner" id="tabs"></div></nav>
+    <nav class="tabs subtabs" id="subtabs-nav" aria-label="Bereich" hidden><div class="tabs-inner" id="subtabs"></div></nav>
   </header>
 
   <main class="page">
     <!-- Hinweise an die Wehr (records.js) -->
     <div id="notices" hidden></div>
+    <section id="view-overview" class="view" hidden></section>
     <section id="view-evaluation" class="view" hidden></section>
+    <section id="view-times" class="view" hidden></section>
+    <section id="view-load" class="view" hidden></section>
 
     <section id="view-incidents" class="view" hidden>
       <div class="card list-card">
@@ -70,9 +74,9 @@
                 <th class="sortable" data-sort-incidents="started_at" tabindex="0">Datum<span class="sort-mark"></span></th>
                 <th class="sortable" data-sort-incidents="keyword" tabindex="0">Stichwort<span class="sort-mark"></span></th>
                 <th>Einsatz</th>
-                <th data-help-key="unit_leader">EHF</th>
+                <th data-help-key="unit_leader">Einheitsführung</th>
                 <th>Fahrzeuge</th>
-                <th class="right sortable" data-sort-incidents="arrival_min" tabindex="0" data-help-key="arrival_min">Ezeit<span class="sort-mark"></span></th>
+                <th class="right sortable" data-sort-incidents="arrival_min" tabindex="0" data-help-key="arrival_min">Zeit bis Eintreffen<span class="sort-mark"></span></th>
                 <th class="right sortable" data-sort-incidents="crew_total" tabindex="0" data-help-key="crew_total">Stärke<span class="sort-mark"></span></th>
                 <th class="col-toggle"></th>
               </tr>
@@ -151,7 +155,7 @@
         <p>Frage, Fehler oder Wunsch? Die Nachricht geht per E-Mail an den Betreiber der App. Die Antwort kommt an deine Anmeldeadresse.</p>
         <label class="field"><span>Nachricht</span>
           <textarea name="message" rows="8" maxlength="5000" required></textarea></label>
-        <p class="muted small">Mitgeschickt werden deine Adresse, die ausgewählte Wehr und die aktuelle Ansicht. Bitte keine Namen von Kameraden oder anderen Personen eintragen.</p>
+        <p class="muted small">Mitgeschickt werden deine Adresse, die ausgewählte Wehr und die aktuelle Ansicht. Bitte keine Namen von Personen eintragen.</p>
         <div><button type="submit" class="btn btn-primary">Senden</button></div>
         <div class="message" id="feedback-status" role="status" hidden></div>
       </form>
@@ -170,6 +174,7 @@
   <script src="/static/help.js"></script>
   <script src="/static/app.js"></script>
   <script src="/static/imports.js"></script>
+  <script src="/static/analysis.js"></script>
   <script src="/static/records.js"></script>
   <script src="/static/admin_views.js"></script>
   <script src="/static/admin.js"></script>

@@ -106,7 +106,7 @@ def test_save_and_differences(con):
     assert not any(p["new"] for p in incident["people"])
 
     changed = {**incident, "unit_leader": "E. Beispiel"}
-    assert report.differences(existing, changed, CFG) == [{"field": "EHF", "stored": "M. Muster", "report": "E. Beispiel"}]
+    assert report.differences(existing, changed, CFG) == [{"field": "Einheitsführung", "stored": "M. Muster", "report": "E. Beispiel"}]
 
 
 def test_older_layout_with_incident_site_in_right_column():

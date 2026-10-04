@@ -107,7 +107,7 @@ function barChart(items) {
     <div class="bar-row ${i.link && i.value ? "linked" : ""}" data-tip="${esc(i.tip || `${i.label}: ${i.value}`)}${i.link && i.value ? "\nKlicken: Einsätze anzeigen" : ""}" tabindex="0"${i.value ? linkAttributes(i.link) : ""}>
       <span class="bar-label">${esc(i.label)}${i.hint ? `<small>${esc(i.hint)}</small>` : ""}</span>
       <span class="bar-track">${i.value ? `<span class="bar" style="width:${(i.value / max) * 100}%"></span>` : ""}</span>
-      <span class="bar-value">${i.value}</span>
+      <span class="bar-value">${i.text ?? i.value}</span>
     </div>`).join("")}</div>`;
 }
 
@@ -124,7 +124,7 @@ function columnChart(groups, { dense = false } = {}) {
       <div class="columns-row">${groups.map((g) => `
         <div class="columns-group ${g.link ? "linked" : ""}" data-tip="${esc(g.tip)}${g.link ? "\nKlicken: Einsätze anzeigen" : ""}" tabindex="0"${linkAttributes(g.link)}>${g.values.map((v) => `
           <div class="column tone-${v.tone || "series"}" style="height:${((v.value || 0) / scale.max) * 100}%">
-            ${v.labelled && v.value ? `<span class="column-value">${v.value}</span>` : ""}
+            ${v.labelled && v.value ? `<span class="column-value">${v.text ?? v.value}</span>` : ""}
           </div>`).join("")}
         </div>`).join("")}
       </div>
@@ -167,22 +167,44 @@ function chartCard({ id, title, subtitle = "", chart, table, extra = "", heading
 // permission: nötiges Recht, sonst fehlt der Reiter; visible(): eigene Regel; noYear: Titel ohne Jahr;
 // help: Abschnitt (sec_…) oder Feld der Hilfe, das das ?-Symbol im Kopf in dieser Ansicht öffnet.
 // Weitere Ansichten tragen sich selbst ein (admin.js).
+// sub: Beschriftung im Unterreiter, wenn ein Hauptreiter mehrere Ansichten bündelt (NAV); overview, times und load
+// stehen in analysis.js.
 const VIEWS = {
-  evaluation: { label: "Auswertung", load: loadEvaluation, render: renderEvaluation, permission: "stats.view",
+  evaluation: { label: "Einsatzgeschehen", sub: "Einsatzgeschehen", load: loadEvaluation, render: renderEvaluation, permission: "stats.view",
     help: () => config.vg ? "sec_vg" : "sec_evaluation" },
-  incidents: { label: "Einsätze", load: loadIncidents, render: renderIncidents, permission: "incidents.view",
+  incidents: { label: "Einsätze", sub: "Einsätze", load: loadIncidents, render: renderIncidents, permission: "incidents.view",
     help: () => state.editing != null ? "sec_capture" : "sec_metrics" },
-  // Kameraden gehören zu einer Wehr – nicht in der Gesamtansicht einer VG
-  members: { label: "Kameraden", load: loadMembers, render: renderMembers, permission: "people.view", single: true,
+  // Personal gehört zu einer Wehr – nicht in der Gesamtansicht einer VG
+  members: { label: "Personal", title: "Einsatzteilnahmen", load: loadMembers, render: renderMembers, permission: "people.view", single: true,
     help: "sec_members" },
 };
-const allowedViews = () => Object.keys(VIEWS).filter((key) => {
+// Hauptreiter: Jeder bündelt Ansichten (Schlüssel in VIEWS); mehrere erscheinen als Unterreiter darunter.
+const NAV = [
+  { key: "overview", label: "Übersicht", views: ["overview"] },
+  { key: "incidents", label: "Einsätze", views: ["incidents", "records"] },
+  { key: "evaluation", label: "Auswertungen", views: ["evaluation", "times", "load"] },
+  { key: "members", label: "Personal", views: ["members"] },
+  { key: "admin", label: "Einstellungen", views: ["admin", "dpa"] },
+];
+const navGroup = (view) => NAV.find((g) => g.views.includes(view));
+// In der Reihenfolge der Hauptreiter; die erste erlaubte Ansicht ist der Einstieg
+const allowedViews = () => NAV.flatMap((g) => g.views).filter((key) => {
   const view = VIEWS[key];
-  return (view.visible ? view.visible() : can(view.permission)) && !(view.single && config.vg);
+  return view && (view.visible ? view.visible() : can(view.permission)) && !(view.single && config.vg);
 });
 
 function renderTabs() {
-  $("#tabs").innerHTML = allowedViews().map((key) => `<a href="#${key}" data-view="${key}">${VIEWS[key].label}</a>`).join("");
+  const allowed = allowedViews();
+  $("#tabs").innerHTML = NAV.map((g) => ({ g, first: g.views.find((k) => allowed.includes(k)) })).filter((x) => x.first)
+    .map(({ g, first }) => `<a href="#${first}" data-nav="${g.key}">${g.label}</a>`).join("");
+}
+
+// Unterreiter des gewählten Hauptreiters (nur bei mehreren erlaubten Ansichten)
+function renderSubTabs() {
+  const allowed = allowedViews(), views = (navGroup(state.view)?.views || []).filter((k) => allowed.includes(k));
+  $("#subtabs-nav").hidden = views.length < 2;
+  $("#subtabs").innerHTML = views.length < 2 ? "" : views.map((k) =>
+    `<a href="#${k}" data-view="${k}" class="${k === state.view ? "active" : ""}">${esc(VIEWS[k].sub || VIEWS[k].label)}</a>`).join("");
 }
 
 // Name und Logos der Wehr; ohne eigene Logos (und in der Gesamtansicht) das neutrale Signet
@@ -217,7 +239,7 @@ async function loadYears() {
 
 async function loadEvaluation() {
   const e = state.evaluation, filter = [...state.tenantFilter].sort().join(",");
-  // Zeitgrenze der Anfrage merken: ohne Freigabe fehlt der Bedarfsplan (response_plan = null)
+  // Zeitgrenze der Anfrage merken: ohne Freigabe fehlt die Auswertung des Eintreffens (response_plan = null)
   if (!e || e.year !== state.year || e.limit !== state.limit || e.filter !== filter) {
     const { year, limit } = state;
     const data = await api(`/api/evaluation?year=${year}&limit=${limit}${filter ? `&tenants=${encodeURIComponent(filter)}` : ""}`);
@@ -228,13 +250,13 @@ async function loadEvaluation() {
   }
 }
 
-// Kameraden: Anwesenheit aus der Auswertung, Einsätze je Person aus der Einsatzliste
+// Personal: Anwesenheit aus der Auswertung, Einsätze je Person aus der Einsatzliste
 async function loadMembers() {
   await loadEvaluation();
   await loadIncidents();
 }
 
-// Einsatz in der Einsatzliste aufklappen und hinscrollen (aus Hinweisen und der Kameraden-Ansicht)
+// Einsatz in der Einsatzliste aufklappen und hinscrollen (aus Hinweisen und der Personal-Ansicht)
 async function openIncident(key, year) {
   if (year && year !== state.year && state.years.includes(year)) {
     state.year = year;
@@ -270,9 +292,10 @@ async function showView() {
   const key = parseHash().view, allowed = allowedViews();
   state.view = allowed.includes(key) ? key : allowed[0];
   const view = VIEWS[state.view];
-  for (const a of $$("#tabs a")) a.classList.toggle("active", a.dataset.view === state.view);
+  for (const a of $$("#tabs a")) a.classList.toggle("active", a.dataset.nav === navGroup(state.view)?.key);
+  renderSubTabs();
   for (const k of Object.keys(VIEWS)) $(`#view-${k}`).hidden = k !== state.view;
-  $("#page-title").textContent = view.noYear ? view.label : `${view.label} ${state.year}`;
+  $("#page-title").textContent = view.noYear ? (view.title || view.label) : `${view.title || view.label} ${state.year}`;
   const section = $(`#view-${state.view}`), run = ++viewRun;
   section.classList.add("loading");
   $(".view-load-error", section)?.remove();
@@ -323,11 +346,13 @@ function renderEvaluation() {
       esc(`${vg.participations} Beteiligungen der Wehren${vg.without_dispatch_number ? ` · ${vg.without_dispatch_number} ohne BKS-Stammdatensatz und Leitstellen-Nr.` : ""}`), true)
       : kpi(`Einsätze ${state.year}`, s.count, esc(comparison), true)}
     ${kpi(`Einsätze / Woche${helpButton("per_week")}`, num(s.per_week, 2), currentYear ? "bis zur aktuellen KW" : "im ganzen Jahr")}
-    ${kpi(`Ø Einsatzdauer${helpButton("duration")}`, formatDuration(s.duration_avg_min), "Alarm bis Einsatzende")}
+    ${kpi(`Ø Einsatzdauer${helpButton("duration")}`, formatDuration(s.duration_avg_min),
+      state.evaluation.workload.duration.valid < state.evaluation.workload.duration.total
+        ? `Alarm bis Einsatzende · ${state.evaluation.workload.duration.valid} von ${state.evaluation.workload.duration.total} Einsätzen` : "Alarm bis Einsatzende")}
     ${kpi(`Einsatzstunden${helpButton("operation_hours")}`, formatHours(s.duration_total_min), "Summe aller Einsätze")}
     ${kpi(`Personalstunden${helpButton("staff_hours")}`, s.staff_hours == null ? "–" : `${num(s.staff_hours, 0)}<small>h</small>`,
-      s.staff_recorded < s.staff_total ? `Unvollständig: Anwesenheit und Dauer für ${s.staff_recorded} von ${s.staff_total} Einsätzen` : `Ø ${num(s.attendees_avg, 1)} Kameraden je Einsatz`)}
-    ${plan ? kpi(`Eintreffen ≤ ${plan.limit} Min.${helpButton("on_time")}`, percent(plan.total.rate), `${plan.total.on_time} von ${plan.total.count} (Bedarfsplan)`) : ""}
+      s.staff_recorded < s.staff_total ? `Unvollständig: Anwesenheit und Dauer für ${s.staff_recorded} von ${s.staff_total} Einsätzen` : `Ø ${num(s.attendees_avg, 1)} Personen je Einsatz`)}
+    ${plan ? kpi(`Eintreffen ≤ ${plan.limit} Min.${helpButton("on_time")}`, percent(plan.total.rate), `${plan.total.on_time} von ${plan.total.count} Einsätzen mit Eintreffzeit`) : ""}
   </div>`;
 
   $("#view-evaluation").innerHTML = evaluationToolbar() + kpis + (plan ? responsePlanCard(plan, previousPlan) : "") + (vg ? tenantsCard(vg) : "") + `
@@ -338,7 +363,7 @@ function renderEvaluation() {
 }
 
 // Kopf der Auswertung: Wehr-Filter (Gesamtansicht), Drucken und Kennzahlen-Export
-function evaluationToolbar() {
+function evaluationToolbar({ exports = true } = {}) {
   const tenants = config.vg ? config.tenants : [];
   const chips = tenants.length > 1 ? `<div class="segments tenant-filter" role="group" aria-label="Wehren">
     <button type="button" data-tenant-filter="" class="${state.tenantFilter.size ? "" : "active"}">Alle Wehren</button>
@@ -346,7 +371,7 @@ function evaluationToolbar() {
   </div>` : "<div></div>";
   const chosen = state.tenantFilter.size ? tenants.filter((t) => state.tenantFilter.has(t.slug)).map((t) => t.name).join(", ") : "";
   return `<div class="evaluation-toolbar no-print">${chips}<div class="toolbar-right">
-      <button type="button" class="btn btn-light btn-small" data-action="summary-export" data-tip="Kennzahlen je Wehr, ohne Namen">Kennzahlen (Excel)</button>
+      ${exports ? `<button type="button" class="btn btn-light btn-small" data-action="summary-export" data-tip="Kennzahlen je Wehr, ohne Namen">Kennzahlen (Excel)</button>` : ""}
       <button type="button" class="btn btn-light btn-small" data-action="print" data-tip="Druckansicht, im Druckdialog „Als PDF sichern“">Drucken / PDF</button>
     </div></div>
     <p class="print-only print-stamp">${esc(config.name)} · Einsatzstatistik ${state.year}${chosen ? ` · ${esc(chosen)}` : ""} · Stand ${formatDate(new Date().toISOString())}</p>`;
@@ -356,7 +381,7 @@ function tenantsCard(vg) {
   const rows = vg.rows.map((r) => [esc(r.name), r.count, r.plan_count, percent(r.rate), minutes(r.arrival_min),
     num(r.duration_hours, 0), num(r.staff_hours, 0)]);
   const sum = (key) => vg.rows.reduce((total, r) => total + (r[key] || 0), 0);
-  const table = dataTable(["Wehr", "Einsätze", "Bedarfsplan", "Erreichungsgrad", "Ø Eintreffzeit", "Einsatzstunden", "Personalstunden"],
+  const table = dataTable(["Wehr", "Einsätze", "Eintreffen: Einsätze", "In der Zeitgrenze", "Ø Zeit bis Eintreffen", "Einsatzstunden", "Personalstunden"],
     rows, ["Summe (Beteiligungen)", vg.participations, sum("plan_count"), "", "", num(sum("duration_hours"), 0), num(sum("staff_hours"), 0)]);
   const items = vg.rows.map((r) => ({ label: r.name, value: r.count, tip: `${r.name}: ${r.count} Einsätze`,
     link: listLink({ tenants: config.tenants.find((t) => t.name === r.name)?.slug }) }));
@@ -380,8 +405,8 @@ function responsePlanCard(plan, previousPlan) {
       <div class="meter" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round((w.rate || 0) * 100)}"
            aria-label="Erreichungsgrad"><span style="width:${(w.rate || 0) * 100}%"></span></div>
       <dl class="window-values">
-        <dt>Ø Ausrückezeit</dt><dd>${minutes(w.turnout_min)}</dd>
-        <dt>Ø Eintreffzeit</dt><dd>${minutes(w.arrival_min)}</dd>
+        <dt>Ø Ausrückdauer</dt><dd>${minutes(w.turnout_min)}</dd>
+        <dt>Ø Zeit bis Eintreffen</dt><dd>${minutes(w.arrival_min)}</dd>
         <dt>Stärke bei Eintreffen</dt><dd>${num(w.crew_on_arrival)}</dd>
         <dt>Zusätzlich bis ${limit} Min.</dt><dd>${num(w.crew_within_limit)}</dd>
         <dt>Zusätzlich ${limit}–${second} Min.</dt><dd>${num(w.crew_within_second)}</dd>
@@ -392,7 +417,7 @@ function responsePlanCard(plan, previousPlan) {
   const rows = [...plan.windows, { ...plan.total, day_type: "Gesamt", hours: "" }].map((w) => [
     `${esc(w.day_type)} ${esc(w.hours)}`, w.count, num(w.turnout_min), num(w.arrival_min), w.on_time, w.late,
     percent(w.rate), num(w.crew_on_arrival), num(w.crew_within_limit), num(w.crew_within_second), num(w.crew_total)]);
-  const table = dataTable(["Zeitfenster", "Einsätze", "Ø Azeit (min)", "Ø Ezeit (min)", `≤ ${limit} Min.`, `> ${limit} Min.`,
+  const table = dataTable(["Zeitfenster", "Einsätze", "Ø Ausrückdauer (min)", "Ø Zeit bis Eintreffen (min)", `≤ ${limit} Min.`, `> ${limit} Min.`,
     "Erreichungsgrad", "Stärke Eintreffen", `Zusätzlich bis ${limit} Min.`, `Zusätzlich ${limit}–${second} Min.`, "Gesamtstärke"], rows);
   // Umschalter nur, wenn die Wehr mehrere Zeitgrenzen eingestellt hat
   const limitSwitch = config.limits.length > 1 ? `<div class="segments" role="group" aria-label="Zeitgrenze">
@@ -400,7 +425,7 @@ function responsePlanCard(plan, previousPlan) {
   </div>` : "";
   const e = state.evaluation;
   // Freigabe: Verwaltungsrollen sehen den Plan immer und geben ihn für die übrigen Rollen frei
-  const release = config.tenant && can("plan.release") ? `<label class="toggle no-print" data-tip="Ohne Freigabe sehen den Bedarfsplan nur Rollen mit dem Recht „Bedarfsplan ohne Freigabe sehen“ (z. B. Wehrführer, Wehrleiter)">
+  const release = config.tenant && can("plan.release") ? `<label class="toggle no-print" data-tip="Ohne Freigabe sehen diese Auswertung nur Rollen mit dem Recht „Eintreffen und Kräfte ohne Freigabe sehen“ (z. B. Wehrführer, Wehrleiter)">
       <input type="checkbox" data-plan-release ${e.response_plan_public ? "checked" : ""}> für alle freigegeben</label>` : "";
   const hidden = e.response_plan_hidden.length ? ` Ohne ${esc(e.response_plan_hidden.join(", "))} (nicht freigegeben).` : "";
   const exclusions = config.plan_excluded_vehicles.length ? `Gesamtstärke ohne ${esc(config.plan_excluded_vehicles.join(", "))}.` : "Keine Fahrzeuge ausgeschlossen.";
@@ -408,8 +433,8 @@ function responsePlanCard(plan, previousPlan) {
     ${plan.without_times ? `${plural(plan.without_times, "Einsatz", "Einsätze")} ohne Eintreffzeit nicht berücksichtigt (Excel zählte sie mit 0 min als erreicht).` : ""}${hidden}</p>`;
   return chartCard({
     id: "plan", heading: "h2", className: "plan grid", chartLabel: "Kacheln", controls: release + limitSwitch, extra: footer,
-    title: `Feuerwehrbedarfsplan · Pos. 8.4${helpButton("response_plan")}`,
-    subtitle: plan.places.length ? `Einsätze ab Alarmstufe ${config.plan_min_level} in ${esc(plan.places.join(", "))} – Eintreffen des ersten Fahrzeugs innerhalb von ${limit} Minuten nach Alarmierung.` : "Noch kein Ausrückebereich konfiguriert. Bitte unter Verwaltung → Orte & Bedarfsplan einrichten.",
+    title: `Eintreffen und verfügbare Kräfte${helpButton("response_plan")}`,
+    subtitle: plan.places.length ? `Einsätze ab Alarmstufe ${config.plan_min_level} in ${esc(plan.places.join(", "))} – Eintreffen des ersten Fahrzeugs innerhalb von ${limit} Minuten nach Alarmierung. Das ist eine Eintreffquote – kein vollständiger Nachweis eines Schutzziels und kein Feuerwehrbedarfsplan.` : "Noch kein Ausrückebereich konfiguriert. Bitte unter Einstellungen → Orte & Zeitgrenzen einrichten.",
     chart: `<div class="plan-windows">${plan.windows.map((w) => windowTile(w, false)).join("")}${windowTile(plan.total, true)}</div>`,
     table,
   });
@@ -537,12 +562,21 @@ function weekdaysCard(s) {
 const WEEKDAYS = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"];
 const WINDOW_LABELS = { weekday_day: "Werktag, Tag", weekday_night: "Werktag, Nacht", weekend_day: "Sa/So/Feiertag, Tag",
   weekend_night: "Sa/So/Feiertag, Nacht" };
+// Einsätze, denen eine Angabe fehlt (Übersicht → Datenvollständigkeit): Beschriftung und Prüfung je Schlüssel
+const MISSING_LABELS = { duration: "ohne Einsatzdauer", turnout: "ohne Ausrückdauer", arrival: "ohne Eintreffzeit",
+  crew: "ohne Besatzung", attendance: "ohne Anwesenheit", leader: "ohne Einheitsführung" };
+const lacks = {
+  duration: (e) => e.duration_min == null, turnout: (e) => e.turnout_min == null, arrival: (e) => e.arrival_min == null,
+  crew: (e) => !(e.crew_total > 0), attendance: (e) => !e.people_count, leader: (e) => !e.unit_leader,
+};
+
 // Filter aus der Auswertung: Schlüssel in der Adresse -> Beschriftung des Filter-Chips
 const LIST_FILTERS = {
   tenants: (v) => v.split(",").map((slug) => config.tenants.find((t) => t.slug === slug)?.name || slug).join(", "),
   month: (v) => new Date(2000, Number(v) - 1).toLocaleString("de-DE", { month: "long" }), weekday: (v) => WEEKDAYS[Number(v)] || v,
   hour: (v) => `${pad2(v)}–${pad2((Number(v) + 1) % 24)} Uhr`, area: (v) => v, level: (v) => `Alarmstufe ${v}`,
-  plan: () => "Bedarfsplan", window: (v) => WINDOW_LABELS[v] || v, late: (v) => `nicht innerhalb ${v} Min.`,
+  missing: (v) => MISSING_LABELS[v] || v,
+  plan: () => "Eintreffen und Kräfte", window: (v) => WINDOW_LABELS[v] || v, late: (v) => `nicht innerhalb ${v} Min.`,
 };
 
 function parseHash() {
@@ -610,7 +644,8 @@ function matchesFilter(e) {
   if (f.hour && start?.getHours() !== Number(f.hour)) return false;
   if (f.area && e.area !== f.area) return false;
   if (f.level && levelOf(e.keyword) !== f.level) return false;
-  // Bedarfsplan wie in der Auswertung: relevante Einsätze mit Eintreffzeit
+  if (f.missing && !lacks[f.missing]?.(e)) return false;
+  // Eintreffen und Kräfte wie in der Auswertung: relevante Einsätze mit Eintreffzeit
   if ((f.plan || f.window || f.late) && !(e.plan_relevant && e.arrival_min != null)) return false;
   if (f.window && (e.weekend_or_holiday !== f.window.startsWith("weekend") || e.daytime !== f.window.endsWith("_day"))) return false;
   if (f.late && !isLate(e, Number(f.late))) return false;
@@ -710,7 +745,7 @@ function renderIncidents() {
 function vehicleTable(e) {
   const limit = config.default_limit;
   return `<div class="table-wrap"><table class="mini-table"><thead><tr>
-    <th>Fzg.</th><th class="right">Stärke</th><th>Ausr.</th><th class="right">Azeit</th><th>Eintr.</th><th class="right">Ezeit</th></tr></thead>
+    <th>Fzg.</th><th class="right">Stärke</th><th>Ausrücken</th><th class="right">Ausrückdauer</th><th>Eintreffen</th><th class="right">Zeit bis Eintreffen</th></tr></thead>
     <tbody>${e.vehicles.map((v) => isIdle(v)
       ? `<tr class="vehicle-idle"><td>${esc(v.call_sign)}</td><td colspan="5">nicht im Einsatz</td></tr>`
       : `<tr><td><strong>${esc(v.call_sign)}</strong>${v.substitute ? `<br><span class="small muted">${esc(v.substitute)}</span>` : ""}</td>
@@ -719,13 +754,13 @@ function vehicleTable(e) {
     </tbody></table></div>`;
 }
 
-// pickLeader: Namen sind Knöpfe, ein Klick trägt die Person als EHF ins Formular ein
+// pickLeader: Namen sind Knöpfe, ein Klick trägt die Person als Einheitsführung ins Formular ein
 function peopleChips(e, { markNew = false, pickLeader = false } = {}) {
   return e.people.map((p) => {
     const isLeader = e.unit_leader ? p.leader : /Einheitsführer/.test(p.role || "");
     const cls = [markNew && p.new && "new", isLeader && "leader"].filter(Boolean).join(" ");
-    const tip = [p.role, p.vehicle, markNew && p.new && "wird als neuer Kamerad angelegt",
-      pickLeader && `Klicken: als EHF eintragen (${p.leader_name})`].filter(Boolean).join(" · ");
+    const tip = [p.role, p.vehicle, markNew && p.new && "wird als neue Person angelegt",
+      pickLeader && `Klicken: als Einheitsführung eintragen (${p.leader_name})`].filter(Boolean).join(" · ");
     const content = `${esc(p.name)}${p.vehicle ? `<small>${esc(p.vehicle)}</small>` : ""}`;
     const attributes = `class="person ${cls}" ${tip ? `data-tip="${esc(tip)}"` : ""}`;
     return pickLeader
@@ -734,7 +769,7 @@ function peopleChips(e, { markNew = false, pickLeader = false } = {}) {
   }).join("") || `<span class="muted">Keine Anwesenheit erfasst</span>`;
 }
 
-/** EHF aus einem angeklickten Namen übernehmen und die Hervorhebung nachziehen. */
+/** Einheitsführung aus einem angeklickten Namen übernehmen und die Hervorhebung nachziehen. */
 function pickLeader(chip) {
   const form = chip.closest("[data-form], .preview-card");
   const input = $('input[name="unit_leader"]', form);
@@ -761,7 +796,7 @@ function attendancePanel(e, options = {}) {
       <p class="small muted">Die Namen sehen nur Rollen der Wehr mit Recht auf die Anwesenheit (z. B. Wehrführer, Erfasser).</p>`;
   }
   const newCount = options.markNew ? e.people.filter((p) => p.new).length : 0;
-  const hint = options.pickLeader && e.people.length ? `<p class="small muted">Einen Namen anklicken, um die Person als EHF einzutragen.</p>` : "";
+  const hint = options.pickLeader && e.people.length ? `<p class="small muted">Einen Namen anklicken, um die Person als Einheitsführung einzutragen.</p>` : "";
   return `<h4>Anwesenheit · ${e.people.length} Personen${newCount ? ` · ${newCount} neu` : ""}${helpButton("attendance")}</h4>
     ${hint}<div class="people">${peopleChips(e, options)}</div>`;
 }
@@ -775,15 +810,15 @@ function incidentDetail(e) {
       <dt>Dauer${helpButton("duration")}</dt><dd>${formatDuration(e.duration_min)}</dd>
       <dt>Zeitfenster${helpButton("time_window")}</dt><dd>${e.weekend_or_holiday ? "Sa/So/Feiertag" : "Werktag"}, ${e.daytime ? "Tag" : "Nacht"}</dd>
       <dt>Ort</dt><dd>${esc(e.place || "–")}</dd>
-      ${e.people_visible !== false ? `<dt>EHF${helpButton("unit_leader")}</dt><dd>${esc(e.unit_leader || "–")}</dd>` : ""}
+      ${e.people_visible !== false ? `<dt>Einheitsführung${helpButton("unit_leader")}</dt><dd>${esc(e.unit_leader || "–")}</dd>` : ""}
       <dt>Gerätehaus${helpButton("station_staff")}</dt><dd>${e.station_staff}</dd>
       <dt>Quelle</dt><dd class="small">${sourceLabel(e)}</dd>
       ${e.bks_url ? `<dt>BKS-Portal${helpButton("bks_url")}</dt><dd class="small">${bksLink(e)}</dd>` : ""}
     </dl></div>
     <div class="panel"><h4>Fahrzeuge${helpButton("vehicles")}</h4>${vehicleTable(e)}</div>
     <div class="panel"><h4>Kennzahlen</h4><dl class="facts">
-      <dt>Azeit${helpButton("turnout_min")}</dt><dd>${minutes(e.turnout_min)}</dd>
-      <dt>Ezeit${helpButton("arrival_min")}</dt><dd>${minutes(e.arrival_min)}</dd>
+      <dt>Ausrückdauer${helpButton("turnout_min")}</dt><dd>${minutes(e.turnout_min)}</dd>
+      <dt>Zeit bis Eintreffen${helpButton("arrival_min")}</dt><dd>${minutes(e.arrival_min)}</dd>
       <dt>${limit} Min. erreicht${helpButton("on_time")}</dt><dd>${e.on_time == null ? "–" : e.on_time ? "ja" : "nein"}</dd>
       <dt>Stärke Eintreffen${helpButton("crew_on_arrival")}</dt><dd>${orDash(e.crew_on_arrival)}</dd>
       <dt>zusätzlich bis ${limit} Min.${helpButton("crew_within_limit")}</dt><dd>${orDash(e.crew_within_limit)}</dd>
@@ -814,7 +849,7 @@ function stepButtons(e) {
 let formSequence = 0;
 function formFields(e) {
   const prefix = `incident-form-${++formSequence}`;
-  // EHF ist ein Name: nur mit Recht auf die Anwesenheit (sonst bleibt der gespeicherte Wert)
+  // Einheitsführung ist ein Name: nur mit Recht auf die Anwesenheit (sonst bleibt der gespeicherte Wert)
   const fields = config.incident_fields.filter(([name]) => name !== "unit_leader" || e.people_visible !== false);
   return `<div class="form-grid">${fields.map(([name, title, type, span, attributes]) => {
     const value = type === "datetime-local" ? (e[name] || "").slice(0, 19) : e[name];
@@ -837,7 +872,7 @@ function readForm(el) {
 
 // Bearbeiten: Fahrzeuge direkt im Formular, Anwesenheit als Entwurf (state.editDraft) bis zum Speichern
 function vehicleEditTable(e) {
-  const time = (t) => t ? t.slice(0, 8) : "";   // mit Sekunden (step="1"), sonst ändern sich Azeit und Ezeit
+  const time = (t) => t ? t.slice(0, 8) : "";   // mit Sekunden (step="1"), sonst ändern sich Ausrückdauer und Zeit bis Eintreffen
   return `<div class="table-wrap"><table class="mini-table vehicle-edit"><thead><tr>
     <th>Fzg.</th><th>dabei</th><th>Stärke</th><th>Ausrücken</th><th>Eintreffen</th></tr></thead>
     <tbody>${e.vehicles.map((v) => `<tr data-vehicle="${esc(v.call_sign)}">
@@ -849,7 +884,7 @@ function vehicleEditTable(e) {
     </tr>`).join("")}</tbody></table></div>`;
 }
 
-// "Nachname, Vorname" -> "V. Nachname" (Schreibweise für das EHF-Feld)
+// "Nachname, Vorname" -> "V. Nachname" (Schreibweise für das Feld Einheitsführung)
 function leaderSpelling(name) {
   const [last, first = ""] = name.split(",").map((part) => part.trim());
   return first ? `${first.charAt(0)}. ${last}` : last;
@@ -858,11 +893,11 @@ function leaderSpelling(name) {
 function peopleEditPanel() {
   const people = state.editDraft.people;
   const chips = people.map((p, i) => `<span class="person-edit">
-      <button type="button" class="person" data-leader="${esc(p.leader_name)}" data-tip="${esc([p.role, p.vehicle, `Klicken: als EHF eintragen (${p.leader_name})`].filter(Boolean).join(" · "))}">${esc(p.name)}${p.vehicle ? `<small>${esc(p.vehicle)}</small>` : ""}</button>
+      <button type="button" class="person" data-leader="${esc(p.leader_name)}" data-tip="${esc([p.role, p.vehicle, `Klicken: als Einheitsführung eintragen (${p.leader_name})`].filter(Boolean).join(" · "))}">${esc(p.name)}${p.vehicle ? `<small>${esc(p.vehicle)}</small>` : ""}</button>
       <button type="button" class="person-remove" data-action="remove-person" data-index="${i}" aria-label="${esc(p.name)} entfernen">×</button>
     </span>`).join("");
   return `<h4>Anwesenheit · ${people.length} Personen${helpButton("attendance")}</h4>
-    <p class="small muted">Einen Namen anklicken, um die Person als EHF einzutragen; × entfernt sie aus dem Einsatz.</p>
+    <p class="small muted">Einen Namen anklicken, um die Person als Einheitsführung einzutragen; × entfernt sie aus dem Einsatz.</p>
     <div class="people">${chips || `<span class="muted">Keine Anwesenheit erfasst</span>`}</div>
     <div class="person-add">
       <input type="text" list="member-options" data-p="name" placeholder="Nachname, Vorname" aria-label="Person hinzufügen" autocomplete="off">
@@ -898,7 +933,7 @@ function addDraftPerson(form) {
   const display = member ? member.name : name;
   people.push({ id: member ? member.id : null, name: display, role: field("role").value.trim(),
                 vehicle: field("vehicle").value, leader_name: leaderSpelling(display) });
-  if (!member) toast(`${display} wird beim Speichern als neuer Kamerad angelegt`);
+  if (!member) toast(`${display} wird beim Speichern als neue Person angelegt`);
   redrawPeople(form);
 }
 
@@ -947,7 +982,7 @@ function editForm(e) {
 }
 
 function updateDatalists() {
-  // Vorschläge für Ort und EHF aus den bekannten Orten und vorhandenen Einsätzen
+  // Vorschläge für Ort und Einheitsführung aus den bekannten Orten und vorhandenen Einsätzen
   const incidents = state.incidents?.incidents || [];
   const places = [...new Set([...config.places, ...incidents.map((e) => e.place)])].filter(Boolean);
   const leaders = [...new Set(incidents.map((e) => e.unit_leader).filter(Boolean))].sort();
@@ -1069,14 +1104,14 @@ async function handleIncidentAction(action, id, el) {
   }
 }
 
-// ------------------------------------------------------------ Kameraden
+// ------------------------------------------------------------ Personal (Einsatzteilnahmen)
 const MEMBER_COLUMNS = [      // [Feld, Titel, CSS-Klassen, Hilfe-Schlüssel]
   ["name", "Name", ""], ["incidents", "Einsätze", ""], ["rate", "Beteiligung", "right", "participation"],
   ["hours", "Stunden", "right", "hours"], ["nights", "nachts", "right hide-mobile", "nights_weekends"],
   ["weekends", "Sa/So/FT", "right hide-mobile", "nights_weekends"], ["last", "Zuletzt", "right hide-mobile"],
 ];
 
-// Einsätze eines Kameraden im gewählten Jahr (Klick öffnet den Einsatz)
+// Einsätze einer Person im gewählten Jahr (Klick öffnet den Einsatz)
 function memberIncidents(member) {
   const rows = (state.incidents?.incidents || []).filter((e) => e.people.some((p) => p.id === member.id))
     .sort((a, b) => (b.started_at || "").localeCompare(a.started_at || ""));
@@ -1101,7 +1136,7 @@ function renderMembers() {
   const max = Math.max(1, ...list.map((m) => m.incidents));
   $("#view-members").innerHTML = `<div class="card list-card members-table">
     <div class="toolbar"><div><h3>Anwesenheit ${state.year}</h3>
-      <p class="muted small">${plural(list.length, "Kamerad", "Kameraden")} · ${plural(a.incident_count, "Einsatz", "Einsätze")} · Stunden = Einsatzdauer je Teilnahme</p></div></div>
+      <p class="muted small">${plural(list.length, "Person", "Personen")} · ${plural(a.incident_count, "Einsatz", "Einsätze")} · Stunden = Einsatzdauer je Teilnahme</p></div></div>
     <div class="table-wrap"><table class="table">
       <thead><tr><th class="col-number">#</th>${MEMBER_COLUMNS.map(([f, title, cls, help]) =>
         `<th class="sortable ${cls}" data-sort="${f}">${title}${field === f ? (descending ? " ▾" : " ▴") : ""}${help ? helpButton(help) : ""}</th>`).join("")}</tr></thead>
@@ -1176,29 +1211,35 @@ $("#year").addEventListener("change", (e) => {
   showView();
 });
 
-$("#view-evaluation").addEventListener("change", async (e) => {
+// Auswertungen (Einsatzgeschehen, Zeiten & Kräfte, Belastung) und Übersicht teilen sich die Bedienung
+const evaluationViews = ["overview", "evaluation", "times", "load"];
+function onEvaluationViews(type, handler) {
+  for (const key of evaluationViews) $(`#view-${key}`).addEventListener(type, handler);
+}
+
+onEvaluationViews("change", async (e) => {
   if (!e.target.matches("[data-plan-release]")) return;
   try {
     await apiJson(`/api/admin/${encodeURIComponent(config.tenant.slug)}/response-plan`, "PUT", { public: e.target.checked });
     state.evaluation = null;
-    toast(e.target.checked ? "Bedarfsplan für alle freigegeben" : "Bedarfsplan nur noch für die Verwaltung sichtbar");
+    toast(e.target.checked ? "Eintreffen und Kräfte für alle freigegeben" : "Eintreffen und Kräfte nur noch für die Verwaltung sichtbar");
     await showView();
   } catch (err) {
     e.target.checked = !e.target.checked;
     alert(err.message);
   }
 });
-$("#view-evaluation").addEventListener("keydown", (e) => {
+onEvaluationViews("keydown", (e) => {
   const link = e.target.closest("[data-list-link]");
   if (link && e.key === "Enter") location.hash = link.dataset.listLink;
 });
-$("#view-evaluation").addEventListener("click", (e) => {
+onEvaluationViews("click", (e) => {
   const toggle = e.target.closest("[data-toggle-table]");
   if (toggle) {
     const id = toggle.dataset.toggleTable;
     state.tableCards.has(id) ? state.tableCards.delete(id) : state.tableCards.add(id);
     remember("table-cards", JSON.stringify([...state.tableCards]));
-    renderEvaluation();
+    VIEWS[state.view].render();
     return;
   }
   const limitButton = e.target.closest("[data-limit]");
@@ -1300,7 +1341,7 @@ $("#view-members").addEventListener("click", (e) => {
   renderMembers();
 });
 
-// EHF von Hand geändert → Hervorhebung der Namen anpassen.
+// Einheitsführung von Hand geändert → Hervorhebung der Namen anpassen.
 // Stichwort: Suche im Katalog, ganzes Stichwort (B207, B2.07) gleich trennen – der Server trennt beim Speichern ebenso.
 const formOf = (el) => el.closest("[data-form], .preview-card");
 for (const container of [$("#incident-table tbody"), $("#previews")]) {

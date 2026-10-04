@@ -12,7 +12,7 @@ Die Rechte stehen fest im Code (PERMISSIONS), die Rollen in der Zentral-DB:
 Vererbung: eine VG-Rolle gilt in allen Wehren der VG; eine Rolle mit parent_id erbt Rechte und Verteilung
 ihres Elternteils (gleicher Bereich, keine Zyklen). Mehrere Rollen je Person und Bereich addieren sich.
 
-Leitplanken (nicht konfigurierbar): Anwesenheit und Kameraden (PEOPLE*) gibt es nur für Rollen einer Wehr –
+Leitplanken (nicht konfigurierbar): Anwesenheit und Personal (PEOPLE*) gibt es nur für Rollen einer Wehr –
 der Wehrleiter sieht keine Namen. Eigene Zuordnungen und Rollen, die man selbst (auch über Vererbung) hat,
 ändert nur jemand anderes. Superadmins (ADMIN_EMAILS) stehen außerhalb und dürfen alles.
 """
@@ -56,14 +56,14 @@ class Permission:
 
 PERMISSIONS = {p.key: p for p in (
     Permission(STATS, "Auswertung", "Auswertung ansehen", BOTH),
-    Permission(PLAN_VIEW, "Auswertung", "Bedarfsplan ohne Freigabe sehen", BOTH, (STATS,)),
-    Permission(PLAN_RELEASE, "Auswertung", "Bedarfsplan freigeben", BOTH, (PLAN_VIEW,)),
+    Permission(PLAN_VIEW, "Auswertung", "Eintreffen und Kräfte ohne Freigabe sehen", BOTH, (STATS,)),
+    Permission(PLAN_RELEASE, "Auswertung", "Eintreffen und Kräfte freigeben", BOTH, (PLAN_VIEW,)),
     Permission(INCIDENTS, "Einsätze", "Einsätze ansehen", BOTH, (STATS,)),
     Permission(EXPORT, "Einsätze", "Excel-Export", BOTH, (INCIDENTS,)),
     Permission(IMPORT, "Einsätze", "Berichte einlesen", BOTH, (INCIDENTS,)),
     Permission(WRITE, "Einsätze", "Einsätze bearbeiten", BOTH, (INCIDENTS,)),
     Permission(DELETE, "Einsätze", "Einsätze löschen", BOTH, (WRITE,)),
-    Permission(PEOPLE, "Personen", "Anwesenheit und Kameraden sehen", TENANT, (INCIDENTS,)),
+    Permission(PEOPLE, "Personen", "Anwesenheit und Personal sehen", TENANT, (INCIDENTS,)),
     Permission(PEOPLE_EDIT, "Personen", "Anwesenheit bearbeiten", TENANT, (PEOPLE, WRITE)),
     Permission(SETTINGS, "Wehr", "Einstellungen, Fahrzeuge, Farben und Logos", BOTH),
     Permission(KEYWORDS, "Wehr", "Stichwortkatalog", BOTH),
@@ -225,7 +225,7 @@ def save_role(con, roles, role_id, *, vg_id, scope, label, description, parent_i
     if unknown:
         raise Invalid(f"Unbekanntes Recht: {', '.join(sorted(unknown))}.")
     if set(permissions) - set(allowed(permissions, scope)):
-        raise Invalid("Anwesenheit und Kameraden gibt es nur für Rollen einer Wehr; "
+        raise Invalid("Anwesenheit und Personal gibt es nur für Rollen einer Wehr; "
                       "Gesamtansicht, Prüfprotokoll, Gebühren und Rollenpflege nur für Rollen der VG.")
     if parent_id is not None:
         parent = roles.get(parent_id)

@@ -228,7 +228,7 @@ def _write_instructions(ws, sheet, last_member_column):
         "• Stichwort 'H2.03' -> Einsatzstichwort H2, Stufe 03; Brandsicherheitswache -> S1 / 00.",
         "• Stärke = Gesamtstärke je Fahrzeug aus dem Bericht; Zeiten mit Sekunden (Anzeige hh:mm).",
         "• Personen Gerätehaus = Anwesende laut Liste minus Besatzung der erfassten Fahrzeuge.",
-        "• EHF = Person mit Funktion 'Einheitsführer'; fehlt diese, der Einsatzleiter (mit Hinweis).",
+        "• Einheitsführung = Person mit Funktion 'Einheitsführer'; fehlt diese, der Einsatzleiter (mit Hinweis).",
         "• Wochenende/Feiertag = Sa/So oder gesetzlicher Feiertag in Rheinland-Pfalz.",
         *substitutes,
         "• Grau hinterlegte Zellen enthalten Formeln wie in der Einsatzübersicht.",
@@ -258,9 +258,9 @@ def write_workbook(incidents, members, year, target, cfg):
 
 
 # ---------------------------------------------------------------- Mehrere Wehren und Kennzahlen
-SUMMARY_COLUMNS = (("name", "Wehr", None), ("count", "Einsätze", "0"), ("plan_count", "Bedarfsplan: Einsätze", "0"),
+SUMMARY_COLUMNS = (("name", "Wehr", None), ("count", "Einsätze", "0"), ("plan_count", "Eintreffen und Kräfte: Einsätze", "0"),
                    ("on_time", "davon in der Zeitgrenze", "0"), ("rate", "Erreichungsgrad", "0%"),
-                   ("arrival_min", "Ø Eintreffzeit (min)", "0.0"), ("duration_hours", "Einsatzstunden", "0.0"),
+                   ("arrival_min", "Ø Zeit bis Eintreffen (min)", "0.0"), ("duration_hours", "Einsatzstunden", "0.0"),
                    ("staff_hours", "Personalstunden", "0.0"))
 
 
@@ -277,7 +277,7 @@ def _sheet_title(prefix, name, taken):
 
 def write_summary(ws, rows, total, year, limit, notes=()):
     """Kennzahlen je Wehr und Summe (rows/total: metrics.summary mit "name"). Ohne Namen von Personen."""
-    ws["A1"] = f"Einsatzstatistik {year} – Kennzahlen je Wehr (Bedarfsplan mit {limit} Minuten)"
+    ws["A1"] = f"Einsatzstatistik {year} – Kennzahlen je Wehr (Eintreffen innerhalb von {limit} Minuten)"
     ws["A1"].font = Font(name="Calibri", size=14, bold=True)
     for i, (_, title, _) in enumerate(SUMMARY_COLUMNS, start=1):
         _style_header(ws.cell(HEADER_ROW, i, title), horizontal="center", vertical="center")

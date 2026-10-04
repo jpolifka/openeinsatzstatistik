@@ -282,7 +282,7 @@ def _check_plan(s):
     if not limits or any(not 1 <= m <= 60 for m in limits) or s.default_limit not in limits:
         _invalid("Zeitgrenzen: 1 bis 60 Minuten, die Standardgrenze muss dabei sein.")
     if not max(limits) < s.second_limit <= 120:
-        _invalid("Die zweite Zeitgrenze muss über den Zeitgrenzen des Bedarfsplans liegen.")
+        _invalid("Die zweite Zeitgrenze muss über den Zeitgrenzen für das Eintreffen liegen.")
     if not 1 <= s.plan_min_level <= 4:
         _invalid("Die Mindest-Alarmstufe muss zwischen 1 und 4 liegen.")
     if len(s.day_hours) != 2 or not 0 <= s.day_hours[0] < s.day_hours[1] <= 24:
@@ -302,7 +302,7 @@ def _check_settings(s: SettingsIn):
     substitutes = _check_substitutes(s.substitutes, fleet)
     names = _check_places(s.places)
     if not set(s.plan_places) <= set(names):
-        _invalid("Bedarfsplan-Orte müssen in der Ortsliste stehen.")
+        _invalid("Orte für die Auswertung des Eintreffens müssen in der Ortsliste stehen.")
     unit_marker = s.unit_marker.strip()
     if unit_marker and not prefixes_of(unit_marker):
         _invalid("Einheit im Bericht: wie in der Kopfzeile des Berichts, z. B. FW NR#.ABC 02.")
@@ -461,7 +461,7 @@ def put_vg_settings(vg_slug: str, s: VgSettingsIn, a: tenancy.Access = Depends(a
         with tenants[t.slug].connection() as con:     # eigene Orte der Wehr statt der Vorgabe?
             own = "places" in tenancy.config_sources(con)
         if t.plan_places is not None and not set(t.plan_places) <= set(tenants[t.slug].config.places if own else places):
-            _invalid(f"{tenants[t.slug].name}: Bedarfsplan-Orte müssen in der Ortsliste stehen.")
+            _invalid(f"{tenants[t.slug].name}: Orte für die Auswertung des Eintreffens müssen in der Ortsliste stehen.")
     with tenancy.central() as con:
         tenancy.save_vg_settings(con, vg_id, values)
         layer = tenancy.load_vg_layer(con, vg_id)

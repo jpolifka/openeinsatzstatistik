@@ -7,6 +7,12 @@ const CHANGELOG = [
   {
     date: "2026-10-04",
     items: [
+      "<b>Neu geordnet:</b> Die Reiter heißen jetzt <i>Übersicht</i>, <i>Einsätze</i>, <i>Auswertungen</i>, <i>Personal</i> und <i>Einstellungen</i>. „Berichte abgleichen“ (früher Prüfprotokoll) ist ein Unterreiter von „Einsätze“, „Datenschutz &amp; Vertrag“ (früher Auftragsverarbeitung) steht unter „Einstellungen“. Die Auswahl oben heißt „Feuerwehr / Verbandsgemeinde“ (früher „Ansicht“ bzw. „Wehrleitung“). Gespeicherte Links funktionieren weiter.",
+      "<b>Verständlichere Begriffe:</b> Azeit heißt jetzt <i>Ausrückdauer</i>, Ezeit <i>Zeit bis zum Eintreffen</i>, EHF <i>Einheitsführung</i>, „Kameraden“ <i>Einsatzteilnahmen</i> (Reiter „Personal“). Das gilt auch im Excel-Export.",
+      "<b>Ehrlicher benannt:</b> Der „Feuerwehrbedarfsplan Pos. 8.4“ heißt <i>Eintreffen und verfügbare Kräfte</i>. Die Karte zeigt, wie oft das erste eigene Fahrzeug rechtzeitig eintraf, und zählt die Personen – sie ersetzt keinen Bedarfsplan und prüft keine Funktionen oder Qualifikationen. Die Hilfe erklärt, was sie aussagt.",
+      "<b>Übersicht:</b> Jahreskennzahlen, offene Aufgaben (Einsätze mit Prüfhinweisen oder fehlenden Angaben – ein Klick zeigt sie in der Liste) und die Datenvollständigkeit. Kennzahlen nennen jetzt, für wie viele Einsätze sie berechnet werden konnten („42 von 57 Einsätzen auswertbar“); Fehlendes zählt nie als null.",
+      "<b>Zeiten &amp; Kräfte:</b> Ausrückdauer, Anfahrtdauer je Fahrzeug und Zeit bis zum Eintreffen mit Median und 90. Perzentil, Kräfteaufbau nach 5, 10 und 15 Minuten sowie die Zeiten nach Tageszeit und Ort. Zeilen mit weniger als 5 Einsätzen sind gekennzeichnet. Wie „Eintreffen und verfügbare Kräfte“ nur sichtbar, wenn freigegeben.",
+      "<b>Belastung:</b> Lange, nächtliche und Wochenend-Einsätze mit Stunden, Verteilung der Einsatzdauer und zeitliche Überschneidung von Einsätzen.",
       "<b>Viele Berichte auf einmal:</b> Größere Mengen (z. B. ein ZIP mit allen Berichten des Jahres) brechen nicht mehr mit einem Zeitfehler ab. Die Berichte werden im Hintergrund und schneller gelesen; die Anzeige zeigt, wie viele schon gelesen sind.",
     ],
   },

@@ -28,12 +28,23 @@ Feuerwehrbedarfsplan, Anwesenheit) rechnet die App direkt im Browser nach.
 - **Bericht einlesen** – Einsatzberichte als PDF oder Excel-Export des BKS-Portals per Drag & Drop (einzeln,
   mehrere oder als ZIP), Vorschau mit Prüfhinweisen,
   Korrektur einzelner Felder vor dem Übernehmen, Abgleich mit bereits erfassten Einsätzen.
-- **Auswertung** – Kennzahlen, Feuerwehrbedarfsplan Pos. 8.4 (8 oder 10 Minuten),
-  Einsatzarten, Alarmstufen, Einsatzgebiet, Monate im Vorjahresvergleich, Uhrzeiten,
-  Wochentage. Jedes Diagramm ist auch als Tabelle abrufbar.
+- **Navigation** – Hauptreiter *Übersicht*, *Einsätze*, *Auswertungen*, *Personal*, *Einstellungen*; mehrere
+  Ansichten eines Reiters stehen als Unterreiter darunter (`NAV` in `app.js`). Alte Adressen
+  (`#evaluation`, `#records`, `#admin`, `#dpa` …) funktionieren weiter. Die Auswahl oben heißt
+  „Feuerwehr / Verbandsgemeinde“.
+- **Übersicht** – Jahreskennzahlen, offene Aufgaben (Einsätze mit Prüfhinweisen oder fehlenden Angaben, Hinweise
+  an die Wehr) und die Datenvollständigkeit je Angabe.
+- **Auswertungen** – *Einsatzgeschehen*: Kennzahlen, „Eintreffen und verfügbare Kräfte“ (Eintreffquote des ersten
+  eigenen Fahrzeugs; kein vollständiger Schutzzielnachweis, vgl. Abweichungen), Einsatzarten, Alarmstufen,
+  Einsatzgebiet, Monate im Vorjahresvergleich, Uhrzeiten, Wochentage. *Zeiten & Kräfte*: Ausrückdauer, Anfahrtdauer
+  je Fahrzeug und Zeit bis zum Eintreffen mit Median und 90. Perzentil, Kräfteaufbau nach 5/10/15 Minuten, Zeiten
+  nach Tageszeit und Ort. *Belastung*: lange, nächtliche und Wochenend-Einsätze, Dauerverteilung, zeitliche
+  Überschneidung. Jede Kennzahl nennt ihre Fallzahl („42 von 57 Einsätzen auswertbar“). Jedes Diagramm ist auch
+  als Tabelle abrufbar.
 - **Einsätze** – Liste mit Suche und Filter, Details, Bearbeiten, Löschen sowie
-  Excel-Export im Spaltenformat der Einsatzübersicht (A:AV + Anwesenheit).
-- **Kameraden** – Einsätze, Beteiligung, Stunden, Nacht- und Wochenendeinsätze je Kamerad.
+  Excel-Export im Spaltenformat der Einsatzübersicht (A:AV + Anwesenheit). Für die VG als Unterreiter
+  „Berichte abgleichen“ (früher Prüfprotokoll).
+- **Personal** – Einsatzteilnahmen: Einsätze, Beteiligung, Stunden, Nacht- und Wochenendeinsätze je Person.
 - **Online-Hilfe** – `?` im Kopf öffnet die Hilfe beim Thema der aktuellen Ansicht bzw. des offenen
   Fensters; das `?` neben Feldern und Kennzahlen erklärt den jeweiligen Wert und springt zur passenden Stelle.
   Im Hilfefenster stehen außerdem die **Neuigkeiten** (Änderungen für Anwender, ein Punkt am `?` zeigt
@@ -108,17 +119,17 @@ Im Container fest eingestellt, weil er zum Volume gehört (siehe [`docker-compos
 
 Eine Installation bedient mehrere Wehren, gruppiert nach Verbandsgemeinde (VG). Jede Wehr hat
 eine eigene Datenbank und eine eigene Fachkonfiguration (Fahrzeuge, BKS-Kennung, Orte,
-Bedarfsplan). Wer sich anmeldet, sieht nur die Wehren, denen er zugeordnet ist; bei mehreren
+Zeitgrenzen). Wer sich anmeldet, sieht nur die Wehren, denen er zugeordnet ist; bei mehreren
 gibt es oben eine Auswahl.
 
-Rechte und Rollen (`app/rbac.py`): Die **Rechte** sind fest (Auswertung, Bedarfsplan, Einsätze ansehen,
+Rechte und Rollen (`app/rbac.py`): Die **Rechte** sind fest (Auswertung, Eintreffen und Kräfte, Einsätze ansehen,
 exportieren, einlesen, bearbeiten, löschen, Anwesenheit sehen/bearbeiten, Einstellungen, Stichworte,
 Gesamtansicht, Prüfprotokoll, Gebühren, AVV, Zuordnungen sehen, Rollen vergeben, Rollen pflegen). Eine
 **Rolle** bündelt Rechte für einen Bereich – eine Wehr oder eine VG (gilt dann in allen Wehren der VG).
 Rollen erben von einer anderen Rolle desselben Bereichs, eine Person kann mehrere Rollen haben. Startbestand
 (entspricht dem früheren festen Modell):
 
-| Rolle | Bereich | erbt von | Statistik | Einsätze | Anwesenheit und Kameraden | Berichte einlesen, bearbeiten | Verwaltung | vergibt |
+| Rolle | Bereich | erbt von | Statistik | Einsätze | Anwesenheit und Personal | Berichte einlesen, bearbeiten | Verwaltung | vergibt |
 |---|---|---|:-:|:-:|:-:|:-:|:-:|---|
 | Superadmin (`ADMIN_EMAILS`) | alle | – | ✓ | ✓ | ✓ | ✓ | ✓ | alles |
 | Wehrleiter | VG | Statistik VG | ✓ | ✓ | – | ✓ | ✓ (+ Rollen der VG) | alle Rollen |
@@ -132,20 +143,20 @@ Rollen erben von einer anderen Rolle desselben Bereichs, eine Person kann mehrer
 Systemrollen. Die **Verteilung** legt fest, welche Rolle welche Rollen vergeben darf. Änderungen gelten
 sofort; Vergaben und Rollenänderungen stehen im Protokoll (nur anhängbar).
 
-**Leitplanken** (fest im Code): Die Anwesenheit (Namen der Kameraden) gibt es nur für Rollen einer
+**Leitplanken** (fest im Code): Die Anwesenheit (Namen der Personen) gibt es nur für Rollen einer
 Wehr – der Wehrleiter sieht bei einem Einsatz nur die Anzahl der Anwesenden; der Excel-Export enthält
-für ihn kein Blatt Anwesenheit, Kameraden und die Anwesenheitsübersicht der Auswertung fehlen.
-Auch EHF und Einsatzleiter (Namen) sieht nur, wer die Anwesenheit sehen darf.
+für ihn kein Blatt Anwesenheit, Personal und die Anwesenheitsübersicht der Auswertung fehlen.
+Auch Einheitsführung und Einsatzleiter (Namen) sieht nur, wer die Anwesenheit sehen darf.
 Eigene Zuordnungen und Rollen, die man selbst hat (auch über Vererbung), ändert nur jemand anderes.
 Rollen nur mit Statistik sehen keine Namen: Einsatzliste und Excel-Export sind für sie ebenfalls
 gesperrt. Geprüft wird im Backend, die Oberfläche blendet nur aus.
 
-**Gesamtansicht einer VG** (Recht „Gesamtansicht“: Wehrleiter, Statistik VG, Superadmin; oben „Wehrleitung · …“):
+**Gesamtansicht einer VG** (Recht „Gesamtansicht“: Wehrleiter, Statistik VG, Superadmin; oben „Verbandsgemeinde · …“):
 - Auswertung über alle Wehren der VG, auf einzelne Wehren filterbar. Ein Einsatz mehrerer Wehren
   zählt bei jeder Wehr (Beteiligungen); die große Zahl zählt ihn über den Stammdatensatz im
-  BKS-Portal bzw. die Einsatznummer der Leitstelle nur einmal. Der Bedarfsplan wertet jede Wehr
+  BKS-Portal bzw. die Einsatznummer der Leitstelle nur einmal. „Eintreffen und verfügbare Kräfte“ wertet jede Wehr
   mit ihren eigenen Orten aus.
-- Einsatzliste aller Wehren mit Markierung der Wehr; Kameraden gibt es nur je Wehr.
+- Einsatzliste aller Wehren mit Markierung der Wehr; Personal gibt es nur je Wehr.
 - Excel-Export als eine Mappe mit Übersicht und je Wehr Einsatzübersicht (Anwesenheit nicht für
   den Wehrleiter).
   „Kennzahlen (Excel)“ enthält nur die Zahlen je Wehr, ohne Namen.
@@ -154,24 +165,24 @@ gesperrt. Geprüft wird im Backend, die Oberfläche blendet nur aus.
   eigenen Fahrzeuge im Bericht nur bei Wehren ohne BKS-Kennung). Haben andere Wehren denselben
   Einsatz schon erfasst, zeigt die Vorschau „gemeinsamer Einsatz mit …“.
 
-**Verwaltung** (Reiter „Verwaltung“ mit einem Verwaltungsrecht, im Startbestand Wehrführer, Wehrleiter und Superadmin).
-Oben wählt man eine Wehr oder die Wehrleitung einer VG; die Bereiche wechseln diese Auswahl nie. Bei der
-Wehrleitung legen dieselben Bereiche die **Vorgaben der VG** für alle ihre Wehren fest (Recht
+**Einstellungen** (Reiter „Einstellungen“ mit einem Verwaltungsrecht, im Startbestand Wehrführer, Wehrleiter und Superadmin).
+Oben wählt man eine Feuerwehr oder die Verbandsgemeinde; die Bereiche wechseln diese Auswahl nie. Bei der
+Verbandsgemeinde legen dieselben Bereiche die **Vorgaben der VG** für alle ihre Wehren fest (Recht
 „Einstellungen“ bzw. „Stichwortkatalog“ in einer Rolle der VG) und zeigen alle Wehren auf einmal. Eine Wehr
 übernimmt die Vorgaben und kann bei sich abweichen; an jedem Wert steht „von der VG“ oder „abweichend“.
 - *Allgemein*: Name und Logos der Wehr, Farben (Vorgabe der VG; Farbwähler, Hex oder RGB, mit Vorschau und
   Kontrastprüfung).
 - *Fahrzeuge*: Reihenfolge, Bezeichnung, Dienstzeitraum („im Dienst ab“, „außer Dienst ab“), Nachfolger,
-  Zählung im Bedarfsplan, Ersatzfahrzeuge. Bei der Wehrleitung die Fahrzeuge aller Wehren in einer Tabelle,
+  Zählung in der Gesamtstärke, Ersatzfahrzeuge. Bei der Verbandsgemeinde die Fahrzeuge aller Wehren in einer Tabelle,
   mit Wechsel der Wehr und den noch nicht zugeordneten Funkrufnamen aus Berichten. Neue eigene Fahrzeuge
   aus BKS-Berichten nimmt die App beim Übernehmen automatisch auf.
 - *BKS-Kennung*: Kennung der VG (z. B. NR#.ABC) und Standort der Wehr ergeben die Einheit im Bericht
   („FW NR#.ABC 02“) und die eigenen Funkrufnamen; FEZ-Kennung, Nummerierung; Testfeld.
-- *Orte & Bedarfsplan*: Orte, Ausrückebereich je Wehr, Alarmstufe, Zeitgrenzen, Tagesstunden.
+- *Orte & Zeitgrenzen*: Orte, Ausrückebereich je Wehr, Alarmstufe, Zeitgrenzen, Tagesstunden.
 - *Stichworte*: Katalog der VG (Vorlage der AAO oder eigener) – Stichworte anlegen, ändern, deaktivieren,
   Import aus CSV/Excel mit Vorschau; je Wehr Abweichungen (gilt hier nicht, eigene Bezeichnung, eigene
   Stichworte).
-- *Gebührenordnung* (nur Wehrleitung): Fassungen der Satzung über den Kostenersatz.
+- *Gebührenordnung* (nur Verbandsgemeinde): Fassungen der Satzung über den Kostenersatz.
 - *Benutzer*: E-Mail-Adressen Rollen zuordnen – nach der Verteilung der eigenen Rolle, nie sich selbst.
   „Rechte“ zeigt, was eine Person darf und über welche Rolle; dazu das Protokoll der Vergaben.
 - *Rollen*: Rechtematrix aller Rollen; eigene Rollen anlegen, ändern, kopieren und löschen (siehe oben).
@@ -215,7 +226,7 @@ Verantwortlich ist die Verbandsgemeinde als Träger der Feuerwehr, deshalb gilt 
 
 - **Sperre bis zum AVV:** Eine neue VG startet mit „AVV ausstehend“. Ihre Wehren sind für alle außer
   Superadmins gesperrt; Zugeordnete sehen nach der Anmeldung nur „Auftragsverarbeitung“.
-- **Ablauf:** Wehrleitung, Statistik VG oder Wehrführer füllen die Angaben des Auftraggebers aus, die App
+- **Ablauf:** Verbandsgemeinde, Statistik VG oder Wehrführer füllen die Angaben des Auftraggebers aus, die App
   erzeugt daraus den Vertrag (Vorlage `app/templates/avv_v2.html`, Prüfsumme des Textes wird gespeichert;
   ein mit einer älteren Vorlage erzeugter Vertrag wird weiter mit dieser angezeigt).
   Nach der Unterschrift wird das PDF hochgeladen (`daten/avv/<vg>/`, nie überschrieben, mit Prüfsumme)
@@ -242,7 +253,7 @@ Die Vorlage ist ein Muster und keine Rechtsberatung.
    Felder, Fahrzeuge, Anwesenheit und Prüfhinweise. Berichte ohne Anmerkungen (keine
    Prüfhinweise, keine neuen Personen, keine Abweichungen) werden direkt übernommen, angezeigt
    werden nur die übrigen.
-2. Felder wie EHF oder Zeiten bei Bedarf korrigieren, dann **In Statistik übernehmen**.
+2. Felder wie Einheitsführung oder Zeiten bei Bedarf korrigieren, dann **In Statistik übernehmen**.
 3. Ist der Bericht schon erfasst (gleiche Berichtsnummer im BKS-Portal, bei älteren Einsätzen
    gleiche Nr. und Jahr), werden die Abweichungen angezeigt; **Aktualisieren** übernimmt den
    neuen Stand. Der Einsatz behält seine ID, manuell ergänzte Fahrzeuge und Personen bleiben.
@@ -267,13 +278,13 @@ Fahrzeuge andere Werte nennt, wenn ihre Fahrzeuge laut Stammdatensatz ausgerück
 noch keinen Bericht hat, und wenn ein Bericht zur Übernahme bereitliegt. Die Texte enthalten keine
 Namen; erledigt markiert, wer die Einsätze der Wehr bearbeiten darf.
 
-**Prüfprotokoll** (Wehrleiter, Gesamtansicht der VG): je Einsatz mit Stammdatensatz die Berichte
+**Berichte abgleichen** (früher Prüfprotokoll; Wehrleiter, Gesamtansicht der VG, Unterreiter von „Einsätze“): je Einsatz mit Stammdatensatz die Berichte
 der Wehren und die Befunde – Stärke und Zeiten der Fahrzeuge im Vergleich zum Stammdatensatz,
 anderes Stichwort, fehlende, unbearbeitete (ohne Anwesenheit) und Berichte ohne Nr. „Als geprüft
 markieren“ gilt für den jetzigen Stand der Befunde; „Drucken / PDF“ für die Ablage.
 
 **Einsatz bearbeiten** (Einsätze → aufklappen → Bearbeiten): Felder, Fahrzeuge (dabei, Stärke,
-Ausrücken, Eintreffen) und Anwesenheit (Person entfernen, vorhandenen Kameraden oder neue Person
+Ausrücken, Eintreffen) und Anwesenheit (Person entfernen, vorhandene Person oder neue Person
 „Nachname, Vorname“ hinzufügen). Manuell ergänzte Fahrzeuge und Personen bleiben erhalten, wenn der
 Bericht später erneut eingelesen wird; Werte von Fahrzeugen aus der PDF ersetzt der neue Bericht.
 
@@ -282,9 +293,11 @@ fehlt sie (z. B. bei selbst angelegten Brandsicherheitswachen), vergibt die App 
 „nach Datum durchnummerieren“ vergibt alle Nummern nach dem Einsatzbeginn – ein später eingelesener
 Einsatz rückt an seine Stelle, die folgenden Nummern verschieben sich.
 
-**Bedarfsplan:** Rollen mit „Bedarfsplan ohne Freigabe sehen“ (Wehrführer, Wehrleiter) sehen ihn immer; mit „Bedarfsplan freigeben“ geben sie ihn über „für alle freigegeben“
-(Karte in der Auswertung oder Verwaltung → Orte & Bedarfsplan) für die übrigen Rollen frei. Ohne
-Freigabe fehlt er für diese auch in der Gesamtansicht und im Kennzahlen-Export.
+**Eintreffen und verfügbare Kräfte:** Rollen mit „Eintreffen und Kräfte ohne Freigabe sehen“ (Wehrführer, Wehrleiter)
+sehen die Auswertung immer; mit „Eintreffen und Kräfte freigeben“ geben sie sie über „für alle freigegeben“
+(Karte im Einsatzgeschehen oder Einstellungen → Orte & Zeitgrenzen) für die übrigen Rollen frei. Ohne
+Freigabe fehlt sie für diese auch in der Gesamtansicht, in *Zeiten & Kräfte* und im Kennzahlen-Export. (Die
+Schlüssel der Rechte, z. B. `plan.release`, blieben unverändert.)
 
 **Kostenersatz** (Recht „Prüfprotokoll und Kostenersatz“, Gebührenordnung mit „Gebührenordnung der VG“; im Startbestand der Wehrleiter): Verwaltung → Gebührenordnung pflegt die Satzung der VG in Fassungen
 mit „gültig ab“ (für die VG Bad Hönningen vorbelegt mit der Satzung vom 16.05.2024 – Beginn der
@@ -295,7 +308,7 @@ BMA höchstens die Pauschale, Auslagen mit Verwaltungszuschlag, Umsatzsteuer wä
 Fahrzeugtyp liefert die Bezeichnung in der Fahrzeugliste der Wehr (z. B. „HLF 20“). Es wird nichts
 gespeichert; „Drucken / PDF“ für die Ablage.
 
-**Kameraden:** Ein Klick auf eine Person zeigt ihre Einsätze im Jahr, ein Klick auf einen Einsatz
+**Personal:** Ein Klick auf eine Person zeigt ihre Einsätze im Jahr, ein Klick auf einen Einsatz
 öffnet ihn in der Einsatzliste.
 
 Was die einzelnen Felder und Kennzahlen bedeuten, erklärt die Online-Hilfe in der App.
@@ -329,15 +342,16 @@ app/
   auth.py          Anmeldung per Magic Link
   mail.py          Mailversand per SMTP mit DKIM, Prüfung von SPF/DKIM/DMARC
   domain.py        Fachkonstanten für alle Wehren (Stichworte, Einsatzarten, Standardwerte)
-  tenant_config.py Fachkonfiguration einer Wehr (Fahrzeuge, Orte, Bedarfsplan) – auch für die Oberfläche
+  tenant_config.py Fachkonfiguration einer Wehr (Fahrzeuge, Orte, Zeitgrenzen) – auch für die Oberfläche
   legacy.py        Übernahme der bisherigen Einzel-Installation (FF Rheinbrohl)
   pdf_report.py    Einsatzbericht-PDF lesen
   xlsx_report.py   Einsatzbericht als Excel-Export des BKS-Portals lesen
   report.py        Felder ableiten, Prüfhinweise, Bericht -> Einsatz
   records.py       Stammdatensätze, Verzeichnis der Berichte, Abgleich/Prüfprotokoll, Hinweise je VG
   fees.py          Gebührenordnungen der VG und Berechnung des Kostenersatzes
-  metrics.py       Formeln der Einsatzübersicht (Kennzahlen, Statistik, Bedarfsplan, Anwesenheit)
-  store.py         Datenbankzugriff, Namensabgleich Kameraden
+  metrics.py       Formeln der Einsatzübersicht (Kennzahlen, Statistik, Eintreffen/Kräfte, Anwesenheit) sowie
+                   Zeiten, Kräfteaufbau, Belastung und Datenabdeckung (`timing`, `workload`, `coverage`)
+  store.py         Datenbankzugriff, Namensabgleich Personen
   db.py            SQLite-Verbindungen und Migrationen (zentral und je Wehr)
   excel_layout.py  Spaltenaufbau der Einsatzübersicht, aus der Fahrzeugliste der Wehr
   excel_export.py  Excel-Export im Format der Einsatzübersicht, Gesamtmappe, Kennzahlen
@@ -365,12 +379,16 @@ Bewusste Unterschiede zu den Formeln der Excel-Datei:
 - Das Blatt „Auswertung“ rechnet in Excel nicht (`#WERT!`, Formelbereiche `AO4:AO7`
   vs. `H4:H59`). Hier wird es korrekt gerechnet.
 - Einsätze ohne Eintreffzeit zählt Excel mit 0 Minuten als „erreicht“ – hier werden sie
-  im Bedarfsplan nicht berücksichtigt (die Anzahl wird angezeigt).
-- Der Gesamtwert im Bedarfsplan ist über alle Einsätze gemittelt (Excel: Mittel der
+  in „Eintreffen und verfügbare Kräfte“ nicht berücksichtigt (die Anzahl wird angezeigt).
+- Der Gesamtwert dort ist über alle Einsätze gemittelt (Excel: Mittel der
   vier Zeitfenster).
 - Tag/Nacht folgt überall der Excel-Regel (Spalte D): Ein Einsatzbeginn um genau 06:00:00
   oder 18:00:00 zählt zur Nacht, auch beim Anteil „tagsüber“.
-- Die Zeitgrenze des Bedarfsplans ist 10 Minuten; die frühere Auswahl 8 Minuten entfällt
+- „Eintreffen und verfügbare Kräfte“ (früher „Feuerwehrbedarfsplan Pos. 8.4“) ist eine Eintreffquote des ersten
+  eigenen Fahrzeugs mit Personenzahlen; Funktionen, Ausrüstung und Qualifikation (FwDV 3) sind nicht erfasst. Sie
+  ersetzt keinen Feuerwehrbedarfsplan. Spalten- und Kartenbezeichnungen: Azeit → Ausrückdauer, Ezeit → Zeit bis
+  Eintreffen, EHF → Einheitsführung (auch im Excel-Export).
+- Die Zeitgrenze ist 10 Minuten (Einsatzgrundzeit nach der Feuerwehrverordnung RLP seit 26.09.2025); die frühere Auswahl 8 Minuten entfällt
   (Spalten „10 Min. erreicht“ und „Stärke nach 10 Min.“ im Export).
 
 ## Lizenz

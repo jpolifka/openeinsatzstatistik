@@ -11,6 +11,7 @@ Die drei Blatt-Auswertungen bekommen evaluate(einsätze, cfg), damit die Kennzah
 Einsatz nur einmal berechnet werden. cfg ist die TenantConfig der Wehr, zu der die Einsätze gehören.
 """
 import datetime as dt
+import math
 
 from app import domain
 from app.timeutil import parse_iso, seconds_of_day
@@ -228,6 +229,159 @@ def response_plan(evaluated, limit, cfg):
                for key, day_type, hours, weekend, daytime in time_windows(cfg)]
     return {"limit": limit, "places": cfg.plan_places, "windows": windows, "total": _summarize(timed),
             "without_times": len(relevant) - len(timed)}
+
+
+# ---------------------------------------------------------------- Zeiten, Kräfte, Belastung
+# Neue Auswertungen ohne Vorbild in der Excel-Übersicht. Grundsatz: Fehlende Angaben sind nicht null –
+# jede Kennzahl nennt, für wie viele Einsätze sie berechnet werden konnte ("valid" von "total").
+SMALL_SAMPLE = 5          # darunter kennzeichnet die Oberfläche eine Zeile als wenig belastbar
+BUILD_UP_MARKS = (5, 10, 15)   # Minuten nach Alarmierung für den Kräfteaufbau
+LONG_MINUTES = 120        # ab dieser Dauer gilt ein Einsatz als lang
+DURATION_BUCKETS = ((30, "bis 30 min"), (60, "30–60 min"), (120, "1–2 h"), (240, "2–4 h"), (None, "über 4 h"))
+
+
+def percentile(values, share):
+    """Nächster Rang: kleinster Wert, bei dem mindestens der Anteil `share` der Werte höchstens so groß ist. None ohne Werte."""
+    values = sorted(v for v in values if v is not None)
+    if not values:
+        return None
+    rank = max(1, math.ceil(round(len(values) * share, 9)))
+    return values[min(rank, len(values)) - 1]
+
+
+def _median(values):
+    values = sorted(v for v in values if v is not None)
+    if not values:
+        return None
+    middle = len(values) // 2
+    return values[middle] if len(values) % 2 else (values[middle - 1] + values[middle]) / 2
+
+
+def distribution(values, total):
+    """Verteilung einer Zeit in Minuten: Fallzahl, Mittel, Median, 90. Perzentil und Abdeckung."""
+    values = [v for v in values if v is not None]
+    rounded = lambda v: round(v, 1) if v is not None else None
+    return {"valid": len(values), "total": total, "average": rounded(sum(values) / len(values)) if values else None,
+            "median": rounded(_median(values)), "p90": rounded(percentile(values, 0.9))}
+
+
+def _travel_minutes(vehicles):
+    """Anfahrtdauer je Fahrzeug (Eintreffen minus Ausrücken desselben Fahrzeugs); unplausible (negative) Werte entfallen."""
+    result = []
+    for v in vehicles.values():
+        if v["turnout_min"] is not None and v["arrival_min"] is not None and v["arrival_min"] >= v["turnout_min"]:
+            result.append(v["arrival_min"] - v["turnout_min"])
+    return result
+
+
+def timing(evaluated, cfg, marks=BUILD_UP_MARKS):
+    """Zeiten und Kräfte aller Einsätze (nicht nur der Planrelevanten), je Wehr mit deren Zeitgrenzen.
+
+    Ausrückdauer und Zeit bis zum Eintreffen je Einsatz (schnellstes bzw. erstes eigenes Fahrzeug), Anfahrtdauer je
+    Fahrzeug, Kräfteaufbau (Ø anwesende Kräfte nach n Minuten) und Zeiten nach Ort und Zeitfenster.
+    """
+    total = len(evaluated)
+    travel = [t for _, m in evaluated for t in _travel_minutes(m["vehicles"])]
+    vehicle_total = sum(1 for _, m in evaluated for v in m["vehicles"].values() if v["arrival_min"] is not None
+                        or v["turnout_min"] is not None)
+    timed = [(i, m) for i, m in evaluated if m["arrival_min"] is not None]
+    build_up = [{"minutes": minute,
+                 "crew": _average([sum(v["crew"] for v in m["vehicles"].values()
+                                       if v["arrival_min"] is not None and v["arrival_min"] <= minute + _WINDOW_TOLERANCE)
+                                   for _, m in timed]),
+                 "valid": len(timed), "total": total} for minute in marks]
+
+    def group(items):
+        return {"count": len(items), "small": len(items) < SMALL_SAMPLE,
+                "turnout": distribution([m["turnout_min"] for _, m in items], len(items)),
+                "arrival": distribution([m["arrival_min"] for _, m in items], len(items))}
+
+    areas = {}
+    for i, m in evaluated:
+        areas.setdefault(m["area"], []).append((i, m))
+    order = list(cfg.place_names) + [domain.OTHER_AREA]
+    by_area = [{"name": name, **group(areas[name])} for name in sorted(areas, key=lambda n: (order.index(n) if n in order else len(order), n))]
+    by_window = [{"key": key, "day_type": day_type, "hours": hours,
+                  **group([(i, m) for i, m in evaluated if bool(i["weekend_or_holiday"]) == weekend and m["daytime"] == daytime])}
+                 for key, day_type, hours, weekend, daytime in time_windows(cfg)]
+    return {"total": total, "turnout": distribution([m["turnout_min"] for _, m in evaluated], total),
+            "arrival": distribution([m["arrival_min"] for _, m in evaluated], total),
+            "travel": {**distribution(travel, vehicle_total), "unit": "vehicle"},
+            "build_up": build_up, "by_area": by_area, "by_window": by_window}
+
+
+def overlaps(evaluated):
+    """Zeitliche Überschneidung von Einsätzen einer Wehr: gleichzeitig offen heißt nicht, dass dieselben Kräfte gebunden waren.
+
+    -> {valid, total, incidents_with_overlap, max_concurrent, overlap_minutes}; Einsätze ohne Beginn/Ende zählen nicht.
+    Berühren sich Ende und Beginn genau, überschneiden sich die Einsätze nicht.
+    """
+    events = []
+    for i, _ in evaluated:
+        start, end = parse_iso(i["started_at"]), parse_iso(i["ended_at"])
+        if start and end and end > start:
+            events += [(start, 1, len(events)), (end, 0, len(events))]   # 0 (Ende) sortiert vor 1 (Beginn)
+    spans = len(events) // 2
+    events = [(t, kind, n // 2) for n, (t, kind, _) in enumerate(events)]
+    events.sort(key=lambda e: (e[0], e[1]))
+    active, overlapping, maximum, minutes, last = set(), set(), 0, 0.0, None
+    for time, kind, index in events:
+        if len(active) >= 2:
+            minutes += (time - last).total_seconds() / 60
+        last = time
+        if kind:
+            if active:
+                overlapping |= active | {index}
+            active.add(index)
+            maximum = max(maximum, len(active))
+        else:
+            active.discard(index)
+    return {"valid": spans, "total": len(evaluated), "incidents_with_overlap": len(overlapping),
+            "max_concurrent": maximum, "overlap_minutes": round(minutes)}
+
+
+def combine_overlaps(parts):
+    """Überschneidungen mehrerer Wehren zusammenfassen (je Wehr berechnet; Wehren überschneiden sich nicht untereinander)."""
+    return {"valid": sum(p["valid"] for p in parts), "total": sum(p["total"] for p in parts),
+            "incidents_with_overlap": sum(p["incidents_with_overlap"] for p in parts),
+            "max_concurrent": max((p["max_concurrent"] for p in parts), default=0),
+            "overlap_minutes": sum(p["overlap_minutes"] for p in parts)}
+
+
+def workload(evaluated, overlap):
+    """Belastung: lange, nächtliche und Wochenend-Einsätze mit Stunden, Dauerverteilung und Überschneidungen."""
+    total = len(evaluated)
+    with_duration = [(i, m) for i, m in evaluated if m["duration_min"] is not None]
+    durations = [m["duration_min"] for _, m in with_duration]
+
+    def part(items):
+        spent = [m["duration_min"] for _, m in items if m["duration_min"] is not None]
+        return {"count": len(items), "share": _share(len(items), total),
+                "hours": round(sum(spent) / 60, 1), "hours_valid": len(spent), **staff_totals(items)}
+
+    buckets, lower = [], 0
+    for upper, label in DURATION_BUCKETS:
+        count = sum(1 for d in durations if d >= lower and (upper is None or d < upper))
+        buckets.append({"label": label, "count": count})
+        lower = upper if upper is not None else lower
+    return {"total": total, "duration": distribution(durations, total),
+            "long": {**part([(i, m) for i, m in with_duration if m["duration_min"] >= LONG_MINUTES]), "minutes": LONG_MINUTES},
+            "night": part([(i, m) for i, m in evaluated if not m["daytime"] and i["started_at"]]),
+            "weekend": part([(i, m) for i, m in evaluated if i["weekend_or_holiday"]]),
+            "buckets": buckets, "overlap": overlap}
+
+
+def coverage(evaluated):
+    """Datenvollständigkeit: für wie viele Einsätze liegt die jeweilige Angabe vor?"""
+    count = lambda test: sum(1 for i, m in evaluated if test(i, m))
+    return {"total": len(evaluated), "rows": [
+        {"key": "duration", "valid": count(lambda i, m: m["duration_min"] is not None)},
+        {"key": "turnout", "valid": count(lambda i, m: m["turnout_min"] is not None)},
+        {"key": "arrival", "valid": count(lambda i, m: m["arrival_min"] is not None)},
+        {"key": "crew", "valid": count(lambda i, m: m["crew_total"] > 0)},
+        {"key": "attendance", "valid": count(lambda i, m: m["attendees"] > 0)},
+        {"key": "leader", "valid": count(lambda i, m: bool(i["unit_leader"]))},
+    ]}
 
 
 # ---------------------------------------------------------------- Mehrere Wehren

@@ -23,12 +23,12 @@ const HELP_SECTIONS = [
       started_at: {
         title: "Beginn",
         short: () => `Früheste Alarmierung eines eigenen Fahrzeugs (${esc(config.own_prefix)}..).`,
-        text: () => `Einsatzbeginn = frühester Alarmierungszeitpunkt der eigenen Fahrzeuge (Funkrufname ${esc(config.own_prefix)}..). Gibt es keine, zählt die erste Alarmierung im Bericht. Alle Minutenwerte (Azeit, Ezeit) werden ab diesem Zeitpunkt gerechnet. Der Beginn bestimmt außerdem Jahr, Monat, Wochentag und das Zeitfenster Tag/Nacht.`,
+        text: () => `Einsatzbeginn = frühester Alarmierungszeitpunkt der eigenen Fahrzeuge (Funkrufname ${esc(config.own_prefix)}..). Gibt es keine, zählt die erste Alarmierung im Bericht. Alle Minutenwerte (Ausrückdauer, Zeit bis zum Eintreffen) werden ab diesem Zeitpunkt gerechnet. Der Beginn bestimmt außerdem Jahr, Monat, Wochentag und das Zeitfenster Tag/Nacht.`,
       },
       ended_at: {
         title: "Ende",
         short: "Spätestes Einsatzende der eigenen Fahrzeuge bzw. der FEZ.",
-        text: "Einsatzende = spätestes Einsatzende der eigenen Fahrzeuge bzw. der Feuerwehreinsatzzentrale (FL NR#.LIN). Aus Beginn und Ende ergeben sich Einsatzdauer, Einsatzstunden und die Stunden je Kamerad.",
+        text: "Einsatzende = spätestes Einsatzende der eigenen Fahrzeuge bzw. der Feuerwehreinsatzzentrale (FL NR#.LIN). Aus Beginn und Ende ergeben sich Einsatzdauer, Einsatzstunden und die Stunden je Person.",
       },
       station_staff: {
         title: "Gerätehaus",
@@ -52,8 +52,8 @@ const HELP_SECTIONS = [
       },
       place: {
         title: "Ort",
-        short: "Einsatzort; bestimmt Einsatzgebiet und Bedarfsplan.",
-        text: () => `Ortsteil oder Ort des Einsatzes. Bekannte Orte (${helpList(config.places)}) werden vorgeschlagen. Nur Einsätze in ${helpList(config.plan_places)} zählen für den Feuerwehrbedarfsplan – bitte den Ort daher genau so schreiben.`,
+        short: "Einsatzort; bestimmt Einsatzgebiet und Ausrückebereich.",
+        text: () => `Ortsteil oder Ort des Einsatzes. Bekannte Orte (${helpList(config.places)}) werden vorgeschlagen. Nur Einsätze in ${helpList(config.plan_places)} zählen für „Eintreffen und verfügbare Kräfte“ – bitte den Ort daher genau so schreiben.`,
       },
       bks_url: {
         title: "BKS-Portal",
@@ -66,9 +66,9 @@ const HELP_SECTIONS = [
         text: "Die Einsatznummer der Leitstelle verbindet Berichte desselben Einsatzes über mehrere Wehren. Sie ist nicht die laufende Nummer der Wehr und nicht die BKS-Bericht-ID. Leer bedeutet unbekannt; bei Korrekturen den Originalbericht prüfen.",
       },
       unit_leader: {
-        title: "EHF",
+        title: "Einheitsführung (EHF)",
         short: "Einheitsführer, Schreibweise „V. Nachname“.",
-        text: "Einheitsführer des Einsatzes in der Schreibweise <i>V. Nachname</i>. Übernommen wird die Person mit der Funktion „Einheitsführer“. Fehlt sie im Bericht, wird der Einsatzleiter eingetragen und ein Prüfhinweis erzeugt – ist auch der nicht in der Anwesenheit, bleibt das Feld leer und ist rot markiert. Ein Klick auf einen Namen in der Anwesenheit trägt diese Person als EHF ein.",
+        text: "Einheitsführer des Einsatzes in der Schreibweise <i>V. Nachname</i>. Übernommen wird die Person mit der Funktion „Einheitsführer“. Fehlt sie im Bericht, wird der Einsatzleiter eingetragen und ein Prüfhinweis erzeugt – ist auch der nicht in der Anwesenheit, bleibt das Feld leer und ist rot markiert. Ein Klick auf einen Namen in der Anwesenheit trägt diese Person als Einheitsführung ein.",
       },
     },
   },
@@ -78,24 +78,24 @@ const HELP_SECTIONS = [
     intro: "Werden aus den Fahrzeugzeiten berechnet und sind nicht direkt änderbar – korrigieren Sie bei Bedarf Beginn oder Ende.",
     entries: {
       turnout_min: {
-        title: "Azeit (Ausrückezeit)",
+        title: "Ausrückdauer",
         short: "Minuten von der Alarmierung bis zum Ausrücken des schnellsten Fahrzeugs.",
-        text: "Minuten vom Einsatzbeginn bis zum Ausrücken (Status 3) des schnellsten eigenen Fahrzeugs. In der Fahrzeugtabelle steht die Azeit je Fahrzeug.",
+        text: "Minuten vom Einsatzbeginn bis zum Ausrücken (Status 3) des schnellsten eigenen Fahrzeugs. In der Fahrzeugtabelle steht die Ausrückdauer je Fahrzeug.",
       },
       arrival_min: {
-        title: "Ezeit (Eintreffzeit)",
+        title: "Zeit bis zum Eintreffen",
         short: "Minuten von der Alarmierung bis zum Eintreffen des ersten Fahrzeugs.",
-        text: () => `Minuten vom Einsatzbeginn bis zum Eintreffen (Status 4) des ersten eigenen Fahrzeugs an der Einsatzstelle. Rot markiert, wenn sie über ${helpLimit()} Minuten liegt. Ohne Eintreffzeit wird der Einsatz im Bedarfsplan nicht berücksichtigt.`,
+        text: () => `Minuten vom Einsatzbeginn bis zum Eintreffen (Status 4) des ersten eigenen Fahrzeugs an der Einsatzstelle. Rot markiert, wenn sie über ${helpLimit()} Minuten liegt. Ohne Eintreffzeit wird der Einsatz in der Auswertung „Eintreffen und verfügbare Kräfte“ nicht berücksichtigt. Die Uhrzeit des Eintreffens selbst heißt „Eintreffen“.`,
       },
       on_time: {
         title: () => `${helpLimit()} Min. erreicht`,
         short: "Ja, wenn das erste Fahrzeug innerhalb der Zeitgrenze eingetroffen ist.",
-        text: () => `„Ja“, wenn die Ezeit höchstens der Zeitgrenze entspricht (${helpLimit()} Minuten; in der Auswertung umschaltbar: ${helpLimits()}). Grundlage des Erreichungsgrads im Feuerwehrbedarfsplan.`,
+        text: () => `„Ja“, wenn die Zeit bis zum Eintreffen höchstens der Zeitgrenze entspricht (${helpLimit()} Minuten; in der Auswertung umschaltbar: ${helpLimits()}). Grundlage der Eintreffquote in „Eintreffen und verfügbare Kräfte“.`,
       },
       crew_on_arrival: {
         title: "Stärke bei Eintreffen",
         short: "Besatzung der Fahrzeuge, die als erste eingetroffen sind.",
-        text: "Summe der Besatzung aller Fahrzeuge, die zum Zeitpunkt der Ezeit eingetroffen sind.",
+        text: "Summe der Besatzung aller Fahrzeuge, die zum Zeitpunkt des ersten Eintreffens eingetroffen sind.",
       },
       crew_within_limit: {
         title: () => `Zusätzliche Kräfte bis ${helpLimit()} Min.`,
@@ -110,12 +110,12 @@ const HELP_SECTIONS = [
       crew_total: {
         title: "Gesamtstärke",
         short: "Besatzung aller Fahrzeuge plus Personen im Gerätehaus.",
-        text: () => `Besatzung aller eigenen Fahrzeuge plus Personen im Gerätehaus.${config.plan_excluded_vehicles.length ? ` Im Bedarfsplan wird – wie in der Einsatzübersicht – ohne ${helpList(config.plan_excluded_vehicles)} gerechnet.` : ""}`,
+        text: () => `Besatzung aller eigenen Fahrzeuge plus Personen im Gerätehaus.${config.plan_excluded_vehicles.length ? ` In „Eintreffen und verfügbare Kräfte“ wird – wie in der Einsatzübersicht – ohne ${helpList(config.plan_excluded_vehicles)} gerechnet.` : ""}`,
       },
       duration: {
         title: "Dauer",
         short: "Zeit von Beginn bis Ende des Einsatzes.",
-        text: "Zeit von Einsatzbeginn bis Einsatzende. Grundlage für Einsatzstunden, Personalstunden und die Stunden je Kamerad.",
+        text: "Zeit von Einsatzbeginn bis Einsatzende. Grundlage für Einsatzstunden, Personalstunden und die Stunden je Person.",
       },
       time_window: {
         title: "Zeitfenster",
@@ -124,7 +124,7 @@ const HELP_SECTIONS = [
       },
       vehicles: {
         title: "Fahrzeuge",
-        short: "Stärke sowie Ausrücke- und Eintreffzeit je Fahrzeug.",
+        short: "Stärke sowie Ausrücken und Eintreffen (Uhrzeit) je Fahrzeug.",
         text: () => `Je Fahrzeug (${helpList(config.vehicles)} – in der Reihenfolge der Einsatzübersicht): Stärke, Uhrzeit Ausrücken und Eintreffen sowie die daraus berechneten Minuten.${Object.entries(config.substitutes).map(([sub, block]) => ` ${esc(sub)} wird bei eigener Besatzung als Ersatz im Block ${esc(block)} eingetragen.`).join("")} Grau = nicht im Einsatz.`,
       },
       warnings: {
@@ -135,13 +135,13 @@ const HELP_SECTIONS = [
       attendance: {
         title: "Anwesenheit",
         short: "Alle Personen laut Anwesenheitsliste des Berichts.",
-        text: "Personen aus der Anwesenheitsliste des Berichts, mit Fahrzeug und Funktion. Namen werden mit den bekannten Kameraden abgeglichen; unbekannte Namen sind markiert und werden beim Übernehmen als neue Kameraden angelegt. Beim Bearbeiten und in der Vorschau trägt ein Klick auf einen Namen die Person als EHF ein; der EHF ist dunkelrot hervorgehoben.",
+        text: "Personen aus der Anwesenheitsliste des Berichts, mit Fahrzeug und Funktion. Namen werden mit den bekannten Personen abgeglichen; unbekannte Namen sind markiert und werden beim Übernehmen als neue Personen angelegt. Beim Bearbeiten und in der Vorschau trägt ein Klick auf einen Namen die Person als Einheitsführung ein; die Einheitsführung ist dunkelrot hervorgehoben.",
       },
     },
   },
   {
     id: "sec_evaluation",
-    title: "Auswertung",
+    title: "Einsatzgeschehen",
     intro: "Alle Werte beziehen sich auf das oben rechts gewählte Jahr. Jedes Diagramm lässt sich über „Tabelle“ als Zahlentabelle anzeigen.",
     entries: {
       history: {
@@ -161,13 +161,13 @@ const HELP_SECTIONS = [
       },
       staff_hours: {
         title: "Personalstunden",
-        short: "Einsatzdauer × anwesende Kameraden, über alle Einsätze.",
+        short: "Einsatzdauer × anwesende Personen, über alle Einsätze.",
         text: "Für jeden Einsatz Dauer × Anzahl der Anwesenden, aufsummiert über das Jahr. Darunter steht die durchschnittliche Zahl Anwesender je Einsatz.",
       },
       response_plan: {
-        title: "Feuerwehrbedarfsplan Pos. 8.4",
-        short: "Anteil der Einsätze, bei denen das erste Fahrzeug rechtzeitig eintraf.",
-        text: () => `Berücksichtigt werden Einsätze ab Alarmstufe ${config.plan_min_level} (Stichwort x${config.plan_min_level}–x4) in ${helpList(config.plan_places)} mit Eintreffzeit. Erreichungsgrad = Anteil der Einsätze, bei denen das erste Fahrzeug innerhalb der Zeitgrenze (${helpLimits()} Minuten) eingetroffen ist – getrennt nach den vier Zeitfenstern Werktag/Wochenende × Tag/Nacht. Die Stärken sind Mittelwerte je Einsatz. Den Bedarfsplan sehen zunächst nur Wehrführer und Wehrleiter; mit „für alle freigegeben“ (oder in der Verwaltung unter „Orte & Bedarfsplan“) sehen ihn alle Rollen der Wehr.`,
+        title: "Eintreffen und verfügbare Kräfte",
+        short: "Anteil der Einsätze, bei denen das erste eigene Fahrzeug rechtzeitig eintraf.",
+        text: () => `Berücksichtigt werden Einsätze ab Alarmstufe ${config.plan_min_level} (Stichwort x${config.plan_min_level}–x4) in ${helpList(config.plan_places)} mit Eintreffzeit. Eintreffquote = Anteil der Einsätze, bei denen das erste Fahrzeug innerhalb der Zeitgrenze (${helpLimits()} Minuten) eingetroffen ist – getrennt nach den vier Zeitfenstern Werktag/Wochenende × Tag/Nacht. Die Stärken sind Mittelwerte je Einsatz. <b>Was die Auswertung nicht aussagt:</b> Sie misst, ob das erste eigene Fahrzeug rechtzeitig eintraf, und zählt die Personen der Fahrzeuge. Funktionen, Ausrüstung und Qualifikation (z. B. Staffel 1/5/6, Gruppe 1/8/9 nach FwDV 3) prüft sie nicht; sie ist daher eine Eintreffquote, kein vollständiger Nachweis eines Schutzziels und kein Feuerwehrbedarfsplan. Die Zeitgrenze richtet sich nach den Einstellungen der Wehr (seit 26.09.2025 nennt die Feuerwehrverordnung RLP zehn statt acht Minuten Einsatzgrundzeit); wer Jahre vergleicht, sollte dieselbe Grenze wählen. Zunächst sehen die Auswertung nur Wehrführer und Wehrleiter; mit „für alle freigegeben“ (oder in den Einstellungen unter „Orte & Zeitgrenzen“) sehen sie alle Rollen der Wehr.`,
       },
       alarm_level: {
         title: "Alarmstufen",
@@ -182,7 +182,68 @@ const HELP_SECTIONS = [
       participations: {
         title: "Einsätze und Beteiligungen (alle Wehren)",
         short: "Große Zahl: Einsätze ohne Doppelte. Beteiligungen: Summe der Einsätze aller Wehren.",
-        text: "In der Gesamtansicht einer Verbandsgemeinde zählt ein Einsatz, an dem mehrere Wehren beteiligt waren, bei jeder Wehr (Beteiligungen). Die große Zahl zählt ihn nur einmal: Einsätze mit demselben Stammdatensatz im BKS-Portal oder derselben Einsatznummer der Leitstelle gelten als ein Einsatz. Einsätze ohne beides (z. B. aus der früheren Excel-Übersicht) zählen einzeln. Alle übrigen Kennzahlen und Diagramme summieren die Beteiligungen; der Bedarfsplan wertet jede Wehr mit ihren eigenen Orten aus. Über die Schaltflächen oben lässt sich die Auswertung auf einzelne Wehren einschränken.",
+        text: "In der Gesamtansicht einer Verbandsgemeinde zählt ein Einsatz, an dem mehrere Wehren beteiligt waren, bei jeder Wehr (Beteiligungen). Die große Zahl zählt ihn nur einmal: Einsätze mit demselben Stammdatensatz im BKS-Portal oder derselben Einsatznummer der Leitstelle gelten als ein Einsatz. Einsätze ohne beides (z. B. aus der früheren Excel-Übersicht) zählen einzeln. Alle übrigen Kennzahlen und Diagramme summieren die Beteiligungen; die Auswertung „Eintreffen und verfügbare Kräfte“ wertet jede Wehr mit ihren eigenen Orten aus. Über die Schaltflächen oben lässt sich die Auswertung auf einzelne Wehren einschränken.",
+      },
+    },
+  },
+  {
+    id: "sec_overview",
+    title: "Übersicht",
+    intro: "Der Einstieg: Jahreskennzahlen, was noch zu tun ist und wie vollständig die Daten sind.",
+    entries: {
+      overview_tasks: {
+        title: "Offene Aufgaben",
+        short: "Einsätze mit Prüfhinweisen oder fehlenden Angaben, dazu Hinweise an die Wehr.",
+        text: "Hier stehen Einsätze des gewählten Jahres, die Aufmerksamkeit brauchen: Einsätze mit aktuellen Prüfhinweisen und Einsätze, denen eine Angabe fehlt (Einsatzdauer, Ausrücken, Eintreffen, Besatzung, Anwesenheit, Einheitsführung). Ein Klick öffnet die Einsatzliste mit genau diesem Filter. Hinweise an die Wehr (z. B. ein von anderen eingelesener Bericht) lassen sich hier einblenden.",
+      },
+      data_coverage: {
+        title: "Datenvollständigkeit",
+        short: "Für wie viele Einsätze liegt eine Angabe vor? Fehlendes ist nicht null.",
+        text: "Zeigt je Angabe, für wie viele Einsätze des Jahres sie vorliegt. Einsätze ohne Angabe gehen nicht als Null in Durchschnitte ein, sondern fehlen in der jeweiligen Kennzahl – die Kennzahlen nennen deshalb ihre Fallzahl („42 von 57 Einsätzen auswertbar“). „Besatzung“ heißt: Mindestens ein eigenes Fahrzeug oder Personen im Gerätehaus sind mit Stärke erfasst.",
+      },
+    },
+  },
+  {
+    id: "sec_times",
+    title: "Zeiten & Kräfte",
+    intro: "Wo entsteht die Zeit zwischen Alarmierung und Hilfe – und wie viele Kräfte sind wann vor Ort? Gerechnet wird aus allen Einsätzen des Jahres, nicht nur aus denen des Ausrückebereichs. Wie „Eintreffen und verfügbare Kräfte“ ist die Auswertung nur sichtbar, wenn sie freigegeben ist.",
+    entries: {
+      time_distribution: {
+        title: "Median und 90. Perzentil",
+        short: "Median: die Hälfte war schneller. 90 %: neun von zehn waren höchstens so langsam.",
+        text: "Der <b>Median</b> ist der mittlere Wert – die Hälfte der Einsätze war schneller, die Hälfte langsamer. Das <b>90. Perzentil</b> sagt, wie lang es in neun von zehn Fällen höchstens dauerte; es zeigt die Verlässlichkeit besser als der Durchschnitt, den einzelne Ausreißer verzerren. Berechnet wird das Perzentil nach dem Rangverfahren (nächster Rang). <b>Fälle</b> nennt, für wie viele Einsätze bzw. Fahrzeuge der Wert vorliegt.",
+      },
+      travel_min: {
+        title: "Anfahrtdauer je Fahrzeug",
+        short: "Minuten vom Ausrücken bis zum Eintreffen desselben Fahrzeugs.",
+        text: "Für jedes eigene Fahrzeug: Eintreffen minus Ausrücken <i>desselben</i> Fahrzeugs. Nicht gerechnet wird vom frühesten Ausrücken eines Fahrzeugs bis zur Ankunft eines anderen. Fahrzeuge ohne beide Zeiten oder mit unplausibler Reihenfolge (Eintreffen vor Ausrücken) fehlen und sind in „Fälle“ nicht enthalten. So lässt sich trennen: Personal sammeln (Ausrückdauer) oder Fahrt (Anfahrtdauer).",
+      },
+      build_up: {
+        title: "Kräfteaufbau nach Alarmierung",
+        short: "Ø Personen der bis dahin eingetroffenen eigenen Fahrzeuge nach 5, 10, 15 Minuten.",
+        text: () => `Für jeden Einsatz mit Eintreffzeit die Besatzung aller eigenen Fahrzeuge, die nach 5, 10 und 15 Minuten (sowie ${helpLimits()} und ${config.second_limit} Minuten) nach Einsatzbeginn eingetroffen waren; angezeigt wird der Durchschnitt. Das sind Personen, keine taktischen Einheiten: Funktionen, Ausrüstung und Qualifikation (z. B. Staffel 1/5/6, Gruppe 1/8/9 nach FwDV 3) sind nicht erfasst.`,
+      },
+      time_groups: {
+        title: "Zeiten nach Tageszeit und Ort",
+        short: "Median und 90. Perzentil je Zeitfenster und Einsatzgebiet; kleine Fallzahlen sind gekennzeichnet.",
+        text: "Dieselben Zeiten, gruppiert nach Werktag/Wochenende × Tag/Nacht und nach Einsatzgebiet. Gruppen mit weniger als 5 Einsätzen sind als „wenige Fälle“ gekennzeichnet; ihre Werte schwanken stark und sagen wenig über ein Muster aus.",
+      },
+    },
+  },
+  {
+    id: "sec_load",
+    title: "Belastung",
+    intro: "Was hinter der reinen Zahl der Einsätze steckt: Dauer, Nachtstunden und gleichzeitige Einsätze.",
+    entries: {
+      workload: {
+        title: "Lange und nächtliche Einsätze",
+        short: "Einsätze ab zwei Stunden Dauer, in der Nacht und an Wochenenden/Feiertagen mit Stunden.",
+        text: () => `<b>Lang</b> sind Einsätze ab zwei Stunden (Alarm bis Einsatzende). <b>Nachts</b> sind Einsätze mit Beginn außerhalb der Tagesstunden (${helpDay().join("–")} Uhr gilt als Tag). <b>Samstag, Sonntag, Feiertag</b> wie im Einsatzgeschehen. Ein Einsatz kann in mehreren Zeilen vorkommen. Die Personalstunden beruhen auf der erfassten Anwesenheit; fehlt sie, fehlen die Stunden (die Zeile nennt, für wie viele Einsätze sie vorliegen) – sie sind keine Stempelzeiten, sondern Einsatzdauer × Anwesende.`,
+      },
+      overlaps: {
+        title: "Zeitliche Überschneidung",
+        short: "Wann waren mehrere Einsätze gleichzeitig offen? Das belegt keine gebundenen Kräfte.",
+        text: "Zählt Einsätze der Wehr, deren Zeitraum (Beginn bis Ende) sich mit einem anderen überschneidet, die höchste Zahl gleichzeitig offener Einsätze und die Zeit mit mindestens zwei offenen Einsätzen. Berührt das Ende eines Einsatzes genau den Beginn des nächsten, gilt das nicht als Überschneidung. Offen heißt nicht, dass dieselben Fahrzeuge oder Personen gebunden waren; die tatsächliche Bindung ist aus den Berichten nicht vollständig belegt. In der Gesamtansicht einer Verbandsgemeinde wird je Wehr gerechnet und addiert.",
       },
     },
   },
@@ -215,18 +276,18 @@ const HELP_SECTIONS = [
   },
   {
     id: "sec_members",
-    title: "Kameraden",
-    intro: "Anwesenheit je Kamerad im gewählten Jahr. Spaltenköpfe anklicken zum Sortieren.",
+    title: "Einsatzteilnahmen",
+    intro: "Anwesenheit je Person im gewählten Jahr. Spaltenköpfe anklicken zum Sortieren.",
     entries: {
       participation: {
         title: "Beteiligung",
-        short: "Anteil der Einsätze des Jahres, bei denen der Kamerad anwesend war.",
-        text: "Einsätze des Kameraden geteilt durch alle Einsätze des Jahres.",
+        short: "Anteil der Einsätze des Jahres, bei denen die Person anwesend war.",
+        text: "Einsätze der Person geteilt durch alle Einsätze des Jahres.",
       },
       hours: {
         title: "Stunden",
         short: "Summe der Einsatzdauer aller Einsätze mit Teilnahme.",
-        text: "Summe der Einsatzdauer aller Einsätze, bei denen der Kamerad in der Anwesenheit steht.",
+        text: "Summe der Einsatzdauer aller Einsätze, bei denen die Person in der Anwesenheit steht.",
       },
       nights_weekends: {
         title: "nachts / Sa/So/FT",
@@ -248,7 +309,7 @@ const HELP_SECTIONS = [
       list_filters: {
         title: "Filter und Links",
         short: "Filter, Suche und Sortierung stehen in der Adresse – Link kopieren und weitergeben.",
-        text: "Kategorie, Suche, Sortierung und der Filter <b>Prüfhinweise</b> (nur Einsätze mit aktuellen Prüfhinweisen, z. B. ohne Eintreffzeit oder Anwesenheit) stehen in der Adresse der Seite: Sie bleiben beim Neuladen erhalten, und ein kopierter Link zeigt anderen dieselbe Liste. In der <b>Auswertung</b> öffnet ein Klick auf einen Balken, eine Säule oder die Zahlen im Bedarfsplan die passenden Einsätze; der Filter steht dann als Chip über der Liste und lässt sich mit × entfernen. Spaltenköpfe mit ▾/▴ sortieren die Liste. Kategorie, Sortierung und Tabellen-/Diagrammansicht merkt sich der Browser.",
+        text: "Kategorie, Suche, Sortierung und der Filter <b>Prüfhinweise</b> (nur Einsätze mit aktuellen Prüfhinweisen, z. B. ohne Eintreffzeit oder Anwesenheit) stehen in der Adresse der Seite: Sie bleiben beim Neuladen erhalten, und ein kopierter Link zeigt anderen dieselbe Liste. In der <b>Auswertung</b> öffnet ein Klick auf einen Balken, eine Säule oder die Zahlen in „Eintreffen und verfügbare Kräfte“ die passenden Einsätze; der Filter steht dann als Chip über der Liste und lässt sich mit × entfernen. Spaltenköpfe mit ▾/▴ sortieren die Liste. Kategorie, Sortierung und Tabellen-/Diagrammansicht merkt sich der Browser.",
       },
       undo_delete: {
         title: "Löschen rückgängig machen",
@@ -280,17 +341,17 @@ const HELP_SECTIONS = [
       admin_fleet: {
         title: "Fahrzeuge",
         short: "Fahrzeugblöcke der Einsatzübersicht mit Dienstzeitraum.",
-        text: "Jedes Fahrzeug ist ein Block der Einsatzübersicht (Stärke, Ausrücken, Eintreffen). Der <b>Funkrufname</b> wird genau so eingetragen, wie er im BKS-Bericht steht, z. B. „FL NR#.ABC 02/45-01“ oder „RP WW 01/23-06“ für ein Fahrzeug des Landes am Standort. Darüber ordnet die App die Fahrzeuge eines Berichts zu; zur Auswahl stehen die Namen aus bisher eingelesenen Berichten der VG. Darunter steht die Auflösung nach dem Funkrufnamenverzeichnis RLP (Kennung, Standort, Kennzahl = Fahrzeugart, laufende Nummer) und der Block, unter dem das Fahrzeug in Einsätzen und im Excel-Export erscheint (z. B. 02/45). Der <b>Fahrzeugtyp</b> ist die Grundlage für den Kostenersatz und muss so heißen wie in der Gebührenordnung (z. B. HLF 20). Zur Auswahl stehen die Typen, die die Kennzahl laut Verzeichnis haben kann, und die Typen der Gebührenordnung. Vorbelegt wird er, wenn nur einer davon in Frage kommt; sonst steht der Hinweis „laut Kennzahl: …“ darunter. Jedes Fahrzeug kann nur einmal in der Liste stehen – für einen alten Eintrag wie 02/45 den Funkrufnamen dort eintragen statt ihn neu hinzuzufügen. <b>Im Dienst ab / außer Dienst ab</b> begrenzen, wann ein Fahrzeug beim Einlesen zugeordnet und als Spalte im Excel-Export des Jahres angezeigt wird – ein ausgemustertes Fahrzeug muss so nicht gelöscht werden, alte Einsätze bleiben vollständig. <b>Ersetzt durch</b> hält fest, welches Fahrzeug nachfolgt. Ohne Haken bei <b>Bedarfsplan</b> zählt die Besatzung nicht zur Gesamtstärke des Bedarfsplans. Eigene Fahrzeuge, die in einem Bericht vorkommen, aber noch fehlen, werden beim Übernehmen automatisch angefügt.",
+        text: "Jedes Fahrzeug ist ein Block der Einsatzübersicht (Stärke, Ausrücken, Eintreffen). Der <b>Funkrufname</b> wird genau so eingetragen, wie er im BKS-Bericht steht, z. B. „FL NR#.ABC 02/45-01“ oder „RP WW 01/23-06“ für ein Fahrzeug des Landes am Standort. Darüber ordnet die App die Fahrzeuge eines Berichts zu; zur Auswahl stehen die Namen aus bisher eingelesenen Berichten der VG. Darunter steht die Auflösung nach dem Funkrufnamenverzeichnis RLP (Kennung, Standort, Kennzahl = Fahrzeugart, laufende Nummer) und der Block, unter dem das Fahrzeug in Einsätzen und im Excel-Export erscheint (z. B. 02/45). Der <b>Fahrzeugtyp</b> ist die Grundlage für den Kostenersatz und muss so heißen wie in der Gebührenordnung (z. B. HLF 20). Zur Auswahl stehen die Typen, die die Kennzahl laut Verzeichnis haben kann, und die Typen der Gebührenordnung. Vorbelegt wird er, wenn nur einer davon in Frage kommt; sonst steht der Hinweis „laut Kennzahl: …“ darunter. Jedes Fahrzeug kann nur einmal in der Liste stehen – für einen alten Eintrag wie 02/45 den Funkrufnamen dort eintragen statt ihn neu hinzuzufügen. <b>Im Dienst ab / außer Dienst ab</b> begrenzen, wann ein Fahrzeug beim Einlesen zugeordnet und als Spalte im Excel-Export des Jahres angezeigt wird – ein ausgemustertes Fahrzeug muss so nicht gelöscht werden, alte Einsätze bleiben vollständig. <b>Ersetzt durch</b> hält fest, welches Fahrzeug nachfolgt. Ohne Haken bei <b>Gesamtstärke</b> zählt die Besatzung nicht zur Gesamtstärke in „Eintreffen und verfügbare Kräfte“. Eigene Fahrzeuge, die in einem Bericht vorkommen, aber noch fehlen, werden beim Übernehmen automatisch angefügt.",
       },
       admin_vg_vehicles: {
         title: "Fahrzeuge der VG",
         short: "Alle Fahrzeuge aller Wehren der VG in einer Tabelle.",
-        text: "Bei gewählter Wehrleitung stehen hier die Fahrzeuglisten aller Wehren der VG untereinander, mit denselben Spalten wie bei einer Wehr (Funkrufname, Fahrzeugtyp, Dienstzeitraum, Nachfolger, Bedarfsplan, Reihenfolge, Ersatzfahrzeuge). Über die Spalte <b>Wehr</b> wechselt ein Fahrzeug die Wehr – nur deren Berichte ordnen es als eigenes Fahrzeug zu (Einsatzbeginn, Kostenersatz). Die bisherigen Einsätze mit seinen Daten bleiben bei der alten Wehr unverändert; dort erscheint es nur nicht mehr als Spalte. Darunter stehen die Funkrufnamen aus eingelesenen Berichten, die noch keiner Wehr gehören (weitere wie Rettungsdienst oder Fahrzeuge des Landes aufklappbar). Gespeichert wird alles mit einem Klick; hat sich eine Liste inzwischen geändert (z. B. durch einen Import), bitte neu laden.",
+        text: "Bei gewählter Verbandsgemeinde stehen hier die Fahrzeuglisten aller Wehren der VG untereinander, mit denselben Spalten wie bei einer Wehr (Funkrufname, Fahrzeugtyp, Dienstzeitraum, Nachfolger, Gesamtstärke, Reihenfolge, Ersatzfahrzeuge). Über die Spalte <b>Wehr</b> wechselt ein Fahrzeug die Wehr – nur deren Berichte ordnen es als eigenes Fahrzeug zu (Einsatzbeginn, Kostenersatz). Die bisherigen Einsätze mit seinen Daten bleiben bei der alten Wehr unverändert; dort erscheint es nur nicht mehr als Spalte. Darunter stehen die Funkrufnamen aus eingelesenen Berichten, die noch keiner Wehr gehören (weitere wie Rettungsdienst oder Fahrzeuge des Landes aufklappbar). Gespeichert wird alles mit einem Klick; hat sich eine Liste inzwischen geändert (z. B. durch einen Import), bitte neu laden.",
       },
       admin_vg_defaults: {
         title: "Vorgaben der VG",
         short: "Einstellungen, die für alle Wehren der VG gelten.",
-        text: "Bei gewählter Wehrleitung legen <b>Allgemein</b>, <b>BKS-Kennung</b> und <b>Orte & Bedarfsplan</b> die Vorgaben für alle Wehren der VG fest: Farben, Kennung im BKS-Bericht, FEZ, Nummerierung, Orte, Alarmstufe, Zeitgrenzen und Tagesstunden. Je Wehr kommen ihr Standort und ihr Ausrückebereich dazu. Eine neue Wehr übernimmt alle Vorgaben. Eine Wehr kann bei sich abweichen – bei gewählter Wehr steht an jedem Wert „von der VG“ oder „abweichend von der VG“ mit „VG-Wert übernehmen“. Abweichungen sind in der Wehrleitung unter dem jeweiligen Wert aufgeführt; ändert die VG ihre Vorgabe auf denselben Wert, entfällt die Abweichung.",
+        text: "Bei gewählter Verbandsgemeinde legen <b>Allgemein</b>, <b>BKS-Kennung</b> und <b>Orte & Zeitgrenzen</b> die Vorgaben für alle Wehren der VG fest: Farben, Kennung im BKS-Bericht, FEZ, Nummerierung, Orte, Alarmstufe, Zeitgrenzen und Tagesstunden. Je Wehr kommen ihr Standort und ihr Ausrückebereich dazu. Eine neue Wehr übernimmt alle Vorgaben. Eine Wehr kann bei sich abweichen – bei gewählter Wehr steht an jedem Wert „von der VG“ oder „abweichend von der VG“ mit „VG-Wert übernehmen“. Abweichungen sind in der Verbandsgemeinde unter dem jeweiligen Wert aufgeführt; ändert die VG ihre Vorgabe auf denselben Wert, entfällt die Abweichung.",
       },
       admin_bks: {
         title: "BKS-Kennung",
@@ -298,14 +359,14 @@ const HELP_SECTIONS = [
         text: "<b>Kennung der VG</b> (gilt für alle Wehren der VG) und <b>Standort</b> der Wehr ergeben die Einheit aus der Kopfzeile des Berichts, z. B. „FW NR#.ABC 02“. Darüber werden Berichte der richtigen Wehr zugeordnet, und daraus ergeben sich die Funkrufnamen: „FL NR#.ABC 02/…“ sind eigene Fahrzeuge (deren früheste Alarmierung ist der Einsatzbeginn), „FL NR#.ABC …“ Fahrzeuge der übrigen Wehren der VG. Fahrzeuge der Fahrzeugliste zählen immer als eigene, auch mit anderem Funkrufnamen (z. B. „RP WW …“). <b>FEZ-Kennung</b>: die Feuerwehreinsatzzentrale, deren Einsatzende mitzählt. Ins <b>Testfeld</b> passt beliebiger Text aus einem Bericht – einzelne Funkrufnamen, Zeilen der Fahrzeugtabelle oder der ganze Bericht; die App zeigt, wie sie jedes gefundene Fahrzeug zuordnet.",
       },
       admin_places: {
-        title: "Orte und Bedarfsplan",
-        short: "Einsatzgebiete und Ausrückebereich des Feuerwehrbedarfsplans.",
-        text: "Ein Einsatz gehört zu dem Ort, mit dessen <b>Namen</b> der Einsatzort beginnt (z. B. „Musterstadt-Nord“ → Musterstadt, Groß-/Kleinschreibung egal). Nur Orte mit Haken bei <b>Bedarfsplan</b> zählen für den Erreichungsgrad. Dazu kommen die Mindest-Alarmstufe, die Zeitgrenzen (mehrere möglich, z. B. 8 und 10 Minuten), die zweite Grenze für „Stärke nach … Min.“ und die Stunden, die als Tag gelten. Orte und Bedarfsplan gibt die Wehrleitung für alle Wehren der VG vor; dort setzt sie auch je Wehr die Haken des Ausrückebereichs.",
+        title: "Orte und Zeitgrenzen",
+        short: "Einsatzgebiete und Ausrückebereich für „Eintreffen und verfügbare Kräfte“.",
+        text: "Ein Einsatz gehört zu dem Ort, mit dessen <b>Namen</b> der Einsatzort beginnt (z. B. „Musterstadt-Nord“ → Musterstadt, Groß-/Kleinschreibung egal). Nur Orte mit Haken bei <b>Ausrückebereich</b> zählen für „Eintreffen und verfügbare Kräfte“. Dazu kommen die Mindest-Alarmstufe, die Zeitgrenzen (mehrere möglich, z. B. 8 und 10 Minuten), die zweite Grenze für „Stärke nach … Min.“ und die Stunden, die als Tag gelten. Orte und Zeitgrenzen gibt die Verbandsgemeinde für alle Wehren der VG vor; dort setzt sie auch je Wehr die Haken des Ausrückebereichs.",
       },
       admin_keywords: {
         title: "Stichwortkatalog",
         short: "Stichworte der AAO für die Suche im Feld Stichwort.",
-        text: "Den Katalog pflegt die Wehrleitung für alle Wehren der VG; Standard ist die Vorlage der AAO. Bei gewählter Wehr zeigt die Spalte <b>Herkunft</b>, was von der VG kommt. Eine Wehr kann abweichen: Haken <b>gilt hier</b> entfernen (Stichwort gilt in dieser Wehr nicht), Bezeichnung oder Suchbegriffe ändern oder eigene Stichworte ergänzen; ↺ hebt eine Abweichung wieder auf. In der Wehrleitung steht je Stichwort, welche Wehren abweichen. <b>Deaktivierte</b> Stichworte erscheinen nicht mehr in der Suche, alte Einsätze behalten aber ihre Bezeichnung. Ein ganzer Katalog lässt sich als CSV oder Excel (Stichwort, Bezeichnung, Suchbegriffe) einlesen – vorher zeigt die App, was neu ist oder sich ändert.",
+        text: "Den Katalog pflegt die Verbandsgemeinde für alle Wehren der VG; Standard ist die Vorlage der AAO. Bei gewählter Wehr zeigt die Spalte <b>Herkunft</b>, was von der VG kommt. Eine Wehr kann abweichen: Haken <b>gilt hier</b> entfernen (Stichwort gilt in dieser Wehr nicht), Bezeichnung oder Suchbegriffe ändern oder eigene Stichworte ergänzen; ↺ hebt eine Abweichung wieder auf. In der Verbandsgemeinde steht je Stichwort, welche Wehren abweichen. <b>Deaktivierte</b> Stichworte erscheinen nicht mehr in der Suche, alte Einsätze behalten aber ihre Bezeichnung. Ein ganzer Katalog lässt sich als CSV oder Excel (Stichwort, Bezeichnung, Suchbegriffe) einlesen – vorher zeigt die App, was neu ist oder sich ändert.",
       },
       dpa: {
         title: "Auftragsverarbeitung (AVV)",
@@ -320,12 +381,12 @@ const HELP_SECTIONS = [
       admin_roles: {
         title: "Rollen",
         short: "Welche Rolle welche Rechte hat – als Übersicht.",
-        text: "Startbestand: <b>Benutzer</b> (nur Auswertung, ohne Namen) → <b>Erfasser</b> (erbt Benutzer; Einsätze, Anwesenheit und Kameraden, Berichte einlesen, bearbeiten) → <b>Wehrführer</b> (erbt Erfasser; Verwaltung der Wehr, vergibt Erfasser und Benutzer). Für die VG: <b>Statistik VG</b> (z. B. Bürgermeister: Auswertung aller Wehren, ohne Namen) → <b>Wehrleiter</b> (erbt Statistik VG; Einsätze und Verwaltung aller Wehren, Prüfprotokoll, Gebührenordnung, vergibt alle Rollen, pflegt eigene Rollen der VG – sieht aber keine Anwesenheit). Der Wehrleiter kann eigene Rollen für seine VG anlegen, der Superadmin Rollen für alle VGs. Die Tabelle zeigt ● eigene und ○ geerbte Rechte.",
+        text: "Startbestand: <b>Benutzer</b> (nur Auswertung, ohne Namen) → <b>Erfasser</b> (erbt Benutzer; Einsätze, Anwesenheit und Personal, Berichte einlesen, bearbeiten) → <b>Wehrführer</b> (erbt Erfasser; Verwaltung der Wehr, vergibt Erfasser und Benutzer). Für die VG: <b>Statistik VG</b> (z. B. Bürgermeister: Auswertung aller Wehren, ohne Namen) → <b>Wehrleiter</b> (erbt Statistik VG; Einsätze und Verwaltung aller Wehren, Prüfprotokoll, Gebührenordnung, vergibt alle Rollen, pflegt eigene Rollen der VG – sieht aber keine Anwesenheit). Der Wehrleiter kann eigene Rollen für seine VG anlegen, der Superadmin Rollen für alle VGs. Die Tabelle zeigt ● eigene und ○ geerbte Rechte.",
       },
       admin_role_editor: {
         title: "Rolle bearbeiten",
         short: "Bezeichnung, Bereich, Vererbung, Rechte und Verteilung einer Rolle.",
-        text: "<b>Bereich</b>: Rolle einer Wehr oder der VG (gilt dann in allen Wehren der VG); er lässt sich nach dem Anlegen nicht ändern. <b>Gilt in</b>: eigene Rolle einer VG oder (nur Superadmin) in allen VGs. <b>Erbt von</b>: die Rolle bekommt alle Rechte und die Verteilung der gewählten Rolle dazu – Änderungen dort wirken mit. Geerbte Rechte lassen sich nicht abwählen; für weniger Rechte von einer kleineren Rolle erben (z. B. Benutzer statt Erfasser). Ein Recht, das ein anderes voraussetzt, setzt dieses mit. <b>Leitplanken</b>: Anwesenheit und Kameraden gibt es nur für Rollen einer Wehr; Gesamtansicht, Prüfprotokoll, Gebühren und Rollenpflege nur für Rollen der VG. Systemrollen ändert nur der Superadmin, Rollen, die man selbst hat (auch über Vererbung), ändert jemand anderes. Löschen lässt sich eine Rolle erst, wenn sie niemand mehr hat und keine Rolle von ihr erbt. Änderungen gelten sofort.",
+        text: "<b>Bereich</b>: Rolle einer Wehr oder der VG (gilt dann in allen Wehren der VG); er lässt sich nach dem Anlegen nicht ändern. <b>Gilt in</b>: eigene Rolle einer VG oder (nur Superadmin) in allen VGs. <b>Erbt von</b>: die Rolle bekommt alle Rechte und die Verteilung der gewählten Rolle dazu – Änderungen dort wirken mit. Geerbte Rechte lassen sich nicht abwählen; für weniger Rechte von einer kleineren Rolle erben (z. B. Benutzer statt Erfasser). Ein Recht, das ein anderes voraussetzt, setzt dieses mit. <b>Leitplanken</b>: Anwesenheit und Personal gibt es nur für Rollen einer Wehr; Gesamtansicht, Prüfprotokoll, Gebühren und Rollenpflege nur für Rollen der VG. Systemrollen ändert nur der Superadmin, Rollen, die man selbst hat (auch über Vererbung), ändert jemand anderes. Löschen lässt sich eine Rolle erst, wenn sie niemand mehr hat und keine Rolle von ihr erbt. Änderungen gelten sofort.",
       },
       admin_role_grants: {
         title: "Verteilung",
@@ -346,18 +407,18 @@ const HELP_SECTIONS = [
     entries: {
       perm_stats_view: {
         title: "Auswertung ansehen",
-        short: "Kennzahlen, Diagramme und Bedarfsplan (wenn freigegeben) – ohne Namen.",
-        text: "Kennzahlen, Diagramme und Bedarfsplan (wenn freigegeben) – ohne Namen.",
+        short: "Kennzahlen, Diagramme und „Eintreffen und verfügbare Kräfte“ (wenn freigegeben) – ohne Namen.",
+        text: "Kennzahlen, Diagramme und „Eintreffen und verfügbare Kräfte“ (wenn freigegeben) – ohne Namen.",
       },
       perm_plan_view: {
-        title: "Bedarfsplan ohne Freigabe sehen",
-        short: "Der Bedarfsplan einer Wehr ist sichtbar, auch solange die Wehr ihn nicht für alle freigegeben hat.",
-        text: "Der Bedarfsplan einer Wehr ist sichtbar, auch solange die Wehr ihn nicht für alle freigegeben hat.",
+        title: "Eintreffen und Kräfte ohne Freigabe sehen",
+        short: "Die Auswertung „Eintreffen und verfügbare Kräfte“ einer Wehr ist sichtbar, auch solange die Wehr sie nicht für alle freigegeben hat.",
+        text: "Die Auswertung „Eintreffen und verfügbare Kräfte“ einer Wehr ist sichtbar, auch solange die Wehr sie nicht für alle freigegeben hat.",
       },
       perm_plan_release: {
-        title: "Bedarfsplan freigeben",
-        short: "Schalter „Bedarfsplan für alle“ in der Auswertung bzw. unter Orte & Bedarfsplan.",
-        text: "Schalter „Bedarfsplan für alle“ in der Auswertung bzw. unter Orte & Bedarfsplan.",
+        title: "Eintreffen und Kräfte freigeben",
+        short: "Schalter „für alle freigegeben“ in der Auswertung bzw. unter Orte & Zeitgrenzen.",
+        text: "Schalter „für alle freigegeben“ in der Auswertung bzw. unter Orte & Zeitgrenzen.",
       },
       perm_incidents_view: {
         title: "Einsätze ansehen",
@@ -366,8 +427,8 @@ const HELP_SECTIONS = [
       },
       perm_incidents_export: {
         title: "Excel-Export",
-        short: "Einsatzübersicht als Excel; die Anwesenheit nur mit dem Recht „Anwesenheit und Kameraden sehen“.",
-        text: "Einsatzübersicht als Excel; die Anwesenheit nur mit dem Recht „Anwesenheit und Kameraden sehen“.",
+        short: "Einsatzübersicht als Excel; die Anwesenheit nur mit dem Recht „Anwesenheit und Personal sehen“.",
+        text: "Einsatzübersicht als Excel; die Anwesenheit nur mit dem Recht „Anwesenheit und Personal sehen“.",
       },
       perm_reports_import: {
         title: "Berichte einlesen",
@@ -385,14 +446,14 @@ const HELP_SECTIONS = [
         text: "Einen Einsatz endgültig entfernen.",
       },
       perm_people_view: {
-        title: "Anwesenheit und Kameraden sehen",
-        short: "Namen der Kameraden, Anwesenheit je Einsatz und Reiter Kameraden. Nur für Rollen einer Wehr.",
-        text: "Namen der Kameraden, Anwesenheit je Einsatz und Reiter Kameraden. Nur für Rollen einer Wehr.",
+        title: "Anwesenheit und Personal sehen",
+        short: "Namen der Personen, Anwesenheit je Einsatz und Reiter Personal. Nur für Rollen einer Wehr.",
+        text: "Namen der Personen, Anwesenheit je Einsatz und Reiter Personal. Nur für Rollen einer Wehr.",
       },
       perm_people_edit: {
         title: "Anwesenheit bearbeiten",
-        short: "Anwesenheit eines Einsatzes ändern und Kameraden ergänzen. Nur für Rollen einer Wehr.",
-        text: "Anwesenheit eines Einsatzes ändern und Kameraden ergänzen. Nur für Rollen einer Wehr.",
+        short: "Anwesenheit eines Einsatzes ändern und Personen ergänzen. Nur für Rollen einer Wehr.",
+        text: "Anwesenheit eines Einsatzes ändern und Personen ergänzen. Nur für Rollen einer Wehr.",
       },
       perm_tenant_settings: {
         title: "Einstellungen, Fahrzeuge, Farben und Logos",
@@ -406,8 +467,8 @@ const HELP_SECTIONS = [
       },
       perm_vg_overview: {
         title: "Gesamtansicht der VG",
-        short: "Auswahl „Wehrleitung“ oben: Auswertung aller Wehren der VG zusammen. Nur für Rollen der VG.",
-        text: "Auswahl „Wehrleitung“ oben: Auswertung aller Wehren der VG zusammen. Nur für Rollen der VG.",
+        short: "Auswahl „Verbandsgemeinde · …“ oben: Auswertung aller Wehren der VG zusammen. Nur für Rollen der VG.",
+        text: "Auswahl „Verbandsgemeinde · …“ oben: Auswertung aller Wehren der VG zusammen. Nur für Rollen der VG.",
       },
       perm_vg_records: {
         title: "Prüfprotokoll und Kostenersatz",
