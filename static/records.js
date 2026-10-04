@@ -11,6 +11,9 @@ const feeCalc = { record: null, request: null, result: null, error: "" };
 VIEWS.records = { label: "Berichte abgleichen", sub: "Berichte abgleichen", load: loadRecords, render: renderRecords, help: "records",
   visible: () => Boolean(config.vg && config.vg_permissions.includes("vg.records")) };
 
+VIEWS.fees = { label: "Kostenersatz", sub: "Kostenersatz", load: loadRecords, render: renderFeeList, help: "fees",
+  visible: () => Boolean(config.vg && config.vg_permissions.includes("vg.records")) };
+
 const NOTICE_KINDS = { import: "Eingelesen", deviation: "Abweichung", missing: "Bericht fehlt", pending: "Zur Übernahme" };
 const FINDING_KINDS = { vehicle: "Abweichung", keyword: "Stichwort", missing: "Bericht fehlt", unedited: "unbearbeitet",
   no_number: "ohne Nr." };
@@ -194,6 +197,27 @@ function renderRecords() {
     </div>
   </div>`;
 }
+
+// Kostenersatz als eigener Reiter: alle Einsätze mit Stammdatensatz, ein Klick öffnet die Berechnung
+function renderFeeList() {
+  const list = records.data.records.filter((e) => e.incidents.length);
+  const rows = list.map((entry) => `<tr class="row" data-fees="${esc(entry.record.bks_record_id)}">
+      <td>${formatDate(entry.started_at)}</td><td>${recordTitle(entry)}</td>
+      <td>${entry.incidents.map((i) => esc(i.tenant_name)).join(", ")}</td>
+      <td class="right"><button type="button" class="btn btn-primary btn-small" data-fees="${esc(entry.record.bks_record_id)}">Kostenersatz berechnen</button></td></tr>`).join("");
+  $("#view-fees").innerHTML = `<div class="card list-card">
+    <div class="toolbar no-print"><strong>Kostenersatz ${state.year}</strong>
+      <div class="toolbar-right">${helpButton("fees")}</div></div>
+    <p class="small muted">Einsatz wählen: Die Kosten werden nach der Gebührenordnung der VG über alle beteiligten Wehren berechnet und lassen sich drucken.</p>
+    <div class="table-wrap"><table class="table">
+      <thead><tr><th>Datum</th><th>Einsatz</th><th>Wehren</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+      ${list.length ? "" : `<p class="empty-note">Für ${state.year} sind keine Einsätze mit BKS-Stammdatensatz erfasst.</p>`}
+    </div></div>`;
+}
+$("#view-fees").addEventListener("click", (e) => {
+  const fees = e.target.closest("[data-fees]");
+  if (fees) openFees(fees.dataset.fees);
+});
 
 $("#view-records").addEventListener("click", async (e) => {
   const filter = e.target.closest("[data-records-filter]");

@@ -7,6 +7,7 @@ const CHANGELOG = [
   {
     date: "2026-10-04",
     items: [
+      "<b>Kostenersatz leichter finden:</b> Unter „Einsätze“ gibt es jetzt den eigenen Unterreiter <i>Kostenersatz</i> (Verbandsgemeinde-Ansicht). Dort einen Einsatz wählen und die Kosten berechnen – nicht mehr nur versteckt im aufgeklappten Einsatz unter „Berichte abgleichen“.",
       "<b>Neu geordnet:</b> Die Reiter heißen jetzt <i>Übersicht</i>, <i>Einsätze</i>, <i>Auswertungen</i>, <i>Personal</i> und <i>Einstellungen</i>. „Berichte abgleichen“ (früher Prüfprotokoll) ist ein Unterreiter von „Einsätze“, „Datenschutz &amp; Vertrag“ (früher Auftragsverarbeitung) steht unter „Einstellungen“. Die Auswahl oben heißt „Feuerwehr / Verbandsgemeinde“ (früher „Ansicht“ bzw. „Wehrleitung“). Gespeicherte Links funktionieren weiter.",
       "<b>Verständlichere Begriffe:</b> Azeit heißt jetzt <i>Ausrückdauer</i>, Ezeit <i>Zeit bis zum Eintreffen</i>, EHF <i>Einheitsführung</i>, „Kameraden“ <i>Einsatzteilnahmen</i> (Reiter „Personal“). Das gilt auch im Excel-Export.",
       "<b>Ehrlicher benannt:</b> Der „Feuerwehrbedarfsplan Pos. 8.4“ heißt <i>Eintreffen und verfügbare Kräfte</i>. Die Karte zeigt, wie oft das erste eigene Fahrzeug rechtzeitig eintraf, und zählt die Personen – sie ersetzt keinen Bedarfsplan und prüft keine Funktionen oder Qualifikationen. Die Hilfe erklärt, was sie aussagt.",
