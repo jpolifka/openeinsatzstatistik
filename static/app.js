@@ -181,7 +181,7 @@ const VIEWS = {
 // Hauptreiter: Jeder bündelt Ansichten (Schlüssel in VIEWS); mehrere erscheinen als Unterreiter darunter.
 const NAV = [
   { key: "overview", label: "Übersicht", views: ["overview"] },
-  { key: "incidents", label: "Einsätze", views: ["incidents", "records"] },
+  { key: "incidents", label: "Einsätze", views: ["incidents", "fees", "records"] },
   { key: "evaluation", label: "Auswertungen", views: ["evaluation", "times", "load"] },
   { key: "members", label: "Personal", views: ["members"] },
   { key: "admin", label: "Einstellungen", views: ["admin", "dpa"] },
