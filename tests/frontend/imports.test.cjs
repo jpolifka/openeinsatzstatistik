@@ -11,7 +11,11 @@ function setup() {
     state: { upload: { token: null, reports: [] } },
     config: {}, console,
     FormData: class { append() {} },
-    $: (key) => { if (!elements.has(key)) elements.set(key, { hidden: false, disabled: false }); return elements.get(key); },
+    $: (key) => {
+      if (!elements.has(key)) elements.set(key, { hidden: false, disabled: false, style: {}, classList: { add() {}, remove() {} } });
+      return elements.get(key);
+    },
+    setTimeout: (fn) => setImmediate(fn),     // Abfrage des Lesevorgangs ohne Wartezeit
     $$: () => [], window: { confirm: () => true },
     esc: (s) => String(s), alert: () => {}, toast: () => {},
     readForm: () => ({ description: "Korrektur" }),
@@ -22,13 +26,29 @@ function setup() {
   return { context, calls };
 }
 
+// Lesen im Hintergrund: Upload antwortet mit einem Job, die Abfrage liefert das Ergebnis, sobald der Test
+// finish(ergebnis) aufruft. uploads zählt die Upload-Anfragen.
+function backgroundApi() {
+  const api = { finish: null, uploads: 0 };
+  let result = null;
+  api.call = async (url) => {
+    if (url.startsWith("/api/reports?")) { api.uploads++; return { job: "j", total: 1 }; }
+    return result ? { done: true, read: 1, total: 1, ...result } : { done: false, read: 0, total: 1 };
+  };
+  api.finish = (data) => { result = data; };
+  return api;
+}
+// Bis der Upload angenommen ist und der Lesevorgang abgefragt wird
+const settle = () => new Promise((resolve) => setImmediate(resolve));
+
 test("Abbruch eines laufenden Uploads verwirft verspätete Vorschau", async () => {
   const { context, calls } = setup();
-  let finish;
-  context.api = () => new Promise((resolve) => { finish = resolve; });
+  const api = backgroundApi();
+  context.api = api.call;
   const reading = context.readPdfs([{ name: "test.xlsx" }]);
+  await settle();
   await context.discardUpload();
-  finish({ token: "late", reports: [{ filename: "test.xlsx" }], errors: [] });
+  api.finish({ token: "late", reports: [{ filename: "test.xlsx" }], errors: [] });
   await reading;
   assert.equal(context.state.upload.reports.length, 0);
   assert.equal(calls[0][0], "/api/reports/cancel");
@@ -37,13 +57,13 @@ test("Abbruch eines laufenden Uploads verwirft verspätete Vorschau", async () =
 
 test("Doppeltes Einlesen startet nur eine Anfrage", async () => {
   const { context } = setup();
-  let finish, reads = 0;
-  context.api = () => { reads++; return new Promise((resolve) => { finish = resolve; }); };
+  const api = backgroundApi();
+  context.api = api.call;
   const first = context.readPdfs([{ name: "test.xlsx" }]);
   await context.readPdfs([{ name: "other.xlsx" }]);
-  assert.equal(reads, 1);
-  finish({ token: "new", reports: [], errors: [] });
+  api.finish({ token: "new", reports: [], errors: [] });
   await first;
+  assert.equal(api.uploads, 1);
 });
 
 test("Aktualisierung sendet die Revision der Vorschau", async () => {
@@ -58,12 +78,13 @@ test("Aktualisierung sendet die Revision der Vorschau", async () => {
 test("Eine alte Vorschau kann während eines neuen Uploads nicht übernommen werden", async () => {
   const { context, calls } = setup();
   context.state.upload = { token: "old", reports: [{ filename: "old.xlsx" }] };
-  let finish;
-  context.api = () => new Promise((resolve) => { finish = resolve; });
+  const api = backgroundApi();
+  context.api = api.call;
   const reading = context.readPdfs([{ name: "new.xlsx" }]);
+  await settle();
   await context.acceptReport(0);
   assert.equal(calls.length, 0);
-  finish({ token: "new", reports: [], errors: [] });
+  api.finish({ token: "new", reports: [], errors: [] });
   await reading;
   assert.equal(calls.length, 1);
   assert.equal(calls[0][0], "/api/reports/cancel");
