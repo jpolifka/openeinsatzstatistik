@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """Mehrfachberichte über Wehren hinweg: Weitergabe, Hinweise an andere Wehren und Prüfprotokoll."""
+from app import pdf_report
 import dataclasses
 
 import pytest
@@ -40,7 +41,7 @@ def vg(make_client, monkeypatch):
     grant("lead1@example.org", "lead", a1)
     grant("lead2@example.org", "lead", a2)
     grant("vglead@example.org", "vg_lead", vg_id)
-    monkeypatch.setattr(main.pdf_report, "extract_text", lambda path: TEXTS[path.rsplit("/", 1)[-1]])
+    monkeypatch.setattr(pdf_report, "extract_text", lambda path: TEXTS[path.rsplit("/", 1)[-1]])
     return make_client(login=True)
 
 

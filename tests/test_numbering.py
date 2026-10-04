@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """Einsatznummern je Wehr (aus dem Bericht bzw. nach Datum) und Freigabe des Bedarfsplans."""
+from app import pdf_report
 import dataclasses
 
 import pytest
@@ -26,7 +27,7 @@ def test_renumber_by_date(con):
 
 
 def _read(client, monkeypatch, text, name="bericht.pdf"):
-    monkeypatch.setattr(main.pdf_report, "extract_text", lambda path: (text, LEFT if "17/25" in text else "", ""))
+    monkeypatch.setattr(pdf_report, "extract_text", lambda path: (text, LEFT if "17/25" in text else "", ""))
     return client.post("/api/reports", files=[("pdfs", (name, b"x", "application/pdf"))]).json()
 
 
