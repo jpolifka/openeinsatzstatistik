@@ -87,7 +87,7 @@ def api_update_incident(key: str, update: IncidentUpdate, a: tenancy.Access = De
             new_year = year_of(changes["started_at"]) if changes.get("started_at") else old_year
             if by_date and new_year and new_year != old_year:
                 changes["number"] = store.next_number(con, new_year)   # vorläufig ans Ende des neuen Jahres
-            store.update_incident(con, incident_id, changes, modified_by=a.email, revision=revision)
+            store.update_incident(con, incident_id, changes, modified_by=a.email, revision=revision, manual=True)
             if by_date:
                 for y in {old_year, store.load_incident(con, incident_id)["year"]} - {None}:
                     store.renumber(con, y)

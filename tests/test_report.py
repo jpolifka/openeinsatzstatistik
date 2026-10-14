@@ -106,7 +106,7 @@ def test_save_and_differences(con):
     assert not any(p["new"] for p in incident["people"])
 
     changed = {**incident, "unit_leader": "E. Beispiel"}
-    assert report.differences(existing, changed, CFG) == [{"field": "Einheitsführung", "stored": "M. Muster", "report": "E. Beispiel"}]
+    assert report.differences(existing, changed, CFG) == [{"field": "Einheitsführung", "stored": "M. Muster", "report": "E. Beispiel", "kept": False}]
 
 
 def test_older_layout_with_incident_site_in_right_column():
@@ -179,3 +179,11 @@ def test_agt_per_person_and_details_are_saved(con):
     assert (stored["vehicles"]["02/45"]["deployed"], stored["vehicles"]["02/24"]["respiratory"]) == (1, 0)
     incident, existing = report.preview(con, r)
     assert report.differences(existing, incident, CFG) == []
+
+
+def test_keep_recorded_protects_manual_and_empty_values():
+    original = {"unit_leader": "M. Muster", "tactic": None, "place": "Alt", "description": "von Hand",
+                "manual_fields": ["description"]}
+    fields = {"unit_leader": None, "tactic": "Außenangriff", "place": "Neu", "description": "Bericht"}
+    assert report.keep_recorded(fields, original, set()) == {"tactic": "Außenangriff", "place": "Neu"}
+    assert report.keep_recorded(fields, original, {"description"})["description"] == "Bericht"

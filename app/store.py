@@ -159,6 +159,7 @@ def load_incidents(con, year=None, ids=None):
         return []
     for r in rows:
         r["warnings"] = json.loads(r["warnings"] or "[]")
+        r["manual_fields"] = json.loads(r["manual_fields"] or "[]")
         r["vehicles"], r["people"] = {}, []
     in_ids = f"IN ({_placeholders(by_id)})"
     for v in con.execute(f"SELECT * FROM vehicle WHERE incident_id {in_ids}", list(by_id)):
@@ -279,21 +280,24 @@ def add_attendance(con, incident_id, member_id, role=None, vehicle=None, manual=
 def replace_report_rows(con, incident_id, vehicles, attendance):
     """Fahrzeuge und Anwesenheit aus einem (erneut eingelesenen) Bericht schreiben.
 
-    Zeilen aus dem vorigen Bericht entfallen; manuell ergänzte bleiben, außer der Bericht bringt
-    dasselbe Fahrzeug bzw. dieselbe Person. attendance: [(kamerad_id, funktion, fahrzeug, agt, agt_min)]
-    (agt und agt_min dürfen fehlen).
+    Zeilen aus dem vorigen Bericht entfallen; von Hand ergänzte oder geänderte (manual = 1) bleiben so,
+    wie sie sind. Liefert der Bericht gar keine Fahrzeuge bzw. Anwesenden, bleibt die Liste unangetastet.
+    attendance: [(kamerad_id, funktion, fahrzeug, agt, agt_min)] (agt und agt_min dürfen fehlen).
     """
-    con.execute("DELETE FROM vehicle WHERE incident_id = ? AND manual = 0", (incident_id,))
-    con.execute("DELETE FROM attendance WHERE incident_id = ? AND manual = 0", (incident_id,))
+    vehicles = list(vehicles)
+    if vehicles:
+        con.execute("DELETE FROM vehicle WHERE incident_id = ? AND manual = 0", (incident_id,))
+    if attendance:
+        con.execute("DELETE FROM attendance WHERE incident_id = ? AND manual = 0", (incident_id,))
     for row in vehicles:
-        con.execute("DELETE FROM vehicle WHERE incident_id = ? AND call_sign = ?", (incident_id, row["call_sign"]))
-        add_vehicle(con, incident_id, **row)
+        if not con.execute("SELECT 1 FROM vehicle WHERE incident_id = ? AND call_sign = ?",
+                           (incident_id, row["call_sign"])).fetchone():
+            add_vehicle(con, incident_id, **row)
     seen = set()
     for row in attendance:
         member_id, role, vehicle, agt, agt_min = (*row, None, None)[:5]
         if member_id not in seen:   # doppelte Zeile im Bericht: die erste zählt
             seen.add(member_id)
-            con.execute("DELETE FROM attendance WHERE incident_id = ? AND member_id = ?", (incident_id, member_id))
             add_attendance(con, incident_id, member_id, role, vehicle, agt=agt, agt_min=agt_min)
 
 
@@ -330,8 +334,10 @@ def replace_vehicles(con, incident_id, rows):
                 stored, given = current[call_sign][key], (rows_by_sign[call_sign].get(key) or "").strip()
                 if stored and len(given) == 5 and stored[:5] == given:
                     values[key] = stored
-            con.execute("UPDATE vehicle SET crew = ?, departed = ?, arrived = ? WHERE incident_id = ? AND call_sign = ?",
-                        (values["crew"], values["departed"], values["arrived"], incident_id, call_sign))
+            changed = any(values[key] != current[call_sign][key] for key in ("crew", "departed", "arrived"))
+            con.execute("UPDATE vehicle SET crew = ?, departed = ?, arrived = ?, manual = manual OR ? "
+                        "WHERE incident_id = ? AND call_sign = ?",
+                        (values["crew"], values["departed"], values["arrived"], int(changed), incident_id, call_sign))
         else:
             add_vehicle(con, incident_id, call_sign, None, values["crew"], values["departed"], values["arrived"],
                         manual=True)
@@ -340,8 +346,9 @@ def replace_vehicles(con, incident_id, rows):
 def replace_attendance(con, incident_id, people):
     """Anwesenheit aus dem Formular: [{id oder name, role, vehicle}]. Nicht genannte Personen entfallen;
     neue gelten als manuell ergänzt, unbekannte Namen („Nachname, Vorname“) werden als Kameraden angelegt."""
-    current = {r["member_id"] for r in con.execute("SELECT member_id FROM attendance WHERE incident_id = ?",
-                                                   (incident_id,))}
+    stored = {r["member_id"]: (r["role"], r["vehicle"]) for r in
+              con.execute("SELECT member_id, role, vehicle FROM attendance WHERE incident_id = ?", (incident_id,))}
+    current = set(stored)
     members, wanted = MemberDirectory(con), {}
     for p in people:
         member_id = p.get("id")
@@ -358,8 +365,9 @@ def replace_attendance(con, incident_id, people):
         con.execute("DELETE FROM attendance WHERE incident_id = ? AND member_id = ?", (incident_id, member_id))
     for member_id, (role, vehicle) in wanted.items():
         if member_id in current:
-            con.execute("UPDATE attendance SET role = ?, vehicle = ? WHERE incident_id = ? AND member_id = ?",
-                        (role, vehicle, incident_id, member_id))
+            changed = stored[member_id] != (role, vehicle)
+            con.execute("UPDATE attendance SET role = ?, vehicle = ?, manual = manual OR ? "
+                        "WHERE incident_id = ? AND member_id = ?", (role, vehicle, int(changed), incident_id, member_id))
         else:
             add_attendance(con, incident_id, member_id, role, vehicle, manual=True)
 
@@ -373,9 +381,10 @@ class StaleIncident(ValueError):
     """Der Einsatz wurde seit dem Öffnen geändert."""
 
 
-def update_incident(con, incident_id, changes, modified_by=None, source=None, revision=None):
+def update_incident(con, incident_id, changes, modified_by=None, source=None, revision=None, manual=False):
     """Felder ändern; Jahr und Wochenende/Feiertag werden neu abgeleitet.
-    source: {source, filename, warnings} beim Aktualisieren aus einem Bericht."""
+    source: {source, filename, warnings} beim Aktualisieren aus einem Bericht.
+    manual: Änderung von Hand – geänderte Felder merken, damit ein neu eingelesener Bericht sie nicht überschreibt."""
     current = con.execute("SELECT * FROM incident WHERE id = ?", (incident_id,)).fetchone()
     if not current:
         raise KeyError(incident_id)
@@ -383,6 +392,9 @@ def update_incident(con, incident_id, changes, modified_by=None, source=None, re
         raise StaleIncident("Der Einsatz wurde inzwischen geändert. Bitte neu laden und Änderungen vergleichen.")
     f = normalize_fields({**dict(current), **changes})
     _check_unique(con, f, incident_id)
+    if manual:
+        touched = {name for name in FIELDS + ID_FIELDS if f[name] != current[name]}
+        f["manual_fields"] = json.dumps(sorted(set(json.loads(current["manual_fields"] or "[]")) | touched))
     if source:
         f.update(source=source["source"], filename=source["filename"],
                  warnings=json.dumps(list(source["warnings"]), ensure_ascii=False))

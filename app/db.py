@@ -320,10 +320,15 @@ def _settings_for_fee_roles(con):
                 "WHERE rp.permission = 'vg.fees' AND r.scope = 'vg'")
 
 
+def _add_manual_fields(con):
+    """Von Hand geänderte Einsatzfelder (JSON-Liste): ein erneut eingelesener Bericht überschreibt sie nicht."""
+    con.execute("ALTER TABLE incident ADD COLUMN manual_fields TEXT NOT NULL DEFAULT '[]'")
+
+
 # Neue Schemaänderungen nur hinten anfügen; PRAGMA user_version zählt die erledigten Schritte.
 TENANT_MIGRATIONS = [_create_legacy_schema, _rename_to_english, _add_tenant_tables, _add_bks_ids,
                      _add_pending_reports, _add_fleet_names, _add_incident_revision, _add_import_jobs,
-                     _add_abort_reason, _add_report_details]
+                     _add_abort_reason, _add_report_details, _add_manual_fields]
 CENTRAL_MIGRATIONS = [_create_central_schema, _add_dpa, _add_records, _add_notices, _add_fee_schedules, _add_roles,
                       _records_per_vg, _add_consumed_magic_links, _add_completed_imports, _add_tenant_archive,
                       _add_vg_defaults, _settings_for_fee_roles, _add_sessions]

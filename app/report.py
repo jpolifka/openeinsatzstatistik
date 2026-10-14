@@ -304,6 +304,21 @@ def preview(con, report, numbered=True):
     return incident, (store.load_incident(con, existing_id) if existing_id else None)
 
 
+def keep_recorded(fields, original, corrected):
+    """Beim Aktualisieren aus einem Bericht bleiben erfasste Werte, wenn sie von Hand geändert wurden oder der
+    Bericht nichts angibt. In der Vorschau selbst korrigierte Felder (corrected) gelten immer."""
+    manual = set(original.get("manual_fields") or [])
+    kept = {}
+    for name, value in fields.items():
+        if name in corrected or name not in original:
+            kept[name] = value
+        elif name in manual or (value in (None, "") and original[name] not in (None, "")):
+            continue
+        else:
+            kept[name] = value
+    return kept
+
+
 def save(con, report, fields, update_id=None, modified_by=None, revision=None):
     """Bericht mit den (ggf. korrigierten) Feldern als Einsatz speichern; unbekannte Personen anlegen.
 
@@ -354,17 +369,20 @@ def differences(stored, incoming, cfg):
     """Unterschiede zwischen gespeichertem Einsatz und Bericht als [{field, stored, report}]."""
     diffs = []
 
-    def compare(label, name, old, new):
+    manual = set(stored.get("manual_fields") or [])
+
+    def compare(label, name, old, new, by_hand=False):
+        kept = by_hand or (new in (None, "") and old not in (None, ""))   # beim Aktualisieren bleibt der erfasste Wert
         old, new = _display(name, old), _display(name, new)
         if old != new:
-            diffs.append({"field": label, "stored": old, "report": new})
+            diffs.append({"field": label, "stored": old, "report": new, "kept": kept})
 
     for name, label in COMPARED_FIELDS.items():
-        compare(label, name, stored.get(name), incoming.get(name))
+        compare(label, name, stored.get(name), incoming.get(name), name in manual)
     for call_sign in sorted(set(cfg.vehicles) | set(stored["vehicles"]) | set(incoming["vehicles"])):
         old, new = stored["vehicles"].get(call_sign) or {}, incoming["vehicles"].get(call_sign) or {}
         for name, label in COMPARED_VEHICLE_FIELDS.items():
-            compare(f"{label} {call_sign}", name, old.get(name), new.get(name))
+            compare(f"{label} {call_sign}", name, old.get(name), new.get(name), bool(old.get("manual")))
     def attendance(people):
         def identity(person):
             if person.get("id") is not None:
@@ -374,5 +392,6 @@ def differences(stored, incoming, cfg):
 
     if attendance(stored["people"]) != attendance(incoming["people"]):
         diffs.append({"field": "Anwesende", "stored": str(len(stored["people"])),
-                      "report": str(len(incoming["people"])) + " (Personen oder Zuordnungen geändert)"})
+                      "report": str(len(incoming["people"])) + " (Personen oder Zuordnungen geändert)",
+                      "kept": not incoming["people"] and bool(stored["people"])})
     return diffs

@@ -128,7 +128,7 @@ function differencesTable(existing) {
   if (!existing?.differences.length) return "";
   return `<h4 class="section-gap">Abweichungen zur Statistik</h4>
     <table class="mini-table diff-table"><thead><tr><th>Feld</th><th>erfasst</th><th>Bericht</th></tr></thead><tbody>
-    ${existing.differences.map((d) => `<tr><td>${esc(d.field)}</td><td>${esc(d.stored)}</td><td>${esc(d.report)}</td></tr>`).join("")}</tbody></table>`;
+    ${existing.differences.map((d) => `<tr><td>${esc(d.field)}</td><td>${esc(d.stored)}</td><td>${esc(d.report)}${d.kept ? ' <span class="diff-kept">bleibt wie erfasst</span>' : ""}</td></tr>`).join("")}</tbody></table>`;
 }
 
 // Eingaben in den noch offenen Vorschauen vor dem Neuzeichnen übernehmen

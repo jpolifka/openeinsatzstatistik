@@ -117,10 +117,13 @@ def _accept_report(acceptance, a, r, slug):
                 raise HTTPException(428, "Zum Aktualisieren ist die Revision der Vorschau erforderlich.")
             if not original or original["revision"] != acceptance.revision:
                 raise HTTPException(409, "Der Einsatz wurde inzwischen geändert. Bitte erneut einlesen und vergleichen.")
+        if original:
+            fields = report.keep_recorded(fields, original, set(corrected))
+            year = year_of(fields.get("started_at") or original["started_at"])
         if by_date:
             # Vorläufig ans Ende, die richtige Stelle ergibt sich nach dem Speichern
             fields["number"] = store.next_number(con, year) if year else None
-        elif store.to_int(fields.get("number")) is None and year:
+        elif store.to_int(fields.get("number", original["number"] if original else None)) is None and year:
             fields["number"] = store.next_number(con, year)
             r["warnings"].append(f"Einsatzbericht-Nr. fehlt – nächste freie Nr. {fields['number']} vergeben")
         try:

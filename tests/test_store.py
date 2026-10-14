@@ -129,8 +129,26 @@ def test_report_rows_replace_imported_but_keep_manual(con):
     store.replace_report_rows(con, incident_id, [{**vehicle, "call_sign": "02/71"}],
                               [(both, "Maschinist", "02/71"), (both, "doppelt", None)])
     incident = store.load_incident(con, incident_id)
-    assert {cs: (v["crew"], v["manual"]) for cs, v in incident["vehicles"].items()} == \
-        {"02/24": (2, 1), "02/71": (5, 0)}
-    assert incident["vehicles"]["02/71"]["finished"] == "11:00:00"
+    # von Hand ergänzte Zeilen bleiben unverändert, auch wenn der Bericht sie ebenfalls nennt
+    assert {cs: v["crew"] for cs, v in incident["vehicles"].items()} == {"02/24": 2, "02/71": 3}
     assert {p["id"]: (p["role"], p["manual"]) for p in incident["people"]} == \
-        {manual: (None, 1), both: ("Maschinist", 0)}
+        {manual: (None, 1), both: (None, 1)}
+
+
+def test_report_rows_keep_list_when_report_has_none(con):
+    incident_id = store.create_incident(con, FIELDS, source="pdf")
+    member = store.MemberDirectory(con).find_or_create("Muster", "Max")
+    store.add_vehicle(con, incident_id, "02/45", None, 6, "10:03:00", "10:07:00")
+    store.add_attendance(con, incident_id, member)
+    store.replace_report_rows(con, incident_id, [], [])
+    incident = store.load_incident(con, incident_id)
+    assert list(incident["vehicles"]) == ["02/45"] and len(incident["people"]) == 1
+
+
+def test_manual_edit_survives_reimport(con):
+    incident_id = store.create_incident(con, FIELDS, source="pdf")
+    store.add_vehicle(con, incident_id, "02/45", None, 6, "10:03:00", "10:07:00")
+    store.replace_vehicles(con, incident_id, [{"call_sign": "02/45", "crew": 6, "departed": "10:05", "arrived": "10:07"}])
+    store.replace_report_rows(con, incident_id, [{"call_sign": "02/45", "name": None, "crew": 6, "departed": "10:03:00",
+                                                  "arrived": "10:07:00"}], [])
+    assert store.load_incident(con, incident_id)["vehicles"]["02/45"]["departed"] == "10:05:00"
