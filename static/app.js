@@ -284,7 +284,11 @@ const tooltip = $("#tooltip");
 let tooltipTarget = null, tooltipFrame = 0;
 function showTooltip(el, x, y) {
   // Text nur beim Wechsel des Elements setzen, Position höchstens einmal je Frame messen
-  if (el !== tooltipTarget || tooltip.hidden) { tooltipTarget = el; tooltip.textContent = el.dataset.tip; tooltip.hidden = false; }
+  if (el !== tooltipTarget || !tooltip.matches(":popover-open")) {
+    tooltipTarget = el; tooltip.textContent = el.dataset.tip;
+    // Popover liegt in der obersten Ebene und damit auch über geöffneten Dialogen
+    if (!tooltip.matches(":popover-open")) tooltip.showPopover();
+  }
   cancelAnimationFrame(tooltipFrame);
   tooltipFrame = requestAnimationFrame(() => {
     const r = tooltip.getBoundingClientRect();
@@ -295,7 +299,7 @@ function showTooltip(el, x, y) {
 function hideTooltip() {
   cancelAnimationFrame(tooltipFrame);
   tooltipTarget = null;
-  tooltip.hidden = true;
+  if (tooltip.matches(":popover-open")) tooltip.hidePopover();
 }
 document.addEventListener("mousemove", (e) => {
   const el = e.target.closest?.("[data-tip]");
