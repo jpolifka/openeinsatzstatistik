@@ -82,6 +82,12 @@ def api_evaluation(year: Optional[int] = None, limit: Optional[int] = None, tena
               if plan_parts else None,
               "workload": metrics.workload(current, metrics.combine_overlaps([metrics.overlaps(e) for _, e, _ in parts])),
               "coverage": metrics.coverage(current),
+              "aborts": metrics.aborts(current),
+              "alarm_systems": metrics.alarm_systems(current),
+              "vehicle_usage": metrics.vehicle_usage(current, cfg),
+              "respiratory": metrics.respiratory(current),
+              "fire_course": metrics.fire_course(current),
+              "casualties": metrics.casualties(current),
               "tenants": None}
     if not single:
         unique, without = metrics.unique_incidents([i for i, _ in current])

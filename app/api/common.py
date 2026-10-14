@@ -59,6 +59,7 @@ def incident_json(incident, leaders, tenant, limit=None, cfg=None):
         vehicles.append({"call_sign": call_sign, "substitute": cfg.substitute_label(v.get("name"), call_sign),
                          "crew": v.get("crew"), "departed": v.get("departed"), "arrived": v.get("arrived"),
                          "alerted": v.get("alerted"), "finished": v.get("finished"),
+                         "deployed": v.get("deployed"), "respiratory": v.get("respiratory"),
                          "turnout_min": _rounded(vm.get("turnout_min")),
                          "arrival_min": _rounded(vm.get("arrival_min"))})
     return {
@@ -76,7 +77,8 @@ def incident_json(incident, leaders, tenant, limit=None, cfg=None):
         "area": m["area"], "plan_relevant": m["plan_relevant"],     # Filter aus der Auswertung
         "vehicles": vehicles,
         "people": [{"id": p["id"], "name": p["name"], "role": p.get("role"), "vehicle": p.get("vehicle"),
-                    "new": p.get("new", False), "leader_name": leaders.spelling(p),
+                    "new": p.get("new", False), "agt": bool(p.get("agt")), "agt_min": p.get("agt_min"),
+                    "leader_name": leaders.spelling(p),
                     "leader": leaders.is_leader(incident.get("unit_leader"), p)} for p in incident["people"]]
         if tenant.can(PEOPLE) else [],
         "people_count": len(incident["people"]),

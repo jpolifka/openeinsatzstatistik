@@ -168,7 +168,7 @@ function chartCard({ id, title, subtitle = "", chart, table, extra = "", heading
 // help: Abschnitt (sec_…) oder Feld der Hilfe, das das ?-Symbol im Kopf in dieser Ansicht öffnet.
 // Weitere Ansichten tragen sich selbst ein (admin.js).
 // sub: Beschriftung im Unterreiter, wenn ein Hauptreiter mehrere Ansichten bündelt (NAV); overview, times und load
-// stehen in analysis.js.
+// stehen in analysis.js, aborts, resources und fire in operations.js.
 const VIEWS = {
   evaluation: { label: "Einsatzgeschehen", sub: "Einsatzgeschehen", load: loadEvaluation, render: renderEvaluation, permission: "stats.view",
     help: () => config.vg ? "sec_vg" : "sec_evaluation" },
@@ -182,7 +182,7 @@ const VIEWS = {
 const NAV = [
   { key: "overview", label: "Übersicht", views: ["overview"] },
   { key: "incidents", label: "Einsätze", views: ["incidents", "fees", "records"] },
-  { key: "evaluation", label: "Auswertungen", views: ["evaluation", "times", "load"] },
+  { key: "evaluation", label: "Auswertungen", views: ["evaluation", "times", "load", "aborts", "resources", "fire"] },
   { key: "members", label: "Personal", views: ["members"] },
   { key: "admin", label: "Einstellungen", views: ["admin", "dpa"] },
 ];

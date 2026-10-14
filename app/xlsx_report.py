@@ -18,7 +18,8 @@ import zipfile
 import openpyxl
 from openpyxl.utils.exceptions import InvalidFileException
 
-from app.bks_common import KINDS, PERSON_VEHICLE, SHORT_CALL_SIGN, _call_sign_pattern, _parse_keyword, parse_number
+from app.bks_common import (KINDS, PERSON_VEHICLE, SHORT_CALL_SIGN, _call_sign_pattern, _parse_keyword,
+                            clean_alarm_system, clean_tactic, parse_number)
 
 MAIN_SHEET = "Einsatzbericht"
 VEHICLE_SHEET = "Ausger. Fahrzeuge"
@@ -85,6 +86,13 @@ def _int(value):
         return 0
 
 
+def _count(row, *titles, prefix=False):
+    """Summe der Zähler aus den Spalten (Überschrift oder Anfang der Überschrift); None, wenn alle leer sind."""
+    values = [v for title, v in row.items() if _text(v) and any(
+        _text(title).startswith(t) if prefix else _text(title) == t for t in titles)]
+    return sum(_int(v) for v in values) if values else None
+
+
 def _timestamp(value):
     if isinstance(value, dt.datetime):
         return value
@@ -124,6 +132,7 @@ def _parse_vehicles(rows, unit_prefix):
         vehicles.append({
             "name": name, "call_sign": call_sign.group(1) if call_sign else None,
             "crew": _int(row.get("Gesamt")), "respiratory": _int(row.get("AGT")),
+            "deployed": {"1": 1, "ja": 1, "0": 0, "nein": 0}.get(_text(row.get("Eingesetzt")).lower()),
             "alerted": _timestamp(row.get("Alarmiert")), "departed": _timestamp(row.get("Ausrücken")),
             "arrived": _timestamp(row.get("Eintreffen an E-Stelle")), "finished": _timestamp(row.get("Einsatzende")),
         })
@@ -164,7 +173,8 @@ def _parse_people(rows):
         people.append({"last_name": last_name, "first_name": first_name,
                        "vehicle_name": vehicle or None,
                        "vehicle": SHORT_CALL_SIGN.search(vehicle).group(1) if vehicle else None,
-                       "role": cell(row, "Funktion")})
+                       "role": cell(row, "Funktion"),
+                       "agt": cell(row, "AGT").lower() in ("ja", "agt"), "agt_min": _int(cell(row, "Min (AGT)"))})
     return people
 
 
@@ -197,6 +207,16 @@ def parse_report(sheets, filename, unit_prefix):
     report["first_alarm"] = _timestamp(row.get("Zeitpunkt der Alarmierung der ersten Einheit"))
 
     report["abort_reason"] = _text(row.get("Einsatzabbruch")) or None
+    report["alarm_system"] = clean_alarm_system(_text(row.get("Nummer der Gefahrenmeldeanlage")))
+    report["tactic"] = clean_tactic(_text(row.get("Einatztaktik")) or _text(row.get("Einsatztaktik")))
+    report["fire_controlled_at"] = _timestamp(row.get("Brand unter Kontrolle"))
+    report["fire_out_at"] = _timestamp(row.get("Feuer aus"))
+    report["fire_watch_until"] = _timestamp(row.get("Brandwache gestellt bis"))
+    report["rescued"] = _count(row, "Menschenrettung", prefix=True)
+    report["rescued_animals"] = _count(row, "Rettung von Großvieh", "Rettung von Kleinvieh")
+    report["injured"] = _count(row, "Verletzte andere Personen")
+    report["injured_firefighters"] = _count(row, "Verletzte Feuerwehrangehörige")
+    report["deceased"] = _count(row, "Verstorbene andere Personen", "Verstorbene Feuerwehrangehörige")
 
     report["vehicles"] = _parse_vehicles(_sheet(sheets, VEHICLE_SHEET), unit_prefix)
     report["people"] = _parse_people(_sheet(sheets, PEOPLE_SHEET))

@@ -65,6 +65,61 @@ const HELP_SECTIONS = [
         short: "Grund, warum der Einsatz abgebrochen wurde (aus dem BKS-Bericht).",
         text: () => `Wird aus dem Feld „Einsatzabbruch“ des BKS-Berichts übernommen (z. B. Täuschungsalarm, böswilliger Alarm, in Bereitstellung). Ist es gefüllt und fehlt die Eintreffzeit, gilt der Einsatz in „Eintreffen und verfügbare Kräfte“ als innerhalb der Zeitgrenze (${helpLimit()} Minuten) eingetroffen – die Einheit musste nicht mehr ankommen. Gibt es eine Eintreffzeit, zählt diese. Leer lassen, wenn der Einsatz nicht abgebrochen wurde.`,
       },
+      building: {
+        title: "Objekt",
+        short: "Objekt der Einsatzstelle aus dem BKS-Bericht (z. B. Pflegeheim).",
+        text: "Wird aus dem Feld „Einsatzstelle – Objekt“ übernommen. Es dient der Auswertung von Brandmeldeanlagen: Einsätze werden je Objekt gezählt, wenn keine Nummer der Anlage angegeben ist.",
+      },
+      alarm_system: {
+        title: "Brandmelde-Nr.",
+        short: "Nummer der Gefahrenmeldeanlage laut BKS-Bericht.",
+        text: "Nummer der Gefahrenmeldeanlage (Brandmeldeanlage), die den Alarm ausgelöst hat. „0“ und „-“ gelten als nicht angegeben. Unter „Auswertungen → Abbrüche &amp; Anlagen“ werden Alarme und Fehlalarme je Anlage gezählt.",
+      },
+      tactic: {
+        title: "Einsatztaktik",
+        short: "Innen- oder Außenangriff laut BKS-Bericht.",
+        text: "Taktik bei Brandeinsätzen laut Bericht (Innenangriff oder Außenangriff). Sie steht im Brandverlauf unter „Auswertungen → Brand &amp; Rettung“.",
+      },
+      fire_controlled_at: {
+        title: "Brand unter Kontrolle",
+        short: "Zeitpunkt „Brand unter Kontrolle“ laut Bericht.",
+        text: "Die Auswertung rechnet die Zeit ab dem Eintreffen des ersten eigenen Fahrzeugs bis zu diesem Zeitpunkt. Ohne Eintreffzeit entfällt der Einsatz in dieser Kennzahl.",
+      },
+      fire_out_at: {
+        title: "Feuer aus",
+        short: "Zeitpunkt „Feuer aus“ laut Bericht.",
+        text: "Zeitpunkt, an dem das Feuer aus war. Die Auswertung rechnet die Zeit ab dem Eintreffen des ersten eigenen Fahrzeugs.",
+      },
+      fire_watch_until: {
+        title: "Brandwache bis",
+        short: "Ende der Brandwache nach dem Einsatz laut Bericht.",
+        text: "Bis wann eine Brandwache an der Einsatzstelle gestellt wurde (nicht die Brandsicherheitswache S1.00). Die Dauer wird ab „Feuer aus“, ersatzweise ab Einsatzende gerechnet.",
+      },
+      rescued: {
+        title: "Menschen gerettet",
+        short: "Summe der Menschenrettungen laut Bericht (alle Verfahren).",
+        text: "Summe aller Angaben „Menschenrettung über/mit …“ des Berichts (baulicher Rettungsweg, Hubrettungsfahrzeug, Leiter, Boot, Schere/Spreizer, sonstiges). Leer heißt nicht angegeben, 0 heißt: ausdrücklich keine.",
+      },
+      rescued_animals: {
+        title: "Tiere gerettet",
+        short: "Gerettete Groß- und Kleintiere laut Bericht.",
+        text: "Summe aus „Rettung von Großvieh“ und „Rettung von Kleinvieh“. Leer heißt nicht angegeben.",
+      },
+      injured: {
+        title: "Verletzte",
+        short: "Verletzte andere Personen (nicht Feuerwehr) laut Bericht.",
+        text: "Verletzte Personen außer Feuerwehrangehörigen. Leer heißt nicht angegeben.",
+      },
+      injured_firefighters: {
+        title: "Verletzte Feuerwehrangehörige",
+        short: "Verletzte Feuerwehrangehörige laut Bericht.",
+        text: "Verletzte Angehörige der Feuerwehr im Einsatz. Leer heißt nicht angegeben.",
+      },
+      deceased: {
+        title: "Verstorbene",
+        short: "Verstorbene Personen laut Bericht (Feuerwehr und andere).",
+        text: "Summe aus „Verstorbene andere Personen“ und „Verstorbene Feuerwehrangehörige“. Leer heißt nicht angegeben.",
+      },
       dispatch_number: {
         title: "Leitstellen-Nr.",
         short: "Gemeinsame Einsatznummer der Leitstelle für beteiligte Wehren.",
@@ -253,6 +308,62 @@ const HELP_SECTIONS = [
     },
   },
   {
+    id: "sec_aborts",
+    title: "Abbrüche und Brandmeldeanlagen",
+    intro: "Wie viele Einsätze enden, bevor die Einheit gebraucht wird, und welche Anlagen die meisten Alarme auslösen. Grundlage ist das Feld „Einsatzabbruch“ des BKS-Berichts.",
+    entries: {
+      abort_kinds: {
+        title: "Abbruchgründe",
+        short: "Abgebrochene Einsätze nach Gruppen des Abbruchgrunds.",
+        text: "Der Grund steht im Bericht als Freitext. Die App ordnet ihn vier Gruppen zu: <b>Fehlalarm / kein Ereignis</b> (Täuschungsalarm, technischer oder böswilliger Alarm, kein Schadenereignis festgestellt), <b>Nicht erforderlich</b>, <b>In Bereitstellung</b> und <b>Sonstiger Grund</b>. Die Zuordnung steht nicht im Bericht, sondern beruht auf dem Wortlaut; die Tabelle „Häufigste Gründe“ zeigt den Originaltext. Abgebrochene Einsätze ohne Eintreffzeit gelten in „Eintreffen und verfügbare Kräfte“ als rechtzeitig.",
+      },
+      alarm_systems: {
+        title: "Brandmeldeanlagen",
+        short: "Einsätze an Brandmeldeanlagen je Anlage bzw. Objekt, mit Anteil der Fehlalarme.",
+        text: "Gezählt werden Einsätze mit Stichwort B2.07 und Einsätze mit angegebener Nummer der Gefahrenmeldeanlage. Gruppiert wird nach dieser Nummer, ersatzweise nach dem Objekt der Einsatzstelle. Einsätze ohne beides stehen gesammelt unter „ohne Angabe“. Als Fehlalarm zählen abgebrochene Einsätze mit Täuschungs-, technischem oder böswilligem Alarm bzw. ohne festgestelltes Ereignis. Hinweis: Die Zahlen können Argumente gegenüber Betreibern liefern – prüfen Sie vorher die Berichte der betroffenen Anlage.",
+      },
+    },
+  },
+  {
+    id: "sec_resources",
+    title: "Fahrzeuge und Atemschutz",
+    intro: "Wie stark Fahrzeuge und Atemschutzgeräteträger gebraucht werden.",
+    entries: {
+      vehicle_usage: {
+        title: "Fahrzeugnutzung",
+        short: "Alarmierungen, Ausfahrten und tatsächliche Einsätze je Fahrzeug.",
+        text: "<b>Alarmiert</b>: das Fahrzeug steht im Bericht. <b>Ausgerückt</b>: es hat eine Ausrückzeit. <b>Eingesetzt</b> bzw. <b>nur bereit</b>: Angabe „Eingesetzt“ der Fahrzeugtabelle (Ja/Nein) – ein Fahrzeug in Bereitstellung ist alarmiert, aber nicht eingesetzt. Ältere Einsätze haben die Angabe nicht; sie zählen nicht als „nur bereit“. <b>Einsatzstunden</b> = Alarmierung bis Einsatzende des Fahrzeugs, nur für ausgerückte Fahrzeuge. <b>Ø Besatzung</b> = mittlere Stärke bei Ausfahrten.",
+      },
+      respiratory: {
+        title: "Atemschutz",
+        short: "Einsätze mit Atemschutz, Geräteträger und Minuten unter Atemschutz.",
+        text: "<b>Geräteträger</b> sind die AGT-Zahlen der Fahrzeuge im Bericht. Die <b>Minuten</b> stammen aus der Anwesenheitsliste („Min (AGT)“) je Person. Sie sind Angaben der Berichtenden, keine Messwerte der Atemschutzüberwachung. Einsätze ohne diese Angaben (ältere Berichte) fehlen in den Kennzahlen; die Karte nennt die Abdeckung. Namen und Zeiten je Person stehen unter „Personal“.",
+      },
+    },
+  },
+  {
+    id: "sec_fire",
+    title: "Brand und Rettung",
+    intro: "Brandverlauf, Einsatztaktik, Menschenrettung und Personenschäden aus den Angaben des BKS-Berichts.",
+    entries: {
+      fire_course: {
+        title: "Brandverlauf",
+        short: "Zeit vom Eintreffen bis „Brand unter Kontrolle“ und „Feuer aus“.",
+        text: "Berücksichtigt werden Brandeinsätze (Einsatzart B) ohne Abbruch, ohne Brandmeldeanlagen (B2.07) und ohne Brandsicherheitswachen. Die Zeit läuft ab dem Eintreffen des ersten eigenen Fahrzeugs; ohne Eintreffzeit oder bei Zeiten vor dem Eintreffen entfällt der Einsatz in der Kennzahl. Median und 90. Perzentil wie bei den Zeiten.",
+      },
+      fire_tactic: {
+        title: "Einsatztaktik und Brandwache",
+        short: "Innen- oder Außenangriff und Brandwachen nach dem Einsatz.",
+        text: "Die Taktik wird nur angezeigt, wenn sie im Bericht angegeben ist. Brandwachen: Einsätze mit „Brandwache gestellt bis“; die Stunden laufen von „Feuer aus“ (ersatzweise Einsatzende) bis zum angegebenen Ende.",
+      },
+      casualties: {
+        title: "Menschenrettung und Personenschäden",
+        short: "Gerettete Menschen und Tiere, Verletzte und Verstorbene laut Bericht.",
+        text: "Summen der Angaben im Bericht. „Menschen gerettet“ addiert alle Verfahren der Menschenrettung. Was nicht angegeben ist, zählt nicht als null: Die Spalte „Berichte mit Angabe“ nennt, in wie vielen Einsätzen die Zahl überhaupt vorliegt.",
+      },
+    },
+  },
+  {
     id: "sec_vg",
     title: "Einsätze mehrerer Wehren",
     intro: "Im BKS-Portal hat ein Einsatz einen Stammdatensatz (alle Fahrzeuge mit den Zeiten der Leitstelle) und je beteiligter Einheit einen Haupt- oder Nebenbericht. Die Wehren korrigieren in ihren Berichten oft Stärke und Zeiten – daraus entstehen Abweichungen.",
@@ -293,6 +404,16 @@ const HELP_SECTIONS = [
         title: "Stunden",
         short: "Summe der Einsatzdauer aller Einsätze mit Teilnahme.",
         text: "Summe der Einsatzdauer aller Einsätze, bei denen die Person in der Anwesenheit steht.",
+      },
+      member_agt: {
+        title: "Atemschutz",
+        short: "Einsätze mit Atemschutz und Minuten unter Atemschutz laut Anwesenheitsliste.",
+        text: "Einsätze, in denen die Person laut Anwesenheitsliste unter Atemschutz eingesetzt war, und die dort eingetragenen Minuten. Ältere Einsätze ohne diese Angabe sind nicht enthalten (Bericht erneut einlesen). Die Werte ersetzen keinen Atemschutznachweis.",
+      },
+      member_functions: {
+        title: "Funktionen",
+        short: "Wie oft welche Funktion laut Anwesenheitsliste besetzt war.",
+        text: "Zählt die Angabe „Funktion“ der Anwesenheitsliste (z. B. Einheitsführer, Maschinist, Angriffstruppführer). Je Person steht sie im aufgeklappten Eintrag. Nicht eingetragene Funktionen fehlen – es ist keine Qualifikationsübersicht.",
       },
       nights_weekends: {
         title: "nachts / Sa/So/FT",

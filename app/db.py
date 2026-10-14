@@ -286,6 +286,21 @@ def _add_abort_reason(con):
     con.execute("ALTER TABLE incident ADD COLUMN abort_reason TEXT")
 
 
+def _add_report_details(con):
+    """Weitere Angaben aus dem BKS-Bericht für die Auswertungen: Objekt, Brandmeldeanlage, Brandverlauf, Rettung und
+    Personenschäden je Einsatz, eingesetzt/Atemschutz je Fahrzeug, Atemschutz je Person. NULL = nicht angegeben
+    (Altdaten: den Bericht erneut einlesen und aktualisieren)."""
+    for column, kind in (("building", "TEXT"), ("alarm_system", "TEXT"), ("tactic", "TEXT"),
+                         ("fire_controlled_at", "TEXT"), ("fire_out_at", "TEXT"), ("fire_watch_until", "TEXT"),
+                         ("rescued", "INTEGER"), ("rescued_animals", "INTEGER"), ("injured", "INTEGER"),
+                         ("injured_firefighters", "INTEGER"), ("deceased", "INTEGER")):
+        con.execute(f"ALTER TABLE incident ADD COLUMN {column} {kind}")
+    con.execute("ALTER TABLE vehicle ADD COLUMN deployed INTEGER")
+    con.execute("ALTER TABLE vehicle ADD COLUMN respiratory INTEGER")
+    con.execute("ALTER TABLE attendance ADD COLUMN agt INTEGER")
+    con.execute("ALTER TABLE attendance ADD COLUMN agt_min INTEGER")
+
+
 def _add_vg_defaults(con):
     """Vorgaben der VG für die Fachkonfiguration ihrer Wehren (siehe tenancy.load_config); eine Wehr speichert
     nur noch, wo sie abweicht. defaults_lifted: Werte der Wehren schon übernommen (tenancy.lift_vg_defaults)."""
@@ -308,7 +323,7 @@ def _settings_for_fee_roles(con):
 # Neue Schemaänderungen nur hinten anfügen; PRAGMA user_version zählt die erledigten Schritte.
 TENANT_MIGRATIONS = [_create_legacy_schema, _rename_to_english, _add_tenant_tables, _add_bks_ids,
                      _add_pending_reports, _add_fleet_names, _add_incident_revision, _add_import_jobs,
-                     _add_abort_reason]
+                     _add_abort_reason, _add_report_details]
 CENTRAL_MIGRATIONS = [_create_central_schema, _add_dpa, _add_records, _add_notices, _add_fee_schedules, _add_roles,
                       _records_per_vg, _add_consumed_magic_links, _add_completed_imports, _add_tenant_archive,
                       _add_vg_defaults, _settings_for_fee_roles, _add_sessions]

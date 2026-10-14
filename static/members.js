@@ -10,8 +10,25 @@ async function loadMembers() {
 const MEMBER_COLUMNS = [      // [Feld, Titel, CSS-Klassen, Hilfe-Schlüssel]
   ["name", "Name", ""], ["incidents", "Einsätze", ""], ["rate", "Beteiligung", "right", "participation"],
   ["hours", "Stunden", "right", "hours"], ["nights", "nachts", "right hide-mobile", "nights_weekends"],
-  ["weekends", "Sa/So/FT", "right hide-mobile", "nights_weekends"], ["last", "Zuletzt", "right hide-mobile"],
+  ["weekends", "Sa/So/FT", "right hide-mobile", "nights_weekends"], ["agt_incidents", "Atemschutz", "right hide-mobile", "member_agt"],
+  ["agt_minutes", "AGT-Min.", "right hide-mobile", "member_agt"], ["last", "Zuletzt", "right hide-mobile"],
 ];
+
+// Funktionen laut Anwesenheitsliste (Einheitsführer, Maschinist, Angriffstrupp …) im Jahr
+function functionsCard(functions) {
+  if (!functions?.length) return "";
+  const rows = functions.map((f) => `<tr><td>${esc(f.role)}</td><td class="right">${f.count}</td><td class="right">${f.people}</td></tr>`).join("");
+  return `<div class="card"><div class="card-header"><div><h3>Funktionen${helpButton("member_functions")}</h3>
+    <p class="muted small">Wie oft wurde welche Funktion im Einsatz besetzt – laut Anwesenheitsliste, soweit eingetragen.</p></div></div>
+    <div class="table-wrap"><table class="data-table"><thead><tr><th>Funktion</th><th class="right">Besetzungen</th><th class="right">Personen</th></tr></thead>
+    <tbody>${rows}</tbody></table></div></div>`;
+}
+
+// Funktionen einer Person im Jahr, z. B. „Maschinist 4× · Angriffstruppführer 2×“
+function memberFunctions(member) {
+  const entries = Object.entries(member.functions || {}).sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0], "de"));
+  return entries.length ? `<p class="small muted">Funktionen: ${entries.map(([role, n]) => `${esc(role)} ${n}×`).join(" · ")}</p>` : "";
+}
 
 // Einsätze einer Person im gewählten Jahr (Klick öffnet den Einsatz)
 function memberIncidents(member) {
@@ -36,7 +53,7 @@ function renderMembers() {
     : (x[field] ?? "") > (y[field] ?? "") ? 1 : (x[field] ?? "") < (y[field] ?? "") ? -1 : 0;
   const list = [...a.members].sort((x, y) => descending ? -compare(x, y) : compare(x, y));
   const max = Math.max(1, ...list.map((m) => m.incidents));
-  $("#view-members").innerHTML = `<div class="card list-card members-table">
+  $("#view-members").innerHTML = functionsCard(a.functions) + `<div class="card list-card members-table">
     <div class="toolbar"><div><h3>Anwesenheit ${state.year}</h3>
       <p class="muted small">${plural(list.length, "Person", "Personen")} · ${plural(a.incident_count, "Einsatz", "Einsätze")} · Stunden = Einsatzdauer je Teilnahme</p></div></div>
     <div class="table-wrap"><table class="table">
@@ -50,8 +67,10 @@ function renderMembers() {
         <td class="right">${num(m.hours)}</td>
         <td class="right hide-mobile">${m.nights}</td>
         <td class="right hide-mobile">${m.weekends}</td>
+        <td class="right hide-mobile">${m.agt_incidents || "–"}</td>
+        <td class="right hide-mobile">${m.agt_minutes || "–"}</td>
         <td class="right hide-mobile">${formatDate(m.last)}</td>
-      </tr>${state.openMembers.has(m.id) ? `<tr class="detail"><td colspan="${MEMBER_COLUMNS.length + 1}">${memberIncidents(m)}</td></tr>` : ""}`).join("")}</tbody>
+      </tr>${state.openMembers.has(m.id) ? `<tr class="detail"><td colspan="${MEMBER_COLUMNS.length + 1}">${memberFunctions(m)}${memberIncidents(m)}</td></tr>` : ""}`).join("")}</tbody>
     </table></div>
     ${list.length ? "" : `<p class="empty-note">Für ${state.year} ist keine Anwesenheit erfasst.</p>`}
   </div>`;

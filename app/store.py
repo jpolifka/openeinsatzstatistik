@@ -4,7 +4,7 @@ import json
 import re
 
 from app import domain
-from app.incident_schema import FIELDS, INT_FIELDS
+from app.incident_schema import FIELDS, INT_FIELDS, OPTIONAL_COUNTS, OPTIONAL_TEXT, OPTIONAL_TIMES
 from app.holidays import is_weekend_or_holiday
 from app.names import NameMatcher, leader_spelling, matches_leader, split_name
 from app.timeutil import normalize_iso, parse_iso, to_iso, year_of
@@ -15,7 +15,8 @@ FULL_KEYWORD = re.compile(r"([A-Za-z]\d)\s*[.\s]?\s*(\d{0,2})")
 # Bearbeitbare Felder eines Einsatzes – Grundlage für Formular, Speichern und Abgleich
 # Datensätze im BKS-Portal (eigener Bericht, Stammdatensatz des Einsatzes): kommen aus der PDF, nicht aus dem Formular
 ID_FIELDS = ("bks_report_id", "bks_record_id")
-TEXT_FIELDS = tuple(name for name in FIELDS if name not in INT_FIELDS + ("started_at", "ended_at", "dispatch_number", "abort_reason"))
+TEXT_FIELDS = tuple(name for name in FIELDS if name not in INT_FIELDS + OPTIONAL_TEXT + OPTIONAL_TIMES + OPTIONAL_COUNTS
+                    + ("started_at", "ended_at", "dispatch_number", "abort_reason"))
 
 
 class DuplicateIncident(ValueError):
@@ -47,11 +48,17 @@ def normalize_fields(fields, weekend_or_holiday=None):
     if f["station_staff"] < 0 or (f["number"] is not None and f["number"] < 0):
         raise ValueError("Einsatznummer und Stärke dürfen nicht negativ sein.")
     f["started_at"], f["ended_at"] = normalize_iso(f["started_at"]), normalize_iso(f["ended_at"])
+    for name in OPTIONAL_TIMES:
+        f[name] = normalize_iso(f[name])
+    for name in OPTIONAL_COUNTS:
+        f[name] = to_int(f[name])
+        if f[name] is not None and f[name] < 0:
+            raise ValueError("Anzahlen dürfen nicht negativ sein.")
     for name in TEXT_FIELDS:
         f[name] = (f[name] or "").strip()
     f["keyword"], f["subcode"] = split_keyword(f["keyword"], f["subcode"])
     # Einsatznummer der Leitstelle: leer heißt unbekannt (Altdaten aus Excel)
-    for name in ("dispatch_number", "abort_reason", *ID_FIELDS):
+    for name in ("dispatch_number", "abort_reason", *OPTIONAL_TEXT, *ID_FIELDS):
         f[name] = str(f[name] or "").strip() or None
     start = parse_iso(f["started_at"])
     end = parse_iso(f["ended_at"])
@@ -157,7 +164,7 @@ def load_incidents(con, year=None, ids=None):
     for v in con.execute(f"SELECT * FROM vehicle WHERE incident_id {in_ids}", list(by_id)):
         by_id[v["incident_id"]]["vehicles"][v["call_sign"]] = dict(v)
     for p in con.execute(
-            "SELECT a.incident_id, a.role, a.vehicle, a.manual, m.id, m.name, m.last_name, m.first_name "
+            "SELECT a.incident_id, a.role, a.vehicle, a.manual, a.agt, a.agt_min, m.id, m.name, m.last_name, m.first_name "
             f"FROM attendance a JOIN member m ON m.id = a.member_id WHERE a.incident_id {in_ids} "
             "ORDER BY m.sort_order, m.name", list(by_id)):
         by_id[p["incident_id"]]["people"].append(dict(p))
@@ -254,22 +261,27 @@ def create_incident(con, fields, source, filename=None, warnings=(), weekend_or_
                                      "warnings": json.dumps(list(warnings), ensure_ascii=False)})
 
 
-def add_vehicle(con, incident_id, call_sign, name, crew, departed, arrived, alerted=None, finished=None, manual=False):
+def add_vehicle(con, incident_id, call_sign, name, crew, departed, arrived, alerted=None, finished=None, manual=False,
+                deployed=None, respiratory=None):
+    """deployed: 1 eingesetzt, 0 nur alarmiert (z. B. in Bereitstellung), None unbekannt; respiratory: Atemschutzgeräteträger."""
     _insert(con, "vehicle", {"incident_id": incident_id, "call_sign": call_sign, "name": name,
                              "crew": crew, "departed": departed, "arrived": arrived,
-                             "alerted": alerted, "finished": finished, "manual": int(manual)})
+                             "alerted": alerted, "finished": finished, "manual": int(manual),
+                             "deployed": deployed, "respiratory": respiratory})
 
 
-def add_attendance(con, incident_id, member_id, role=None, vehicle=None, manual=False):
-    con.execute("INSERT OR IGNORE INTO attendance (incident_id, member_id, role, vehicle, manual) VALUES (?,?,?,?,?)",
-                (incident_id, member_id, role, vehicle, int(manual)))
+def add_attendance(con, incident_id, member_id, role=None, vehicle=None, manual=False, agt=None, agt_min=None):
+    """agt: 1 unter Atemschutz eingesetzt, 0 nicht, None unbekannt; agt_min: Minuten unter Atemschutz."""
+    con.execute("INSERT OR IGNORE INTO attendance (incident_id, member_id, role, vehicle, manual, agt, agt_min) "
+                "VALUES (?,?,?,?,?,?,?)", (incident_id, member_id, role, vehicle, int(manual), agt, agt_min))
 
 
 def replace_report_rows(con, incident_id, vehicles, attendance):
     """Fahrzeuge und Anwesenheit aus einem (erneut eingelesenen) Bericht schreiben.
 
     Zeilen aus dem vorigen Bericht entfallen; manuell ergänzte bleiben, außer der Bericht bringt
-    dasselbe Fahrzeug bzw. dieselbe Person. attendance: [(kamerad_id, funktion, fahrzeug)].
+    dasselbe Fahrzeug bzw. dieselbe Person. attendance: [(kamerad_id, funktion, fahrzeug, agt, agt_min)]
+    (agt und agt_min dürfen fehlen).
     """
     con.execute("DELETE FROM vehicle WHERE incident_id = ? AND manual = 0", (incident_id,))
     con.execute("DELETE FROM attendance WHERE incident_id = ? AND manual = 0", (incident_id,))
@@ -277,11 +289,12 @@ def replace_report_rows(con, incident_id, vehicles, attendance):
         con.execute("DELETE FROM vehicle WHERE incident_id = ? AND call_sign = ?", (incident_id, row["call_sign"]))
         add_vehicle(con, incident_id, **row)
     seen = set()
-    for member_id, role, vehicle in attendance:
+    for row in attendance:
+        member_id, role, vehicle, agt, agt_min = (*row, None, None)[:5]
         if member_id not in seen:   # doppelte Zeile im Bericht: die erste zählt
             seen.add(member_id)
             con.execute("DELETE FROM attendance WHERE incident_id = ? AND member_id = ?", (incident_id, member_id))
-            add_attendance(con, incident_id, member_id, role, vehicle)
+            add_attendance(con, incident_id, member_id, role, vehicle, agt=agt, agt_min=agt_min)
 
 
 TIME = re.compile(r"([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?")
