@@ -376,7 +376,7 @@ const HELP_SECTIONS = [
       records: {
         title: "Prüfprotokoll",
         short: "Abgleich je Einsatz über alle Wehren der VG (Recht „Prüfprotokoll und Kostenersatz“, z. B. Wehrleiter).",
-        text: "Für jeden Einsatz mit Stammdatensatz vergleicht das Protokoll die Zeiten der Leitstelle mit den Berichten der Wehren. „Geprüft“ (in der Zeile) bzw. „Als geprüft markieren“ gilt für den jetzigen Stand: Kommt ein neuer Befund hinzu (z. B. ein geänderter Bericht), ist der Einsatz wieder offen. „Alle bestätigen“ vermerkt alle offenen Einsätze des Jahres auf einmal als geprüft – erst nach Durchsicht verwenden. Fehlt ein Bericht, öffnet „BKS ↗“ den Stammdatensatz im BKS-Portal. „Drucken / PDF“ druckt die angezeigten Einsätze mit ihren Befunden.",
+        text: "Für jeden Einsatz mit Stammdatensatz vergleicht das Protokoll die Zeiten der Leitstelle mit den Berichten der Wehren. „Geprüft“ (in der Zeile) bzw. „Als geprüft markieren“ gilt für den jetzigen Stand: Kommt ein neuer Befund hinzu (z. B. ein geänderter Bericht), ist der Einsatz wieder offen. „Alle bestätigen“ vermerkt alle offenen Einsätze des Jahres auf einmal als geprüft – erst nach Durchsicht verwenden. „Einsatz öffnen“ springt zum erfassten Bericht der Wehr in der Einsatzliste. „Drucken / PDF“ druckt die angezeigten Einsätze mit ihren Befunden.",
       },
       fees: {
         title: "Kostenersatz",

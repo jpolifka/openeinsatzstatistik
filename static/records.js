@@ -138,7 +138,9 @@ function recordTitle(entry) {
   return [keyword, r.reported_as, place].filter(Boolean).map(esc).join(" · ") || "–";
 }
 
-const bksAnchor = (url, label) => url ? `<a href="${esc(url)}" target="_blank" rel="noopener" class="bks-link">${label}</a>` : "";
+// Link zum Einsatz in dieser Oberfläche (öffnet ihn in der Einsatzliste)
+const incidentLink = (i, label, cls = "incident-link") =>
+  `<a href="#incidents" class="${cls}" data-open-incident="${esc(i.id)}" data-year="${i.year}">${label}</a>`;
 
 // Befunde in einer Zeile: fehlende Berichte mit Wehr, sonst je Art die Anzahl
 function findingSummary(entry) {
@@ -157,24 +159,22 @@ const findingValue = (v) => v == null || v === "" ? "–" : esc(v);
 function recordDetail(entry) {
   const reports = entry.incidents.map((i) => `<tr>
       <td>${esc(i.tenant_name)}</td><td>${i.number ?? "–"}</td><td>${esc(i.keyword || "–")}</td>
-      <td class="right">${i.people}</td><td>${i.bks_report_id ? bksAnchor(i.bks_url, esc(i.bks_report_id)) : "–"}</td></tr>`).join("");
+      <td class="right">${i.people}</td><td>${i.bks_report_id ? esc(i.bks_report_id) : "–"}</td><td class="no-print">${incidentLink(i, "Einsatz öffnen")}</td></tr>`).join("");
   const findings = entry.findings.map((f) => `<tr>
       <td>${esc(f.tenant_name)}</td><td>${esc(FINDING_KINDS[f.kind] || f.kind)}</td><td>${findingValue(f.vehicle)}</td>
       <td>${findingValue(f.field)}</td><td>${findingValue(f.source)}</td><td>${findingValue(f.stored)}</td></tr>`).join("");
   const id = esc(entry.record.bks_record_id);
-  const missingText = entry.findings.some((f) => f.kind === "missing");
   return `<div class="detail-grid record-grid">
     <div class="panel"><h4>Berichte der Wehren</h4>
-      ${reports ? `<table class="mini-table"><thead><tr><th>Wehr</th><th>Nr.</th><th>Stichwort</th><th class="right">Personen</th><th>BKS-Bericht</th></tr></thead><tbody>${reports}</tbody></table>`
+      ${reports ? `<table class="mini-table"><thead><tr><th>Wehr</th><th>Nr.</th><th>Stichwort</th><th class="right">Personen</th><th>BKS-Bericht</th><th class="no-print"></th></tr></thead><tbody>${reports}</tbody></table>`
         : `<p class="muted small">Noch kein Bericht einer Wehr erfasst.</p>`}
-      <p class="small muted section-gap">Stammdatensatz ${bksAnchor(entry.record.bks_url, id)}${entry.record.dispatch_number ? ` · Einsatznummer Leitstelle ${esc(entry.record.dispatch_number)}` : ""}${entry.record.first_alarm ? "" : " · Stammdatensatz nicht eingelesen"}</p>
+      <p class="small muted section-gap">Stammdatensatz ${id}${entry.record.dispatch_number ? ` · Einsatznummer Leitstelle ${esc(entry.record.dispatch_number)}` : ""}${entry.record.first_alarm ? "" : " · Stammdatensatz nicht eingelesen"}</p>
     </div>
     <div class="panel"><h4>Befunde${helpButton("findings")}</h4>
       ${findings ? `<table class="mini-table"><thead><tr><th>Wehr</th><th>Art</th><th>Fahrzeug</th><th>Wert</th><th>Stammdatensatz / Leitstelle</th><th>Bericht der Wehr</th></tr></thead><tbody>${findings}</tbody></table>`
         : `<p class="muted small">Keine Abweichungen.</p>`}
     </div>
     <div class="actions panel full bare no-print">
-      ${missingText ? bksAnchor(entry.record.bks_url, "Stammdatensatz im BKS-Portal öffnen").replace('class="bks-link"', 'class="btn btn-light btn-small"') : ""}
       ${entry.incidents.length ? `<button type="button" class="btn btn-light btn-small" data-fees="${id}">Kostenersatz berechnen</button>` : ""}
       ${!entry.findings.length ? "" : entry.reviewed ? `<button type="button" class="btn btn-outline btn-small" data-review="${id}" data-done="0">Prüfvermerk entfernen</button>`
         : `<button type="button" class="btn btn-primary btn-small" data-review="${id}" data-done="1">Als geprüft markieren</button>`}
@@ -190,7 +190,7 @@ function renderRecords() {
     const id = entry.record.bks_record_id, expanded = records.expanded.has(id);
     const tenants = entry.incidents.map((i) => `${esc(i.tenant_name)}${i.number != null ? " " + i.number : ""}`).join(", ");
     const pending = entry.findings.length && !entry.reviewed;
-    const actions = `${entry.findings.some((f) => f.kind === "missing") ? bksAnchor(entry.record.bks_url, "BKS ↗") : ""}
+    const actions = `${entry.incidents.length ? incidentLink(entry.incidents[0], "Einsatz öffnen") : ""}
       ${pending ? `<button type="button" class="btn btn-light btn-small" data-review="${esc(id)}" data-done="1">Geprüft</button>` : ""}`;
     return `<tr class="row ${expanded ? "open" : ""}" data-record="${esc(id)}">
         <td>${formatDate(entry.started_at)}</td><td>${recordTitle(entry)}</td><td>${tenants || "–"}</td>
@@ -245,7 +245,12 @@ $("#view-records").addEventListener("click", async (e) => {
   const filter = e.target.closest("[data-records-filter]");
   if (filter) { records.onlyOpen = filter.dataset.recordsFilter === "open"; renderRecords(); return; }
   if (e.target.closest("[data-records-print]")) { window.print(); return; }
-  if (e.target.closest("a")) return;                       // Link ins BKS-Portal: nicht aufklappen
+  const open = e.target.closest("[data-open-incident]");
+  if (open) {
+    e.preventDefault();
+    try { await openIncident(open.dataset.openIncident, Number(open.dataset.year)); } catch (err) { alert(err.message); }
+    return;
+  }
   const all = e.target.closest("[data-review-all]");
   if (all) {
     const n = all.dataset.reviewAll;

@@ -631,7 +631,7 @@ a.tenant-badge { text-decoration: none; }
 
 .todo-mark { color: var(--brand); font-size: .7rem; vertical-align: middle; }
 .record-actions { white-space: nowrap; }
-.record-actions .bks-link { margin-right: 8px; font-size: .85rem; }
+.record-actions .incident-link { margin-right: 8px; font-size: .85rem; }
 .detail-grid.record-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.8fr); }
 .record-grid .panel { overflow-x: auto; }
 @media (max-width: 1000px) { .detail-grid.record-grid { grid-template-columns: minmax(0, 1fr); } }

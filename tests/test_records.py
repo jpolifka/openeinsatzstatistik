@@ -126,7 +126,7 @@ def test_review_all_confirms_every_open_record(vg):
     _accept(client, data, "a1.pdf")
     _accept(client, data, "a2.pdf")
     entry = client.get("/api/records?year=2025").json()["records"][0]
-    assert entry["record"]["bks_url"].endswith("/9000001?from_nid=9336")     # Link zum Stammdatensatz
+    assert all(i["id"] and i["year"] for i in entry["incidents"])           # Grundlage der Links zum Einsatz
     assert client.post("/api/records/review-all?year=2025").json()["reviewed"] == 1
     assert client.get("/api/records?year=2025").json()["records"][0]["reviewed"]["by"] == "vglead@example.org"
     assert client.post("/api/records/review-all?year=2025").json()["reviewed"] == 0

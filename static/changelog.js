@@ -9,7 +9,7 @@ const CHANGELOG = [
     date: "2026-10-14",
     version: "2026-10-14.3",
     items: [
-      "<b>Berichte abgleichen übersichtlicher:</b> Jede Zeile zeigt die Befunde jetzt auf einen Blick (z. B. „Bericht fehlt: Wehr“), mit <i>Geprüft</i> direkt in der Zeile. <i>Alle bestätigen</i> vermerkt alle offenen Befunde auf einmal als geprüft. Fehlt ein Bericht, führt ein Link direkt zum Stammdatensatz im BKS-Portal; auch die Berichte der Wehren sind dorthin verlinkt.",
+      "<b>Berichte abgleichen übersichtlicher:</b> Jede Zeile zeigt die Befunde jetzt auf einen Blick (z. B. „Bericht fehlt: Wehr“), mit <i>Geprüft</i> direkt in der Zeile. <i>Alle bestätigen</i> vermerkt alle offenen Befunde auf einmal als geprüft. „Einsatz öffnen“ springt direkt zum Einsatz in der Einsatzliste.",
       "<b>Einsätze: „Zu erledigen“:</b> Neuer Filter für Einsätze mit Prüfhinweisen, fehlender Nummer oder einem offenen Hinweis an die Wehr. Betroffene Einsätze tragen in der Liste einen Punkt, der Grund steht im Tooltip.",
     ],
   },
