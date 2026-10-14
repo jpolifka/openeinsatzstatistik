@@ -333,6 +333,7 @@ button.person:hover:not(.leader) { background: var(--brand-light); color: var(--
 .toggle { display: inline-flex; align-items: center; gap: 8px; font-size: .9rem; cursor: pointer; }
 .toggle input { width: 18px; height: 18px; accent-color: var(--brand); }
 .diff-table td:nth-child(2) { color: var(--gray); text-decoration: line-through; }
+.diff-table .diff-kept { display: block; font-size: .75rem; font-weight: 400; color: var(--gray); }
 .diff-table td:nth-child(3) { color: var(--brand-dark); font-weight: 700; }
 
 /* ------------------------------------------------------------ Tooltip, Toast, Fuß */

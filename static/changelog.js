@@ -5,6 +5,12 @@
 // Ein neuer Eintrag mit neuem Datum markiert das ?-Symbol im Kopf, bis die Neuigkeiten gelesen sind.
 const CHANGELOG = [
   {
+    date: "2026-10-16",
+    items: [
+      "<b>Handarbeit bleibt erhalten:</b> Wird ein Bericht erneut eingelesen und der Einsatz aktualisiert, überschreibt er keine Angaben mehr, die Sie von Hand geändert haben (Felder, Fahrzeugzeiten, Anwesenheit). Das gilt auch, wenn der Bericht einen Wert gar nicht enthält oder die Anwesenheitsliste leer ist. In der Vorschau steht dann „bleibt wie erfasst“. Möchten Sie den Berichtswert doch, tragen Sie ihn in der Vorschau ein.",
+    ],
+  },
+  {
     date: "2026-10-15",
     items: [
       "<b>Neue Auswertungen unter „Auswertungen“:</b> <i>Abbrüche &amp; Anlagen</i> (warum Einsätze abgebrochen wurden, Fehlalarme, Brandmeldeanlagen je Anlage bzw. Objekt), <i>Fahrzeuge &amp; Atemschutz</i> (Alarmierungen, Ausfahrten und tatsächliche Einsätze je Fahrzeug, Einsatzstunden, Geräteträger und Minuten unter Atemschutz) und <i>Brand &amp; Rettung</i> (Zeit bis „Brand unter Kontrolle“ und „Feuer aus“, Innen-/Außenangriff, Brandwachen, Menschenrettung und Verletzte).",

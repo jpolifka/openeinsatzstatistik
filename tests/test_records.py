@@ -178,11 +178,11 @@ def test_edit_vehicles_and_people_survive_reimport(vg):
     assert sorted(p["name"] for p in edited["people"]) == ["Muster, Max", "Neu, Nora"]
     assert "Neu, Nora" in [m["name"] for m in client.get("/api/members?tenant=wehr-a1").json()["members"]]
 
-    # Erneut eingelesen: Werte aus der PDF ersetzen die importierten Zeilen, manuelle bleiben
+    # Erneut eingelesen: von Hand geänderte und ergänzte Zeilen bleiben, der Rest kommt aus der PDF
     data = _upload(client, "a1.pdf")
     updated = _accept(client, data, "a1.pdf", replace=True)
     vehicles = {v["call_sign"]: v["crew"] for v in updated["vehicles"] if v["crew"] is not None}
-    assert vehicles == {"02/45": 2, "02/24": 0, "02/71": 3}
+    assert vehicles == {"02/45": 4, "02/24": 0, "02/71": 3}
     assert "Neu, Nora" in [p["name"] for p in updated["people"]]
 
 
