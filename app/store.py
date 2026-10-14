@@ -293,12 +293,21 @@ def replace_report_rows(con, incident_id, vehicles, attendance):
         if not con.execute("SELECT 1 FROM vehicle WHERE incident_id = ? AND call_sign = ?",
                            (incident_id, row["call_sign"])).fetchone():
             add_vehicle(con, incident_id, **row)
+        else:   # von Hand gesetzte Werte bleiben, nur Fehlendes kommt aus dem Bericht
+            for column in ("name", "alerted", "finished", "deployed", "respiratory"):
+                if row.get(column) is not None:
+                    con.execute(f"UPDATE vehicle SET {column} = ? WHERE incident_id = ? AND call_sign = ? "
+                                f"AND {column} IS NULL", (row[column], incident_id, row["call_sign"]))
     seen = set()
     for row in attendance:
         member_id, role, vehicle, agt, agt_min = (*row, None, None)[:5]
         if member_id not in seen:   # doppelte Zeile im Bericht: die erste zählt
             seen.add(member_id)
             add_attendance(con, incident_id, member_id, role, vehicle, agt=agt, agt_min=agt_min)
+            for column, value in (("agt", agt), ("agt_min", agt_min)):   # Atemschutz aus dem Bericht nachtragen
+                if value is not None:
+                    con.execute(f"UPDATE attendance SET {column} = ? WHERE incident_id = ? AND member_id = ? "
+                                f"AND {column} IS NULL", (value, incident_id, member_id))
 
 
 TIME = re.compile(r"([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?")
