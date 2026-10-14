@@ -5,6 +5,14 @@
 // Ein neuer Eintrag mit neuem Datum markiert das ?-Symbol im Kopf, bis die Neuigkeiten gelesen sind.
 const CHANGELOG = [
   {
+    date: "2026-10-14",
+    items: [
+      "<b>Abgebrochene Einsätze:</b> Der „Einsatzabbruch“ aus dem BKS-Bericht wird jetzt übernommen und steht im Einsatz (auch bearbeitbar). Fehlt die Eintreffzeit und ist ein Abbruch hinterlegt, gilt der Einsatz in „Eintreffen und verfügbare Kräfte“ als rechtzeitig eingetroffen. <b>Bereits erfasste Einsätze:</b> den Bericht erneut einlesen und aktualisieren, damit der Abbruch übernommen wird.",
+      "<b>BKS-Portal:</b> Der Link zum Bericht öffnet jetzt direkt den richtigen Bereich im Portal.",
+      "<b>Hilfetexte:</b> Orte werden in den Hilfetexten nicht mehr namentlich genannt. Welche Orte zum Ausrückebereich zählen, legt die Verwaltung unter <i>Einstellungen → Orte &amp; Zeitgrenzen</i> fest.",
+    ],
+  },
+  {
     date: "2026-10-05",
     items: [
       "<b>Sicherer abmelden:</b> „Abmelden“ beendet die Sitzung jetzt auch auf dem Server – ein kopiertes Anmelde-Cookie ist danach wertlos. Superadmins sehen unter <i>Einstellungen → Sitzungen</i>, wer angemeldet ist, und können einzelne Sitzungen, alle einer Person oder alle anderen beenden. <b>Einmalig nach dem Update:</b> alle melden sich neu an.",

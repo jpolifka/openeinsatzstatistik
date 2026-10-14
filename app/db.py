@@ -281,6 +281,11 @@ def _add_tenant_archive(con):
     con.execute("CREATE TABLE tenant_archive (slug TEXT PRIMARY KEY, target TEXT NOT NULL, email TEXT)")
 
 
+def _add_abort_reason(con):
+    """Einsatzabbruch aus dem BKS-Bericht: ohne Eintreffzeit gilt der Einsatz als rechtzeitig."""
+    con.execute("ALTER TABLE incident ADD COLUMN abort_reason TEXT")
+
+
 def _add_vg_defaults(con):
     """Vorgaben der VG für die Fachkonfiguration ihrer Wehren (siehe tenancy.load_config); eine Wehr speichert
     nur noch, wo sie abweicht. defaults_lifted: Werte der Wehren schon übernommen (tenancy.lift_vg_defaults)."""
@@ -302,7 +307,8 @@ def _settings_for_fee_roles(con):
 
 # Neue Schemaänderungen nur hinten anfügen; PRAGMA user_version zählt die erledigten Schritte.
 TENANT_MIGRATIONS = [_create_legacy_schema, _rename_to_english, _add_tenant_tables, _add_bks_ids,
-                     _add_pending_reports, _add_fleet_names, _add_incident_revision, _add_import_jobs]
+                     _add_pending_reports, _add_fleet_names, _add_incident_revision, _add_import_jobs,
+                     _add_abort_reason]
 CENTRAL_MIGRATIONS = [_create_central_schema, _add_dpa, _add_records, _add_notices, _add_fee_schedules, _add_roles,
                       _records_per_vg, _add_consumed_magic_links, _add_completed_imports, _add_tenant_archive,
                       _add_vg_defaults, _settings_for_fee_roles, _add_sessions]

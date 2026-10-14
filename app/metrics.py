@@ -82,13 +82,17 @@ def incident_metrics(incident, cfg, limit=None):
         on_arrival = crew_arriving(lambda m: m == first)                          # AR
         within_limit = crew_arriving(lambda m: first < m <= window_end)           # AS
         within_second = crew_arriving(lambda m: m > first and limit < m <= second_end)  # AT
+    # Einsatz vor dem Eintreffen abgebrochen (Einsatzabbruch im BKS-Bericht): gilt als rechtzeitig, damit die
+    # Eintreffquote nicht durch Alarme sinkt, bei denen die Einheit gar nicht ankommen musste
+    aborted = first is None and bool(incident.get("abort_reason"))
     return {
         "daytime": bool(start) and cfg.is_daytime(start.time()),                 # D
         "duration_min": duration,                                                 # G
         "vehicles": vehicles,
         "turnout_min": turnout,
         "arrival_min": first,
-        "on_time": first <= limit + _ON_TIME_TOLERANCE if first is not None else None,   # AQ
+        "on_time": True if aborted else first <= limit + _ON_TIME_TOLERANCE if first is not None else None,   # AQ
+        "aborted": aborted,
         "crew_on_arrival": on_arrival,
         "crew_within_limit": within_limit,
         "crew_within_second": within_second,
@@ -213,7 +217,8 @@ def _summarize(evaluated):
         "crew_within_limit": _average([m["crew_within_limit"] for _, m in evaluated]),
         "crew_within_second": _average([m["crew_within_second"] for _, m in evaluated]),
         "crew_total": _average([m["crew_plan_total"] for _, m in evaluated]),
-        "incidents": [{"id": i["id"], "number": i["number"], "arrival_min": round(m["arrival_min"], 1),
+        "incidents": [{"id": i["id"], "number": i["number"], "arrival_min": None if m["arrival_min"] is None else round(m["arrival_min"], 1),
+                       "aborted": m["aborted"],
                        "on_time": m["on_time"]} for i, m in evaluated],
     }
 
@@ -221,8 +226,9 @@ def _summarize(evaluated):
 def response_plan(evaluated, limit, cfg):
     """Pos. 8.4: ab Alarmstufe 2 im eigenen Ausrückebereich; evaluated mit derselben Zeitgrenze."""
     relevant = [(i, m) for i, m in evaluated if m["plan_relevant"]]
-    # Excel zählt Einsätze ohne Eintreffzeit mit 0 min als "erreicht" – hier ausgenommen
-    timed = [(i, m) for i, m in relevant if m["arrival_min"] is not None]
+    # Excel zählt Einsätze ohne Eintreffzeit mit 0 min als "erreicht" – hier ausgenommen; abgebrochene Einsätze
+    # (Einsatzabbruch hinterlegt) gelten dagegen als rechtzeitig
+    timed = [(i, m) for i, m in relevant if m["on_time"] is not None]
     windows = [{"key": key, "day_type": day_type, "hours": hours,
                 **_summarize([(i, m) for i, m in timed
                               if bool(i["weekend_or_holiday"]) == weekend and m["daytime"] == daytime])}

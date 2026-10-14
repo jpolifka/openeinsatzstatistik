@@ -385,6 +385,8 @@ Bewusste Unterschiede zu den Formeln der Excel-Datei:
   vs. `H4:H59`). Hier wird es korrekt gerechnet.
 - Einsätze ohne Eintreffzeit zählt Excel mit 0 Minuten als „erreicht“ – hier werden sie
   in „Eintreffen und verfügbare Kräfte“ nicht berücksichtigt (die Anzahl wird angezeigt).
+  Ausnahme: Ist im BKS-Bericht ein Einsatzabbruch hinterlegt (`abort_reason`), gilt der Einsatz
+  als rechtzeitig eingetroffen; die Zeit bis zum Eintreffen bleibt leer und geht in keinen Mittelwert ein.
 - Der Gesamtwert dort ist über alle Einsätze gemittelt (Excel: Mittel der
   vier Zeitfenster).
 - Tag/Nacht folgt überall der Excel-Regel (Spalte D): Ein Einsatzbeginn um genau 06:00:00

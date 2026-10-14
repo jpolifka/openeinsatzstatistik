@@ -55,6 +55,19 @@ def test_response_plan_counts_relevant_incidents():
     assert windows == {"weekday_day": 1, "weekday_night": 0, "weekend_day": 1, "weekend_night": 0}
 
 
+def test_aborted_incident_without_arrival_counts_as_on_time():
+    aborted = make_incident(id=1, abort_reason="Täuschungsalarm", vehicles={"02/45": vehicle("02/45", 6)})
+    arrived_late = make_incident(id=2, abort_reason="in Bereitstellung",
+                                 vehicles={"02/45": vehicle("02/45", 6, None, "10:12:00")})
+    m = metrics.incident_metrics(aborted, CFG, 8)
+    assert (m["arrival_min"], m["on_time"], m["aborted"]) == (None, True, True)
+    # mit Eintreffzeit zählt diese, auch bei hinterlegtem Abbruch
+    assert metrics.incident_metrics(arrived_late, CFG, 8)["on_time"] is False
+    plan = metrics.response_plan(metrics.evaluate([aborted, arrived_late], CFG, 8), 8, CFG)
+    assert (plan["total"]["count"], plan["total"]["on_time"], plan["without_times"]) == (2, 1, 0)
+    assert plan["total"]["arrival_min"] == 12
+
+
 def test_statistics_and_attendance():
     people = [{"id": 1, "name": "Muster, Max"}]
     incidents = [

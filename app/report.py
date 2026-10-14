@@ -326,7 +326,7 @@ def save(con, report, fields, update_id=None, modified_by=None, revision=None):
 # ---------------------------------------------------------------- Abgleich
 COMPARED_FIELDS = {"number": "Nr.", "started_at": "Beginn", "ended_at": "Ende", "keyword": "Stichwort",
                    "subcode": "Stufe", "place": "Ort", "unit_leader": "Einheitsführung", "station_staff": "Personen Gerätehaus",
-                   "description": "Beschreibung", "dispatch_number": "Leitstellen-Nr."}
+                   "description": "Beschreibung", "dispatch_number": "Leitstellen-Nr.", "abort_reason": "Einsatzabbruch"}
 COMPARED_VEHICLE_FIELDS = {"crew": "Stärke", "departed": "Ausrücken", "arrived": "Eintreffen"}
 
 

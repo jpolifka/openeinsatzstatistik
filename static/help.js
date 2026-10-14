@@ -53,12 +53,17 @@ const HELP_SECTIONS = [
       place: {
         title: "Ort",
         short: "Einsatzort; bestimmt Einsatzgebiet und Ausrückebereich.",
-        text: () => `Ortsteil oder Ort des Einsatzes. Bekannte Orte (${helpList(config.places)}) werden vorgeschlagen. Nur Einsätze in ${helpList(config.plan_places)} zählen für „Eintreffen und verfügbare Kräfte“ – bitte den Ort daher genau so schreiben.`,
+        text: () => `Ortsteil oder Ort des Einsatzes. Bekannte Orte der Wehr werden vorgeschlagen. Nur Einsätze in Orten, die in den Einstellungen unter „Orte & Zeitgrenzen“ zum Ausrückebereich zählen, gehen in „Eintreffen und verfügbare Kräfte“ ein – bitte den Ort daher genau so schreiben.`,
       },
       bks_url: {
         title: "BKS-Portal",
         short: "Bericht im BKS-Portal öffnen.",
         text: "Jeder Bericht im BKS-Portal hat eine eigene Nummer (Haupt- bzw. Nebenbericht einer Einheit). Alle Berichte eines Einsatzes verweisen auf denselben <i>Stammdatensatz</i>; darüber erkennt die App gemeinsame Einsätze mehrerer Wehren – auch selbst angelegte ohne Einsatznummer der Leitstelle, z. B. Brandsicherheitswachen. Der Link öffnet den Bericht im Portal (Anmeldung dort nötig).",
+      },
+      abort_reason: {
+        title: "Einsatzabbruch",
+        short: "Grund, warum der Einsatz abgebrochen wurde (aus dem BKS-Bericht).",
+        text: () => `Wird aus dem Feld „Einsatzabbruch“ des BKS-Berichts übernommen (z. B. Täuschungsalarm, böswilliger Alarm, in Bereitstellung). Ist es gefüllt und fehlt die Eintreffzeit, gilt der Einsatz in „Eintreffen und verfügbare Kräfte“ als innerhalb der Zeitgrenze (${helpLimit()} Minuten) eingetroffen – die Einheit musste nicht mehr ankommen. Gibt es eine Eintreffzeit, zählt diese. Leer lassen, wenn der Einsatz nicht abgebrochen wurde.`,
       },
       dispatch_number: {
         title: "Leitstellen-Nr.",
@@ -85,7 +90,7 @@ const HELP_SECTIONS = [
       arrival_min: {
         title: "Zeit bis zum Eintreffen",
         short: "Minuten von der Alarmierung bis zum Eintreffen des ersten Fahrzeugs.",
-        text: () => `Minuten vom Einsatzbeginn bis zum Eintreffen (Status 4) des ersten eigenen Fahrzeugs an der Einsatzstelle. Rot markiert, wenn sie über ${helpLimit()} Minuten liegt. Ohne Eintreffzeit wird der Einsatz in der Auswertung „Eintreffen und verfügbare Kräfte“ nicht berücksichtigt. Die Uhrzeit des Eintreffens selbst heißt „Eintreffen“.`,
+        text: () => `Minuten vom Einsatzbeginn bis zum Eintreffen (Status 4) des ersten eigenen Fahrzeugs an der Einsatzstelle. Rot markiert, wenn sie über ${helpLimit()} Minuten liegt. Ohne Eintreffzeit wird der Einsatz in der Auswertung „Eintreffen und verfügbare Kräfte“ nicht berücksichtigt – außer es ist ein Einsatzabbruch hinterlegt: dann gilt er als rechtzeitig eingetroffen. Die Uhrzeit des Eintreffens selbst heißt „Eintreffen“.`,
       },
       on_time: {
         title: () => `${helpLimit()} Min. erreicht`,
@@ -167,7 +172,7 @@ const HELP_SECTIONS = [
       response_plan: {
         title: "Eintreffen und verfügbare Kräfte",
         short: "Anteil der Einsätze, bei denen das erste eigene Fahrzeug rechtzeitig eintraf.",
-        text: () => `Berücksichtigt werden Einsätze ab Alarmstufe ${config.plan_min_level} (Stichwort x${config.plan_min_level}–x4) in ${helpList(config.plan_places)} mit Eintreffzeit. Eintreffquote = Anteil der Einsätze, bei denen das erste Fahrzeug innerhalb der Zeitgrenze (${helpLimits()} Minuten) eingetroffen ist – getrennt nach den vier Zeitfenstern Werktag/Wochenende × Tag/Nacht. Die Stärken sind Mittelwerte je Einsatz. <b>Was die Auswertung nicht aussagt:</b> Sie misst, ob das erste eigene Fahrzeug rechtzeitig eintraf, und zählt die Personen der Fahrzeuge. Funktionen, Ausrüstung und Qualifikation (z. B. Staffel 1/5/6, Gruppe 1/8/9 nach FwDV 3) prüft sie nicht; sie ist daher eine Eintreffquote, kein vollständiger Nachweis eines Schutzziels und kein Feuerwehrbedarfsplan. Die Zeitgrenze richtet sich nach den Einstellungen der Wehr (seit 26.09.2025 nennt die Feuerwehrverordnung RLP zehn statt acht Minuten Einsatzgrundzeit); wer Jahre vergleicht, sollte dieselbe Grenze wählen. Zunächst sehen die Auswertung nur Wehrführer und Wehrleiter; mit „für alle freigegeben“ (oder in den Einstellungen unter „Orte & Zeitgrenzen“) sehen sie alle Rollen der Wehr.`,
+        text: () => `Berücksichtigt werden Einsätze ab Alarmstufe ${config.plan_min_level} (Stichwort x${config.plan_min_level}–x4) im Ausrückebereich der Wehr mit Eintreffzeit. Welche Orte zum Ausrückebereich gehören, legt die Verwaltung unter „Einstellungen → Orte & Zeitgrenzen“ fest. Einsätze ohne Eintreffzeit, bei denen ein Einsatzabbruch hinterlegt ist, gelten als rechtzeitig eingetroffen. Eintreffquote = Anteil der Einsätze, bei denen das erste Fahrzeug innerhalb der Zeitgrenze (${helpLimits()} Minuten) eingetroffen ist – getrennt nach den vier Zeitfenstern Werktag/Wochenende × Tag/Nacht. Die Stärken sind Mittelwerte je Einsatz. <b>Was die Auswertung nicht aussagt:</b> Sie misst, ob das erste eigene Fahrzeug rechtzeitig eintraf, und zählt die Personen der Fahrzeuge. Funktionen, Ausrüstung und Qualifikation (z. B. Staffel 1/5/6, Gruppe 1/8/9 nach FwDV 3) prüft sie nicht; sie ist daher eine Eintreffquote, kein vollständiger Nachweis eines Schutzziels und kein Feuerwehrbedarfsplan. Die Zeitgrenze richtet sich nach den Einstellungen der Wehr (seit 26.09.2025 nennt die Feuerwehrverordnung RLP zehn statt acht Minuten Einsatzgrundzeit); wer Jahre vergleicht, sollte dieselbe Grenze wählen. Zunächst sehen die Auswertung nur Wehrführer und Wehrleiter; mit „für alle freigegeben“ (oder in den Einstellungen unter „Orte & Zeitgrenzen“) sehen sie alle Rollen der Wehr.`,
       },
       alarm_level: {
         title: "Alarmstufen",

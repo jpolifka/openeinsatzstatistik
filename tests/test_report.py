@@ -130,3 +130,9 @@ def test_comparison_detects_text_people_and_seconds(con):
     changed["vehicles"]["02/45"]["arrived"] = "10:16:26"
     fields = {d["field"] for d in report.differences(existing, changed, CFG)}
     assert {"Beschreibung", "Leitstellen-Nr.", "Anwesende", "Eintreffen 02/45"} <= fields
+
+
+def test_abort_reason_is_read_from_header_line():
+    left = LEFT + "Zeitpunkt der Alarmierung der ersten Einheit: 12.03.2025 10:00 Einsatzabbruch: Täuschungsalarm\n"
+    assert parse_report(FULL.replace(LEFT, left), left, "", "17-25_B2_Test.pdf", CFG.unit_prefix)["abort_reason"] == "Täuschungsalarm"
+    assert parse_report(FULL, LEFT, "", "17-25_B2_Test.pdf", CFG.unit_prefix)["abort_reason"] is None

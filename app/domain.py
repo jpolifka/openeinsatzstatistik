@@ -11,7 +11,7 @@ import re
 CONTROL_CENTER = "FL NR#.LIN"
 
 # Bericht im BKS-Portal RLP; {} = Nummer des Haupt- bzw. Nebenberichts (bks_report_id)
-BKS_REPORT_URL = "https://bks-portal.rlp.de/bkslist/continue/einsatzbericht/{}"
+BKS_REPORT_URL = "https://bks-portal.rlp.de/bkslist/continue/einsatzbericht/{}?from_nid=9336"
 
 # Funkrufnamen in RLP (BOS-Funkrufnamenverzeichnis, Stand 01.06.2026), z. B. „FL NR#.ABC 02/45-01“ oder
 # „RP WW 01/23-06“: [BOS-Kennung] Ort Standort/Kennzahl-laufende Nummer
