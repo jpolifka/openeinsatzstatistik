@@ -410,11 +410,6 @@ const HELP_SECTIONS = [
         short: "Einsätze mit Atemschutz und Minuten unter Atemschutz laut Anwesenheitsliste.",
         text: "Einsätze, in denen die Person laut Anwesenheitsliste unter Atemschutz eingesetzt war, und die dort eingetragenen Minuten. Ältere Einsätze ohne diese Angabe sind nicht enthalten (Bericht erneut einlesen). Die Werte ersetzen keinen Atemschutznachweis.",
       },
-      member_functions: {
-        title: "Funktionen",
-        short: "Wie oft welche Funktion laut Anwesenheitsliste besetzt war.",
-        text: "Zählt die Angabe „Funktion“ der Anwesenheitsliste (z. B. Einheitsführer, Maschinist, Angriffstruppführer). Je Person steht sie im aufgeklappten Eintrag. Nicht eingetragene Funktionen fehlen – es ist keine Qualifikationsübersicht.",
-      },
       nights_weekends: {
         title: "nachts / Sa/So/FT",
         short: () => `Einsätze zwischen ${config.day_hours[1]} und ${config.day_hours[0]} Uhr bzw. an Wochenenden und Feiertagen.`,

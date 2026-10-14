@@ -57,7 +57,7 @@ test("Abbrüche: Gruppen, Anlagen mit Fehlalarmquote und Abdeckung", () => {
   const html = els["#view-aborts"].innerHTML;
   assert.match(html, /Abgebrochene Einsätze/);
   assert.match(html, /Fehlalarm \/ kein Ereignis=5 · 63 %/);
-  assert.match(html, /WH Musterhaus · Anlage 301986=5 · davon 3 Fehlalarm/);
+  assert.match(html, /WH Musterhaus · Anlage 301986=5 · 3 Fehlalarm/);
   assert.match(html, /7 von 9 Einsätzen auswertbar/);
   assert.match(html, /ohne Angabe von Anlage oder Objekt/);
 });
@@ -72,7 +72,7 @@ test("Fahrzeuge: nur bereitgestellt und fehlende Angaben werden benannt, Atemsch
   };
   context.renderResources();
   const html = els["#view-resources"].innerHTML;
-  assert.match(html, /02\/45 · HLF 20=8 Einsätze · 1× nur bereit/);
+  assert.match(html, /02\/45 · HLF 20=8 · 1× bereit/);
   assert.match(html, /Bei 4 von 11 Alarmierungen fehlt die Angabe/);
   assert.match(html, /Keine Angaben zum Atemschutz/);
   assert.doesNotMatch(html, /0 von 0/);

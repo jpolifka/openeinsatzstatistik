@@ -35,7 +35,7 @@ function abortReasonsCard(a) {
 }
 
 function abortCategoriesCard(a) {
-  const items = a.categories.map((c) => ({ label: c.name, value: c.aborted, text: `${c.aborted} von ${c.count} · ${percent(c.share)}`,
+  const items = a.categories.map((c) => ({ label: c.name, value: c.aborted, text: `${c.aborted}/${c.count} · ${percent(c.share)}`,
     tip: `${c.name}: ${c.aborted} von ${c.count} Einsätzen abgebrochen` }));
   const table = dataTable(["Einsatzart", "Einsätze", "abgebrochen", "Anteil"], a.categories.map((c) => [esc(c.name), c.count, c.aborted, percent(c.share)]));
   return chartCard({ id: "abort-categories", title: "Abbrüche nach Einsatzart",
@@ -48,7 +48,7 @@ function alarmSystemsCard(s, a) {
   const name = (r) => !r.known ? "ohne Angabe von Anlage oder Objekt" : [r.building, r.system && `Anlage ${r.system}`].filter(Boolean).join(" · ");
   const rows = s.rows.map((r) => [esc(name(r)), r.count, r.false_alarms, r.false_share == null ? "–" : percent(r.false_share), formatDate(r.last)]);
   const items = s.rows.filter((r) => r.known).slice(0, 12).map((r) => ({ label: name(r), value: r.count,
-    text: `${r.count} · davon ${r.false_alarms} Fehlalarm`, tip: `${name(r)}: ${r.count} Einsätze, ${r.false_alarms} Fehlalarme` }));
+    text: r.false_alarms ? `${r.count} · ${r.false_alarms} Fehlalarm` : String(r.count), tip: `${name(r)}: ${r.count} Einsätze, ${r.false_alarms} Fehlalarme` }));
   return chartCard({ id: "alarm-systems", title: `Brandmeldeanlagen${helpButton("alarm_systems")}`,
     subtitle: `Einsätze an Brandmeldeanlagen je Anlage bzw. Objekt – wenige Anlagen verursachen oft die meisten Alarme. ${esc(coverageText(s.identified, s.total))} mit Angabe von Anlage oder Objekt.`,
     chart: items.length ? barChart(items) : `<p class="empty-note">Keine Einsätze mit bekannter Anlage oder bekanntem Objekt${s.total ? ` – ${NOT_STATED}` : ""}.</p>`,
@@ -76,7 +76,7 @@ const vehicleName = (u) => u.label ? `${u.call_sign} · ${u.label}` : u.call_sig
 function vehicleUsageCard(v) {
   const unknown = v.rows.reduce((n, u) => n + u.unknown, 0), alerted = v.rows.reduce((n, u) => n + u.alerted, 0);
   const items = v.rows.map((u) => ({ label: vehicleName(u), value: u.drove,
-    text: `${plural(u.drove, "Einsatz", "Einsätze")}${u.standby ? ` · ${u.standby}× nur bereit` : ""}`,
+    text: `${u.drove}${u.standby ? ` · ${u.standby}× bereit` : ""}`,
     tip: `${vehicleName(u)}: ${u.alerted} Alarmierungen, ${u.drove} Ausfahrten, ${u.deployed} eingesetzt, ${u.standby} nur bereitgestellt` }));
   const rows = v.rows.map((u) => [esc(vehicleName(u)), u.alerted, u.drove, u.deployed, u.standby, u.standby_share == null ? "–" : percent(u.standby_share),
     u.minutes_valid ? `${num(u.hours, 0)} h` : "–", u.crew_avg == null ? "–" : num(u.crew_avg)]);

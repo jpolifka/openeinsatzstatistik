@@ -302,3 +302,11 @@ def test_attendance_overview_counts_functions_and_agt():
     erika = next(m for m in a["members"] if m["id"] == 2)
     assert erika["functions"] == {"Maschinist": 2} and (erika["agt_incidents"], erika["agt_minutes"]) == (2, 24)
     assert a["functions"] == [{"role": "Maschinist", "count": 2, "people": 1}, {"role": "Einheitsführer", "count": 1, "people": 1}]
+
+
+def test_abort_reasons_ignore_standard_suffix_in_brackets():
+    texts = ["Täuschungsalarm einer automatischen BMA (DIN VDE 0833-1)", "Täuschungsalarm einer automatischen BMA (DIN VDE 0833-",
+             "täuschungsalarm einer automatischen BMA"]
+    incidents = [make_incident(id=n, abort_reason=t) for n, t in enumerate(texts, 1)]
+    reasons = metrics.aborts(metrics.evaluate(incidents, CFG))["reasons"]
+    assert reasons == [{"reason": "Täuschungsalarm einer automatischen BMA", "count": 3, "kind": "false_alarm"}]
