@@ -18,6 +18,7 @@ const state = {
   years: [], year: null, view: "evaluation", limit: null,
   evaluation: null, incidents: null,
   category: recall("incident-category") || "all", query: "", expanded: new Set(), editing: null,
+  todoOnly: false,                            // nur Einsätze, um die man sich kümmern sollte
   warnOnly: false,                            // nur Einsätze mit aktuellen Prüfhinweisen
   filters: {},                                // Filter aus der Auswertung (Monat, Ort, …), siehe LIST_FILTERS
   incidentSort: sortFrom(recall("incident-sort")),
@@ -397,6 +398,7 @@ $("#category-filter").addEventListener("click", (e) => {
   remember("incident-category", state.category);
   renderIncidents();
 });
+$("#todo-filter").addEventListener("click", () => { state.todoOnly = !state.todoOnly; renderIncidents(); });
 $("#warn-filter").addEventListener("click", () => { state.warnOnly = !state.warnOnly; renderIncidents(); });
 $("#view-incidents").addEventListener("click", (e) => {
   const remove = e.target.closest("[data-remove-filter]");

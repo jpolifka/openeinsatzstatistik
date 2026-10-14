@@ -15,7 +15,7 @@ import datetime as dt
 import hashlib
 import json
 
-from app import store
+from app import domain, store
 from app.timeutil import to_iso
 
 # Werte je Fahrzeug, die Stammdatensatz und Berichte gemeinsam haben
@@ -134,6 +134,11 @@ def incident_of(con, bks_record_id):
     return store.load_incident(con, row["id"]) if row else None
 
 
+def bks_url(bks_id):
+    """Link ins BKS-Portal zu einem Bericht bzw. Stammdatensatz (die Kennung des Stammdatensatzes ist seine Bericht-ID)."""
+    return domain.BKS_REPORT_URL.format(bks_id) if bks_id else None
+
+
 def _keyword(item):
     return f"{item.get('keyword') or ''}.{item.get('subcode') or ''}".strip(".")
 
@@ -171,7 +176,8 @@ def check(central_con, vg_id, bks_record_id, tenants, loaded=None):
         incidents.append({"tenant": t.slug, "tenant_name": t.name, "id": f"{t.slug}:{incident['id']}",
                           "number": incident["number"], "year": incident["year"], "started_at": incident["started_at"],
                           "keyword": _keyword(incident), "place": incident["place"],
-                          "people": len(incident["people"]), "bks_report_id": incident.get("bks_report_id")})
+                          "people": len(incident["people"]), "bks_report_id": incident.get("bks_report_id"),
+                          "bks_url": bks_url(incident.get("bks_report_id"))})
         if master:
             for d in vehicle_differences(master["vehicles"], incident, cfg):
                 add(t, "vehicle", **d)
@@ -188,6 +194,7 @@ def check(central_con, vg_id, bks_record_id, tenants, loaded=None):
     record = {key: master.get(key) for key in ("bks_record_id", "dispatch_number", "first_alarm", "keyword", "subcode",
                                                "reported_as", "town", "district", "street")} if master else \
         {"bks_record_id": bks_record_id}
+    record["bks_url"] = bks_url(bks_record_id)
     return {"record": record, "incidents": incidents, "findings": findings}
 
 
@@ -242,6 +249,20 @@ def review(central_con, vg_id, bks_record_id, tenants, email, done=True):
         "ON CONFLICT(bks_record_id, vg_id) DO UPDATE SET findings_hash = excluded.findings_hash, "
         "reviewed_by = excluded.reviewed_by, reviewed = datetime('now', 'localtime')",
         (bks_record_id, vg_id, digest, email))
+
+
+def review_all(central_con, vg_id, year, tenants, email):
+    """Alle offenen Befunde eines Jahres als geprüft vermerken -> Anzahl der bestätigten Einsätze."""
+    count = 0
+    for entry in protocol(central_con, vg_id, year, tenants):
+        if entry["findings"] and not entry["reviewed"]:
+            central_con.execute(
+                "INSERT INTO record_review (bks_record_id, vg_id, findings_hash, reviewed_by) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(bks_record_id, vg_id) DO UPDATE SET findings_hash = excluded.findings_hash, "
+                "reviewed_by = excluded.reviewed_by, reviewed = datetime('now', 'localtime')",
+                (entry["record"]["bks_record_id"], vg_id, findings_hash(entry["findings"]), email))
+            count += 1
+    return count
 
 
 # ---------------------------------------------------------------- Hinweise an Wehren

@@ -72,6 +72,7 @@ function applyListParams(params) {
   state.query = params.get("q") || "";
   state.category = params.get("cat") || "all";
   state.warnOnly = params.get("warn") === "1";
+  state.todoOnly = params.get("todo") === "1";
   if (params.has("sort")) state.incidentSort = sortFrom(params.get("sort"));
   state.filters = Object.fromEntries(Object.keys(LIST_FILTERS).filter((k) => params.has(k)).map((k) => [k, params.get(k)]));
   $("#search").value = state.query;
@@ -82,6 +83,7 @@ function listParams() {
   if (state.query) params.set("q", state.query);
   if (state.category !== "all") params.set("cat", state.category);
   if (state.warnOnly) params.set("warn", "1");
+  if (state.todoOnly) params.set("todo", "1");
   const { field, descending } = state.incidentSort;
   if (field !== "started_at" || !descending) params.set("sort", `${field}-${descending ? "desc" : "asc"}`);
   for (const [k, v] of Object.entries(state.filters)) params.set(k, v);
@@ -99,8 +101,18 @@ function clearListFilters() {
   state.query = "";
   state.category = "all";
   state.warnOnly = false;
+  state.todoOnly = false;
   state.filters = {};
   $("#search").value = "";
+}
+
+// Zu erledigen: Prüfhinweise, fehlende Nr. oder ein offener Hinweis (Abweichung, Bericht fehlt …) zu diesem Einsatz
+function todoReasons(e) {
+  const reasons = [...(e.current_warnings || [])];
+  if (e.number == null) reasons.push("Einsatznummer fehlt");
+  const notices = typeof records === "undefined" ? [] : records.notices;
+  for (const n of notices) if (n.incident_key === e.id) reasons.push(n.text);
+  return reasons;
 }
 
 const levelOf = (keyword) => (keyword || "").charAt(1);
@@ -111,6 +123,7 @@ const isLate = (e, limit) => limit === config.default_limit ? e.on_time === fals
 function matchesFilter(e) {
   if (state.category !== "all" && categoryOf(e.keyword) !== state.category) return false;
   if (state.warnOnly && !e.current_warnings?.length) return false;
+  if (state.todoOnly && !todoReasons(e).length) return false;
   const f = state.filters, start = startOf(e);
   if (f.tenants && !f.tenants.split(",").includes(e.tenant)) return false;
   if (f.month && start?.getMonth() + 1 !== Number(f.month)) return false;
@@ -160,6 +173,10 @@ function renderListControls(list) {
   warn.classList.toggle("active", state.warnOnly);
   warn.setAttribute("aria-pressed", String(state.warnOnly));
   $(".count", warn).textContent = warned;
+  const todo = $("#todo-filter");
+  todo.classList.toggle("active", state.todoOnly);
+  todo.setAttribute("aria-pressed", String(state.todoOnly));
+  $(".count", todo).textContent = list.filter((e) => todoReasons(e).length).length;
   const chips = Object.entries(state.filters).map(([k, v]) =>
     `<span class="filter-chip">${esc(LIST_FILTERS[k](v))}<button type="button" data-remove-filter="${k}" aria-label="Filter ${esc(LIST_FILTERS[k](v))} entfernen">×</button></span>`);
   $("#active-filters").innerHTML = chips.length ? `<span class="small muted">aus der Auswertung:</span>${chips.join("")}
@@ -200,7 +217,7 @@ function renderIncidents() {
       <td><button type="button" class="btn btn-light btn-small" aria-expanded="${open}" aria-label="Details zu Einsatz ${esc(e.number ?? "ohne Nummer")}">${orDash(e.number)}</button></td>
       <td><div>${formatDate(e.started_at)}</div><div class="time">${weekdayShort(e.started_at)} ${formatTime(e.started_at)}${e.weekend_or_holiday ? " · WE/FT" : ""}</div></td>
       <td><span class="keyword ${categoryOf(e.keyword).toLowerCase()}" ${keywordName(e) ? `data-tip="${esc(keywordName(e))}"` : ""}>${esc(e.keyword)}${e.subcode ? "." + esc(e.subcode) : ""}</span></td>
-      <td><div class="incident-title">${esc(e.description)}</div><div class="incident-place">${withTenant ? `<span class="tenant-badge">${esc(tenantNames[e.tenant] || e.tenant)}</span>` : ""}${esc(e.place)}</div></td>
+      <td><div class="incident-title">${esc(e.description)}${todoReasons(e).length ? ` <span class="todo-mark" data-tip="${esc(todoReasons(e).join("\n"))}">●</span>` : ""}</div><div class="incident-place">${withTenant ? `<span class="tenant-badge">${esc(tenantNames[e.tenant] || e.tenant)}</span>` : ""}${esc(e.place)}</div></td>
       <td>${e.unit_leader ? esc(e.unit_leader) : `<span class="muted">–</span>`}</td>
       <td>${vehicleChips(e)}</td>
       <td class="right">${arrival}</td>
@@ -210,7 +227,7 @@ function renderIncidents() {
   }).join("");
   if (formSelector && state.editNode && $(formSelector)) $(formSelector).replaceWith(state.editNode);
   $("#incidents-empty").hidden = visible.length > 0;
-  $("#incidents-empty").innerHTML = list.length && (state.query || state.category !== "all" || state.warnOnly || Object.keys(state.filters).length)
+  $("#incidents-empty").innerHTML = list.length && (state.query || state.category !== "all" || state.warnOnly || state.todoOnly || Object.keys(state.filters).length)
     ? `Keine Einsätze zu diesen Filtern. <button type="button" class="btn btn-link btn-small" data-clear-filters>Alle Filter aufheben</button>`
     : "Keine Einsätze gefunden.";
   syncHash();

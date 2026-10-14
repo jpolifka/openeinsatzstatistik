@@ -28,6 +28,7 @@ async function loadNotices() {
     records.notices = [];
   }
   renderNotices();
+  if (state.view === "incidents" && state.incidents) renderIncidents();     // „Zu erledigen“ hängt an den Hinweisen
 }
 
 // Einsatz zu einem Hinweis nur öffnen, wenn er in der jetzigen Auswahl liegt
@@ -137,27 +138,43 @@ function recordTitle(entry) {
   return [keyword, r.reported_as, place].filter(Boolean).map(esc).join(" · ") || "–";
 }
 
+const bksAnchor = (url, label) => url ? `<a href="${esc(url)}" target="_blank" rel="noopener" class="bks-link">${label}</a>` : "";
+
+// Befunde in einer Zeile: fehlende Berichte mit Wehr, sonst je Art die Anzahl
+function findingSummary(entry) {
+  if (!entry.findings.length) return `<span class="muted">–</span>`;
+  const missing = [...new Set(entry.findings.filter((f) => f.kind === "missing").map((f) => f.tenant_name))];
+  const others = {};
+  for (const f of entry.findings.filter((f) => f.kind !== "missing")) others[f.kind] = (others[f.kind] || 0) + 1;
+  const chips = [];
+  if (missing.length) chips.push(`<span class="finding-chip kind-missing">Bericht fehlt: ${missing.map(esc).join(", ")}</span>`);
+  for (const [kind, n] of Object.entries(others)) chips.push(`<span class="finding-chip">${esc(FINDING_KINDS[kind] || kind)}${n > 1 ? ` ×${n}` : ""}</span>`);
+  return `<div class="finding-chips">${chips.join("")}</div>`;
+}
+
 const findingValue = (v) => v == null || v === "" ? "–" : esc(v);
 
 function recordDetail(entry) {
   const reports = entry.incidents.map((i) => `<tr>
       <td>${esc(i.tenant_name)}</td><td>${i.number ?? "–"}</td><td>${esc(i.keyword || "–")}</td>
-      <td class="right">${i.people}</td><td>${i.bks_report_id ? esc(i.bks_report_id) : "–"}</td></tr>`).join("");
+      <td class="right">${i.people}</td><td>${i.bks_report_id ? bksAnchor(i.bks_url, esc(i.bks_report_id)) : "–"}</td></tr>`).join("");
   const findings = entry.findings.map((f) => `<tr>
       <td>${esc(f.tenant_name)}</td><td>${esc(FINDING_KINDS[f.kind] || f.kind)}</td><td>${findingValue(f.vehicle)}</td>
       <td>${findingValue(f.field)}</td><td>${findingValue(f.source)}</td><td>${findingValue(f.stored)}</td></tr>`).join("");
   const id = esc(entry.record.bks_record_id);
+  const missingText = entry.findings.some((f) => f.kind === "missing");
   return `<div class="detail-grid record-grid">
     <div class="panel"><h4>Berichte der Wehren</h4>
       ${reports ? `<table class="mini-table"><thead><tr><th>Wehr</th><th>Nr.</th><th>Stichwort</th><th class="right">Personen</th><th>BKS-Bericht</th></tr></thead><tbody>${reports}</tbody></table>`
         : `<p class="muted small">Noch kein Bericht einer Wehr erfasst.</p>`}
-      <p class="small muted section-gap">Stammdatensatz ${id}${entry.record.dispatch_number ? ` · Einsatznummer Leitstelle ${esc(entry.record.dispatch_number)}` : ""}${entry.record.first_alarm ? "" : " · Stammdatensatz nicht eingelesen"}</p>
+      <p class="small muted section-gap">Stammdatensatz ${bksAnchor(entry.record.bks_url, id)}${entry.record.dispatch_number ? ` · Einsatznummer Leitstelle ${esc(entry.record.dispatch_number)}` : ""}${entry.record.first_alarm ? "" : " · Stammdatensatz nicht eingelesen"}</p>
     </div>
     <div class="panel"><h4>Befunde${helpButton("findings")}</h4>
       ${findings ? `<table class="mini-table"><thead><tr><th>Wehr</th><th>Art</th><th>Fahrzeug</th><th>Wert</th><th>Stammdatensatz / Leitstelle</th><th>Bericht der Wehr</th></tr></thead><tbody>${findings}</tbody></table>`
         : `<p class="muted small">Keine Abweichungen.</p>`}
     </div>
     <div class="actions panel full bare no-print">
+      ${missingText ? bksAnchor(entry.record.bks_url, "Stammdatensatz im BKS-Portal öffnen").replace('class="bks-link"', 'class="btn btn-light btn-small"') : ""}
       ${entry.incidents.length ? `<button type="button" class="btn btn-light btn-small" data-fees="${id}">Kostenersatz berechnen</button>` : ""}
       ${!entry.findings.length ? "" : entry.reviewed ? `<button type="button" class="btn btn-outline btn-small" data-review="${id}" data-done="0">Prüfvermerk entfernen</button>`
         : `<button type="button" class="btn btn-primary btn-small" data-review="${id}" data-done="1">Als geprüft markieren</button>`}
@@ -172,10 +189,14 @@ function renderRecords() {
   const rows = shown.map((entry) => {
     const id = entry.record.bks_record_id, expanded = records.expanded.has(id);
     const tenants = entry.incidents.map((i) => `${esc(i.tenant_name)}${i.number != null ? " " + i.number : ""}`).join(", ");
+    const pending = entry.findings.length && !entry.reviewed;
+    const actions = `${entry.findings.some((f) => f.kind === "missing") ? bksAnchor(entry.record.bks_url, "BKS ↗") : ""}
+      ${pending ? `<button type="button" class="btn btn-light btn-small" data-review="${esc(id)}" data-done="1">Geprüft</button>` : ""}`;
     return `<tr class="row ${expanded ? "open" : ""}" data-record="${esc(id)}">
         <td>${formatDate(entry.started_at)}</td><td>${recordTitle(entry)}</td><td>${tenants || "–"}</td>
-        <td>${recordStatus(entry)}</td><td class="col-toggle">${ICON_CHEVRON}</td></tr>
-      <tr class="detail record-detail" ${expanded ? "" : "hidden"}><td colspan="5">${recordDetail(entry)}</td></tr>`;
+        <td>${pending ? findingSummary(entry) : recordStatus(entry)}</td>
+        <td class="right no-print record-actions">${actions}</td><td class="col-toggle">${ICON_CHEVRON}</td></tr>
+      <tr class="detail record-detail" ${expanded ? "" : "hidden"}><td colspan="6">${recordDetail(entry)}</td></tr>`;
   }).join("");
   $("#view-records").innerHTML = `<div class="card list-card">
     <div class="toolbar no-print">
@@ -184,13 +205,14 @@ function renderRecords() {
         <button type="button" data-records-filter="all" class="${records.onlyOpen ? "" : "active"}">Alle (${all.length})</button>
       </div>
       <div class="toolbar-right">${helpButton("records")}
+        ${open.length ? `<button type="button" class="btn btn-primary btn-small" data-review-all="${open.length}" data-tip="Alle offenen Befunde als geprüft vermerken">Alle bestätigen (${open.length})</button>` : ""}
         <button type="button" class="btn btn-light btn-small" data-records-print data-tip="Druckansicht, im Druckdialog „Als PDF sichern“">Drucken / PDF</button>
       </div>
     </div>
     <p class="print-only print-stamp">${esc(config.name)} · Prüfprotokoll ${state.year} · Stand ${formatDate(new Date().toISOString())}</p>
     <div class="table-wrap">
       <table class="table records-table">
-        <thead><tr><th>Datum</th><th>Einsatz</th><th>Berichte</th><th>Status</th><th class="col-toggle"></th></tr></thead>
+        <thead><tr><th>Datum</th><th>Einsatz</th><th>Berichte</th><th>Befunde</th><th class="no-print"></th><th class="col-toggle"></th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
       ${shown.length ? "" : `<p class="empty-note">${records.onlyOpen ? "Keine offenen Befunde." : `Für ${state.year} sind keine Einsätze mit BKS-Stammdatensatz erfasst.`}</p>`}
@@ -223,6 +245,21 @@ $("#view-records").addEventListener("click", async (e) => {
   const filter = e.target.closest("[data-records-filter]");
   if (filter) { records.onlyOpen = filter.dataset.recordsFilter === "open"; renderRecords(); return; }
   if (e.target.closest("[data-records-print]")) { window.print(); return; }
+  if (e.target.closest("a")) return;                       // Link ins BKS-Portal: nicht aufklappen
+  const all = e.target.closest("[data-review-all]");
+  if (all) {
+    const n = all.dataset.reviewAll;
+    if (!window.confirm(`Alle ${n} offenen Befunde als geprüft vermerken?`)) return;
+    try {
+      const done = await apiJson(`/api/records/review-all?year=${state.year}`, "POST", {});
+      toast(`${plural(done.reviewed, "Einsatz", "Einsätze")} bestätigt`);
+      await loadRecords();
+      renderRecords();
+    } catch (err) {
+      alert(err.message);
+    }
+    return;
+  }
   const fees = e.target.closest("[data-fees]");
   if (fees) { openFees(fees.dataset.fees); return; }
   const review = e.target.closest("[data-review]");

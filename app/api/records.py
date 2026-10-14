@@ -37,6 +37,15 @@ class Review(BaseModel):
     done: bool = True
 
 
+@router.post("/api/records/review-all")
+def api_review_all(year: Optional[int] = None, a: tenancy.Access = Depends(access)):
+    """Alle offenen Befunde des Jahres bestätigen."""
+    vg_id, tenants = _managed_vg(a)
+    year = year or latest_year(tenants) or dt.date.today().year
+    with tenancy.central() as con:
+        return {"ok": True, "reviewed": records.review_all(con, vg_id, year, tenants, a.email)}
+
+
 @router.post("/api/records/{bks_record_id}/review")
 def api_review_record(bks_record_id: str, review: Review, a: tenancy.Access = Depends(access)):
     vg_id, tenants = _managed_vg(a)

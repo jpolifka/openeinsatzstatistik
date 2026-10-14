@@ -7,6 +7,14 @@
 const CHANGELOG = [
   {
     date: "2026-10-14",
+    version: "2026-10-14.3",
+    items: [
+      "<b>Berichte abgleichen übersichtlicher:</b> Jede Zeile zeigt die Befunde jetzt auf einen Blick (z. B. „Bericht fehlt: Wehr“), mit <i>Geprüft</i> direkt in der Zeile. <i>Alle bestätigen</i> vermerkt alle offenen Befunde auf einmal als geprüft. Fehlt ein Bericht, führt ein Link direkt zum Stammdatensatz im BKS-Portal; auch die Berichte der Wehren sind dorthin verlinkt.",
+      "<b>Einsätze: „Zu erledigen“:</b> Neuer Filter für Einsätze mit Prüfhinweisen, fehlender Nummer oder einem offenen Hinweis an die Wehr. Betroffene Einsätze tragen in der Liste einen Punkt, der Grund steht im Tooltip.",
+    ],
+  },
+  {
+    date: "2026-10-14",
     version: "2026-10-14.2",
     items: [
       "<b>Handarbeit bleibt erhalten:</b> Wird ein Bericht erneut eingelesen und der Einsatz aktualisiert, überschreibt er keine Angaben mehr, die Sie von Hand geändert haben (Felder, Fahrzeugzeiten, Anwesenheit). Das gilt auch, wenn der Bericht einen Wert gar nicht enthält oder die Anwesenheitsliste leer ist. In der Vorschau steht dann „bleibt wie erfasst“. Möchten Sie den Berichtswert doch, tragen Sie ihn in der Vorschau ein.",

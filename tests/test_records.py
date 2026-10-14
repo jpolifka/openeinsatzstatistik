@@ -119,6 +119,20 @@ def test_import_by_vg_lead_is_shown_to_the_tenant(vg):
     assert [n["kind"] for n in _notices(client)] == ["import"]
 
 
+def test_review_all_confirms_every_open_record(vg):
+    client = _as(vg, "vglead@example.org", "vg:vg-a")
+    data = _upload(client, "stamm.pdf", "a1.pdf", "a2.pdf")
+    _accept(client, data, "stamm.pdf")
+    _accept(client, data, "a1.pdf")
+    _accept(client, data, "a2.pdf")
+    entry = client.get("/api/records?year=2025").json()["records"][0]
+    assert entry["record"]["bks_url"].endswith("/9000001?from_nid=9336")     # Link zum Stammdatensatz
+    assert client.post("/api/records/review-all?year=2025").json()["reviewed"] == 1
+    assert client.get("/api/records?year=2025").json()["records"][0]["reviewed"]["by"] == "vglead@example.org"
+    assert client.post("/api/records/review-all?year=2025").json()["reviewed"] == 0
+    assert _as(vg, "vglead@example.org", "t:wehr-a1").post("/api/records/review-all").status_code == 403
+
+
 def test_protocol_for_vg_lead(vg):
     client = _as(vg, "vglead@example.org", "vg:vg-a")
     data = _upload(client, "stamm.pdf", "a1.pdf", "a2.pdf")
