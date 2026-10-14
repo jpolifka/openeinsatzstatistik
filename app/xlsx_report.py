@@ -196,6 +196,8 @@ def parse_report(sheets, filename, unit_prefix):
     report["incident_commander"] = _text(row.get("Einsatzleiter"))
     report["first_alarm"] = _timestamp(row.get("Zeitpunkt der Alarmierung der ersten Einheit"))
 
+    report["abort_reason"] = _text(row.get("Einsatzabbruch")) or None
+
     report["vehicles"] = _parse_vehicles(_sheet(sheets, VEHICLE_SHEET), unit_prefix)
     report["people"] = _parse_people(_sheet(sheets, PEOPLE_SHEET))
     return report

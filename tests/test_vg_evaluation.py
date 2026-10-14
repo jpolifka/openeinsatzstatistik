@@ -175,7 +175,7 @@ def test_multi_report_is_distributed_and_updates_on_reimport(vg, monkeypatch):
     assert "FEZ VG" in data["notes"][0]["message"]
     a1 = data["reports"][2]
     assert (a1["bks_report_id"], a1["bks_record_id"]) == ("9000003", "9000001")
-    assert a1["bks_url"].endswith("/einsatzbericht/9000003")
+    assert a1["bks_url"].endswith("/einsatzbericht/9000003?from_nid=9336")
     assert not any("Fahrzeuge im Bericht" in w for w in a1["warnings"])
     assert vg.post("/api/reports/accept", json={"token": data["token"], "filename": "stamm.pdf", "fields": {}}).status_code == 200
     with tenancy.central() as con:

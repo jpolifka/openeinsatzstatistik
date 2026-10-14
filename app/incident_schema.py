@@ -1,6 +1,6 @@
 """Ein gemeinsamer Feldkatalog für API, Speicherung und Einsatzformular."""
 FIELDS = ("number", "started_at", "ended_at", "keyword", "subcode", "description", "place",
-          "unit_leader", "station_staff", "dispatch_number")
+          "unit_leader", "station_staff", "dispatch_number", "abort_reason")
 INT_FIELDS = ("number", "station_staff")
 FORM_FIELDS = [
     ["number", "Nr.", "number", "", 'min="0"'],
@@ -13,4 +13,5 @@ FORM_FIELDS = [
     ["place", "Ort", "text", "span-3", 'list="place-options"'],
     ["unit_leader", "Einheitsführung", "text", "span-3", 'list="leader-options" placeholder="z. B. M. Muster"'],
     ["dispatch_number", "Leitstellen-Nr.", "text", "span-2", ""],
+    ["abort_reason", "Einsatzabbruch", "text", "span-4", 'placeholder="leer = kein Abbruch"'],
 ]

@@ -70,3 +70,8 @@ Jeder Endpunkt mit Einsatzdaten holt sich per `Depends(access)` ein `tenancy.Acc
 `Einsatzberichte/` (PDFs, Excel) und `daten/` (SQLite) enthalten Namen und Anwesenheiten. Sie sind per `.gitignore` ausgeschlossen und dürfen nicht eingecheckt werden. Auch im Code und in Tests keine echten Namen verwenden (Beispiele: „M. Muster“, „Beispiel, Erika“). Konfiguration: `.env` (Vorlage `.env.example`: `APP_PORT`, `BASE_URL`, `ADMIN_EMAILS`, `SECRET_KEY`, `SMTP_*`, `MAIL_FROM`, `DKIM_*`, `DPA_*` für den AVV). Neue Variablen gehören immer mit Kommentar in `.env.example`. Tests prüfen die Rechte als Matrix (`tests/test_access.py`), Rollen, Vererbung und Leitplanken in `tests/test_rbac.py`; neue Endpunkte mit Einsatzdaten gehören dort hinein. Ein neues Recht: Eintrag in `rbac.PERMISSIONS`, Zuordnung zu Systemrollen per Migration (nicht über `SYSTEM_ROLES`, das nur der Startbestand ist), Hilfetext `perm_…` in `help.js`.
 
 Bewusste Abweichungen zur Excel-Datei sind im README dokumentiert. Einsätze ohne Eintreffzeit fließen zum Beispiel nicht in den Bedarfsplan ein.
+
+
+## Dev-Hinweise
+Lokal wird nur mit Docker getestet. Es werden keine Pakete lokal installiert. 
+Auch nicht im Scratchpad. 

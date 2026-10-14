@@ -89,7 +89,7 @@ function coverageCard(e) {
 function renderOverview() {
   const e = state.evaluation, s = e.statistics, plan = e.response_plan;
   const quote = plan?.total.count ? analysisKpi(`Eintreffen ≤ ${plan.limit} Min.${helpButton("on_time")}`, percent(plan.total.rate),
-    `${plan.total.on_time} von ${plan.total.count} Einsätzen mit Eintreffzeit`) : "";
+    `${plan.total.on_time} von ${plan.total.count} Einsätzen mit Eintreffzeit oder Abbruch`) : "";
   const vg = e.tenants;
   $("#view-overview").innerHTML = evaluationToolbar({ exports: false }) + `<div class="kpis kpis-4">
     ${analysisKpi(`Einsätze ${state.year}`, vg ? vg.unique : s.count, vg ? esc(`${vg.participations} Beteiligungen der Wehren`) : `${num(s.per_week, 2)} je Woche`)}

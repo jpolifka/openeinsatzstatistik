@@ -120,7 +120,7 @@ function matchesFilter(e) {
   if (f.level && levelOf(e.keyword) !== f.level) return false;
   if (f.missing && !lacks[f.missing]?.(e)) return false;
   // Eintreffen und Kräfte wie in der Auswertung: relevante Einsätze mit Eintreffzeit
-  if ((f.plan || f.window || f.late) && !(e.plan_relevant && e.arrival_min != null)) return false;
+  if ((f.plan || f.window || f.late) && !(e.plan_relevant && e.on_time != null)) return false;
   if (f.window && (e.weekend_or_holiday !== f.window.startsWith("weekend") || e.daytime !== f.window.endsWith("_day"))) return false;
   if (f.late && !isLate(e, Number(f.late))) return false;
   const query = state.query.trim().toLowerCase();

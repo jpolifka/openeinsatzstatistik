@@ -15,7 +15,7 @@ FULL_KEYWORD = re.compile(r"([A-Za-z]\d)\s*[.\s]?\s*(\d{0,2})")
 # Bearbeitbare Felder eines Einsatzes – Grundlage für Formular, Speichern und Abgleich
 # Datensätze im BKS-Portal (eigener Bericht, Stammdatensatz des Einsatzes): kommen aus der PDF, nicht aus dem Formular
 ID_FIELDS = ("bks_report_id", "bks_record_id")
-TEXT_FIELDS = tuple(name for name in FIELDS if name not in INT_FIELDS + ("started_at", "ended_at", "dispatch_number"))
+TEXT_FIELDS = tuple(name for name in FIELDS if name not in INT_FIELDS + ("started_at", "ended_at", "dispatch_number", "abort_reason"))
 
 
 class DuplicateIncident(ValueError):
@@ -51,7 +51,7 @@ def normalize_fields(fields, weekend_or_holiday=None):
         f[name] = (f[name] or "").strip()
     f["keyword"], f["subcode"] = split_keyword(f["keyword"], f["subcode"])
     # Einsatznummer der Leitstelle: leer heißt unbekannt (Altdaten aus Excel)
-    for name in ("dispatch_number", *ID_FIELDS):
+    for name in ("dispatch_number", "abort_reason", *ID_FIELDS):
         f[name] = str(f[name] or "").strip() or None
     start = parse_iso(f["started_at"])
     end = parse_iso(f["ended_at"])

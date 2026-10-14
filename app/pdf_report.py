@@ -131,6 +131,10 @@ def parse_report(full, left, right, filename, unit_prefix):
     m = re.search(r"Zeitpunkt der Alarmierung der ersten Einheit:\s*(\d\d\.\d\d\.\d{4} \d\d:\d\d)", full)
     report["first_alarm"] = dt.datetime.strptime(m.group(1), "%d.%m.%Y %H:%M") if m else None
 
+    # Grund des Einsatzabbruchs: am Zeilenanfang oder hinter der Alarmierungszeit; Fließtext bleibt außen vor
+    m = re.search(r"(?:^|\d\d:\d\d )Einsatzabbruch:[ \t]*(.+?)[ \t]*$", full, re.M)
+    report["abort_reason"] = m.group(1) if m else None
+
     report["vehicles"] = _parse_vehicles(full, report, unit_prefix)
     report["people"] = _parse_people(full)
     return report

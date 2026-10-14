@@ -41,7 +41,7 @@ function renderEvaluation() {
     ${kpi(`Einsatzstunden${helpButton("operation_hours")}`, formatHours(s.duration_total_min), "Summe aller Einsätze")}
     ${kpi(`Personalstunden${helpButton("staff_hours")}`, s.staff_hours == null ? "–" : `${num(s.staff_hours, 0)}<small>h</small>`,
       s.staff_recorded < s.staff_total ? `Unvollständig: Anwesenheit und Dauer für ${s.staff_recorded} von ${s.staff_total} Einsätzen` : `Ø ${num(s.attendees_avg, 1)} Personen je Einsatz`)}
-    ${plan ? kpi(`Eintreffen ≤ ${plan.limit} Min.${helpButton("on_time")}`, percent(plan.total.rate), `${plan.total.on_time} von ${plan.total.count} Einsätzen mit Eintreffzeit`) : ""}
+    ${plan ? kpi(`Eintreffen ≤ ${plan.limit} Min.${helpButton("on_time")}`, percent(plan.total.rate), `${plan.total.on_time} von ${plan.total.count} Einsätzen mit Eintreffzeit oder Abbruch`) : ""}
   </div>`;
 
   $("#view-evaluation").innerHTML = evaluationToolbar() + kpis + (plan ? responsePlanCard(plan, previousPlan) : "") + (vg ? tenantsCard(vg) : "") + `
@@ -123,7 +123,7 @@ function responsePlanCard(plan, previousPlan) {
   return chartCard({
     id: "plan", heading: "h2", className: "plan grid", chartLabel: "Kacheln", controls: release + limitSwitch, extra: footer,
     title: `Eintreffen und verfügbare Kräfte${helpButton("response_plan")}`,
-    subtitle: plan.places.length ? `Einsätze ab Alarmstufe ${config.plan_min_level} in ${esc(plan.places.join(", "))} – Eintreffen des ersten Fahrzeugs innerhalb von ${limit} Minuten nach Alarmierung. Das ist eine Eintreffquote – kein vollständiger Nachweis eines Schutzziels und kein Feuerwehrbedarfsplan.` : "Noch kein Ausrückebereich konfiguriert. Bitte unter Einstellungen → Orte & Zeitgrenzen einrichten.",
+    subtitle: plan.places.length ? `Einsätze ab Alarmstufe ${config.plan_min_level} im Ausrückebereich der Wehr (festgelegt unter Einstellungen → Orte & Zeitgrenzen) – Eintreffen des ersten Fahrzeugs innerhalb von ${limit} Minuten nach Alarmierung; abgebrochene Einsätze ohne Eintreffzeit gelten als rechtzeitig. Das ist eine Eintreffquote – kein vollständiger Nachweis eines Schutzziels und kein Feuerwehrbedarfsplan.` : "Noch kein Ausrückebereich konfiguriert. Bitte unter Einstellungen → Orte & Zeitgrenzen einrichten.",
     chart: `<div class="plan-windows">${plan.windows.map((w) => windowTile(w, false)).join("")}${windowTile(plan.total, true)}</div>`,
     table,
   });
