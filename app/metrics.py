@@ -12,6 +12,7 @@ Einsatz nur einmal berechnet werden. cfg ist die TenantConfig der Wehr, zu der d
 """
 import datetime as dt
 import math
+import re
 
 from app import domain
 from app.timeutil import parse_iso, seconds_of_day
@@ -398,8 +399,10 @@ def aborts(evaluated):
     kinds = _count_by((domain.abort_kind(i["abort_reason"]) for i in aborted), [k for k, _ in domain.ABORT_KINDS])
     reasons = {}
     for i in aborted:
-        key = " ".join(i["abort_reason"].lower().split())
-        entry = reasons.setdefault(key, {"reason": " ".join(i["abort_reason"].split()), "count": 0,
+        # Normangabe in Klammern („… (DIN VDE 0833-1)“) fehlt oder ist abgeschnitten: gleicher Grund
+        text = " ".join(re.sub(r"\s*\(.*$", "", i["abort_reason"]).split()) or " ".join(i["abort_reason"].split())
+        key = text.lower()
+        entry = reasons.setdefault(key, {"reason": text, "count": 0,
                                          "kind": domain.abort_kind(i["abort_reason"])})
         entry["count"] += 1
     categories = []
