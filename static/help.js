@@ -688,13 +688,16 @@ function showHelpTab(tab) {
   $("#help-intro").hidden = tab !== "help";
   if (tab === "news") {
     if (!$("#help-news").innerHTML) $("#help-news").innerHTML = changelogContent();
-    remember("changelog_seen", CHANGELOG[0].date);
+    remember("changelog_seen", changelogVersion(CHANGELOG[0]));
     markNews();
   }
   if (tab === "feedback") $("#feedback-form textarea").focus();
 }
 
 // ------------------------------------------------------------ Neuigkeiten
+/** Stand eines Eintrags für „ungelesen“: `version` (mehrere Einträge am selben Tag), sonst das Datum. */
+const changelogVersion = (entry) => entry.version || entry.date;
+
 function changelogContent() {
   return CHANGELOG.map((v) => `<section class="help-section">
     <h3>${formatDate(v.date)}</h3>
@@ -704,7 +707,7 @@ function changelogContent() {
 
 /** Punkt am ?-Symbol im Kopf, solange es ungelesene Neuigkeiten gibt. */
 function markNews() {
-  const unseen = CHANGELOG[0].date > (recall("changelog_seen") || "");
+  const unseen = changelogVersion(CHANGELOG[0]) > (recall("changelog_seen") || "");
   const button = $("#btn-help");
   button.classList.toggle("has-news", unseen);
   button.title = unseen ? "Hilfe · Neuigkeiten" : "Hilfe";
