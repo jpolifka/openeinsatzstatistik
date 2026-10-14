@@ -123,3 +123,25 @@ def test_rejects_oversized_workbooks(monkeypatch):
     monkeypatch.setattr(xlsx_report, "MAX_UNPACKED_BYTES", 1000)
     with pytest.raises(ValueError, match="zu groß"):
         xlsx_report.read_workbook(make_workbook())
+
+
+def test_details_vehicles_and_agt():
+    header = MAIN_HEADER + ("Nummer der Gefahrenmeldeanlage", "Einatztaktik", "Brand unter Kontrolle", "Feuer aus",
+                            "Menschenrettung über baulichen Rettungsweg", "Menschenrettung über sonstiges",
+                            "Rettung von Kleinvieh", "Verletzte andere Personen", "Verstorbene andere Personen")
+    row = MAIN_ROW + ("301986", "Außenangriff", "12.03.2025 10:41", "12.03.2025 11:02", 2, 1, 4, 1, None)
+    people = [PEOPLE[0], ("Beispiel", "Erika", 1, "FL NR#.BHÖ 02/45-01", "12.03.25 10:09", "12.03.25 10:48",
+                          "Maschinist", "AGT", 25)]
+    wb = openpyxl.load_workbook(io.BytesIO(make_workbook(people=people)))
+    ws = wb["Einsatzbericht"]
+    ws.delete_rows(1, 2)
+    ws.append(header)
+    ws.append(row)
+    data = io.BytesIO()
+    wb.save(data)
+    r = parse(data.getvalue())
+    assert (r["alarm_system"], r["tactic"]) == ("301986", "Außenangriff")
+    assert r["fire_out_at"] == dt.datetime(2025, 3, 12, 11, 2)
+    assert (r["rescued"], r["rescued_animals"], r["injured"], r["deceased"], r["injured_firefighters"]) == (3, 4, 1, None, None)
+    assert [v["deployed"] for v in r["vehicles"]] == [1, 1, 1, 0]
+    assert [(p["agt"], p["agt_min"]) for p in r["people"]] == [(False, 0), (True, 25)]

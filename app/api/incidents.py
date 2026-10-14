@@ -7,6 +7,7 @@ from fastapi import Depends, HTTPException
 from pydantic import BaseModel, Field, create_model
 
 from app import store, tenancy
+from app.incident_schema import OPTIONAL_COUNTS
 from app.rbac import DELETE, INCIDENTS, PEOPLE, PEOPLE_EDIT, WRITE
 from app.timeutil import year_of
 
@@ -18,7 +19,7 @@ router = APIRouter()
 # ---------------------------------------------------------------- Einsätze
 IncidentFields = create_model(
     "IncidentFields",
-    **{name: (Optional[int], Field(default=None, ge=0, strict=True)) if name in store.INT_FIELDS
+    **{name: (Optional[int], Field(default=None, ge=0, strict=True)) if name in (*store.INT_FIELDS, *OPTIONAL_COUNTS)
        else (Optional[str], None) for name in store.FIELDS})
 
 

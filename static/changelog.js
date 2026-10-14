@@ -5,6 +5,14 @@
 // Ein neuer Eintrag mit neuem Datum markiert das ?-Symbol im Kopf, bis die Neuigkeiten gelesen sind.
 const CHANGELOG = [
   {
+    date: "2026-10-15",
+    items: [
+      "<b>Neue Auswertungen unter „Auswertungen“:</b> <i>Abbrüche &amp; Anlagen</i> (warum Einsätze abgebrochen wurden, Fehlalarme, Brandmeldeanlagen je Anlage bzw. Objekt), <i>Fahrzeuge &amp; Atemschutz</i> (Alarmierungen, Ausfahrten und tatsächliche Einsätze je Fahrzeug, Einsatzstunden, Geräteträger und Minuten unter Atemschutz) und <i>Brand &amp; Rettung</i> (Zeit bis „Brand unter Kontrolle“ und „Feuer aus“, Innen-/Außenangriff, Brandwachen, Menschenrettung und Verletzte).",
+      "<b>Personal:</b> Neue Spalten für Einsätze unter Atemschutz und Atemschutzminuten sowie eine Übersicht der besetzten Funktionen (Einheitsführer, Maschinist, Angriffstrupp …). Je Person stehen die Funktionen im aufgeklappten Eintrag.",
+      "<b>Mehr aus dem BKS-Bericht:</b> Objekt, Nummer der Brandmeldeanlage, Einsatztaktik, Brandzeiten, Menschenrettung und Verletzte, ob ein Fahrzeug eingesetzt war, sowie Atemschutz je Person werden übernommen und stehen im Einsatz (auch bearbeitbar). <b>Bereits erfasste Einsätze:</b> den Bericht erneut einlesen und aktualisieren, damit die neuen Angaben übernommen werden – bis dahin zählen sie als „nicht angegeben“, nie als null.",
+    ],
+  },
+  {
     date: "2026-10-14",
     items: [
       "<b>Abgebrochene Einsätze:</b> Der „Einsatzabbruch“ aus dem BKS-Bericht wird jetzt übernommen und steht im Einsatz (auch bearbeitbar). Fehlt die Eintreffzeit und ist ein Abbruch hinterlegt, gilt der Einsatz in „Eintreffen und verfügbare Kräfte“ als rechtzeitig eingetroffen. <b>Bereits erfasste Einsätze:</b> den Bericht erneut einlesen und aktualisieren, damit der Abbruch übernommen wird.",

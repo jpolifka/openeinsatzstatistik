@@ -17,6 +17,7 @@ import copy
 import re
 
 from app import domain, pdf_report, store, xlsx_report, parser_worker
+from app.incident_schema import OPTIONAL_TIMES
 from app.holidays import is_weekend_or_holiday
 from app.names import normalize, short_name
 from app.timeutil import parse_iso, time_text, to_iso, year_of
@@ -258,9 +259,10 @@ def current_warnings(incident):
 
 def to_fields(report):
     """Abgeleitete Felder in der Form der Datenbank (Zeiten als ISO-Text)."""
-    fields = {name: report[name] for name in store.FIELDS}
+    fields = {name: report.get(name) for name in store.FIELDS}
     fields.update({name: report.get(name) for name in store.ID_FIELDS})
-    fields["started_at"], fields["ended_at"] = to_iso(report["started_at"]), to_iso(report["ended_at"])
+    for name in ("started_at", "ended_at", *OPTIONAL_TIMES):
+        fields[name] = to_iso(report.get(name))
     return fields
 
 
@@ -268,7 +270,8 @@ def vehicle_rows(report):
     """Fahrzeugblöcke in der Form der Datenbank."""
     return {call_sign: {"call_sign": call_sign, "name": v["name"], "crew": v["crew"],
                         "departed": time_text(v["departed"]), "arrived": time_text(v["arrived"]),
-                        "alerted": time_text(v.get("alerted")), "finished": time_text(v.get("finished"))}
+                        "alerted": time_text(v.get("alerted")), "finished": time_text(v.get("finished")),
+                        "deployed": v.get("deployed"), "respiratory": v.get("respiratory")}
             for call_sign, v in report["slots"].items()}
 
 
@@ -293,7 +296,8 @@ def preview(con, report, numbered=True):
         member_id = members.find(p["last_name"], p["first_name"])
         name = members.names[member_id] if member_id else f"{p['last_name']}, {p['first_name']}"
         people.append({"id": member_id, "name": name, "last_name": p["last_name"], "first_name": p["first_name"],
-                       "role": p["role"], "vehicle": p["vehicle"], "new": member_id is None})
+                       "role": p["role"], "vehicle": p["vehicle"], "new": member_id is None,
+                       "agt": int(bool(p.get("agt"))), "agt_min": p.get("agt_min")})
     incident = to_incident(report, to_fields(report), people)
     existing_id = store.find_existing(con, incident["bks_report_id"], incident["year"],
                                       incident["number"] if numbered else None)
@@ -317,8 +321,8 @@ def save(con, report, fields, update_id=None, modified_by=None, revision=None):
                                             warnings=report["warnings"], modified_by=modified_by)
     store.add_fleet_vehicles(con, new_fleet_vehicles(report), report.get("day"))
     members = store.MemberDirectory(con)
-    attendance = [(members.find_or_create(p["last_name"], p["first_name"]), p["role"] or None, p["vehicle"])
-                  for p in report["people"]]
+    attendance = [(members.find_or_create(p["last_name"], p["first_name"]), p["role"] or None, p["vehicle"],
+                   int(bool(p.get("agt"))), p.get("agt_min")) for p in report["people"]]
     store.replace_report_rows(con, incident_id, vehicle_rows(report).values(), attendance)
     return incident_id
 
@@ -326,7 +330,12 @@ def save(con, report, fields, update_id=None, modified_by=None, revision=None):
 # ---------------------------------------------------------------- Abgleich
 COMPARED_FIELDS = {"number": "Nr.", "started_at": "Beginn", "ended_at": "Ende", "keyword": "Stichwort",
                    "subcode": "Stufe", "place": "Ort", "unit_leader": "Einheitsführung", "station_staff": "Personen Gerätehaus",
-                   "description": "Beschreibung", "dispatch_number": "Leitstellen-Nr.", "abort_reason": "Einsatzabbruch"}
+                   "description": "Beschreibung", "dispatch_number": "Leitstellen-Nr.", "abort_reason": "Einsatzabbruch",
+                   "building": "Objekt", "alarm_system": "Brandmelde-Nr.", "tactic": "Einsatztaktik",
+                   "fire_controlled_at": "Brand unter Kontrolle", "fire_out_at": "Feuer aus",
+                   "fire_watch_until": "Brandwache bis", "rescued": "Menschen gerettet",
+                   "rescued_animals": "Tiere gerettet", "injured": "Verletzte", "injured_firefighters": "Verletzte FW",
+                   "deceased": "Verstorbene"}
 COMPARED_VEHICLE_FIELDS = {"crew": "Stärke", "departed": "Ausrücken", "arrived": "Eintreffen"}
 
 
@@ -334,7 +343,7 @@ def _display(name, value):
     """Wert für den Abgleich; Zeiten mit Sekunden."""
     if value in (None, ""):
         return "–"
-    if name in ("started_at", "ended_at"):
+    if name in ("started_at", "ended_at", *OPTIONAL_TIMES):
         return parse_iso(value).strftime("%d.%m.%Y %H:%M:%S")
     if name in ("departed", "arrived"):
         return value[:8]

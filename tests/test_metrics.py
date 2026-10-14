@@ -87,7 +87,8 @@ def test_statistics_and_attendance():
 
     a = metrics.attendance_overview(metrics.evaluate(incidents, CFG))
     assert a["members"] == [{"id": 1, "name": "Muster, Max", "incidents": 2, "nights": 1, "weekends": 1,
-                             "last": "2025-03-15T20:00:00", "hours": 1.5, "rate": 1.0}]
+                             "last": "2025-03-15T20:00:00", "hours": 1.5, "rate": 1.0,
+                                 "functions": {}, "agt_incidents": 0, "agt_minutes": 0}]
 
 
 @pytest.mark.parametrize("today, expected", [(dt.date(2024, 2, 29), dt.date(2023, 2, 28)),
@@ -196,3 +197,108 @@ def test_coverage_reports_available_data():
     c = metrics.coverage(metrics.evaluate([complete, bare], CFG))
     assert c["total"] == 2 and {r["key"]: r["valid"] for r in c["rows"]} == {
         "duration": 2, "turnout": 1, "arrival": 1, "crew": 1, "attendance": 1, "leader": 1}
+
+
+# ---------------------------------------------------------------- Abbrüche, Anlagen, Fahrzeuge, Atemschutz, Brand, Rettung
+def test_abort_kinds_group_the_free_text():
+    from app import domain
+    kinds = {text: domain.abort_kind(text) for text in (
+        "Täuschungsalarm einer automatischen BMA (DIN VDE 0833-1)", "Böswilliger Alarm", "Technischer Alarm einer BMA",
+        "Es konnte kein Schadenereignis festgestellt werden", "in Bereitstellung", "nicht erforderlich",
+        "Kräfte der VG nicht mehr erforderlich", "kein Fahrer für das HLF vorhanden war", "", None)}
+    assert list(kinds.values()) == ["false_alarm", "false_alarm", "false_alarm", "false_alarm", "standby",
+                                    "not_needed", "not_needed", "other", None, None]
+
+
+def test_aborts_share_and_fire_alarm_systems():
+    incidents = [make_incident(id=1, keyword="B2", subcode="07", abort_reason="Täuschungsalarm einer BMA"),
+                 make_incident(id=2, keyword="B2", subcode="07"),
+                 make_incident(id=3, keyword="H1", subcode="01", abort_reason="in Bereitstellung"),
+                 make_incident(id=4, keyword="H1", subcode="01")]
+    a = metrics.aborts(metrics.evaluate(incidents, CFG))
+    assert (a["total"], a["aborted"], a["share"]) == (4, 2, 0.5)
+    assert {k["kind"]: k["count"] for k in a["kinds"]} == {"false_alarm": 1, "not_needed": 0, "standby": 1, "other": 0}
+    assert a["fire_alarm_systems"] == {"count": 2, "aborted": 1, "false_alarms": 1, "share": 0.5}
+    assert {c["code"]: (c["count"], c["aborted"]) for c in a["categories"]} == {"B": (2, 1), "H": (2, 1)}
+
+
+def test_alarm_systems_group_by_number_then_object():
+    incidents = [
+        make_incident(id=1, keyword="B2", subcode="07", alarm_system="301986", building="WH Musterhaus",
+                      abort_reason="Täuschungsalarm"),
+        make_incident(id=2, keyword="B2", subcode="07", alarm_system="301986", building="WH Musterhaus"),
+        make_incident(id=3, keyword="B2", subcode="07", building="HG Beispielhof"),
+        make_incident(id=4, keyword="B2", subcode="07"),
+        make_incident(id=5, keyword="H1", subcode="01"),
+    ]
+    result = metrics.alarm_systems(metrics.evaluate(incidents, CFG))
+    assert result["total"] == 4 and result["identified"] == 3
+    rows = result["rows"]
+    assert [(r["system"], r["building"], r["count"], r["false_alarms"], r["known"]) for r in rows] == [
+        ("301986", "WH Musterhaus", 2, 1, True), (None, "HG Beispielhof", 1, 0, True), (None, None, 1, 0, False)]
+    assert rows[0]["false_share"] == 0.5
+
+
+def test_vehicle_usage_counts_deployed_and_standby():
+    def with_state(call_sign, deployed, crew=4, alerted="10:00:00", departed="10:04:00", finished="11:00:00"):
+        return {**vehicle(call_sign, crew, departed, None), "alerted": alerted, "finished": finished, "deployed": deployed}
+    incidents = [
+        make_incident(id=1, vehicles={"02/45": with_state("02/45", 1), "02/24": with_state("02/24", 0, departed=None)}),
+        make_incident(id=2, vehicles={"02/45": with_state("02/45", 1, crew=2, alerted="23:30:00", finished="00:30:00"),
+                                      "02/24": with_state("02/24", None)}),
+    ]
+    rows = {r["call_sign"]: r for r in metrics.vehicle_usage(metrics.evaluate(incidents, CFG), CFG)["rows"]}
+    first, second = rows["02/45"], rows["02/24"]
+    assert (first["alerted"], first["drove"], first["deployed"], first["standby"]) == (2, 2, 2, 0)
+    assert first["hours"] == 2.0 and first["crew_avg"] == 3.0       # 60 min + 60 min über Mitternacht
+    assert (second["alerted"], second["drove"], second["standby"], second["unknown"]) == (2, 1, 1, 1)
+    assert second["standby_share"] == 1.0 and second["known"] == 1      # „unbekannt“ zählt nicht mit
+
+
+def test_respiratory_counts_carriers_and_minutes():
+    people = [{"id": 1, "name": "Muster, Max", "agt": 1, "agt_min": 20}, {"id": 2, "name": "Beispiel, Erika", "agt": 1, "agt_min": 10},
+              {"id": 3, "name": "Probe, Otto", "agt": 0, "agt_min": 0}]
+    incidents = [
+        make_incident(id=1, vehicles={"02/45": {**vehicle("02/45", 6), "respiratory": 2}}, people=people),
+        make_incident(id=2, vehicles={"02/45": {**vehicle("02/45", 6), "respiratory": 0}}),
+        make_incident(id=3, vehicles={"02/45": vehicle("02/45", 6)}),          # Altdaten: nicht angegeben
+    ]
+    r = metrics.respiratory(metrics.evaluate(incidents, CFG))
+    assert (r["total"], r["known"], r["with_agt"], r["carriers"]) == (3, 2, 1, 2)
+    assert (r["persons"], r["minutes"], r["average_minutes"], r["longest_minutes"]) == (2, 30, 15.0, 20)
+
+
+def test_fire_course_measures_from_arrival():
+    base = dict(keyword="B2", subcode="01", started_at="2025-03-12T10:00:00", ended_at="2025-03-12T12:00:00")
+    arrive = {"02/45": vehicle("02/45", 6, "10:03:00", "10:08:00")}
+    incidents = [
+        make_incident(id=1, **base, vehicles=arrive, tactic="Innenangriff", fire_controlled_at="2025-03-12T10:28:00",
+                      fire_out_at="2025-03-12T10:58:00", fire_watch_until="2025-03-12T12:58:00"),
+        make_incident(id=2, **base, vehicles=arrive),                                  # ohne Angaben
+        make_incident(id=3, **base, vehicles=arrive, abort_reason="nicht erforderlich"),   # Abbruch: zählt nicht
+        make_incident(id=4, keyword="B2", subcode="07", vehicles=arrive),              # BMA: kein Brandverlauf
+    ]
+    f = metrics.fire_course(metrics.evaluate(incidents, CFG))
+    assert f["total"] == 2
+    assert (f["to_control"]["valid"], f["to_control"]["median"], f["to_out"]["median"]) == (1, 20.0, 50.0)
+    assert [(t["tactic"], t["count"]) for t in f["tactics"]] == [("Innenangriff", 1)]
+    assert (f["fire_watches"], f["fire_watch_hours"]) == (1, 2.0)
+
+
+def test_casualties_distinguish_zero_from_not_reported():
+    incidents = [make_incident(id=1, rescued=2, injured=1, deceased=0), make_incident(id=2), make_incident(id=3, rescued=0)]
+    c = metrics.casualties(metrics.evaluate(incidents, CFG))
+    assert c["fields"]["rescued"] == {"total": 2, "incidents": 1, "reported": 2}
+    assert c["fields"]["deceased"] == {"total": 0, "incidents": 0, "reported": 1}
+    assert c["fields"]["injured_firefighters"]["reported"] == 0
+    assert c["incidents_with_persons"] == 1
+
+
+def test_attendance_overview_counts_functions_and_agt():
+    people = [{"id": 1, "name": "Muster, Max", "role": "Einheitsführer", "agt": 0, "agt_min": 0},
+              {"id": 2, "name": "Beispiel, Erika", "role": "Maschinist", "agt": 1, "agt_min": 12}]
+    incidents = [make_incident(id=1, people=people), make_incident(id=2, people=[people[1]])]
+    a = metrics.attendance_overview(metrics.evaluate(incidents, CFG))
+    erika = next(m for m in a["members"] if m["id"] == 2)
+    assert erika["functions"] == {"Maschinist": 2} and (erika["agt_incidents"], erika["agt_minutes"]) == (2, 24)
+    assert a["functions"] == [{"role": "Maschinist", "count": 2, "people": 1}, {"role": "Einheitsführer", "count": 1, "people": 1}]

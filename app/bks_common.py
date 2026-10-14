@@ -27,3 +27,18 @@ def parse_number(text):
     """Laufende Nr. aus der Einsatzbericht-Nr. "34/26", auch mit Kürzel davor wie "B67/2026" oder "FEZ 36/2026"."""
     m = re.match(r"[A-Za-zÄÖÜäöü]*\s*(\d+)\s*/\s*(\d+)", text)
     return int(m.group(1)) if m else None
+
+
+def clean_alarm_system(text):
+    """Nummer der Gefahrenmeldeanlage; „0“ und „-“ heißen: keine angegeben."""
+    text = (text or "").strip()
+    return None if text in ("", "0", "-") else text
+
+
+TACTICS = ("Innenangriff", "Außenangriff")
+
+
+def clean_tactic(text):
+    """Einsatztaktik wie im Bericht („Innenangriff“, „Außenangriff“); anderes bleibt unverändert, leer -> None."""
+    text = (text or "").strip()
+    return next((t for t in TACTICS if t.lower() == text.lower()), text) or None

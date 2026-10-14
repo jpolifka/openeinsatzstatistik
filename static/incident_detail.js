@@ -6,8 +6,8 @@ function vehicleTable(e) {
     <th>Fzg.</th><th class="right">Stärke</th><th>Ausrücken</th><th class="right">Ausrückdauer</th><th>Eintreffen</th><th class="right">Zeit bis Eintreffen</th></tr></thead>
     <tbody>${e.vehicles.map((v) => isIdle(v)
       ? `<tr class="vehicle-idle"><td>${esc(v.call_sign)}</td><td colspan="5">nicht im Einsatz</td></tr>`
-      : `<tr><td><strong>${esc(v.call_sign)}</strong>${v.substitute ? `<br><span class="small muted">${esc(v.substitute)}</span>` : ""}</td>
-        <td class="right">${orDash(v.crew)}</td><td>${formatTime(v.departed)}</td><td class="right minutes">${num(v.turnout_min)}</td>
+      : `<tr><td><strong>${esc(v.call_sign)}</strong>${v.substitute ? `<br><span class="small muted">${esc(v.substitute)}</span>` : ""}${v.deployed === 0 ? `<br><span class="small muted">nur bereitgestellt</span>` : ""}</td>
+        <td class="right">${orDash(v.crew)}${v.respiratory ? `<br><span class="small muted">${v.respiratory} AGT</span>` : ""}</td><td>${formatTime(v.departed)}</td><td class="right minutes">${num(v.turnout_min)}</td>
         <td>${formatTime(v.arrived)}</td><td class="right minutes ${v.arrival_min != null && v.arrival_min > limit ? "late" : ""}">${num(v.arrival_min)}</td></tr>`).join("")}
     </tbody></table></div>`;
 }
@@ -17,7 +17,7 @@ function peopleChips(e, { markNew = false, pickLeader = false } = {}) {
   return e.people.map((p) => {
     const isLeader = e.unit_leader ? p.leader : /Einheitsführer/.test(p.role || "");
     const cls = [markNew && p.new && "new", isLeader && "leader"].filter(Boolean).join(" ");
-    const tip = [p.role, p.vehicle, markNew && p.new && "wird als neue Person angelegt",
+    const tip = [p.role, p.vehicle, p.agt && `Atemschutz${p.agt_min ? ` ${p.agt_min} min` : ""}`, markNew && p.new && "wird als neue Person angelegt",
       pickLeader && `Klicken: als Einheitsführung eintragen (${p.leader_name})`].filter(Boolean).join(" · ");
     const content = `${esc(p.name)}${p.vehicle ? `<small>${esc(p.vehicle)}</small>` : ""}`;
     const attributes = `class="person ${cls}" ${tip ? `data-tip="${esc(tip)}"` : ""}`;
@@ -59,6 +59,23 @@ function attendancePanel(e, options = {}) {
     ${hint}<div class="people">${peopleChips(e, options)}</div>`;
 }
 
+// Weitere Angaben aus dem BKS-Bericht (Abbruch, Objekt, Brandverlauf, Rettung) – nur was angegeben ist
+function reportDetailsPanel(e) {
+  const stamp = (iso) => iso ? `${formatDate(iso)} ${formatTime(iso)}` : null;
+  const count = (n) => n == null ? null : String(n);
+  const rows = [
+    ["Einsatzabbruch", "abort_reason", e.abort_reason], ["Objekt", "building", e.building], ["Brandmelde-Nr.", "alarm_system", e.alarm_system],
+    ["Einsatztaktik", "tactic", e.tactic], ["Brand unter Kontrolle", "fire_controlled_at", stamp(e.fire_controlled_at)],
+    ["Feuer aus", "fire_out_at", stamp(e.fire_out_at)], ["Brandwache bis", "fire_watch_until", stamp(e.fire_watch_until)],
+    ["Menschen gerettet", "rescued", count(e.rescued)], ["Tiere gerettet", "rescued_animals", count(e.rescued_animals)],
+    ["Verletzte", "injured", count(e.injured)], ["Verletzte Feuerwehrangehörige", "injured_firefighters", count(e.injured_firefighters)],
+    ["Verstorbene", "deceased", count(e.deceased)],
+  ].filter(([, , value]) => value != null && value !== "");
+  if (!rows.length) return "";
+  return `<div class="panel"><h4>Weitere Angaben</h4><dl class="facts">${rows.map(([label, key, value]) =>
+    `<dt>${label}${helpButton(key)}</dt><dd>${esc(value)}</dd>`).join("")}</dl></div>`;
+}
+
 function incidentDetail(e) {
   const limit = config.default_limit;
   return `<div class="detail-grid">
@@ -74,6 +91,7 @@ function incidentDetail(e) {
       ${e.bks_url ? `<dt>BKS-Portal${helpButton("bks_url")}</dt><dd class="small">${bksLink(e)}</dd>` : ""}
     </dl></div>
     <div class="panel"><h4>Fahrzeuge${helpButton("vehicles")}</h4>${vehicleTable(e)}</div>
+    ${reportDetailsPanel(e)}
     <div class="panel"><h4>Kennzahlen</h4><dl class="facts">
       <dt>Ausrückdauer${helpButton("turnout_min")}</dt><dd>${minutes(e.turnout_min)}</dd>
       <dt>Zeit bis Eintreffen${helpButton("arrival_min")}</dt><dd>${minutes(e.arrival_min)}</dd>

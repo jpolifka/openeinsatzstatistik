@@ -390,6 +390,176 @@ def coverage(evaluated):
     ]}
 
 
+# ---------------------------------------------------------------- Abbrüche, Anlagen, Fahrzeuge, Atemschutz, Brand, Rettung
+def aborts(evaluated):
+    """Einsätze mit Abbruchgrund im BKS-Bericht: Anteil, Gruppen der Gründe, häufigste Gründe, Anteil je Einsatzart."""
+    total = len(evaluated)
+    aborted = [i for i, _ in evaluated if i.get("abort_reason")]
+    kinds = _count_by((domain.abort_kind(i["abort_reason"]) for i in aborted), [k for k, _ in domain.ABORT_KINDS])
+    reasons = {}
+    for i in aborted:
+        key = " ".join(i["abort_reason"].lower().split())
+        entry = reasons.setdefault(key, {"reason": " ".join(i["abort_reason"].split()), "count": 0,
+                                         "kind": domain.abort_kind(i["abort_reason"])})
+        entry["count"] += 1
+    categories = []
+    for code, name in domain.CATEGORIES:
+        part = [i for i, _ in evaluated if domain.category_of(i["keyword"]) == code]
+        done = sum(1 for i in part if i.get("abort_reason"))
+        categories.append({"code": code, "name": name, "count": len(part), "aborted": done,
+                           "share": _share(done, len(part))})
+    alarm = [i for i, _ in evaluated if domain.is_fire_alarm_system(i["keyword"], i["subcode"])]
+    alarm_aborted = [i for i in alarm if i.get("abort_reason")]
+    return {"total": total, "aborted": len(aborted), "share": _share(len(aborted), total),
+            "kinds": [{"kind": k, "label": label, "count": kinds[k], "share": _share(kinds[k], len(aborted))}
+                      for k, label in domain.ABORT_KINDS],
+            "reasons": sorted(reasons.values(), key=lambda r: (-r["count"], r["reason"]))[:15],
+            "categories": [c for c in categories if c["count"]],
+            "fire_alarm_systems": {"count": len(alarm), "aborted": len(alarm_aborted),
+                                   "false_alarms": sum(1 for i in alarm_aborted
+                                                       if domain.abort_kind(i["abort_reason"]) == "false_alarm"),
+                                   "share": _share(len(alarm_aborted), len(alarm))}}
+
+
+def alarm_systems(evaluated):
+    """Einsätze an Brandmeldeanlagen (Stichwort B2.07 oder Nummer der Anlage im Bericht) je Anlage bzw. Objekt.
+
+    Gruppiert wird nach der Nummer der Gefahrenmeldeanlage, ersatzweise nach dem Objekt. Einsätze ohne beides stehen
+    gesammelt unter „ohne Angabe“, damit die Abdeckung sichtbar bleibt.
+    """
+    rows = [i for i, _ in evaluated if domain.is_fire_alarm_system(i["keyword"], i["subcode"]) or i.get("alarm_system")]
+    groups = {}
+    for i in rows:
+        key = i.get("alarm_system") or (i.get("building") or "").strip() or None
+        g = groups.setdefault(key, {"system": i.get("alarm_system"), "buildings": {}, "count": 0, "aborted": 0,
+                                    "false_alarms": 0, "last": None})
+        g["count"] += 1
+        if i.get("building"):
+            g["buildings"][i["building"]] = g["buildings"].get(i["building"], 0) + 1
+        if i.get("abort_reason"):
+            g["aborted"] += 1
+            g["false_alarms"] += domain.abort_kind(i["abort_reason"]) == "false_alarm"
+        if i["started_at"] and (g["last"] is None or i["started_at"] > g["last"]):
+            g["last"] = i["started_at"]
+    result = []
+    for key, g in groups.items():
+        building = max(g.pop("buildings").items(), key=lambda kv: kv[1])[0] if g["buildings"] else None
+        result.append({**g, "building": building, "known": key is not None,
+                       "false_share": _share(g["false_alarms"], g["count"])})
+    result.sort(key=lambda r: (not r["known"], -r["count"], r["building"] or ""))
+    return {"total": len(rows), "identified": sum(r["count"] for r in result if r["known"]), "rows": result}
+
+
+def _clock_minutes(start, end):
+    """Minuten zwischen zwei Uhrzeiten (HH:MM:SS), über Mitternacht weitergezählt."""
+    return ((seconds_of_day(end) - seconds_of_day(start)) % 86400) / 60 if start and end else None
+
+
+def vehicle_usage(evaluated, cfg):
+    """Je Fahrzeug: Alarmierungen, Ausfahrten, tatsächlicher Einsatz (laut Bericht), nur bereitgestellt, Stunden."""
+    order = [v.call_sign for v in cfg.fleet]
+    labels = {v.call_sign: v.label for v in cfg.fleet}
+    usage = {}
+    for incident, _ in evaluated:
+        for call_sign, v in incident["vehicles"].items():
+            u = usage.setdefault(call_sign, {"call_sign": call_sign, "label": labels.get(call_sign, ""), "alerted": 0,
+                                             "drove": 0, "deployed": 0, "standby": 0, "unknown": 0, "minutes": 0.0,
+                                             "minutes_valid": 0, "crew": 0})
+            u["alerted"] += 1
+            drove = bool(v.get("departed"))
+            u["drove"] += drove
+            u["crew"] += (v.get("crew") or 0) if drove else 0
+            state = v.get("deployed")
+            u["deployed"] += state == 1
+            u["standby"] += state == 0
+            u["unknown"] += state is None
+            spent = _clock_minutes(v.get("alerted"), v.get("finished")) if drove else None
+            if spent is not None:
+                u["minutes"] += spent
+                u["minutes_valid"] += 1
+    rows = sorted(usage.values(), key=lambda u: (order.index(u["call_sign"]) if u["call_sign"] in order else len(order),
+                                                  u["call_sign"]))
+    for u in rows:
+        u["hours"] = round(u.pop("minutes") / 60, 1)
+        u["crew_avg"] = round(u.pop("crew") / u["drove"], 1) if u["drove"] else None
+        known = u["deployed"] + u["standby"]
+        u["standby_share"] = _share(u["standby"], known)
+        u["known"] = known
+    return {"total": len(evaluated), "rows": rows}
+
+
+def respiratory(evaluated):
+    """Atemschutz: Einsätze mit Geräteträgern, Träger und Minuten unter Atemschutz (je Person laut Anwesenheitsliste)."""
+    total = len(evaluated)
+    known = with_agt = carriers = minutes = persons = 0
+    longest = None
+    for incident, _ in evaluated:
+        counts = [v["respiratory"] for v in incident["vehicles"].values() if v.get("respiratory") is not None]
+        agt = [p for p in incident["people"] if p.get("agt")]
+        if counts or any(p.get("agt") is not None for p in incident["people"]):
+            known += 1
+        carried = sum(counts)
+        carriers += carried
+        with_agt += bool(carried or agt)
+        persons += len(agt)
+        for p in agt:
+            if p.get("agt_min"):
+                minutes += p["agt_min"]
+                longest = max(longest or 0, p["agt_min"])
+    return {"total": total, "known": known, "with_agt": with_agt, "share": _share(with_agt, known),
+            "carriers": carriers, "persons": persons, "minutes": minutes,
+            "average_minutes": round(minutes / persons, 1) if persons else None, "longest_minutes": longest}
+
+
+def fire_course(evaluated):
+    """Brandverlauf der Brandeinsätze (Einsatzart B, ohne Abbrüche): Zeit vom Eintreffen bis „Brand unter Kontrolle“ und
+    „Feuer aus“, Einsatztaktik und Brandwachen."""
+    fires = [(i, m) for i, m in evaluated if domain.category_of(i["keyword"]) == "B" and not i.get("abort_reason")
+             and not domain.is_fire_alarm_system(i["keyword"], i["subcode"]) and not domain.is_fire_watch(i["keyword"], i["subcode"])]
+    to_control, to_out, by_tactic, watch_hours, watches = [], [], {}, [], 0
+    for i, m in fires:
+        start = parse_iso(i["started_at"])
+        arrival = start + dt.timedelta(minutes=m["arrival_min"]) if start and m["arrival_min"] is not None else None
+
+        def after(stamp):
+            at = parse_iso(stamp)
+            minutes = (at - arrival).total_seconds() / 60 if at and arrival else None
+            return minutes if minutes is not None and minutes >= 0 else None
+
+        controlled, out = after(i.get("fire_controlled_at")), after(i.get("fire_out_at"))
+        to_control.append(controlled)
+        to_out.append(out)
+        if i.get("tactic"):
+            entry = by_tactic.setdefault(i["tactic"], {"tactic": i["tactic"], "count": 0, "control": []})
+            entry["count"] += 1
+            entry["control"].append(controlled)
+        until, base = parse_iso(i.get("fire_watch_until")), parse_iso(i.get("fire_out_at")) or parse_iso(i["ended_at"])
+        if until:
+            watches += 1
+            if base and until >= base:
+                watch_hours.append((until - base).total_seconds() / 3600)
+    total = len(fires)
+    return {"total": total, "to_control": distribution(to_control, total), "to_out": distribution(to_out, total),
+            "tactics": [{"tactic": t["tactic"], "count": t["count"], "control": distribution(t["control"], t["count"])}
+                        for t in sorted(by_tactic.values(), key=lambda t: -t["count"])],
+            "fire_watches": watches, "fire_watch_hours": round(sum(watch_hours), 1) if watch_hours else None,
+            "fire_watch_valid": len(watch_hours)}
+
+
+CASUALTY_FIELDS = ("rescued", "rescued_animals", "injured", "injured_firefighters", "deceased")
+
+
+def casualties(evaluated):
+    """Menschenrettung, gerettete Tiere, Verletzte und Verstorbene; „nicht angegeben“ ist nie null."""
+    total = len(evaluated)
+    fields = {}
+    for name in CASUALTY_FIELDS:
+        values = [i[name] for i, _ in evaluated if i.get(name) is not None]
+        fields[name] = {"total": sum(values), "incidents": sum(1 for v in values if v > 0), "reported": len(values)}
+    any_event = sum(1 for i, _ in evaluated if any((i.get(n) or 0) > 0 for n in CASUALTY_FIELDS))
+    return {"total": total, "fields": fields, "incidents_with_persons": any_event}
+
+
 # ---------------------------------------------------------------- Mehrere Wehren
 def unique_incidents(incidents):
     """Einsätze ohne Doppelte über mehrere Wehren -> (anzahl, ohne_schlüssel).
@@ -442,8 +612,15 @@ def attendance_overview(evaluated):
     for incident, m in evaluated:
         for person in incident["people"]:
             row = members.setdefault(person["id"], {"id": person["id"], "name": person["name"], "incidents": 0,
-                                                    "minutes": 0.0, "nights": 0, "weekends": 0, "last": None})
+                                                    "minutes": 0.0, "nights": 0, "weekends": 0, "last": None,
+                                                    "functions": {}, "agt_incidents": 0, "agt_minutes": 0})
             row["incidents"] += 1
+            role = " ".join((person.get("role") or "").split())
+            if role:
+                row["functions"][role] = row["functions"].get(role, 0) + 1
+            if person.get("agt"):
+                row["agt_incidents"] += 1
+                row["agt_minutes"] += person.get("agt_min") or 0
             row["minutes"] += m["duration_min"] or 0
             row["nights"] += not m["daytime"]
             row["weekends"] += bool(incident["weekend_or_holiday"])
@@ -453,4 +630,11 @@ def attendance_overview(evaluated):
     for r in rows:
         r["hours"] = round(r.pop("minutes") / 60, 1)
         r["rate"] = _share(r["incidents"], count)
-    return {"incident_count": count, "members": rows}
+    functions = {}
+    for r in rows:
+        for role, n in r["functions"].items():
+            f = functions.setdefault(role, {"role": role, "count": 0, "people": 0})
+            f["count"] += n
+            f["people"] += 1
+    return {"incident_count": count, "members": rows,
+            "functions": sorted(functions.values(), key=lambda f: (-f["count"], f["role"]))}

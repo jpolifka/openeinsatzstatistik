@@ -136,3 +136,46 @@ def test_abort_reason_is_read_from_header_line():
     left = LEFT + "Zeitpunkt der Alarmierung der ersten Einheit: 12.03.2025 10:00 Einsatzabbruch: Täuschungsalarm\n"
     assert parse_report(FULL.replace(LEFT, left), left, "", "17-25_B2_Test.pdf", CFG.unit_prefix)["abort_reason"] == "Täuschungsalarm"
     assert parse_report(FULL, LEFT, "", "17-25_B2_Test.pdf", CFG.unit_prefix)["abort_reason"] is None
+
+
+DETAILS = """Einsatzstelle - Bemerkung Einsatzanlass: Rauch kein Einfluss Nummer der Gefahrenmeldeanlage: 301986
+Einatztaktik: Innenangriff Brand unter Kontrolle: 12.03.2025 10:41
+Feuer aus: 12.03.2025 11:02 Brandwache gestellt bis: 12.03.2025 14:00
+Menschenrettung über baulichen Rettungsweg: 2
+Menschenrettung über Hubrettungsfahrzeug: 1
+Rettung von Kleinvieh: 3
+Verletzte andere Personen: 1
+Verletzte Feuerwehrangehörige: 0
+"""
+
+
+def test_details_are_read_from_the_report():
+    full = FULL.replace(LEFT, LEFT + DETAILS)
+    r = parse_report(full, LEFT + DETAILS, "", "17-25_B2_Test.pdf", CFG.unit_prefix)
+    assert r["alarm_system"] == "301986" and r["tactic"] == "Innenangriff"
+    assert r["fire_controlled_at"] == dt.datetime(2025, 3, 12, 10, 41)
+    assert r["fire_out_at"] == dt.datetime(2025, 3, 12, 11, 2)
+    assert r["fire_watch_until"] == dt.datetime(2025, 3, 12, 14, 0)
+    assert (r["rescued"], r["rescued_animals"], r["injured"], r["injured_firefighters"], r["deceased"]) == (3, 3, 1, 0, None)
+    assert [v["deployed"] for v in r["vehicles"]] == [1, 1, 1, 0]
+    assert [v["respiratory"] for v in r["vehicles"]] == [0, 0, 2, 0]
+
+
+def test_missing_details_stay_unknown():
+    r = parse_report(FULL, LEFT, "", "17-25_B2_Test.pdf", CFG.unit_prefix)
+    assert all(r[name] is None for name in ("alarm_system", "tactic", "fire_controlled_at", "rescued", "injured", "deceased"))
+
+
+def test_agt_per_person_and_details_are_saved(con):
+    people = PEOPLE.replace("Maschinist nein 0", "Maschinist AGT 25")
+    full = LEFT + DETAILS + "Einsatzleiter: Max Muster\n" + VEHICLES + people
+    r = read(full=full, left=LEFT + DETAILS)
+    assert [(p["agt"], p["agt_min"]) for p in r["people"]] == [(False, 0), (True, 25), (False, 0)]
+    incident_id = report.save(con, r, report.to_fields(r))
+    stored = store.load_incident(con, incident_id)
+    assert (stored["alarm_system"], stored["tactic"], stored["rescued"], stored["deceased"]) == ("301986", "Innenangriff", 3, None)
+    assert stored["fire_controlled_at"] == "2025-03-12T10:41:00" and stored["building"] == "WH Musterhaus"
+    assert {p["name"]: (p["agt"], p["agt_min"]) for p in stored["people"]}["Beispiel, Erika"] == (1, 25)
+    assert (stored["vehicles"]["02/45"]["deployed"], stored["vehicles"]["02/24"]["respiratory"]) == (1, 0)
+    incident, existing = report.preview(con, r)
+    assert report.differences(existing, incident, CFG) == []

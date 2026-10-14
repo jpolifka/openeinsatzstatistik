@@ -270,6 +270,29 @@ def alarm_level(keyword):
     return int(digit) if digit.isdigit() else None
 
 
+# Gründe eines Einsatzabbruchs (Freitext im BKS-Bericht) in vier Gruppen
+ABORT_KINDS = (("false_alarm", "Fehlalarm / kein Ereignis"), ("not_needed", "Nicht erforderlich"),
+               ("standby", "In Bereitstellung"), ("other", "Sonstiger Grund"))
+_FALSE_ALARM = re.compile(r"täuschung|technisch|böswillig|fehlalarm|blind\w* alarm|"
+                          r"\bkein\w*\W+(?:\w+\W+){0,4}?(?:schaden\w*ereignis|erkenntnis|brand|feuer)")
+_STANDBY = re.compile(r"bereitstellung|bereitschaft")
+_NOT_NEEDED = re.compile(r"nicht (?:mehr )?(?:erforderlich|benötigt|nötig)|abbestellt|storniert|entlassen")
+
+
+def abort_kind(reason):
+    """Gruppe des Abbruchgrunds (Schlüssel aus ABORT_KINDS); ohne Grund None."""
+    text = (reason or "").strip().lower()
+    if not text:
+        return None
+    if _FALSE_ALARM.search(text):
+        return "false_alarm"
+    if _STANDBY.search(text):
+        return "standby"
+    if _NOT_NEEDED.search(text):
+        return "not_needed"
+    return "other"
+
+
 def is_fire_watch(keyword, subcode):
     return (keyword, subcode) == FIRE_WATCH
 

@@ -44,6 +44,45 @@ def test_evaluation_contains_history(client):
     assert sum(h["count"] for h in history) == 2
 
 
+def test_evaluation_contains_report_detail_blocks(client):
+    key = _create(client, 1)
+    with db.connection(tenancy.tenant_path("wehr-a1")) as con:
+        incident_id = int(key.split(":")[1])
+        con.execute("UPDATE incident SET abort_reason = 'Täuschungsalarm', alarm_system = '301986', building = 'WH Beispiel', "
+                    "subcode = '07', rescued = 2, deceased = 0 WHERE id = ?", (incident_id,))
+        store.add_vehicle(con, incident_id, "02/45", None, 6, "10:03:00", "10:08:00", alerted="10:00:00", finished="10:40:00",
+                          deployed=0, respiratory=2)
+        member = store.MemberDirectory(con).find_or_create("Muster", "Erika")
+        store.add_attendance(con, incident_id, member, "Maschinist", "02/45", agt=1, agt_min=12)
+    e = client.get("/api/evaluation?year=2025").json()
+    assert e["aborts"]["aborted"] == 1 and e["aborts"]["kinds"][0]["count"] == 1
+    assert e["alarm_systems"]["rows"][0]["system"] == "301986"
+    assert e["alarm_systems"]["rows"][0]["false_alarms"] == 1
+    usage = e["vehicle_usage"]["rows"][0]
+    assert (usage["call_sign"], usage["standby"], usage["hours"]) == ("02/45", 1, 0.7)
+    assert (e["respiratory"]["carriers"], e["respiratory"]["minutes"]) == (2, 12)
+    assert e["casualties"]["fields"]["rescued"] == {"total": 2, "incidents": 1, "reported": 1}
+    assert e["fire_course"]["total"] == 0
+    assert e["attendance"]["functions"] == [{"role": "Maschinist", "count": 1, "people": 1}]
+    listed = client.get("/api/incidents?year=2025").json()["incidents"][0]
+    assert (listed["building"], listed["rescued"], listed["deceased"]) == ("WH Beispiel", 2, 0)
+    assert listed["people"][0]["agt_min"] == 12 and listed["vehicles"][0]["deployed"] == 0
+
+
+def test_report_details_can_be_edited(client):
+    key = _create(client, 1)
+    revision = client.get("/api/incidents?year=2025").json()["incidents"][0]["revision"]
+    changed = client.put(f"/api/incidents/{key}", json={"revision": revision, "building": " WH Beispiel ", "rescued": 3,
+                                                       "fire_out_at": "2025-03-12T10:45", "tactic": "Innenangriff"})
+    assert changed.status_code == 200
+    body = changed.json()
+    assert (body["building"], body["rescued"], body["fire_out_at"], body["tactic"]) == ("WH Beispiel", 3, "2025-03-12T10:45:00", "Innenangriff")
+    bad = client.put(f"/api/incidents/{key}", json={"revision": body["revision"], "injured": -1})
+    assert bad.status_code == 422
+    cleared = client.put(f"/api/incidents/{key}", json={"revision": body["revision"], "rescued": None, "building": ""})
+    assert cleared.json()["rescued"] is None and cleared.json()["building"] is None
+
+
 def test_evaluation_rejects_unknown_limit(client):
     assert client.get("/api/evaluation?limit=9").status_code == 400
     assert client.get("/api/evaluation?limit=10").json()["response_plan"]["limit"] == 10
