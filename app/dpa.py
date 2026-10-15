@@ -64,12 +64,6 @@ def status(con, vg_id):
     return dict(row) if row else {"vg_id": vg_id, "status": "pending", "client_data": "{}"}
 
 
-def open_vgs(con):
-    """IDs der VGs ohne gültigen AVV (fehlende Zeile = ausstehend)."""
-    done = {r[0] for r in con.execute("SELECT vg_id FROM dpa WHERE status NOT IN ('pending', 'draft', 'revoked')")}
-    return {r[0] for r in con.execute("SELECT id FROM vg")} - done
-
-
 def _save(con, vg_id, **values):
     con.execute("INSERT INTO dpa (vg_id) VALUES (?) ON CONFLICT(vg_id) DO NOTHING", (vg_id,))
     assignments = ", ".join(f"{k} = ?" for k in values)

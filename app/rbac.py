@@ -236,8 +236,6 @@ def save_role(con, roles, role_id, *, vg_id, scope, label, description, parent_i
     granters, grantable = [roles.get(g) for g in granted_by], [roles.get(g) for g in grants]
     if any(g is None or (g.vg_id is not None and g.vg_id != vg_id) for g in granters + grantable):
         raise Invalid("Bei der Verteilung gehen nur Rollen, die in dieser VG gelten.")
-    if vg_id is None and any(g.vg_id is not None for g in granters + grantable):
-        raise Invalid("Globale Rollen verteilen nur globale Rollen.")
     if role_id is None:
         role_id = con.execute("INSERT INTO role (key, vg_id, scope, label, description, parent_id) "
                               "VALUES (?, ?, ?, ?, ?, ?)", (make_key(con, label, vg_id), vg_id, scope, label,
