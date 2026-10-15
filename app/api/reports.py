@@ -109,6 +109,7 @@ def _accept_report(acceptance, a, r, slug):
     by_date = tenant.config.numbering == "by_date"
     year = year_of(fields.get("started_at"))
     with tenant.connection() as con:
+        con.execute("BEGIN IMMEDIATE")    # next_number und Speichern als eine Sperre: keine doppelte Nummer
         update_id = r.get("_existing_id") if acceptance.replace else None
         original = store.load_incident(con, update_id) if update_id else None
         old_year = original["year"] if original else None

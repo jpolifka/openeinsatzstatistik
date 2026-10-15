@@ -152,3 +152,25 @@ def test_manual_edit_survives_reimport(con):
     store.replace_report_rows(con, incident_id, [{"call_sign": "02/45", "name": None, "crew": 6, "departed": "10:03:00",
                                                   "arrived": "10:07:00"}], [])
     assert store.load_incident(con, incident_id)["vehicles"]["02/45"]["departed"] == "10:05:00"
+
+
+def test_begin_immediate_serializes_number_assignment(tmp_path):
+    """Zwei Schreiber, die die nächste Nummer lesen und speichern, bekommen verschiedene Nummern."""
+    import threading
+    from app import db
+    path = str(tmp_path / "n.db")
+    db.setup(path)
+    numbers, barrier = [], threading.Barrier(2)
+
+    def take():
+        barrier.wait()
+        with db.connection(path) as con:
+            con.execute("BEGIN IMMEDIATE")
+            n = store.next_number(con, 2026)
+            con.execute("INSERT INTO incident (year, number, source) VALUES (2026, ?, 'test')", (n,))
+            numbers.append(n)
+
+    threads = [threading.Thread(target=take) for _ in range(2)]
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+    assert sorted(numbers) == [1, 2]

@@ -356,7 +356,6 @@ def connect(path):
     con = sqlite3.connect(path, timeout=30)
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA foreign_keys = ON")
-    con.execute("PRAGMA journal_mode = WAL")
     return con
 
 
@@ -374,6 +373,7 @@ def connection(path):
 def setup(path, steps=TENANT_MIGRATIONS):
     con = connect(path)
     try:
+        con.execute("PRAGMA journal_mode = WAL")     # bleibt in der Datei, nicht je Verbindung nötig
         migrate(con, steps)
     finally:
         con.close()
