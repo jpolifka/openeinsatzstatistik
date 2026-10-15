@@ -23,8 +23,6 @@ def _held(a, roles):
 def _ceiling(a, vg_id, scope):
     """Rechte, die der Benutzer in dieser VG selbst hat. Eine Wehr-Rolle gilt in allen Wehren der VG, daher
     zählen auch die Rechte aus Rollen einer Wehr."""
-    if a.superadmin:
-        return rbac.ALL_PERMISSIONS
     held = set(a.vg_permissions.get(vg_id, ()))
     if scope == "tenant":
         for tenant in a.tenants.values():

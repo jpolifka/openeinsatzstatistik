@@ -64,11 +64,8 @@ def normalize_fields(fields, weekend_or_holiday=None):
     end = parse_iso(f["ended_at"])
     if any(value and value.tzinfo is not None for value in (start, end)):
         raise ValueError("Einsatzzeiten bitte als örtliche Uhrzeit ohne Zeitzonen-Zusatz angeben.")
-    if start and end:
-        if (start.tzinfo is None) != (end.tzinfo is None):
-            raise ValueError("Beginn und Ende müssen dieselbe Zeitzonen-Konvention verwenden.")
-        if end < start:
-            raise ValueError("Das Einsatzende darf nicht vor dem Beginn liegen.")
+    if start and end and end < start:
+        raise ValueError("Das Einsatzende darf nicht vor dem Beginn liegen.")
     f["year"] = year_of(start)
     if weekend_or_holiday is None:
         weekend_or_holiday = bool(start and is_weekend_or_holiday(start.date()))
