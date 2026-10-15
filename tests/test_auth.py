@@ -156,3 +156,24 @@ def test_login_without_base_url_stops_start(monkeypatch):
     monkeypatch.setattr(auth, "BASE_URL", "")
     with pytest.raises(RuntimeError):
         auth.check_config()
+
+
+def test_start_without_login_needs_explicit_opt_out(monkeypatch):
+    monkeypatch.setattr(tenancy, "ADMIN_EMAILS", set())
+    monkeypatch.setattr(auth, "BASE_URL", "http://localhost:8112")
+    monkeypatch.setattr(auth, "AUTH_DISABLED", False)
+    with pytest.raises(RuntimeError, match="AUTH_DISABLED"):
+        auth.check_config()
+    monkeypatch.setattr(auth, "AUTH_DISABLED", True)
+    auth.check_config()                                  # lokale Entwicklung: erlaubt
+    monkeypatch.setattr(auth, "BASE_URL", "https://einsatz.example.org")
+    with pytest.raises(RuntimeError):                    # öffentliche Adresse ohne Anmeldung nie
+        auth.check_config()
+
+
+def test_disabling_login_and_admins_together_is_refused(monkeypatch):
+    monkeypatch.setattr(tenancy, "ADMIN_EMAILS", {"admin@example.org"})
+    monkeypatch.setattr(auth, "BASE_URL", "http://localhost:8112")
+    monkeypatch.setattr(auth, "AUTH_DISABLED", True)
+    with pytest.raises(RuntimeError, match="widersprechen"):
+        auth.check_config()

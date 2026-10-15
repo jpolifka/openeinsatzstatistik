@@ -147,3 +147,32 @@ class ReadJobs:
                 del self._jobs[job_id]
             return {"read": job["read"], "total": job["total"], "done": done,
                     "result": job["result"], "error": job["error"]}
+
+
+# ---------------------------------------------------------------- Gleichzeitige Uploads
+class UploadSlots:
+    """Begrenzt, wie viele Uploads gleichzeitig verarbeitet werden: Jeder belegt bis zu UPLOAD_MAX_BYTES im
+    tmpfs des Containers (Speicher des einen Workers) und einen der Parser-Plätze. Je Benutzer höchstens einer,
+    damit einer nicht alle Plätze belegt."""
+    TOTAL = 2
+    PER_OWNER = 1
+
+    def __init__(self):
+        self._owners = []
+        self._lock = threading.Lock()
+
+    def acquire(self, owner):
+        """Platz belegen -> release-Funktion; 429, wenn keiner frei ist."""
+        with self._lock:
+            if len(self._owners) >= self.TOTAL or self._owners.count(owner) >= self.PER_OWNER:
+                raise HTTPException(429, "Es werden gerade Berichte eingelesen. Bitte einen Moment warten und "
+                                         "dann erneut einlesen.")
+            self._owners.append(owner)
+        released = []
+
+        def release():
+            with self._lock:
+                if not released:
+                    released.append(True)
+                    self._owners.remove(owner)
+        return release

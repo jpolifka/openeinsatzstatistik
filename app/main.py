@@ -14,8 +14,10 @@ import asyncio
 import contextlib
 import logging
 import os
+import re
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -23,13 +25,26 @@ from pydantic import BaseModel
 
 from app import admin, importing, auth, db, dpa, feedback, import_queue, mail, legacy, rbac, tenancy, theme
 from app.rbac import STATS
-from app.request_limits import RequestSizeLimit
+from app.request_limits import UPLOAD_ROUTES, RequestSizeLimit
 from app.incident_schema import FORM_FIELDS
 from app.api import evaluation, export, incidents, records, reports
 from app.api.common import selection_config
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("pdf2einsatz")
+
+
+class _MaskLoginToken(logging.Filter):
+    """Der Anmeldelink steht als Query-Parameter in der Adresse; im Zugriffslog darf er nicht lesbar sein."""
+    TOKEN = re.compile(r"(token=)[^&\s\"]+")
+
+    def filter(self, record):
+        if isinstance(record.args, tuple):
+            record.args = tuple(self.TOKEN.sub(r"\1***", a) if isinstance(a, str) else a for a in record.args)
+        return True
+
+
+logging.getLogger("uvicorn.access").addFilter(_MaskLoginToken())
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
@@ -70,7 +85,7 @@ async def lifespan(_app):
 app = FastAPI(title="Einsatzstatistik", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 # JSON der Einsatzliste schrumpft komprimiert auf ca. 1/16
 app.add_middleware(GZipMiddleware, minimum_size=1000)
-app.add_middleware(RequestSizeLimit)
+app.add_middleware(RequestSizeLimit, routes=UPLOAD_ROUTES)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
@@ -130,6 +145,13 @@ async def security_headers(request: Request, call_next):
     for name, value in SECURITY_HEADERS.items():
         response.headers.setdefault(name, value)
     return response
+
+
+@app.exception_handler(RequestValidationError)
+async def invalid_request(_request, exc):
+    """422 wie üblich, aber ohne die Eingabe zurückzuschicken (große Texte, NaN lassen sich nicht serialisieren)."""
+    errors = [{key: error[key] for key in ("type", "loc", "msg") if key in error} for error in exc.errors()]
+    return JSONResponse({"detail": errors}, status_code=422)
 
 
 @app.exception_handler(tenancy.Forbidden)

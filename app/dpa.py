@@ -18,6 +18,7 @@ import json
 import logging
 import os
 import re
+import secrets
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
@@ -98,7 +99,7 @@ def render(client_data, tenant_names, version=TEMPLATE_VERSION):
     return body, hashlib.sha256(body.encode("utf-8")).hexdigest()
 
 
-def page(body, checksum, title, generated=None):
+def page(body, checksum, title, generated=None, nonce=""):
     changed = ('<p class="warning noprint">Der Text weicht vom erzeugten Vertrag ab (Prüfsumme damals: '
                f'{generated}). Bitte den Vertrag neu erzeugen.</p>') if generated and generated != checksum else ""
     return f"""<!doctype html><html lang="de"><head><meta charset="utf-8"><title>{html.escape(title)}</title>
@@ -112,9 +113,10 @@ table {{ width: 100%; border-collapse: collapse; margin: 10px 0; }} th, td {{ bo
 .warning {{ background: #FFF2CC; padding: 8px 12px; border-radius: 6px; }}
 @media print {{ body {{ margin: 0 auto; }} .noprint {{ display: none; }} }}
 </style></head><body>
-<p class="noprint"><button onclick="print()">Drucken / als PDF sichern</button></p>
+<p class="noprint"><button id="print-button">Drucken / als PDF sichern</button></p>
 {changed}{body}
 <p class="checksum">Prüfsumme des Vertragstextes (SHA-256): {checksum}</p>
+<script nonce="{nonce}">document.getElementById("print-button").addEventListener("click", () => print());</script>
 </body></html>"""
 
 
@@ -213,9 +215,11 @@ def document(slug: str, a: tenancy.Access = Depends(access)):
         d = status(con, vg["id"])
         body, checksum = render(json.loads(d.get("client_data") or "{}"), _tenant_names(con, vg["id"]),
                                 d.get("template_version") or TEMPLATE_VERSION)
-    return HTMLResponse(page(body, checksum, f"AVV {vg['name']}", d.get("generated_hash")),
-                        headers={"Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; "
-                                                            "script-src 'unsafe-inline'"})
+    nonce = secrets.token_urlsafe(16)      # nur das eigene Skript für den Drucken-Knopf darf laufen
+    return HTMLResponse(page(body, checksum, f"AVV {vg['name']}", d.get("generated_hash"), nonce),
+                        headers={"Content-Security-Policy": f"default-src 'none'; style-src 'unsafe-inline'; "
+                                                            f"script-src 'nonce-{nonce}'; base-uri 'none'; "
+                                                            f"form-action 'none'; frame-ancestors 'none'"})
 
 
 @router.post("/api/dpa/{slug}/upload")

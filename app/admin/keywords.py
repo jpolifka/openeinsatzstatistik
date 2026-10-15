@@ -23,7 +23,7 @@ MAX_KEYWORD_FILE = 2 * 1024 * 1024
 # ---------------------------------------------------------------- Stichwortkatalog
 class KeywordIn(BaseModel):
     name: str = Field(min_length=1, max_length=120)
-    terms: str = ""
+    terms: str = Field(default="", max_length=500)
     active: bool = True
 
 
@@ -220,6 +220,8 @@ def read_keyword_file(filename, data):
             _invalid(f"Zeile {number}: „{cells[0]}“ ist kein Stichwort wie B2 oder B2.07.")
         if not cells[1]:
             _invalid(f"Zeile {number}: Bezeichnung fehlt.")
+        if len(cells[1]) > 120 or len(cells[2]) > 500:
+            _invalid(f"Zeile {number}: Bezeichnung höchstens 120, Suchbegriffe höchstens 500 Zeichen.")
         if code in seen:
             _invalid(f"Zeile {number}: {code} steht doppelt in der Datei.")
         seen.add(code)

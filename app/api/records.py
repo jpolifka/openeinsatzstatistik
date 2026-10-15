@@ -5,7 +5,7 @@ import datetime as dt
 from typing import List, Optional
 
 from fastapi import Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app import fees, records, tenancy
 from app.rbac import VG_RECORDS
@@ -57,15 +57,15 @@ def api_review_record(bks_record_id: str, review: Review, a: tenancy.Access = De
 
 # ---------------------------------------------------------------- Kostenersatz (Recht VG_RECORDS)
 class Expense(BaseModel):
-    label: str = ""
-    amount: float = 0
+    label: str = Field(default="", max_length=200)
+    amount: float = Field(default=0, ge=0, le=10_000_000, allow_inf_nan=False)
 
 
 class FeeRequest(BaseModel):
     schedule_id: Optional[int] = None
     bma_cap: Optional[bool] = None     # None: bei Stichwort Brandmeldeanlage höchstens die Pauschale
-    expenses: List[Expense] = []
-    vat_percent: float = 0
+    expenses: List[Expense] = Field(default=[], max_length=50)
+    vat_percent: float = Field(default=0, allow_inf_nan=False)
 
 
 @router.post("/api/records/{bks_record_id}/fees")

@@ -33,6 +33,8 @@ log = logging.getLogger("pdf2einsatz")
 
 BASE_URL = os.environ.get("BASE_URL", "").rstrip("/")
 SECRET_KEY = os.environ.get("SECRET_KEY", "")
+# Ohne Anmeldung ist jeder Zugriff Superadmin: nur auf ausdrückliche Anweisung (lokale Entwicklung)
+AUTH_DISABLED = os.environ.get("AUTH_DISABLED", "").strip().lower() in ("1", "true", "yes", "ja")
 
 COOKIE = "session"
 SCOPE_COOKIE = "scope"     # ausgewählte Wehr, wird bei jeder Anfrage gegen die Zuordnungen geprüft
@@ -40,10 +42,15 @@ LINK_TTL = 15 * 60
 SESSION_TTL = 30 * 24 * 60 * 60
 # Mindestabstand zwischen zwei Mails an dieselbe Adresse
 MAIL_COOLDOWN = 60
+# Obergrenzen gegen Mail-Flut (an eine Adresse, und insgesamt für den Ruf des Absenders)
+MAIL_PER_ADDRESS_PER_DAY = 20
+MAIL_TOTAL_PER_HOUR = 200
+MAX_SESSIONS_PER_USER = 10
 
 router = APIRouter()
 _lock = threading.Lock()
 _last_mail = {}     # Adresse → Zeitpunkt der letzten Mail
+_sent = []          # (Zeitpunkt, Adresse) der Mails der letzten 24 Stunden
 _key = None
 
 
@@ -51,18 +58,29 @@ def enabled():
     return tenancy.auth_enabled()
 
 
+def _is_local():
+    return urlsplit(BASE_URL).hostname in ("localhost", "127.0.0.1", "::1")
+
+
 def check_config():
     """Bricht den Start ab, wenn die Anmeldung so nicht funktionieren kann."""
     if enabled() and not BASE_URL:
         raise RuntimeError("ADMIN_EMAILS ist gesetzt, BASE_URL fehlt (siehe README)")
-    if not enabled() and BASE_URL and urlsplit(BASE_URL).hostname not in ("localhost", "127.0.0.1", "::1"):
+    if not enabled() and BASE_URL and not _is_local():
         raise RuntimeError("Für eine nicht lokale BASE_URL muss ADMIN_EMAILS gesetzt sein.")
+    if enabled() and not mail.enabled() and not _is_local():
+        # Sonst stünde der Anmeldelink im Log und jeder mit Log-Zugriff könnte sich als beliebiger Benutzer anmelden
+        raise RuntimeError("Anmeldung ohne Mailversand (SMTP_HOST) gibt es nur mit lokaler BASE_URL (siehe README)")
     if os.environ.get("RESEND_API_KEY"):
         # Nicht still ohne Mails starten, wenn noch die alte Konfiguration gesetzt ist
         raise RuntimeError("RESEND_API_KEY wird nicht mehr unterstützt – Versand per SMTP_* (siehe README)")
+    if enabled() and AUTH_DISABLED:
+        raise RuntimeError("AUTH_DISABLED und ADMIN_EMAILS widersprechen sich – eines von beiden entfernen")
+    if not enabled() and not AUTH_DISABLED:
+        raise RuntimeError("ADMIN_EMAILS fehlt: ohne Anmeldung wäre jeder Zugriff Superadmin. Superadmins "
+                           "eintragen – oder nur für die lokale Entwicklung AUTH_DISABLED=1 setzen (siehe README)")
     if not enabled():
-        log.warning("Anmeldung AUS (ADMIN_EMAILS fehlt): jeder Zugriff gilt als Superadmin. "
-                    "Nur lokal verwenden.")
+        log.warning("Anmeldung AUS (AUTH_DISABLED=1): jeder Zugriff gilt als Superadmin. Nur lokal verwenden.")
     mail.check_config()
 
 
@@ -118,6 +136,10 @@ def create_session(email, user_agent=""):
     now = time.time()
     with tenancy.central() as con:
         con.execute("DELETE FROM session WHERE expires < ?", (now,))
+        # Älteste Sitzungen dieser Adresse beenden, damit es nie mehr als MAX_SESSIONS_PER_USER gibt
+        con.execute("DELETE FROM session WHERE email = ? AND id NOT IN (SELECT id FROM session WHERE email = ? "
+                    "ORDER BY last_seen DESC, id DESC LIMIT ?)",
+                    (tenancy.normalize_email(email), tenancy.normalize_email(email), MAX_SESSIONS_PER_USER - 1))
         con.execute("INSERT INTO session (token_hash, email, created, last_seen, expires, user_agent) "
                     "VALUES (?, ?, ?, ?, ?, ?)",
                     (_hash(token), tenancy.normalize_email(email), now, now, now + SESSION_TTL, (user_agent or "")[:200]))
@@ -199,12 +221,22 @@ def send_link(email):
         log.info("Anmeldung mit nicht berechtigter Adresse abgelehnt")
         return
     with _lock:
-        if time.time() - _last_mail.get(email, 0) < MAIL_COOLDOWN:
+        now = time.time()
+        if now - _last_mail.get(email, 0) < MAIL_COOLDOWN:
             return
-        _last_mail[email] = time.time()
+        _sent[:] = [(t, a) for t, a in _sent if now - t < 24 * 3600]
+        if sum(a == email for _, a in _sent) >= MAIL_PER_ADDRESS_PER_DAY or \
+                sum(now - t < 3600 for t, _ in _sent) >= MAIL_TOTAL_PER_HOUR:
+            log.warning("Anmeldelink für %s nicht versendet: Obergrenze für Mails erreicht", email)
+            return
+        _last_mail[email] = now
+        _sent.append((now, email))
     link = f"{BASE_URL}/auth/verify?token={_sign('link', email, LINK_TTL)}"
     if not mail.enabled():
-        log.warning("SMTP_HOST fehlt – Anmeldelink für %s: %s", email, link)
+        if _is_local():          # lokale Entwicklung ohne Mailversand: Link im Log
+            log.warning("SMTP_HOST fehlt – Anmeldelink für %s: %s", email, link)
+        else:
+            log.error("SMTP_HOST fehlt – Anmeldelink für %s nicht versendet", email)
         return
     text = (f"Hallo,\n\nmit diesem Link meldest du dich bei der Einsatzstatistik an:\n{link}\n\n"
                 "Der Link gilt 15 Minuten und nur einmal. Wenn du keine Anmeldung angefordert hast, "

@@ -455,6 +455,12 @@ def pending_reports(con):
                                          "reported_as, filename, uploaded_by, uploaded FROM pending_report ORDER BY uploaded")]
 
 
+def pending_usage(con):
+    """(Anzahl, Bytes) der zur Übernahme abgelegten Berichte einer Wehr."""
+    row = con.execute("SELECT COUNT(*), COALESCE(SUM(LENGTH(pdf)), 0) FROM pending_report").fetchone()
+    return row[0], row[1]
+
+
 def pending_pdf(con, pending_id):
     row = con.execute("SELECT filename, pdf FROM pending_report WHERE id = ?", (pending_id,)).fetchone()
     return (row["filename"], row["pdf"]) if row else (None, None)

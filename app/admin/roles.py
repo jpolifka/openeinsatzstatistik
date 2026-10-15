@@ -20,6 +20,59 @@ def _held(a, roles):
     return set().union(*(roles.chain(r["role_id"]) for r in a.roles)) if a.roles else set()
 
 
+def _ceiling(a, vg_id, scope):
+    """Rechte, die der Benutzer in dieser VG selbst hat. Eine Wehr-Rolle gilt in allen Wehren der VG, daher
+    zählen auch die Rechte aus Rollen einer Wehr."""
+    if a.superadmin:
+        return rbac.ALL_PERMISSIONS
+    held = set(a.vg_permissions.get(vg_id, ()))
+    if scope == "tenant":
+        for tenant in a.tenants.values():
+            if tenant.vg_id == vg_id:
+                held |= tenant.permissions
+    return held
+
+
+def _reachable(a, roles, vg_id):
+    """Rollen, die der Benutzer selbst innehat oder sich (über eine zweite Adresse) verschaffen kann: seine eigenen,
+    die er vergeben darf, und alles, was deren Inhaber wiederum vergeben dürfen."""
+    found = set(_held(a, roles))
+    scopes = [("vg", vg_id)] + [("tenant", t.id) for t in a.tenants.values() if t.vg_id == vg_id]
+    for scope, scope_id in scopes:
+        found |= a.grantable(roles, scope, scope_id, vg_id)
+    todo = list(found)
+    while todo:
+        for role_id in roles.grants(todo.pop()):
+            if role_id not in found:
+                found.add(role_id)
+                todo.append(role_id)
+    return found
+
+
+def _check_ceiling(a, roles, vg_id, scope, r):
+    """403, wenn die Rolle dem Benutzer (oder einer zweiten Adresse von ihm) Rechte verschaffen würde, die er selbst
+    nicht hat. Wer nur Rollen pflegt, könnte sonst eine Rolle mit allen Rechten anlegen, sich als Vergeber eintragen
+    und sie an eine andere Adresse vergeben. Rollen, die er nicht erreichen kann, darf er frei definieren – das ist
+    die Aufgabenteilung der VG: die Wehrführer, die sie vergeben, haben die Rechte selbst."""
+    reach = _reachable(a, roles, vg_id)
+    if a.superadmin or not set(r.granted_by) & reach:
+        return
+    # Mehr als das, was er selbst hat oder sich schon über seine Verteilung verschaffen kann, ist neu
+    reachable = set().union(*(roles.permissions(role_id) for role_id in reach)) if reach else set()
+    ceiling = lambda role_scope: _ceiling(a, vg_id, role_scope) | reachable        # noqa: E731
+    excess = rbac.allowed(rbac.close(r.permissions), scope) - ceiling(scope)
+    if r.parent is not None:
+        excess |= roles.permissions(r.parent) - ceiling(scope)
+    for role_id in r.grants:        # wer diese Rolle hat, darf die genannten vergeben
+        granted = roles.get(role_id)
+        if granted:
+            excess |= roles.permissions(role_id) - ceiling(granted.scope)
+    if excess:
+        labels = ", ".join(rbac.PERMISSIONS[p].label for p in rbac.PERMISSIONS if p in excess)
+        raise tenancy.Forbidden(f"Du darfst dir und anderen über deine Verteilung keine Rechte verschaffen, die du "
+                                f"selbst nicht hast: {labels}.")
+
+
 def _may_edit(a, role, roles):
     if a.superadmin:
         return True
@@ -96,8 +149,10 @@ def create_role(r: RoleIn, a: tenancy.Access = Depends(access)):
             raise tenancy.Forbidden("Rollen für alle VGs legt nur der Superadmin an.")
         if vg_id is not None and not a.vg_can(vg_id, ROLES_MANAGE):
             raise tenancy.Forbidden("Keine Berechtigung, Rollen dieser VG anzulegen.")
+        roles = rbac.Roles(con)
+        _check_ceiling(a, roles, vg_id, r.scope, r)
         try:
-            rbac.save_role(con, rbac.Roles(con), None, vg_id=vg_id, scope=r.scope, label=r.label,
+            rbac.save_role(con, roles, None, vg_id=vg_id, scope=r.scope, label=r.label,
                            description=r.description, parent_id=r.parent, permissions=r.permissions,
                            granted_by=r.granted_by, grants=r.grants)
         except rbac.Invalid as e:
@@ -124,6 +179,7 @@ def change_role(role_id: int, r: RoleIn, a: tenancy.Access = Depends(access)):
     """Rolle ändern; Bereich und VG bleiben."""
     with tenancy.central() as con:
         roles, role = _editable_role(con, a, role_id)
+        _check_ceiling(a, roles, role.vg_id, role.scope, r)
         try:
             rbac.save_role(con, roles, role.id, vg_id=role.vg_id, scope=role.scope, label=r.label,
                            description=r.description, parent_id=r.parent, permissions=r.permissions,
