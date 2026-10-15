@@ -3,7 +3,8 @@ import functools
 import re
 
 KINDS = {"Stammdatensatz": "master", "Hauptbericht": "main", "Nebenbericht": "secondary"}
-PERSON_VEHICLE = re.compile(r"(?:[A-Z]{2} )?[A-Z][A-Z0-9#.ÄÖÜ]* \d\d/\d\d-\d\d")
+# Ortsteil/Kennung höchstens 30 Zeichen: ohne Grenze wächst der Aufwand auf langen Zeilen quadratisch
+PERSON_VEHICLE = re.compile(r"(?:[A-Z]{2} )?[A-Z][A-Z0-9#.ÄÖÜ]{0,29} \d\d/\d\d-\d\d")
 SHORT_CALL_SIGN = re.compile(r"(\d\d/\d\d)-\d\d$")
 
 @functools.lru_cache(maxsize=32)

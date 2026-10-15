@@ -3,7 +3,6 @@
 Kein HTTP außer den Fehlerklassen der Anfrage.
 """
 import concurrent.futures
-import io
 import os
 import tempfile
 import zipfile
@@ -18,22 +17,15 @@ from app.api.common import incident_json, incident_key, log, safe_filename
 # ---------------------------------------------------------------- Berichte einlesen (PDF, Excel-Export)
 ZIP_MAX_PDFS = 500
 ZIP_MAX_BYTES = 50 * 1024 * 1024     # je entpacktem Bericht
-UPLOAD_MAX_BYTES = 200 * 1024 * 1024  # je Upload: hochgeladen bzw. entpackt zusammen (Speicher, Platte)
+UPLOAD_MAX_BYTES = 100 * 1024 * 1024  # je Upload: hochgeladen bzw. entpackt zusammen (Platte, tmpfs des Containers)
 REPORT_TYPES = (".pdf", ".xlsx")
+PENDING_MAX_REPORTS = 200            # weitergegebene Berichte, die je Wehr zur Übernahme bereitliegen
+PENDING_MAX_BYTES = 200 * 1024 * 1024
+CHUNK = 1024 * 1024
 
 
 def is_upload(filename):
     return (filename or "").lower().endswith((*REPORT_TYPES, ".zip"))
-
-
-def _unique_filename(filename, taken):
-    """Gleichnamige PDFs (z. B. aus Unterordnern einer ZIP) durchnummerieren."""
-    stem, ext = os.path.splitext(filename)
-    candidate, n = filename, 2
-    while candidate in taken:
-        candidate, n = f"{stem} ({n}){ext}", n + 1
-    taken.add(candidate)
-    return candidate
 
 
 class Budget:
@@ -52,11 +44,63 @@ class Budget:
 TOO_BIG = f"Zu groß – je Upload höchstens {UPLOAD_MAX_BYTES // (1024 * 1024)} MB, bitte in Teilen hochladen."
 
 
-def _unpack_zip(data, zip_name, errors, budget):
-    """Berichte (PDF, xlsx) aus einer ZIP-Datei holen -> erzeugt (dateiname, inhalt) einzeln, damit nicht alle
-    gleichzeitig im Speicher liegen. Andere Dateien werden übergangen."""
+class Spool:
+    """Berichte eines Uploads als Dateien in einem Arbeitsordner, nicht im Speicher: ein Upload belegt so
+    höchstens seinen Anteil am tmpfs, nicht zusätzlich den Arbeitsspeicher des einzigen Workers.
+    files: [(Anzeigename, Pfad)] in der Reihenfolge des Uploads."""
+
+    def __init__(self):
+        self._dir = tempfile.TemporaryDirectory(prefix="upload-")
+        self.files, self._names = [], set()
+
+    def target(self, filename):
+        """Pfad für eine neue Datei; gleichnamige Berichte (z. B. aus Unterordnern einer ZIP) werden durchnummeriert."""
+        stem, ext = os.path.splitext(filename)
+        shown, n = filename, 2
+        while shown in self._names:
+            shown, n = f"{stem} ({n}){ext}", n + 1
+        self._names.add(shown)
+        return shown, os.path.join(self._dir.name, shown)
+
+    def add_bytes(self, filename, data):
+        shown, path = self.target(filename)
+        with open(path, "wb") as fh:
+            fh.write(data)
+        self.files.append((shown, path))
+
+    def close(self):
+        self._dir.cleanup()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+
+
+def _save(stream, path, limit):
+    """Stream höchstens bis limit Bytes in die Datei kopieren -> Größe, bei Überschreitung None (Datei entfernt)."""
+    size = 0
+    with open(path, "wb") as out:
+        while True:
+            chunk = stream.read(min(CHUNK, limit + 1 - size))
+            if not chunk:
+                break
+            size += len(chunk)
+            if size > limit:
+                break
+            out.write(chunk)
+    if size > limit:
+        os.remove(path)
+        return None
+    return size
+
+
+def _unpack_zip(stream, zip_name, errors, budget, spool):
+    """Berichte (PDF, xlsx) aus einer ZIP-Datei in den Arbeitsordner entpacken, einzeln und in Stücken. Andere
+    Dateien werden übergangen."""
     try:
-        archive = zipfile.ZipFile(io.BytesIO(data))
+        archive = zipfile.ZipFile(stream)
     except zipfile.BadZipFile:
         errors.append({"file": zip_name, "message": "Keine gültige ZIP-Datei."})
         return
@@ -72,19 +116,22 @@ def _unpack_zip(data, zip_name, errors, budget):
         if info.file_size > ZIP_MAX_BYTES:
             errors.append({"file": name, "message": "Bericht in der ZIP-Datei ist zu groß."})
             continue
+        shown, path = spool.target(name)
         try:
             with archive.open(info) as fh:      # Größe aus dem Verzeichnis nicht trauen: begrenzt lesen
-                content = fh.read(ZIP_MAX_BYTES + 1)
+                size = _save(fh, path, min(ZIP_MAX_BYTES, budget.left))
         except Exception as e:  # verschlüsselt oder beschädigt
             errors.append({"file": name, "message": f"Nicht entpackbar ({e or type(e).__name__})."})
             continue
-        if len(content) > ZIP_MAX_BYTES:
-            errors.append({"file": name, "message": "Bericht in der ZIP-Datei ist zu groß."})
-            continue
-        if not budget.take(len(content)):
+        if size is None:
+            # an der Bericht-Grenze: Bericht zu groß; sonst ist das Budget des Uploads aufgebraucht
+            if budget.left >= ZIP_MAX_BYTES:
+                errors.append({"file": name, "message": "Bericht in der ZIP-Datei ist zu groß."})
+                continue
             errors.append({"file": zip_name, "message": TOO_BIG})
             return
-        yield name, content
+        budget.take(size)
+        spool.files.append((shown, path))
 
 
 class Skipped(Exception):
@@ -141,75 +188,81 @@ def _read_report(path, filename, tenants):
 
 
 def collect_uploads(uploads):
-    """Hochgeladene Dateien und den Inhalt von ZIP-Dateien einsammeln -> ([(name, daten)], fehler)."""
-    errors, budget = [], Budget()
-
-    def files():
+    """Hochgeladene Dateien und den Inhalt von ZIP-Dateien in einen Arbeitsordner holen -> (Spool, fehler).
+    Den Spool schließt der Aufrufer (close), sobald gelesen ist."""
+    errors, budget, spool = [], Budget(), Spool()
+    try:
         for upload in uploads:
-            filename, data = safe_filename(upload.filename), upload.file.read(budget.left + 1)
-            if not budget.take(len(data)):
-                errors.append({"file": filename, "message": TOO_BIG})
-                return
+            filename = safe_filename(upload.filename)
             if filename.lower().endswith(".zip"):
-                yield from _unpack_zip(data, filename, errors, budget)
+                stream = upload.file
+                stream.seek(0, os.SEEK_END)
+                size = stream.tell()
+                stream.seek(0)
+                if not budget.take(size):
+                    errors.append({"file": filename, "message": TOO_BIG})
+                    break
+                _unpack_zip(stream, filename, errors, budget, spool)
             else:
-                yield filename, data
-
-    return list(files()), errors
+                shown, path = spool.target(filename)
+                size = _save(upload.file, path, budget.left)
+                if size is None:
+                    errors.append({"file": filename, "message": TOO_BIG})
+                    break
+                budget.take(size)
+                spool.files.append((shown, path))
+    except BaseException:
+        spool.close()
+        raise
+    return spool, errors
 
 
 def read_files(files, tenants, email=None, progress=None):
-    """Alle Berichtsarten ausschließlich lesen; Schreiben erfolgt erst nach Bestätigung. Mehrere Dateien
-    gleichzeitig (parser_worker.WORKERS), Ergebnisse in der Reihenfolge der Dateien; progress() je Datei."""
+    """Alle Berichtsarten ausschließlich lesen; Schreiben erfolgt erst nach Bestätigung. files: [(Anzeigename,
+    Pfad)] (Spool.files). Mehrere Dateien gleichzeitig (parser_worker.WORKERS), Ergebnisse in der Reihenfolge der
+    Dateien; progress() je Datei."""
     reports, errors, notes = [], [], []
-    taken = set()
-    with tempfile.TemporaryDirectory() as tmp:
-        jobs = []
-        for filename, data in files:
-            filename = _unique_filename(filename, taken)
-            path = os.path.join(tmp, filename)
-            with open(path, "wb") as fh:
-                fh.write(data)
-            jobs.append((filename, data, path))
 
-        def read(job):
-            filename, _, path = job
-            try:
-                return _read_report(path, filename, tenants), None
-            except Exception as e:
-                return None, e
-            finally:
-                if progress:
-                    progress()
+    def read(job):
+        filename, path = job
+        try:
+            return _read_report(path, filename, tenants), None
+        except Exception as e:
+            return None, e
+        finally:
+            if progress:
+                progress()
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=parser_worker.WORKERS) as pool:
-            results = list(pool.map(read, jobs))
-        for (filename, data, _), (result, failure) in zip(jobs, results):
-            try:
-                if failure:
-                    raise failure
-                r, tenant = result
-            except Skipped as e:
-                notes.append({"file": filename, "message": str(e)})
-                continue
-            except Forward as f:
-                f.head.update(filename=filename, _action="forward", _target=f.tenant.slug, _data=data)
-                reports.append((f.head, tenants[0]))
-                continue
-            except Exception as e:  # defekte oder fremde Datei: melden, Rest weiter lesen
-                log.exception("Bericht %s", filename)
-                errors.append({"file": filename, "message": str(e) or type(e).__name__})
-                continue
-            if tenant:
-                reports.append((r, tenant))
-                continue
-            r.update(filename=filename, _action="master")
-            reports.append((r, tenants[0]))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=parser_worker.WORKERS) as pool:
+        results = list(pool.map(read, files))
+    for (filename, path), (result, failure) in zip(files, results):
+        try:
+            if failure:
+                raise failure
+            r, tenant = result
+        except Skipped as e:
+            notes.append({"file": filename, "message": str(e)})
+            continue
+        except Forward as f:
+            with open(path, "rb") as fh:         # nur Berichte zur Weitergabe werden ganz geladen
+                f.head.update(filename=filename, _action="forward", _target=f.tenant.slug, _data=fh.read())
+            reports.append((f.head, tenants[0]))
+            continue
+        except Exception as e:  # defekte oder fremde Datei: melden, Rest weiter lesen
+            log.exception("Bericht %s", filename)
+            errors.append({"file": filename, "message": str(e) or type(e).__name__})
+            continue
+        if tenant:
+            reports.append((r, tenant))
+            continue
+        r.update(filename=filename, _action="master")
+        reports.append((r, tenants[0]))
     return reports, errors, notes
 
 
 def save_master(r, vg_id, email):
     """Stammdatensatz speichern; Wehren mit ausgerückten Fahrzeugen, aber ohne Bericht bekommen einen Hinweis."""
+    log.info("Stammdatensatz %s der VG %s gespeichert durch %s", r.get("bks_record_id"), vg_id, email or "lokal")
     with tenancy.central() as con:
         records.save_master(con, vg_id, r, email)
         records.notify_others(con, r, r["vehicles"], "Stammdatensatz", tenancy.vg_tenants(vg_id),
@@ -221,6 +274,10 @@ def forward(tenant, head, filename, data, email):
     with tenant.connection() as con:
         if head["bks_report_id"] and store.find_existing(con, head["bks_report_id"], None, None):
             return f"Bericht der Einheit {report.unit_label(head)} – bei {tenant.name} bereits erfasst, übersprungen."
+        count, size = store.pending_usage(con)
+        if count >= PENDING_MAX_REPORTS or size + len(data) > PENDING_MAX_BYTES:
+            raise ValueError(f"Bei {tenant.name} liegen schon viele Berichte zur Übernahme bereit. Bitte dort erst "
+                             "übernehmen oder verwerfen, dann erneut weitergeben.")
         store.add_pending(con, head, filename, data, email)
     when = records.format_date(head.get("first_alarm"))
     with tenancy.central() as con:

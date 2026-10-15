@@ -6,6 +6,13 @@
 // noch ein Eintrag hinzu, bekommt er `version` ("JJJJ-MM-TT.2", dann .3 …); ohne `version` gilt das Datum.
 const CHANGELOG = [
   {
+    date: "2026-10-15",
+    items: [
+      "<b>Berichte einlesen:</b> Ein Upload darf höchstens 100 MB groß sein (Berichte und ZIP-Inhalt zusammen) – bei größeren Mengen bitte in Teilen hochladen. Liest gerade jemand anderes Berichte ein, erscheint ein Hinweis, kurz zu warten; danach einfach erneut einlesen.",
+      "<b>Rollen:</b> Wer Rollen anlegt oder ändert, kann darin nicht mehr Rechte vergeben, als er selbst hat oder über seine Verteilung ohnehin erreichen kann.",
+    ],
+  },
+  {
     date: "2026-10-14",
     version: "2026-10-14.3",
     items: [

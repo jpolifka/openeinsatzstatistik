@@ -17,10 +17,13 @@ router = APIRouter()
 
 
 # ---------------------------------------------------------------- Einsätze
+MAX_TEXT = 500            # Länge eines Textfelds; Berichtstexte sind deutlich kürzer
+MAX_ROWS = 300            # Fahrzeuge bzw. Anwesende je Einsatz
+
 IncidentFields = create_model(
     "IncidentFields",
     **{name: (Optional[int], Field(default=None, ge=0, strict=True)) if name in (*store.INT_FIELDS, *OPTIONAL_COUNTS)
-       else (Optional[str], None) for name in store.FIELDS})
+       else (Optional[str], Field(default=None, max_length=MAX_TEXT)) for name in store.FIELDS})
 
 
 @router.get("/api/incidents")
@@ -39,23 +42,24 @@ def api_incidents(year: Optional[int] = None, a: tenancy.Access = Depends(access
 
 
 class VehicleEdit(BaseModel):
-    call_sign: str
+    call_sign: str = Field(max_length=60)
     crew: Optional[int] = Field(default=None, ge=0, le=99, strict=True)
-    departed: Optional[str] = None
-    arrived: Optional[str] = None
+    departed: Optional[str] = Field(default=None, max_length=20)
+    arrived: Optional[str] = Field(default=None, max_length=20)
 
 
 class PersonEdit(BaseModel):
     id: Optional[int] = None          # vorhandener Kamerad
-    name: Optional[str] = None        # sonst „Nachname, Vorname“ (wird bei Bedarf angelegt)
-    role: Optional[str] = None
-    vehicle: Optional[str] = None
+    name: Optional[str] = Field(default=None, max_length=120)   # sonst „Nachname, Vorname“ (wird bei Bedarf angelegt)
+    role: Optional[str] = Field(default=None, max_length=120)
+    vehicle: Optional[str] = Field(default=None, max_length=60)
 
 
 # Einsatz bearbeiten: Felder, dazu optional Fahrzeuge und Anwesenheit (fehlen sie, bleiben sie unverändert)
 IncidentUpdate = create_model("IncidentUpdate", __base__=IncidentFields,
                               revision=(Optional[int], Field(default=None, ge=0, strict=True)),
-                              vehicles=(Optional[List[VehicleEdit]], None), people=(Optional[List[PersonEdit]], None))
+                              vehicles=(Optional[List[VehicleEdit]], Field(default=None, max_length=MAX_ROWS)),
+                              people=(Optional[List[PersonEdit]], Field(default=None, max_length=MAX_ROWS)))
 
 
 @router.put("/api/incidents/{key}")

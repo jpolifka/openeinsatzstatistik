@@ -62,8 +62,10 @@ def make_client(data_dir, monkeypatch):
     def factory(login=False):
         if login:
             monkeypatch.setattr(tenancy, "ADMIN_EMAILS", {"admin@example.org"})
-            monkeypatch.setattr(auth, "BASE_URL", "http://testserver")
+            monkeypatch.setattr(auth, "BASE_URL", "http://localhost")      # lokal: Anmeldelinks stehen im Log
             monkeypatch.setattr(auth, "_key", None)
+        else:
+            monkeypatch.setattr(auth, "AUTH_DISABLED", True)               # sonst startet die App nicht
         client = TestClient(main.app)
         client.__enter__()
         clients.append(client)

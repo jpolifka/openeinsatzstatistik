@@ -361,6 +361,10 @@ cryptography==50.0.2 \
     # via
     #   -r requirements.txt
     #   pdfminer-six
+defusedxml==0.7.1 \
+    --hash=sha256:1bb3032db185915b62d7c6209c5a8792be6a32ab2fedacc84e01b52c51aa3e69 \
+    --hash=sha256:a352e7e428770286cc899e2542b6cdaedb2b4953ff269a210103ec58f6198a61
+    # via -r requirements.txt
 dkimpy==1.1.8 \
     --hash=sha256:b5f60fb47bbf5d8d762f134bcea0c388eba6b498342a682a21f1686545094b77
     # via -r requirements.txt

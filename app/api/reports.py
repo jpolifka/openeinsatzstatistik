@@ -16,7 +16,7 @@ from app.api import common
 from app.api.common import access, incident_json, incident_key, log, parse_incident_key
 from app.api.incidents import IncidentFields
 from app import importing
-from app.importing import collect_uploads, forward, is_upload, preview_json, read_files, save_master
+from app.importing import Spool, collect_uploads, forward, is_upload, preview_json, read_files, save_master
 router = APIRouter()
 
 
@@ -39,11 +39,29 @@ def api_read_reports(pdfs: List[UploadFile] = File(...), background: bool = Fals
     pdfs = [p for p in pdfs if is_upload(p.filename)]
     if not pdfs:
         raise HTTPException(400, "Bitte eine PDF-, Excel- oder ZIP-Datei (Einsatzberichte aus dem BKS-Portal) auswählen.")
-    files, errors = collect_uploads(pdfs)
+    release = common.upload_slots.acquire(a.email)
+    try:
+        spool, errors = collect_uploads(pdfs)
+    except BaseException:
+        release()
+        raise
+
+    def work(progress=None):
+        try:
+            return _read_result(spool.files, errors, tenants, a, progress)
+        finally:                                  # Arbeitsordner und Platz erst nach dem Lesen freigeben
+            spool.close()
+            release()
+
     if not background:
-        return _read_result(files, errors, tenants, a)
-    job = common.read_jobs.start(a.email, len(files), lambda progress: _read_result(files, errors, tenants, a, progress))
-    return JSONResponse({"job": job, "total": len(files)}, status_code=202)
+        return work()
+    try:
+        job = common.read_jobs.start(a.email, len(spool.files), work)
+    except BaseException:
+        spool.close()
+        release()
+        raise
+    return JSONResponse({"job": job, "total": len(spool.files)}, status_code=202)
 
 
 @router.get("/api/reports/jobs/{job}")
@@ -95,7 +113,10 @@ def _accept_report(acceptance, a, r, slug):
         target = next((t for t in tenancy.vg_tenants(tenant.vg_id) if t.slug == r["_target"]), None)
         if not target:
             raise HTTPException(409, "Die zuständige Wehr ist nicht mehr verfügbar. Bitte erneut einlesen.")
-        return {"message": forward(target, r, r["filename"], r["_data"], a.email)}
+        try:
+            return {"message": forward(target, r, r["filename"], r["_data"], a.email)}
+        except ValueError as error:          # bei der Zielwehr liegt schon zu viel bereit
+            raise HTTPException(409, str(error))
     if acceptance.replace:
         a.tenant(slug, WRITE)              # erfassten Einsatz überschreiben = bearbeiten
     corrected = acceptance.fields.model_dump(exclude_unset=True)
@@ -163,27 +184,33 @@ def api_pending(a: tenancy.Access = Depends(access)):
 
 
 class PendingSelection(BaseModel):
-    ids: List[str]
+    ids: List[str] = Field(max_length=50)
 
 
 @router.post("/api/pending/read")
 def api_read_pending(selection: PendingSelection, a: tenancy.Access = Depends(access)):
     """Abgelegte Berichte wie hochgeladene Dateien lesen (Vorschau, Übernahme wie bei /api/reports)."""
-    reports, errors, notes = [], [], []
-    for key in selection.ids:
-        slug, pending_id = parse_incident_key(key)
-        tenant = a.tenant(slug, IMPORT)
-        with tenant.connection() as con:
-            filename, data = store.pending_pdf(con, pending_id)
-        if not filename:
-            errors.append({"file": key, "message": "Der Bericht liegt nicht mehr bereit."})
-            continue
-        read, more_errors, more_notes = read_files([(filename, data)], [tenant], a.email)
-        for r, _ in read:
-            r["pending_id"] = pending_id
-        reports += read
-        errors += more_errors
-        notes += more_notes
+    release = common.upload_slots.acquire(a.email)      # liest wie ein Upload: Parser und tmpfs sind geteilt
+    try:
+        reports, errors, notes = [], [], []
+        for key in selection.ids:
+            slug, pending_id = parse_incident_key(key)
+            tenant = a.tenant(slug, IMPORT)
+            with tenant.connection() as con:
+                filename, data = store.pending_pdf(con, pending_id)
+            if not filename:
+                errors.append({"file": key, "message": "Der Bericht liegt nicht mehr bereit."})
+                continue
+            with Spool() as spool:
+                spool.add_bytes(filename, data)
+                read, more_errors, more_notes = read_files(spool.files, [tenant], a.email)
+            for r, _ in read:
+                r["pending_id"] = pending_id
+            reports += read
+            errors += more_errors
+            notes += more_notes
+    finally:
+        release()
     previews_json = [preview_json(r, tenant, a) for r, tenant in reports]
     token = common.previews.add([(r, tenant.slug) for r, tenant in reports], a.email)
     return {"token": token, "reports": previews_json, "errors": errors, "notes": notes}

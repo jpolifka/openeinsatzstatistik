@@ -67,7 +67,7 @@ def test_interrupted_migration_starts_over(old_install, monkeypatch):
 def test_start_migrates_and_serves(old_install, monkeypatch):
     from fastapi.testclient import TestClient
     from app import auth, main
-    monkeypatch.setattr(auth, "BASE_URL", "http://testserver")
+    monkeypatch.setattr(auth, "BASE_URL", "http://localhost")
     with TestClient(main.app) as client:
         assert client.get("/health").status_code == 200
     assert os.path.exists(old_install / "app.db") and legacy.needs_migration(str(old_install)) is False

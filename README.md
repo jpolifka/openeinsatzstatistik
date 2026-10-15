@@ -72,7 +72,7 @@ Code und `docker-compose.yml` enthalten keine Standardwerte. Ohne `.env` startet
 | Variable       | Pflicht     | Bedeutung                                                    |
 |----------------|-------------|--------------------------------------------------------------|
 | `APP_PORT`     | ja          | Port auf dem Host, z. B. `8112`. Hinter einem Reverse Proxy auf demselben Host `127.0.0.1:8112`, damit die App nur über den Proxy erreichbar ist |
-| `ADMIN_EMAILS` | nein        | Superadmins, durch Komma getrennt. Gesetzt = Anmeldung an; alle anderen Benutzer werden den Wehren zugeordnet (siehe [Mandanten und Rollen](#mandanten-und-rollen)). Leer = kein Schutz, jeder ist Superadmin. **Setzen, sobald die App im Netz läuft.** |
+| `ADMIN_EMAILS` | nein        | Superadmins, durch Komma getrennt. Gesetzt = Anmeldung an; alle anderen Benutzer werden den Wehren zugeordnet (siehe [Mandanten und Rollen](#mandanten-und-rollen)). Leer: die App startet nicht, außer mit `AUTH_DISABLED=1` (nur lokale Entwicklung, dann ist jeder Superadmin). |
 | `BASE_URL`     | mit `ADMIN_EMAILS` | Öffentliche Adresse der App, z. B. `https://einsatz.example.org`. Daraus entsteht der Link in der Mail. Mit `https://` wird das Sitzungs-Cookie nur über HTTPS gesendet |
 | `SMTP_HOST`    | nein        | SMTP-Server des Postfachs der eigenen Domain, z. B. `smtp.strato.de`. Leer = kein Versand, Link steht nur im Log (`docker compose logs`) |
 | `SMTP_PORT`, `SMTP_SECURITY` | mit `SMTP_HOST` | `465` + `ssl` oder `587` + `starttls` |
@@ -84,7 +84,7 @@ Code und `docker-compose.yml` enthalten keine Standardwerte. Ohne `.env` startet
 
 **Reverse Proxy:** Die App muss an der Wurzel der Domain laufen (nicht unter einem Unterpfad).
 Weiterleitungen sind relative Pfade, `X-Forwarded-*`-Header werden nicht benötigt. Bei nginx
-`client_max_body_size` so setzen, dass die PDFs bzw. ZIP-Dateien durchpassen (Standard 1 MB).
+`client_max_body_size` für den Upload-Weg `/api/reports` auf etwa 105 MB setzen (Berichte und ZIP-Dateien, höchstens 100 MB je Upload), sonst genügen 2 MB – die App lehnt größere Anfragen an allen anderen Wegen ab (`app/request_limits.py`). Die Beispielkonfiguration in `deploy/nginx/` macht das je `location`.
 
 **Anmeldung:** Ist `ADMIN_EMAILS` gesetzt, fragt die App nach der E-Mail-Adresse und schickt
 einen Anmeldelink (15 Minuten gültig, nur einmal benutzbar). Die Sitzung hält 30 Tage und liegt serverseitig: „Abmelden“ beendet sie sofort, Superadmins können Sitzungen unter Einstellungen → Sitzungen beenden.

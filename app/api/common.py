@@ -7,7 +7,7 @@ import re
 import unicodedata
 
 from app import tenant_config
-from app.preview_sessions import PreviewSessions, ReadJobs
+from app.preview_sessions import PreviewSessions, ReadJobs, UploadSlots
 from fastapi import HTTPException
 
 from app import auth, domain, metrics, report, store
@@ -18,6 +18,7 @@ access = auth.access
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 previews = PreviewSessions()
 read_jobs = ReadJobs()          # Berichte, die im Hintergrund gelesen werden
+upload_slots = UploadSlots()    # gleichzeitig verarbeitete Uploads
 
 
 # ---------------------------------------------------------------- Hilfsfunktionen

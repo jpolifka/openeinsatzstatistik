@@ -319,7 +319,7 @@ def theme_check(c: Colors, a: tenancy.Access = Depends(access)):
 
 
 class ParseTest(BaseModel):
-    line: str = Field(max_length=100_000)     # beliebiger Text aus einem Bericht
+    line: str = Field(max_length=5_000)       # ein Textausschnitt aus einem Bericht (Zeilen sind kurz)
     unit_marker: str = ""
     vg: Optional[str] = None                  # Erkennung über alle Wehren dieser VG (gespeicherter Stand)
 
