@@ -27,7 +27,8 @@ class PreviewSessions:
         token = uuid.uuid4().hex
         if not reports:
             return token
-        size = len(json.dumps(reports, default=str, ensure_ascii=False).encode())
+        size = sum(len(json.dumps({k: v for k, v in r.items() if k != "_data"}, default=str, ensure_ascii=False).encode())
+                   + len(r.get("_data") or b"") for r, _ in reports)
         with self._lock:
             self._expire()
             if len(self._sessions) >= self.MAX_SESSIONS or sum(s["owner"] == owner for s in self._sessions.values()) >= self.MAX_PER_OWNER:
@@ -95,6 +96,7 @@ class ReadJobs:
     Fortschritt ab. So bleibt jede Anfrage kurz (Proxys wie Cloudflare brechen nach etwa 100 s ab).
     Liegt im Prozess wie PreviewSessions; ein Job gehört dem Benutzer, der ihn gestartet hat."""
     TTL = 60 * 60
+    MAX_RUNNING_PER_OWNER = 2
 
     def __init__(self):
         self._jobs = {}
@@ -108,6 +110,10 @@ class ReadJobs:
             cutoff = time.time() - self.TTL
             for key in [k for k, j in self._jobs.items() if j["time"] < cutoff]:
                 del self._jobs[key]
+            running = sum(j["owner"] == owner and j["result"] is None and j["error"] is None
+                          for j in self._jobs.values())
+            if running >= self.MAX_RUNNING_PER_OWNER:
+                raise HTTPException(429, "Es werden schon Berichte eingelesen. Bitte erst das Ergebnis abwarten.")
             self._jobs[job_id] = job
 
         def progress():

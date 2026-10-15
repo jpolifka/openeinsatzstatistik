@@ -60,6 +60,9 @@ def check_config():
     if os.environ.get("RESEND_API_KEY"):
         # Nicht still ohne Mails starten, wenn noch die alte Konfiguration gesetzt ist
         raise RuntimeError("RESEND_API_KEY wird nicht mehr unterstützt – Versand per SMTP_* (siehe README)")
+    if not enabled():
+        log.warning("Anmeldung AUS (ADMIN_EMAILS fehlt): jeder Zugriff gilt als Superadmin. "
+                    "Nur lokal verwenden.")
     mail.check_config()
 
 
@@ -123,6 +126,13 @@ def create_session(email, user_agent=""):
 
 def _session(request: Request):
     """Gültige Sitzung des Cookies (Zeile) oder None; die Adresse muss noch berechtigt sein."""
+    if hasattr(request.state, "session_row"):      # Middleware und access() fragen dieselbe Anfrage
+        return request.state.session_row
+    request.state.session_row = _lookup_session(request)
+    return request.state.session_row
+
+
+def _lookup_session(request):
     token = request.cookies.get(COOKIE)
     if not token or len(token) > 100:
         return None
