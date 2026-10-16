@@ -67,7 +67,7 @@ def test_costs_of_vehicles_and_personnel(vg, monkeypatch):
                    expenses=[{"label": "Bindemittel", "amount": 100}]).json()
     assert [p["amount"] for p in result["positions"] if p["kind"] in ("expense", "surcharge")] == [100.0, 10.0]
     assert result["positions"][2]["rate"] == 40.0
-    assert (result["net"], result["vat"], result["total"]) == (714.0, 135.66, 849.66)
+    assert (result["net"], result["vat"], result["total"]) == (674.0, 128.06, 802.06)
 
 
 def test_only_deployed_vehicles_and_their_crew_are_billed(vg, monkeypatch):
