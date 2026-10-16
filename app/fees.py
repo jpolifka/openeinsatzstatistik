@@ -7,7 +7,9 @@ calculate() rechnet einen Einsatz (Stammdatensatz im BKS-Portal) über alle bete
 nur zur Anzeige und zum Drucken, gespeichert wird nichts. Regeln der Satzung (§ 5):
   - Fahrzeuge: Stundensatz je Fahrzeugtyp, vom Ausrücken bis zum Einsatzende des Fahrzeugs
   - Einsatzkräfte: Stundensatz je Person, von der Alarmierung bis zum Einsatzende
-    (Brandsicherheitswache mit eigenem Satz)
+    (Brandsicherheitswache mit eigenem Satz); abgerechnet werden nur die Fahrzeuge, die ausgerückt und
+    eingesetzt waren, und die auf ihnen eingetragene Mannschaftsstärke – nicht die Anwesenheitsliste
+    (Gerätehaus, Bereitstellung)
   - halbstündlich abgerechnet: angefangene Stunden bis 30 Minuten auf die halbe, darüber auf die
     volle Stunde aufgerundet
   - Fehlalarm durch eine Brandmeldeanlage: höchstens die Pauschale
@@ -172,7 +174,11 @@ def calculate(central_con, vg_id, bks_record_id, tenants, schedule_id=None, bma_
     for t, incident in incidents:
         labels = {v.call_sign: v.label for v in t.config.fleet}
         start, end_of_incident = parse_iso(incident["started_at"]), parse_iso(incident["ended_at"])
-        moved = [(cs, v) for cs, v in sorted(incident["vehicles"].items()) if v.get("departed")]
+        moved = [(cs, v) for cs, v in sorted(incident["vehicles"].items())
+                 if v.get("departed") and v.get("deployed") != 0]       # „nur bereit“ wird nicht abgerechnet
+        for cs, v in sorted(incident["vehicles"].items()):
+            if v.get("departed") and v.get("deployed") == 0:
+                hints.append(f"{t.name}, {cs}: nicht eingesetzt – nicht abgerechnet.")
         if start and end_of_incident and end_of_incident - start > dt.timedelta(hours=24) and \
                 any(v.get("finished") for _, v in moved):
             hints.append(f"{t.name}: Einsatz länger als 24 Stunden – die Fahrzeugstunden aus den Uhrzeiten "
@@ -196,10 +202,9 @@ def calculate(central_con, vg_id, bks_record_id, tenants, schedule_id=None, bma_
             positions.append({"tenant": t.name, "kind": "vehicle", "label": f"{call_sign} {label}".strip(),
                               "count": 1, "minutes": minutes, "hours": hours, "rate": rate,
                               "amount": _round(hours * rate)})
-        count = len(incident["people"])
-        if not count:
-            count = sum(v.get("crew") or 0 for _, v in moved)
-            hints.append(f"{t.name}: keine Anwesenheit erfasst – Einsatzkräfte aus der Stärke der Fahrzeuge ({count}).")
+        count = sum(v.get("crew") or 0 for _, v in moved)       # nur die Stärke auf den abgerechneten Fahrzeugen
+        if moved and not count:
+            hints.append(f"{t.name}: keine Mannschaftsstärke auf den Fahrzeugen eingetragen – keine Einsatzkräfte berechnet.")
         end = end_of_incident
         minutes = (end - start).total_seconds() / 60 if start and end and end > start else None
         if minutes is None:
