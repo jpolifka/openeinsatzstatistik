@@ -6,6 +6,12 @@
 // noch ein Eintrag hinzu, bekommt er `version` ("JJJJ-MM-TT.2", dann .3 …); ohne `version` gilt das Datum.
 const CHANGELOG = [
   {
+    date: "2026-10-16",
+    items: [
+      "<b>Kostenersatz:</b> Abgerechnet werden nur noch die ausgerückten und eingesetzten Fahrzeuge und die auf ihnen eingetragene Mannschaftsstärke. Anwesende im Feuerwehrhaus und Fahrzeuge, die nicht eingesetzt wurden („nur bereit“), kosten nichts; dazu erscheint ein Hinweis.",
+    ],
+  },
+  {
     date: "2026-10-15",
     items: [
       "<b>Berichte einlesen:</b> Ein Upload darf höchstens 100 MB groß sein (Berichte und ZIP-Inhalt zusammen) – bei größeren Mengen bitte in Teilen hochladen. Liest gerade jemand anderes Berichte ein, erscheint ein Hinweis, kurz zu warten; danach einfach erneut einlesen.",

@@ -57,10 +57,10 @@ def test_costs_of_vehicles_and_personnel(vg, monkeypatch):
     result = _fees(vg).json()
     assert result["schedule"]["name"] == "Satzung vom 16.05.2024"           # gilt am 12.03.2025
     rows = [(p["kind"], p["label"], p["count"], p["hours"], p["rate"], p["amount"]) for p in result["positions"]]
-    # 02/45: Ausrücken 10:12 bis Ende 10:48 (37 Min. -> 1 h); 3 Personen 10:08 bis 11:05 (57 Min. -> 1 h)
+    # 02/45: Ausrücken 10:12 bis Ende 10:48 (37 Min. -> 1 h); 2 Personen (Stärke auf den Fahrzeugen, nicht die Anwesenheitsliste) 10:08 bis 11:05 (57 Min. -> 1 h)
     assert rows == [("vehicle", "02/24 MTF", 1, 1, 37.0, 37.0), ("vehicle", "02/45 HLF 20", 1, 1, 447.0, 447.0),
-                    ("personnel", "Einsatzkräfte (ehrenamtlich)", 3, 1, 33.45, 100.35)]
-    assert (result["net"], result["total"], result["hints"]) == (584.35, 584.35, [])
+                    ("personnel", "Einsatzkräfte (ehrenamtlich)", 2, 1, 33.45, 66.9)]
+    assert (result["net"], result["total"], result["hints"]) == (550.9, 550.9, [])
     assert [s["name"] for s in result["schedules"]] == ["Entwurf 2030", "Satzung vom 16.05.2024"]
 
     result = _fees(vg, schedule_id=result["schedules"][0]["id"], vat_percent=19,
@@ -70,11 +70,24 @@ def test_costs_of_vehicles_and_personnel(vg, monkeypatch):
     assert (result["net"], result["vat"], result["total"]) == (714.0, 135.66, 849.66)
 
 
+def test_only_deployed_vehicles_and_their_crew_are_billed(vg, monkeypatch):
+    """Anwesende im Gerätehaus und nicht eingesetzte Fahrzeuge (nur bereit) werden nicht abgerechnet."""
+    _incident(vg, monkeypatch)
+    with db.connection(tenancy.tenant_path("wehr-a1")) as con:
+        con.execute("DELETE FROM attendance")
+        con.execute("UPDATE vehicle SET deployed = 1, crew = 3")
+        con.execute("UPDATE vehicle SET deployed = 0, crew = 5 WHERE call_sign = '02/24'")
+    result = _fees(vg).json()
+    assert [p["label"] for p in result["positions"] if p["kind"] == "vehicle"] == ["02/45 HLF 20"]
+    assert [p["count"] for p in result["positions"] if p["kind"] == "personnel"] == [3]
+    assert any("02/24" in h and "nicht eingesetzt" in h for h in result["hints"])
+
+
 def test_alarm_system_is_capped_and_fire_watch_has_own_rate(vg, monkeypatch):
     _incident(vg, monkeypatch, FULL.replace("B2.08", "B2.07"), LEFT.replace("B2.08", "B2.07"))
     result = _fees(vg).json()
     assert result["bma_cap"] and result["total"] == 400.0
-    assert _fees(vg, bma_cap=False).json()["total"] == 584.35          # kein Fehlalarm: volle Kosten
+    assert _fees(vg, bma_cap=False).json()["total"] == 550.9          # kein Fehlalarm: volle Kosten
 
     with db.connection(tenancy.tenant_path("wehr-a1")) as con:
         con.execute("UPDATE incident SET keyword = 'S1', subcode = '00'")

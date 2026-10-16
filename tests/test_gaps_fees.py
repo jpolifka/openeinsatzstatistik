@@ -81,12 +81,12 @@ def test_day_before_first_schedule_has_no_valid_version(vg, monkeypatch):
 
 def test_incomplete_incident_produces_hints(vg, monkeypatch):
     _incident(vg, monkeypatch)
-    _update("DELETE FROM attendance")
+    _update("UPDATE vehicle SET crew = NULL")
     _update("UPDATE incident SET ended_at = NULL")
     _update("UPDATE vehicle SET finished = NULL")
     hints = _calculate()["hints"]
     assert any("Einsatzende fehlt" in h for h in hints)
-    assert any("keine Anwesenheit erfasst" in h for h in hints)
+    assert any("keine Mannschaftsstärke" in h for h in hints)
     assert any("Beginn oder Ende des Einsatzes fehlt" in h for h in hints)
 
 
