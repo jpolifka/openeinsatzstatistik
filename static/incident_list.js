@@ -18,7 +18,7 @@ async function openIncident(key, year) {
 }
 document.addEventListener("app:view", () => {
   if (!state.scrollTo || state.view !== "incidents") return;
-  $(`#incident-table tr.row[data-id="${CSS.escape(state.scrollTo)}"]`)?.scrollIntoView({ block: "start", behavior: "smooth" });
+  $(`#incident-table tr.row[data-id="${CSS.escape(state.scrollTo)}"]`)?.scrollIntoView({ block: "start", behavior: scrollBehavior() });
   state.scrollTo = null;
 });
 

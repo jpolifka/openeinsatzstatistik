@@ -294,7 +294,7 @@ function stepIncident(delta, from = state.current) {
   state.current = target.id;
   renderIncidents();
   const row = $(`#incident-table tr.row[data-id="${CSS.escape(target.id)}"]`);
-  row?.scrollIntoView({ block: "start", behavior: "smooth" });
+  row?.scrollIntoView({ block: "start", behavior: scrollBehavior() });
   $("button", row)?.focus({ preventScroll: true });
 }
 

@@ -28,6 +28,7 @@
   --ok-bg: #E3F1E6;        /* Status „erledigt“ (unabhängig von den Farben der Wehr) */
   --ok-text: #1E5A2C;
   --line: #E4E4E4;
+  --line-strong: #CFCFCF;     /* Achsen und Bezugslinien (kein Text) */
   --radius: 14px;
   --shadow: 0 1px 2px rgba(51, 0, 0, .06), 0 6px 20px rgba(122, 0, 0, .06);
   --dialog-shadow: 0 30px 80px rgba(60, 0, 0, .35);
@@ -131,12 +132,12 @@ button, input, select { font: inherit; color: inherit; }
 .bar-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bar-label small { color: var(--gray); margin-left: 4px; }
 .bar-track { height: 18px; position: relative; }
-.bar-track::before { content: ""; position: absolute; left: 0; top: -3px; bottom: -3px; width: 1px; background: #CFCFCF; }
+.bar-track::before { content: ""; position: absolute; left: 0; top: -3px; bottom: -3px; width: 1px; background: var(--line-strong); }
 .bar { display: block; height: 100%; background: var(--series); border-radius: 0 4px 4px 0; transition: width .35s ease; }
 .bar-value { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
 
 .columns { position: relative; padding-left: 30px; }
-.columns-plot { position: relative; height: 190px; border-bottom: 1px solid #CFCFCF; }
+.columns-plot { position: relative; height: 190px; border-bottom: 1px solid var(--line-strong); }
 .columns-grid { position: absolute; left: 0; right: 0; border-top: 1px solid var(--gridline); }
 .columns-grid span { position: absolute; left: -30px; top: -8px; width: 24px; text-align: right; font-size: .72rem; color: var(--gray); font-variant-numeric: tabular-nums; }
 .columns-row { position: absolute; inset: 0; display: flex; align-items: flex-end; }
@@ -168,7 +169,7 @@ button, input, select { font: inherit; color: inherit; }
 .history-hit .dot-count { background: var(--series); }
 .history-hit .dot-average { background: var(--text); }
 .history-axis { position: relative; height: 22px; }
-.history-axis span { position: absolute; top: 6px; font-size: .74rem; color: var(--gray); border-left: 1px solid #CFCFCF; padding-left: 4px; line-height: 1; }
+.history-axis span { position: absolute; top: 6px; font-size: .74rem; color: var(--gray); border-left: 1px solid var(--line-strong); padding-left: 4px; line-height: 1; }
 .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: .8rem; color: var(--gray); margin-top: 12px; }
 .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
 .key-figures { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--light-gray); font-size: .86rem; color: var(--gray); }
@@ -204,7 +205,7 @@ button, input, select { font: inherit; color: inherit; }
 .window-values dt { color: var(--gray); }
 .window.total .window-values dt { color: rgba(255,255,255,.78); }
 .window-values dd { margin: 0; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
-.window.empty .rate { color: #BDBDBD; }
+.window.empty .rate { color: var(--gray); }
 .plan-footer { margin-top: 14px; font-size: .82rem; color: var(--gray); }
 
 /* ------------------------------------------------------------ Tabellen / Listen */
@@ -234,7 +235,7 @@ button, input, select { font: inherit; color: inherit; }
 .keyword.w, .keyword.g { background: var(--brand-dark); color: var(--white); }
 .keyword.s { background: var(--light-gray); color: var(--text); }
 .vehicle-chips { display: flex; gap: 4px; }
-.vehicle-chips span { width: 34px; height: 30px; border-radius: 6px; font-size: .72rem; line-height: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1px dashed #D6D6D6; color: #B5B5B5; }
+.vehicle-chips span { width: 34px; height: 30px; border-radius: 6px; font-size: .72rem; line-height: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1px dashed var(--line-strong); color: var(--gray); }
 .vehicle-chips span b { font-size: .82rem; }
 .vehicle-chips span.on { background: var(--brand-mid); border: 0; color: var(--white); }
 .arrival { font-weight: 700; white-space: nowrap; }
@@ -262,7 +263,7 @@ tr.open .chevron { transform: rotate(180deg); color: var(--brand); }
 .mini-table th { text-align: left; font-weight: 700; color: var(--gray); padding: 4px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 .mini-table td { padding: 6px; border-bottom: 1px solid var(--light-gray); white-space: nowrap; }
 .mini-table .right { text-align: right; }
-.mini-table tr.vehicle-idle td { color: #B5B5B5; }
+.mini-table tr.vehicle-idle td { color: var(--gray); }
 .minutes { font-weight: 700; }
 .minutes.late { color: var(--brand); }
 .warnings { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: .88rem; }
@@ -316,6 +317,12 @@ button.person:hover:not(.leader) { background: var(--brand-light); color: var(--
 .progress-bar span { display: block; height: 100%; width: 35%; border-radius: 3px; background: var(--brand); animation: progress-run 1.2s ease-in-out infinite; }
 .progress-bar.determinate span { animation: none; transition: width .3s; }
 @keyframes progress-run { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
+/* Weniger Bewegung: der Ladebalken steht still (Fortschritt sagt der Text daneben), Balken springen, Farbwechsel bleiben. */
+@media (prefers-reduced-motion: reduce) {
+  .progress-bar:not(.determinate) span { animation: none; width: 100%; opacity: .45; }
+  .bar, .column, .chevron, .progress-bar.determinate span { transition: none; }
+  .btn:active:not(:disabled) { transform: none; }
+}
 .message { margin-top: 14px; padding: 12px 16px; border-radius: 10px; }
 .message-error { background: var(--brand-dark); color: var(--white); }
 .message-info { background: var(--white); box-shadow: var(--shadow); }

@@ -4,6 +4,9 @@
 function remember(key, value) { try { localStorage.setItem(key, value); } catch (e) { /* privat/gesperrt */ } }
 function recall(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
 function recallList(key) { try { return JSON.parse(recall(key)) || []; } catch (e) { return []; } }
+/** Weiches Scrollen, außer das System wünscht weniger Bewegung. */
+const scrollBehavior = () => (matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth");
+
 // Sortierung der Einsatzliste: "feld-desc" bzw. "feld-asc"
 const INCIDENT_SORTS = ["number", "started_at", "keyword", "arrival_min", "crew_total"];
 function sortFrom(text) {

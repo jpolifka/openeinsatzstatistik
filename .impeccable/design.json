@@ -1,0 +1,242 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-20T05:22:52.335501+00:00",
+  "title": "Design System: pdf2einsatz",
+  "extensions": {
+    "colorMeta": {
+      "brand": {
+        "role": "primary",
+        "displayName": "Signalrot der Wehr",
+        "canonical": "#D90000",
+        "tonalRamp": [
+          "#4C0000",
+          "#870000",
+          "#C10000",
+          "#FB0000",
+          "#FF3737",
+          "#FF7171",
+          "#FFABAB",
+          "#FFE5E5"
+        ]
+      },
+      "brand-dark": {
+        "role": "primary",
+        "displayName": "Tiefes Wachrot",
+        "canonical": "#7A0000",
+        "tonalRamp": [
+          "#4C0000",
+          "#870000",
+          "#C10000",
+          "#FB0000",
+          "#FF3737",
+          "#FF7171",
+          "#FFABAB",
+          "#FFE5E5"
+        ]
+      },
+      "brand-mid": {
+        "role": "secondary",
+        "displayName": "Gedämpftes Rot",
+        "canonical": "#C9363F",
+        "tonalRamp": [
+          "#3C1013",
+          "#6A1D21",
+          "#982930",
+          "#C6353E",
+          "#D56168",
+          "#E18F94",
+          "#EDBDC0",
+          "#FAEBEC"
+        ]
+      },
+      "brand-accent": {
+        "role": "secondary",
+        "displayName": "Helles Akzentrot",
+        "canonical": "#E0525C",
+        "tonalRamp": [
+          "#410C0F",
+          "#72141B",
+          "#A41D27",
+          "#D52633",
+          "#E1555F",
+          "#E9878D",
+          "#F2B8BC",
+          "#FBE9EB"
+        ]
+      },
+      "brand-pale": {
+        "role": "neutral",
+        "displayName": "Rosa-Papier",
+        "canonical": "#FCEEEF",
+        "tonalRamp": [
+          "#410B0F",
+          "#73141B",
+          "#A41D27",
+          "#D62632",
+          "#E1555F",
+          "#EA868D",
+          "#F2B8BC",
+          "#FBE9EB"
+        ]
+      },
+      "gray": {
+        "role": "neutral",
+        "displayName": "Beschriftungsgrau",
+        "canonical": "#6B6B6B",
+        "tonalRamp": [
+          "#262626",
+          "#434343",
+          "#616161",
+          "#7E7E7E",
+          "#9B9B9B",
+          "#B8B8B8",
+          "#D5D5D5",
+          "#F2F2F2"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Hero-Kennzahl."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Karten- und Abschnittsüberschriften in Markenrot."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Kennzahlentitel, Feldnamen, Spaltenköpfe."
+      }
+    },
+    "shadows": [
+      {
+        "name": "card",
+        "value": "0 1px 2px rgba(51,0,0,.06), 0 6px 20px rgba(122,0,0,.06)",
+        "purpose": "Karten und Kennzahlenkacheln."
+      },
+      {
+        "name": "dialog",
+        "value": "0 30px 80px rgba(60,0,0,.35)",
+        "purpose": "Dialoge."
+      }
+    ],
+    "motion": [
+      {
+        "name": "state",
+        "value": ".15s",
+        "purpose": "Hover und Hintergrundwechsel von Buttons."
+      },
+      {
+        "name": "bar",
+        "value": ".35s ease",
+        "purpose": "Breite und Höhe der Diagrammbalken."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "narrow",
+        "value": "760px"
+      },
+      {
+        "name": "tablet",
+        "value": "900px"
+      },
+      {
+        "name": "medium",
+        "value": "1000px"
+      },
+      {
+        "name": "wide",
+        "value": "1150px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primärbutton",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Hauptaktion einer Ansicht.",
+      "html": "<button class=\"ds-btn-primary\">Bericht übernehmen</button>",
+      "css": ".ds-btn-primary{background:var(--brand,#D90000);color:#fff;border:0;border-radius:10px;padding:10px 18px;font:700 15px Sansation,'Segoe UI',system-ui,sans-serif;box-shadow:0 4px 14px rgba(217,0,0,.25);cursor:pointer}.ds-btn-primary:hover{background:var(--brand-hover,#B80000)}.ds-btn-primary:focus-visible{outline:3px solid var(--brand-accent,#E0525C);outline-offset:2px}"
+    },
+    {
+      "name": "Heller Button",
+      "kind": "button",
+      "refersTo": "button-light",
+      "description": "Zweitaktion.",
+      "html": "<button class=\"ds-btn-light\">Abbrechen</button>",
+      "css": ".ds-btn-light{background:var(--brand-light,#F6DADC);color:var(--brand-dark,#7A0000);border:0;border-radius:10px;padding:10px 18px;font:700 15px Sansation,'Segoe UI',system-ui,sans-serif;cursor:pointer}.ds-btn-light:hover{background:var(--brand-light-hover,#F0C6CA)}.ds-btn-light:focus-visible{outline:3px solid var(--brand-accent,#E0525C);outline-offset:2px}"
+    },
+    {
+      "name": "Kennzahlenkachel",
+      "kind": "card",
+      "refersTo": "kpi",
+      "description": "Wert mit Fallzahl und Abdeckung.",
+      "html": "<div class=\"ds-kpi\"><div class=\"ds-kpi-title\">Einsätze</div><div class=\"ds-kpi-value\">42</div><div class=\"ds-kpi-sub\">n = 42 von 42</div></div>",
+      "css": ".ds-kpi{background:#fff;border-radius:14px;box-shadow:0 1px 2px rgba(51,0,0,.06),0 6px 20px rgba(122,0,0,.06);padding:16px 18px;font-family:Sansation,'Segoe UI',system-ui,sans-serif;color:#333}.ds-kpi-title{font-weight:700;font-size:.86rem;color:#6B6B6B}.ds-kpi-value{font-size:1.9rem;font-weight:700;line-height:1.15}.ds-kpi-sub{font-size:.8rem;color:#6B6B6B}"
+    },
+    {
+      "name": "Schlüsselwort-Chip",
+      "kind": "chip",
+      "refersTo": "keyword-chip",
+      "description": "Einsatzstichwort.",
+      "html": "<span class=\"ds-keyword\">B2.07</span>",
+      "css": ".ds-keyword{display:inline-block;min-width:58px;text-align:center;font:700 15px Sansation,'Segoe UI',system-ui,sans-serif;padding:3px 9px;border-radius:6px;background:var(--brand-light,#F6DADC);color:var(--brand-dark,#7A0000)}"
+    },
+    {
+      "name": "Eingabefeld",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Textfeld mit Markenfokus.",
+      "html": "<input class=\"ds-input\" placeholder=\"Suchen\">",
+      "css": ".ds-input{border:1px solid #E4E4E4;border-radius:8px;padding:8px 10px;background:#fff;font:inherit;width:220px}.ds-input:focus{border-color:var(--brand-accent,#E0525C);outline:none;box-shadow:0 0 0 3px var(--brand-light,#F6DADC)}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Die Wachbuch-Auswertung",
+    "overview": "Die Oberfläche soll wirken wie ein sauber geführtes Einsatzbuch: sachlich, nachvollziehbar, ohne Effekte. Weiße Karten liegen auf einem blassen, rötlich getönten Grund; Zahlen stehen groß und ruhig, jede mit Fallzahl und Abdeckung daneben.",
+    "keyCharacteristics": [
+      "Weiße Karten auf blassem Markengrund, weich angehoben",
+      "Eine Kennfarbe, abgeleitet in zehn Tönen",
+      "Kräftige, kurze Beschriftungen, ruhiger Fließtext",
+      "Jede Kennzahl nennt Fallzahl und Abdeckung",
+      "Sachlicher Ton, deutsche Fachbegriffe"
+    ],
+    "rules": [
+      {
+        "name": "The Wehr-Token Rule",
+        "body": "Jede Farbe der Marke kommt aus einem --brand-*-Token.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Voice Rule",
+        "body": "Eine Kennfarbe pro Wehr; weitere Töne nur durch Abstufung.",
+        "section": "colors"
+      },
+      {
+        "name": "The Fall-Zahl Rule",
+        "body": "Jede Kennzahl nennt Fallzahl und Abdeckung in derselben Karte.",
+        "section": "typography"
+      },
+      {
+        "name": "The Quiet Shadow Rule",
+        "body": "Schatten tragen Ebene, nie Schmuck.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do alle Markenfarben über --brand-*-Tokens ansprechen.",
+      "Do Kennzahlen immer mit Fallzahl und Abdeckung zeigen.",
+      "Do Texte in --gray nicht kleiner als 0,8 rem setzen.",
+      "Do Fokus sichtbar halten: 3-px-Ring in --brand-accent."
+    ],
+    "donts": [
+      "Don't --brand-accent oder --day als Textfarbe auf Weiß einsetzen.",
+      "Don't helle Grautöne für lesbaren Text verwenden.",
+      "Don't Schatten schachteln.",
+      "Don't echte Namen in Beispielen zeigen."
+    ]
+  }
+}

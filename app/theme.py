@@ -102,7 +102,7 @@ def palette(colors):
         "--brand": _hex(brand),
         "--brand-dark": _hex(dark),
         "--brand-mid": _hex(mid),
-        "--brand-accent": _hex(_mix(brand, WHITE, 0.3)),
+        "--brand-accent": _hex(_darken_until(_mix(brand, WHITE, 0.3), MIN_CHART_CONTRAST)),   # Fokusring und Rahmen: mindestens 3:1
         "--brand-light": _hex(_mix(brand, WHITE, 0.85)),
         "--brand-pale": _hex(_mix(brand, WHITE, 0.93)),
         "--brand-gradient": _hex(_mix(brand, dark, 0.5)),

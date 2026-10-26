@@ -103,7 +103,7 @@ document.addEventListener("click", (event) => {
   if (!event.target.closest("[data-overview-notices]")) return;
   records.showNotices = true;
   renderNotices();
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  window.scrollTo({ top: 0, behavior: scrollBehavior() });
 });
 
 // ------------------------------------------------------------ Zeiten & Kräfte
