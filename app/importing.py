@@ -4,11 +4,13 @@ Kein HTTP außer den Fehlerklassen der Anfrage.
 """
 import concurrent.futures
 import os
+import shutil
 import tempfile
+import time
 import zipfile
 
 
-from app import parser_worker
+from app import db, parser_worker
 from app import records, report, store, tenancy
 from app.rbac import PEOPLE, STATS
 from app.api.common import incident_json, incident_key, log, safe_filename
@@ -217,11 +219,27 @@ def collect_uploads(uploads):
     return spool, errors
 
 
+def keep_for_debug(files):
+    """Nur mit gesetzter Umgebungsvariable DEBUG: hochgeladene Berichte zusätzlich in DATA_DIR/debug-reports ablegen
+    (enthalten Namen, nur zur Fehlersuche). Fehler dabei stören das Einlesen nie."""
+    if not os.environ.get("DEBUG"):
+        return
+    try:
+        folder = os.path.join(db.DATA_DIR, "debug-reports")
+        os.makedirs(folder, exist_ok=True)
+        stamp = time.strftime("%Y%m%d-%H%M%S")
+        for filename, path in files:
+            shutil.copyfile(path, os.path.join(folder, f"{stamp}-{safe_filename(os.path.basename(filename))}"))
+    except Exception:
+        log.exception("DEBUG: Bericht nicht abgelegt")
+
+
 def read_files(files, tenants, email=None, progress=None):
     """Alle Berichtsarten ausschließlich lesen; Schreiben erfolgt erst nach Bestätigung. files: [(Anzeigename,
     Pfad)] (Spool.files). Mehrere Dateien gleichzeitig (parser_worker.WORKERS), Ergebnisse in der Reihenfolge der
     Dateien; progress() je Datei."""
     reports, errors, notes = [], [], []
+    keep_for_debug(files)
 
     def read(job):
         filename, path = job
