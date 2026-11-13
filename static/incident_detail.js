@@ -274,21 +274,22 @@ const editSnapshot = () => { const form = openEditForm(); return form ? JSON.str
 const incidentDirty = () => state.editing != null && state.editSnapshot != null && editSnapshot() !== state.editSnapshot;
 
 /** Vor dem Verlassen eines geänderten Formulars nachfragen; true = weiter (Bearbeitung ist dann beendet). */
-function confirmLeaveEdit() {
+async function confirmLeaveEdit() {
   if (state.editing == null) return true;
-  if (incidentDirty() && !confirm("Die Änderungen am Einsatz sind noch nicht gespeichert. Verwerfen?")) return false;
+  if (incidentDirty() && !await askConfirm({ title: "Änderungen am Einsatz verwerfen?", text: "Die Änderungen sind noch nicht gespeichert.",
+    confirm: "Änderungen verwerfen", cancel: "Weiter bearbeiten", danger: true })) return false;
   state.editing = null;
   state.editSnapshot = null;
   return true;
 }
 
 /** Benachbarten Einsatz der Liste aufklappen (delta +1 nächster, -1 vorheriger); ohne geöffneten der erste. */
-function stepIncident(delta, from = state.current) {
+async function stepIncident(delta, from = state.current) {
   const list = visibleIncidents();
   if (!list.length) return;
   const index = list.findIndex((x) => x.id === from);
   const target = list[index < 0 ? (delta > 0 ? 0 : list.length - 1) : index + delta];
-  if (!target || !confirmLeaveEdit()) return;
+  if (!target || !await confirmLeaveEdit()) return;
   state.expanded.clear();
   state.expanded.add(target.id);
   state.current = target.id;
@@ -337,9 +338,9 @@ async function commitDelete(id) {
     await loadYears();
     document.dispatchEvent(new Event("app:data"));
   } catch (err) {
-    alert(`Einsatz ${pending.incident.number ?? ""} wurde nicht gelöscht: ${err.message}`);
     state.incidents = null;
     await showView();
+    await reportError(`Einsatz ${pending.incident.number ?? ""} wurde nicht gelöscht.`, err, "Die Liste wurde neu geladen.");
   }
 }
 window.addEventListener("pagehide", () => {
@@ -351,13 +352,13 @@ window.addEventListener("pagehide", () => {
 });
 
 async function handleIncidentAction(action, id, el) {
-  if (action === "step") { stepIncident(Number(el.dataset.step), id); return; }
+  if (action === "step") { await stepIncident(Number(el.dataset.step), id); return; }
   if (action === "edit") {
-    if (state.editing !== id && !confirmLeaveEdit()) return;
+    if (state.editing !== id && !await confirmLeaveEdit()) return;
     await startEditing(id);
     return;
   }
-  if (action === "cancel") { if (confirmLeaveEdit()) renderIncidents(); return; }
+  if (action === "cancel") { if (await confirmLeaveEdit()) renderIncidents(); return; }
   if (action === "delete") { deleteIncident(id); return; }
   if (action === "add-person") { addDraftPerson(formOf(el)); return; }
   if (action === "remove-person") {
@@ -376,7 +377,7 @@ async function handleIncidentAction(action, id, el) {
     }
     await reloadData();
   } catch (err) {
-    alert(err.message);
+    await reportError("Der Einsatz wurde nicht gespeichert.", err, "Ihre Eingaben bleiben im Formular erhalten.");
   }
 }
 

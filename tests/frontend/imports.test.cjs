@@ -6,7 +6,7 @@ const vm = require("node:vm");
 
 function setup() {
   const elements = new Map();
-  const calls = [];
+  const calls = [], asked = [], errors = [], toasts = [], answers = { confirm: true };
   const context = vm.createContext({
     state: { upload: { token: null, reports: [] } },
     config: {}, console,
@@ -16,14 +16,19 @@ function setup() {
       return elements.get(key);
     },
     setTimeout: (fn) => setImmediate(fn),     // Abfrage des Lesevorgangs ohne Wartezeit
-    $$: () => [], window: { confirm: () => true },
-    esc: (s) => String(s), alert: () => {}, toast: () => {},
+    $$: () => [], window: {},
+    esc: (s) => String(s), toast: (text) => toasts.push(text),
+    plural: (n, one, many) => `${n} ${n === 1 ? one : many}`,
+    askConfirm: async (options) => { asked.push(options); return answers.confirm; },
+    reportError: async (title, err) => { errors.push({ title, message: err.message }); },
+    noticeBox: (kind, title, text = "") => `${kind}|${title}|${text}`,
+    ICON_CHECK: "", ICON_ERROR: "",
     readForm: () => ({ description: "Korrektur" }),
     apiJson: async (...args) => { calls.push(args); return { number: 1, year: 2025 }; },
   });
   vm.runInContext(fs.readFileSync("static/imports.js", "utf8"), context);
   vm.runInContext("renderPreviews = () => {}; keepPreviewInput = () => {};", context);
-  return { context, calls };
+  return { context, calls, asked, errors, toasts, answers };
 }
 
 // Lesen im Hintergrund: Upload antwortet mit einem Job, die Abfrage liefert das Ergebnis, sobald der Test
@@ -106,4 +111,38 @@ test("Verwaltungsfelder behalten bestehende IDs ohne doppelte Attribute", () => 
   const html = context.field("Name", '<input id="vg-name" type="text">');
   assert.match(html, /for="vg-name"/);
   assert.equal((html.match(/ id=/g) || []).length, 1);
+});
+
+test("Offene Vorschauen werden vor dem Einlesen nur nach Bestätigung verworfen", async () => {
+  const { context, asked, answers } = setup();
+  context.state.upload = { token: "old", reports: [{ filename: "old.xlsx", warnings: [], people: [] }] };
+  answers.confirm = false;
+  await context.readPdfs([{ name: "new.xlsx" }]);
+  assert.equal(asked.length, 1);
+  assert.match(asked[0].title, /verwerfen/);
+  assert.equal(asked[0].danger, true);
+  assert.equal(context.state.upload.token, "old");           // nichts wurde verworfen
+});
+
+test("Fehler beim Übernehmen nennt den Bericht und lässt die Vorschau offen", async () => {
+  const { context, errors } = setup();
+  context.state.upload = { token: "t", reports: [{ filename: "a.xlsx", number: 5, year: 2025 }] };
+  context.apiJson = async () => { throw new Error("Revision veraltet"); };
+  context.$ = (key) => key.includes("preview-failure") ? failure : { hidden: false, disabled: false, innerHTML: "" };
+  const failure = { innerHTML: "" };
+  await context.acceptReport(0);
+  assert.equal(context.state.upload.reports[0].saved, undefined);
+  assert.equal(errors.length + (failure.innerHTML ? 1 : 0), 1);
+});
+
+test("Sammelübernahme nimmt nur Berichte ohne Hinweise und hält beim ersten Fehler an", async () => {
+  const { context, calls, toasts } = setup();
+  const clean = (name) => ({ filename: name, number: 1, year: 2025, warnings: [], people: [] });
+  context.state.upload = { token: "t", reports: [clean("a.xlsx"),
+    { ...clean("b.xlsx"), warnings: ["Prüfen"] }, clean("c.xlsx"),
+    { ...clean("d.xlsx"), existing: { differences: [{}], revision: 1 } }] };
+  assert.deepEqual([0, 1, 2, 3].map((i) => vm.runInContext(`isClean(state.upload.reports[${i}])`, context)), [true, false, true, false]);
+  await vm.runInContext("acceptCleanReports()", context);
+  assert.deepEqual(calls.map((c) => c[2].filename), ["a.xlsx", "c.xlsx"]);
+  assert.match(toasts.at(-1), /2 Berichte übernommen/);
 });

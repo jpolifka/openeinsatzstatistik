@@ -50,7 +50,7 @@ const formatTime = (iso) => !iso ? "–" : iso.length > 8 ? iso.slice(11, 16) : 
 const weekdayShort = (iso) => iso ? new Date(iso).toLocaleDateString("de-DE", { weekday: "short" }) : "";
 const MONTH_NAMES = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
 const categoryOf = (keyword) => (keyword || "").charAt(0);
-const errorBox = (message) => `<div class="message message-error">${esc(message)}</div>`;
+const errorBox = (message) => noticeBox("error", message);
 // Rechte des Benutzers für die ausgewählte Wehr (stats, incidents, write, admin) – geprüft wird im Backend
 const can = (permission) => Boolean(config?.permissions.includes(permission));
 
@@ -89,9 +89,56 @@ function toast(text, { action = null, onAction = null, duration = 3500 } = {}) {
     el.append(button);
   }
   el.hidden = false;
+  // Bildschirmleser: eine dauerhaft vorhandene Ansage-Fläche meldet zuverlässiger als ein ein- und ausgeblendetes Element
+  const live = $("#live");
+  if (live) { live.textContent = ""; setTimeout(() => { live.textContent = action ? `${text}. ${action} mit Strg+Z` : text; }, 50); }
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { el.hidden = true; }, duration);
 }
+
+const ICON_ERROR = `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7v6m0 3.6v.1" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>`;
+const ICON_WARN = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5 2.8 19.5h18.4L12 3.5Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 10v4.5m0 2.7v.1" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>`;
+const ICON_CHECK = `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="m7.8 12.4 3 3 5.4-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+/** Hinweis mit Symbol, Überschrift und Folgeschritt. kind: "error" | "warn". */
+const noticeBox = (kind, title, text = "") =>
+  `<div class="message message-${kind}" role="${kind === "error" ? "alert" : "status"}">${kind === "error" ? ICON_ERROR : ICON_WARN}<div><strong>${esc(title)}</strong>${text ? `<span>${text}</span>` : ""}</div></div>`;
+
+/**
+ * Rückfrage bzw. Hinweis als Dialog statt window.confirm/alert. Liefert true (bestätigt) oder false (abgebrochen).
+ * cancel = null: nur ein Hinweis mit einem Knopf. Die Knöpfe nennen die Folge („Vorschauen verwerfen“, nicht „OK“).
+ * Bei gefährlichen Aktionen liegt der Fokus auf „Abbrechen“.
+ */
+function askConfirm({ title, text = "", confirm = "OK", cancel = "Abbrechen", danger = false }) {
+  return new Promise((resolve) => {
+    const dialog = document.createElement("dialog");
+    dialog.className = "dialog dialog-prompt";
+    dialog.setAttribute("role", cancel ? "alertdialog" : "dialog");
+    dialog.setAttribute("aria-labelledby", "prompt-title");
+    dialog.setAttribute("aria-describedby", "prompt-text");
+    dialog.innerHTML = `<div class="dialog-body"><h3 id="prompt-title">${esc(title)}</h3>
+      <p id="prompt-text" class="prompt-text">${esc(text)}</p>
+      <div class="actions section-gap">
+        ${cancel ? `<button type="button" class="btn btn-outline" data-answer="no">${esc(cancel)}</button>` : ""}
+        <button type="button" class="btn ${danger ? "btn-danger" : "btn-primary"}" data-answer="yes">${esc(confirm)}</button>
+      </div></div>`;
+    let answer = false;
+    dialog.addEventListener("click", (e) => {
+      const button = e.target.closest("[data-answer]");
+      if (!button) return;
+      answer = button.dataset.answer === "yes";
+      dialog.close();
+    });
+    dialog.addEventListener("close", () => { dialog.remove(); resolve(answer); });   // Escape = abgebrochen
+    document.body.append(dialog);
+    dialog.showModal();
+    $(`[data-answer="${danger && cancel ? "no" : "yes"}"]`, dialog)?.focus();
+  });
+}
+
+/** Fehler nach einer Aktion: sagt, was nicht geschehen ist, nennt die Ursache und den nächsten Schritt. */
+const reportError = (title, err, next = "Bitte erneut versuchen.") =>
+  askConfirm({ title, text: `${err?.message || err} ${next}`.trim(), confirm: "Schließen", cancel: null });
 
 // ------------------------------------------------------------ Diagramm-Bausteine
 function niceScale(max) {
@@ -208,15 +255,17 @@ function renderSubTabs() {
   const allowed = allowedViews(), views = (navGroup(state.view)?.views || []).filter((k) => allowed.includes(k));
   $("#subtabs-nav").hidden = views.length < 2;
   $("#subtabs").innerHTML = views.length < 2 ? "" : views.map((k) =>
-    `<a href="#${k}" data-view="${k}" class="${k === state.view ? "active" : ""}">${esc(VIEWS[k].sub || VIEWS[k].label)}</a>`).join("");
+    `<a href="#${k}" data-view="${k}" class="${k === state.view ? "active" : ""}"${k === state.view ? ' aria-current="page"' : ""}>${esc(VIEWS[k].sub || VIEWS[k].label)}</a>`).join("");
 }
 
 // Name und Logos der Wehr; ohne eigene Logos (und in der Gesamtansicht) das neutrale Signet
+let appTitle = "Einsatzstatistik";
 function applyBranding() {
   const b = config.branding;
   const named = config.name !== "Einsatzstatistik";       // ohne Wehr heißt die Auswahl selbst so
-  document.title = named ? `Einsatzstatistik · ${config.name}` : "Einsatzstatistik";
-  $(".topbar-kicker").textContent = document.title;
+  appTitle = named ? `Einsatzstatistik · ${config.name}` : "Einsatzstatistik";
+  document.title = appTitle;
+  $(".topbar-sub").textContent = appTitle;
   $("#footer-name").textContent = named ? `${config.name} · Einsatzstatistik` : "Einsatzstatistik";
   $("#logo-light").src = b.logo_light || "/static/img/app-icon-light.svg";
   $("#logo-light").alt = b.logo_light ? config.name : "";
@@ -249,10 +298,15 @@ async function showView() {
   const key = parseHash().view, allowed = allowedViews();
   state.view = allowed.includes(key) ? key : allowed[0];
   const view = VIEWS[state.view];
-  for (const a of $$("#tabs a")) a.classList.toggle("active", a.dataset.nav === navGroup(state.view)?.key);
+  for (const a of $$("#tabs a")) {
+    const current = a.dataset.nav === navGroup(state.view)?.key;
+    a.classList.toggle("active", current);
+    if (current) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+  }
   renderSubTabs();
   for (const k of Object.keys(VIEWS)) $(`#view-${k}`).hidden = k !== state.view;
   $("#page-title").textContent = view.noYear ? (view.title || view.label) : `${view.title || view.label} ${state.year}`;
+  document.title = `${$("#page-title").textContent} · ${appTitle}`;      // Tab und Verlauf unterscheiden die Ansichten
   const section = $(`#view-${state.view}`), run = ++viewRun;
   section.classList.add("loading");
   $(".view-load-error", section)?.remove();
@@ -309,16 +363,23 @@ document.addEventListener("mousemove", (e) => {
   const el = e.target.closest?.("[data-tip]");
   if (el) showTooltip(el, e.clientX, e.clientY); else if (tooltipTarget) hideTooltip();
 });
+// Mit der Tastatur: Tooltip zeigen und für Bildschirmleser als Beschreibung des Elements anbinden
 document.addEventListener("focusin", (e) => {
   const el = e.target.closest?.("[data-tip]");
-  if (el) { const r = el.getBoundingClientRect(); showTooltip(el, r.left + r.width / 2, r.top); }
+  if (el) { el.setAttribute("aria-describedby", "tooltip"); const r = el.getBoundingClientRect(); showTooltip(el, r.left + r.width / 2, r.top); }
 });
-document.addEventListener("focusout", hideTooltip);
+document.addEventListener("focusout", (e) => { e.target.closest?.("[data-tip]")?.removeAttribute("aria-describedby"); hideTooltip(); });
 
 // ------------------------------------------------------------ Ereignisse
-window.addEventListener("hashchange", (e) => {
-  // Offenes, geändertes Formular: erst fragen, sonst zurück zur bisherigen Adresse
-  if (!confirmLeaveEdit()) { history.replaceState(null, "", new URL(e.oldURL).hash); return; }
+window.addEventListener("hashchange", async (e) => {
+  // Offenes, geändertes Formular: sofort zur bisherigen Adresse zurück, dann fragen; bei „Verwerfen“ geht es zur neuen Adresse
+  if (incidentDirty()) {
+    const target = location.hash;
+    history.replaceState(null, "", new URL(e.oldURL).hash);
+    if (await confirmLeaveEdit()) location.hash = target;
+    return;
+  }
+  await confirmLeaveEdit();
   applyListParams(parseHash().params);
   state.expanded.clear();
   if (state.scrollTo) state.expanded.add(state.scrollTo);   // Sprung zu einem Einsatz (openIncident)
@@ -327,8 +388,8 @@ window.addEventListener("hashchange", (e) => {
 window.addEventListener("beforeunload", (e) => {
   if (incidentDirty()) e.preventDefault();
 });
-$("#year").addEventListener("change", (e) => {
-  if (!confirmLeaveEdit()) { e.target.value = String(state.year); return; }
+$("#year").addEventListener("change", async (e) => {
+  if (!await confirmLeaveEdit()) { e.target.value = String(state.year); return; }
   state.year = Number(e.target.value);
   remember("year", state.year);
   state.expanded.clear();
@@ -351,7 +412,7 @@ onEvaluationViews("change", async (e) => {
     await showView();
   } catch (err) {
     e.target.checked = !e.target.checked;
-    alert(err.message);
+    await reportError("Die Freigabe wurde nicht geändert.", err);
   }
 });
 onEvaluationViews("keydown", (e) => {
@@ -421,13 +482,10 @@ $("#view-incidents").addEventListener("click", (e) => {
     renderIncidents();
   }
 });
-$("#incident-table thead").addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && e.target.matches("[data-sort-incidents]")) e.target.click();
-});
 $("#search").addEventListener("input", (e) => { state.query = e.target.value; renderIncidents(); });
 $("#btn-export").addEventListener("click", () => { location.href = `/api/export?year=${state.year}`; });
 
-$("#incident-table tbody").addEventListener("click", (e) => {
+$("#incident-table tbody").addEventListener("click", async (e) => {
   const chip = e.target.closest("[data-leader]");
   if (chip) { pickLeader(chip); return; }
   const action = e.target.closest("[data-action]");
@@ -437,7 +495,7 @@ $("#incident-table tbody").addEventListener("click", (e) => {
   if (!row) return;
   const id = row.dataset.id;
   if (state.expanded.has(id)) {
-    if (state.editing === id && !confirmLeaveEdit()) return;
+    if (state.editing === id && !await confirmLeaveEdit()) return;
     state.expanded.delete(id);
   } else {
     state.expanded.add(id);
@@ -567,21 +625,25 @@ $("#previews").addEventListener("click", (e) => {
   if (chip) { pickLeader(chip); return; }
   const button = e.target.closest("[data-accept]");
   if (button) acceptReport(Number(button.dataset.accept));
+  if (e.target.closest("[data-accept-clean]")) acceptCleanReports();
 });
 
 $("#scope").addEventListener("change", async (e) => {
   if (uploadBusy || acceptingReports) { e.target.value = config.scope; toast("Bitte den laufenden Import abwarten."); return; }
-  if (state.upload.reports.some((r) => !r.saved && !isUnchanged(r)) &&
-      !window.confirm("Offene Importvorschauen verwerfen und Ansicht wechseln?")) { e.target.value = config.scope; return; }
+  const open = state.upload.reports.filter((r) => !r.saved && !isUnchanged(r)).length;
+  if (open && !await askConfirm({ title: "Offene Importvorschauen verwerfen?",
+    text: `${plural(open, "Bericht ist", "Berichte sind")} noch nicht übernommen. Beim Wechsel der Ansicht gehen sie verloren.`,
+    confirm: "Verwerfen und wechseln", danger: true })) { e.target.value = config.scope; return; }
   // Ungespeicherte Einstellungen (admin.js) bzw. Einsatz: erst fragen, sonst wechselte die Wehr auf dem Server trotzdem
-  if (typeof confirmDiscard === "function" && !confirmDiscard()) { e.target.value = config.scope; return; }
-  if (!confirmLeaveEdit()) { e.target.value = config.scope; return; }
+  if (typeof confirmDiscard === "function" && !await confirmDiscard()) { e.target.value = config.scope; return; }
+  if (!await confirmLeaveEdit()) { e.target.value = config.scope; return; }
   try {
     await discardUpload();
     await apiJson("/api/scope", "POST", { key: e.target.value });
     location.reload();
   } catch (err) {
-    alert(err.message);
+    e.target.value = config.scope;
+    await reportError("Die Auswahl konnte nicht gewechselt werden.", err);
   }
 });
 
@@ -595,7 +657,7 @@ function focusSearch() {
   location.hash = "#incidents";
 }
 
-document.addEventListener("keydown", (e) => {
+document.addEventListener("keydown", async (e) => {
   if (e.defaultPrevented || $("dialog[open]")) return;
   if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === "z" && !typing(e.target) && pendingDeletes.size) {
     e.preventDefault();
@@ -606,7 +668,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     if (e.target.id === "search") { e.target.blur(); return; }
     if (state.view !== "incidents") return;
-    if (state.editing != null) { if (confirmLeaveEdit()) renderIncidents(); return; }
+    if (state.editing != null) { if (await confirmLeaveEdit()) renderIncidents(); return; }
     if (state.expanded.size) { state.expanded.clear(); renderIncidents(); }
     return;
   }
@@ -618,8 +680,9 @@ document.addEventListener("keydown", (e) => {
   else if (incidents && (e.key === "j" || e.key === "k")) { e.preventDefault(); stepIncident(e.key === "j" ? 1 : -1); }
   else if (incidents && e.key === "e") {
     const incident = state.incidents.incidents.find((x) => x.id === state.current);
-    if (!incident?.can_edit || state.editing === incident.id || !confirmLeaveEdit()) return;
+    if (!incident?.can_edit || state.editing === incident.id) return;
     e.preventDefault();
+    if (!await confirmLeaveEdit()) return;
     state.expanded.add(incident.id);
     startEditing(incident.id);
   }

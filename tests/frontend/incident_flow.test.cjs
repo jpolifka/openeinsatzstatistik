@@ -26,7 +26,7 @@ function setup(overrides = {}) {
     location, history,
     window: { addEventListener: (name, fn) => { listeners[name] = fn; }, confirm: () => true },
     document: { dispatchEvent() {}, addEventListener() {}, removeEventListener() {} },
-    confirm: () => true, alert: () => {},
+    askConfirm: async () => true, reportError: async () => {}, plural: (n, one, many) => `${n} ${n === 1 ? one : many}`,
     state: { view: "incidents", query: "", category: "all", warnOnly: false, todoOnly: false, filters: {},
       incidentSort: { field: "started_at", descending: true }, tenantFilter: new Set(), expanded: new Set(),
       editing: null, editSnapshot: null, editNode: null, current: null,
@@ -148,31 +148,31 @@ test("Fehlgeschlagenes Löschen meldet den Fehler und lädt die Liste neu", asyn
   const alerts = [];
   let reloaded = 0;
   const ctx = setup({ api: async () => { throw new Error("Revision veraltet"); },
-    alert: (text) => alerts.push(text), showView: async () => { reloaded++; } });
+    reportError: async (title, err) => { alerts.push(`${title} ${err.message}`); }, showView: async () => { reloaded++; } });
   run(ctx, "state.incidents.incidents = [" + JSON.stringify(incident()) + "]; deleteIncident('wehr-a1:7')");
   await [...ctx.timers.values()][0]();
-  assert.match(alerts[0], /nicht gelöscht: Revision veraltet/);
+  assert.match(alerts[0], /nicht gelöscht\. Revision veraltet/);
   assert.equal(reloaded, 1);
   assert.equal(run(ctx, "state.incidents"), null);
 });
 
 // ------------------------------------------------------------ Ungespeicherte Änderungen
-test("confirmLeaveEdit fragt nur bei geändertem Formular und bricht bei „Nein“ ab", () => {
+test("confirmLeaveEdit fragt nur bei geändertem Formular und bricht bei „Nein“ ab", async () => {
   let asked = 0, answer = false;
   let current = "Rheinbrohl";
-  const ctx = setup({ confirm: () => { asked++; return answer; } });
+  const ctx = setup({ askConfirm: async () => { asked++; return answer; } });
   ctx.context.formValue = () => ({ place: current });
   run(ctx, "readIncidentForm = () => formValue()");
-  assert.equal(run(ctx, "confirmLeaveEdit()"), true);                 // nichts in Bearbeitung
+  assert.equal(await run(ctx, "confirmLeaveEdit()"), true);                 // nichts in Bearbeitung
   run(ctx, 'state.editing = "a:1"; state.editSnapshot = JSON.stringify({ place: "Rheinbrohl" })');
-  assert.equal(run(ctx, "confirmLeaveEdit()"), true);                 // unverändert: keine Rückfrage
+  assert.equal(await run(ctx, "confirmLeaveEdit()"), true);                 // unverändert: keine Rückfrage
   assert.equal(asked, 0);
   current = "Neuwied";
   run(ctx, 'state.editing = "a:1"; state.editSnapshot = JSON.stringify({ place: "Rheinbrohl" })');
-  assert.equal(run(ctx, "confirmLeaveEdit()"), false);
+  assert.equal(await run(ctx, "confirmLeaveEdit()"), false);
   assert.equal(run(ctx, "state.editing"), "a:1");                     // Bearbeitung bleibt offen
   answer = true;
-  assert.equal(run(ctx, "confirmLeaveEdit()"), true);
+  assert.equal(await run(ctx, "confirmLeaveEdit()"), true);
   assert.equal(run(ctx, "state.editing"), null);
   assert.equal(asked, 2);
 });

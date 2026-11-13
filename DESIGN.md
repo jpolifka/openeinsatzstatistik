@@ -21,6 +21,12 @@ colors:
   series-previous: "#8F8F8F"
   ok-bg: "#E3F1E6"
   ok-text: "#1E5A2C"
+  warn-bg: "#FFF1CC"
+  warn-text: "#5E3A00"
+  warn-line: "#E2B24A"
+  error-bg: "#FDEBEA"
+  error-text: "#8C1111"
+  error-line: "#D98A8A"
 typography:
   display:
     fontFamily: "Sansation, Segoe UI, system-ui, sans-serif"
@@ -44,10 +50,42 @@ typography:
     lineHeight: 1.5
   label:
     fontFamily: "Sansation, Segoe UI, system-ui, sans-serif"
-    fontSize: "0.82rem"
+    fontSize: "0.85rem"
     fontWeight: 700
     lineHeight: 1.35
+  label-sm:
+    fontFamily: "Sansation, Segoe UI, system-ui, sans-serif"
+    fontSize: "0.78rem"
+    fontWeight: 700
+    lineHeight: 1.35
+  body-sm:
+    fontFamily: "Sansation, Segoe UI, system-ui, sans-serif"
+    fontSize: "0.92rem"
+    fontWeight: 400
+    lineHeight: 1.5
+  subtitle:
+    fontFamily: "Sansation, Segoe UI, system-ui, sans-serif"
+    fontSize: "1rem"
+    fontWeight: 700
+    lineHeight: 1.3
+  number:
+    fontFamily: "Sansation, Segoe UI, system-ui, sans-serif"
+    fontSize: "1.5rem"
+    fontWeight: 700
+    lineHeight: 1.2
+  prompt-title:
+    fontFamily: "Sansation, Segoe UI, system-ui, sans-serif"
+    fontSize: "1.15rem"
+    fontWeight: 700
+    lineHeight: 1.2
+  kpi-value:
+    fontFamily: "Sansation, Segoe UI, system-ui, sans-serif"
+    fontSize: "1.9rem"
+    fontWeight: 700
+    lineHeight: 1.1
 rounded:
+  xs: "4px"
+  chip: "6px"
   sm: "8px"
   md: "10px"
   lg: "14px"
@@ -143,11 +181,15 @@ Eine Kennfarbe in Abstufungen, dazu neutrale Grautöne und ein Statusgrün, das 
 - **Beschriftungsgrau** (#6B6B6B, `--gray`): Sekundärtext; 4,8:1 auf hellem Grau.
 - **Haarlinie** (#E4E4E4, `--line`): Rahmen und Trennlinien; Raster in #ECECEC.
 - **Waldgrün** (#1E5A2C auf #E3F1E6): Status „erledigt“.
+- **Bernstein** (#5E3A00 auf #FFF1CC, Linie #E2B24A): Status „zu prüfen“, neue Personen, Prüfhinweise.
+- **Fehlerrot** (#8C1111 auf #FDEBEA, Linie #D98A8A): Fehlermeldungen und „nicht gespeichert“; immer mit Symbol und Überschrift, auch in Wehren mit rotem Theme.
 
 ### Named Rules
 **The Wehr-Token Rule.** Jede Farbe der Marke kommt aus einem `--brand-*`-Token. Feste Hex-Werte in Regeln sind nur für neutrale Grautöne zulässig und gehören auch dann auf Tokens.
 
-**The One Voice Rule.** Eine Kennfarbe pro Wehr. Weitere Farben entstehen nur durch Abstufung (heller, dunkler), nie durch einen zweiten Farbton.
+**The One Voice Rule.** Eine Kennfarbe pro Wehr. Weitere Farben entstehen nur durch Abstufung (heller, dunkler), nie durch einen zweiten Farbton. Ausnahme sind die Statusfarben unten: Sie gehören keiner Wehr und bleiben in jedem Theme gleich.
+
+**The Status Rule.** Rot der Wehr bedeutet Marke, nie Fehler. Zustände tragen eigene, von der Wehr unabhängige Töne: neutral = bereit, Bernstein (`--warn-*`) = zu prüfen, Grün (`--ok-*`) = erledigt, Fehlerrot (`--error-*`) = nicht gespeichert. Jeder Status nennt sich außerdem mit einem Wort (und meist einem Symbol); Farbe allein trägt nie die Bedeutung.
 
 ## Typography
 
@@ -160,7 +202,8 @@ Eine Kennfarbe in Abstufungen, dazu neutrale Grautöne und ein Statusgrün, das 
 - **Headline** (700, 1,7 rem, 1,2): Seitentitel im Kopf.
 - **Title** (700, 1,3 rem / 1,05 rem, 1,2): Karten- und Abschnittsüberschriften, in Markenrot.
 - **Body** (400, 15 px, 1,5): Fließtext, Tabellen.
-- **Label** (700, 0,78–0,86 rem): Kennzahlentitel, Feldnamen, Spaltenköpfe, Panel-Überschriften (Versalien, Sperrung 0,08 em).
+- **Label** (700, 0,85 rem) und **Label klein** (700, 0,78 rem): Kennzahlentitel, Feldnamen, Spaltenköpfe, Panel-Überschriften (Versalien, Sperrung 0,08 em). Nichts ist kleiner als 0,78 rem.
+- **Body klein** (400, 0,92 rem) und **Untertitel** (700, 1 rem): Tabellen, Kartenuntertitel. Weitere Stufen: 1,3 / 1,5 / 1,7 / 1,9 / 3,1 rem für Überschriften und Kennzahlen.
 
 ### Named Rules
 **The Fall-Zahl Rule.** Jede Kennzahl bekommt Fallzahl und Abdeckung („n von N“) in derselben Karte, in `--gray` und mindestens 0,8 rem.
@@ -205,7 +248,7 @@ Abgerundete, freundliche Formen mit gestaffelten Radien: 6 px (Chips), 8 px (Ein
 - Hellgraue Leiste mit 10 px Radius, aktiver Eintrag weiß mit roter Schrift und feinem Schatten.
 
 ### Kennzahlenkacheln
-- Weiß, 14 px Radius, Titel in Grau (0,86 rem), Wert 1,9 rem in 700. Die Hero-Kachel ist tiefrot mit weißer Schrift und 3,1 rem.
+- Weiß, 14 px Radius, Titel in Grau (0,85 rem), Wert 1,9 rem in 700. Die Hero-Kachel ist tiefrot mit weißer Schrift und 3,1 rem.
 
 ### Schlüsselwort-Chips
 - Rosenschimmer-Grund, tiefrote Schrift, 6 px Radius, Mindestbreite 58 px, zentriert.
@@ -218,6 +261,7 @@ Abgerundete, freundliche Formen mit gestaffelten Radien: 6 px (Chips), 8 px (Ein
 
 ### Dialog
 - 18 px Radius, Kopf weiß mit Linie darunter, Inhalt scrollt. Breiten 1080 / 920 / 760 px.
+- **Rückfrage** (`askConfirm`): schmaler Dialog (460 px) statt `window.confirm`/`alert`. Die Knöpfe nennen die Folge („Vorschauen verwerfen“), bei zerstörerischen Aktionen ist der Fokus auf „Abbrechen“ und der Bestätigen-Knopf fehlerrot. Fehler nach einer Aktion nennen, was nicht geschehen ist, die Ursache und den nächsten Schritt (`reportError`).
 
 ### Diagramme (Signatur)
 - Balkenlisten mit Beschriftung links, Wert rechts, dünner Bezugslinie; Säulen bis 24 px Breite. Reihen: `--series` (#D90000), Tag `--day`, Nacht `--night`, Vorjahr `--previous` (grau). Beschriftungen immer in `--gray`.
@@ -236,4 +280,6 @@ Abgerundete, freundliche Formen mit gestaffelten Radien: 6 px (Chips), 8 px (Ein
 - **Don't** Grautöne unter #6B6B6B für lesbaren Text verwenden; helle Grautöne (#B5B5B5, #BDBDBD) sind nur für Linien und Flächen.
 - **Don't** Schatten in Schatten schachteln oder Karten in Karten ohne Linie darstellen.
 - **Don't** echte Namen in Beispielen oder Screenshots zeigen.
+- **Don't** `window.confirm`/`alert` verwenden; Rückfragen und Fehler laufen über `askConfirm`/`reportError`, Fehler am Ort des Geschehens über `noticeBox`.
+- **Don't** Rot der Wehr für Fehler oder „neu“ einsetzen; dafür gibt es die Statusfarben.
 - **Don't** Bedeutung allein über Farbe tragen; Status braucht Text oder Symbol.

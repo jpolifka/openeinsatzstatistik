@@ -15,13 +15,13 @@
     <div class="topbar-inner">
       <img class="topbar-logo" id="logo-light" src="/static/img/app-icon-light.svg" alt="">
       <div class="topbar-title">
-        <span class="topbar-kicker">Einsatzstatistik</span>
         <h1 id="page-title">Einsätze</h1>
+        <p class="topbar-sub">Einsatzstatistik</p>
       </div>
       <div class="topbar-actions">
         <label class="year-select" id="scope-select" hidden>
-          <span>Feuerwehr / Verbandsgemeinde</span>
-          <select id="scope" aria-label="Feuerwehr oder Verbandsgemeinde wählen"></select>
+          <span id="scope-label">Feuerwehr / Verbandsgemeinde</span>
+          <select id="scope" aria-labelledby="scope-label"></select>
         </label>
         <label class="year-select">
           <span>Jahr</span>
@@ -75,14 +75,14 @@
           <table class="table" id="incident-table">
             <thead>
               <tr>
-                <th class="col-number sortable" data-sort-incidents="number" tabindex="0">Nr.<span class="sort-mark"></span></th>
-                <th class="sortable" data-sort-incidents="started_at" tabindex="0">Datum<span class="sort-mark"></span></th>
-                <th class="sortable" data-sort-incidents="keyword" tabindex="0">Stichwort<span class="sort-mark"></span></th>
+                <th class="col-number sortable" data-sort-incidents="number"><button type="button" class="sort-button">Nr.<span class="sort-mark" aria-hidden="true"></span></button></th>
+                <th class="sortable" data-sort-incidents="started_at"><button type="button" class="sort-button">Datum<span class="sort-mark" aria-hidden="true"></span></button></th>
+                <th class="sortable" data-sort-incidents="keyword"><button type="button" class="sort-button">Stichwort<span class="sort-mark" aria-hidden="true"></span></button></th>
                 <th>Einsatz</th>
                 <th data-help-key="unit_leader">Einheitsführung</th>
                 <th>Fahrzeuge</th>
-                <th class="right sortable" data-sort-incidents="arrival_min" tabindex="0" data-help-key="arrival_min">Zeit bis Eintreffen<span class="sort-mark"></span></th>
-                <th class="right sortable" data-sort-incidents="crew_total" tabindex="0" data-help-key="crew_total">Stärke<span class="sort-mark"></span></th>
+                <th class="right sortable" data-sort-incidents="arrival_min" data-help-key="arrival_min"><button type="button" class="sort-button">Zeit bis Eintreffen<span class="sort-mark" aria-hidden="true"></span></button></th>
+                <th class="right sortable" data-sort-incidents="crew_total" data-help-key="crew_total"><button type="button" class="sort-button">Stärke<span class="sort-mark" aria-hidden="true"></span></button></th>
                 <th class="col-toggle"></th>
               </tr>
             </thead>
@@ -121,9 +121,9 @@
       </label>
       <div class="progress" id="progress" hidden>
         <div class="progress-bar"><span></span></div>
-        <span id="progress-label">Berichte werden gelesen …</span>
+        <span id="progress-label" role="status">Berichte werden gelesen …</span>
       </div>
-      <div class="message message-error" id="pdf-error" hidden></div>
+      <div id="pdf-error" hidden></div>
       <div id="previews"></div>
     </div>
   </dialog>
@@ -169,7 +169,8 @@
   </dialog>
 
   <div class="tooltip" id="tooltip" role="tooltip" popover="manual"></div>
-  <div class="toast" id="toast" role="status" hidden></div>
+  <div class="toast" id="toast" hidden></div>
+  <div class="visually-hidden" id="live" role="status" aria-live="polite"></div>
 
   <footer class="footer">
     <img src="/static/img/app-icon.svg" alt="" class="footer-logo" id="logo-dark">
