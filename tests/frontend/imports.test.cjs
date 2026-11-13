@@ -174,3 +174,17 @@ test("Sammelübernahme hält beim Fehler an, nennt den Bericht und gibt den Knop
   assert.equal(vm.runInContext("bulkRunning", context), false);
   assert.ok(context.state.upload.reports[1].failure);
 });
+
+test("Die Dateiliste wird vor der Rückfrage kopiert (der Datei-Dialog leert sie sofort)", async () => {
+  const { context } = setup();
+  const api = backgroundApi();
+  context.api = api.call;
+  context.state.upload = { token: "old", reports: [{ filename: "old.xlsx", warnings: [], people: [] }] };
+  const files = [{ name: "new.xlsx" }];
+  const reading = context.readPdfs(files);
+  files.length = 0;                                   // wie e.target.value = "" im Change-Handler
+  await settle();
+  api.finish({ token: "new", reports: [], errors: [] });
+  await reading;
+  assert.equal(api.uploads, 1);
+});

@@ -25,6 +25,7 @@ async function discardUpload() {
   renderPreviews();
 }
 async function readPdfs(files) {
+  files = [...files];          // sofort kopieren: der Datei-Dialog leert seine Liste, noch bevor die Rückfrage beantwortet ist
   if (acceptingReports) { showUploadError("Eine Übernahme läuft.", "Bitte warten, bis sie fertig ist."); return; }
   if (uploadBusy) { showUploadError("Ein Import wird bereits gelesen.", "Bitte warten, bis er fertig ist."); return; }
   const open = state.upload.reports.filter((r) => !r.saved && !isUnchanged(r)).length;
