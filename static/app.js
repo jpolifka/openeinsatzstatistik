@@ -77,7 +77,7 @@ const apiJson = (url, method, body) =>
 
 let toastTimer;
 /** Kurze Meldung unten; mit action ein Knopf (z. B. „Rückgängig“), der onAction aufruft. */
-function toast(text, { action = null, onAction = null, duration = 3500 } = {}) {
+function toast(text, { action = null, onAction = null, duration = 3500, onHold = null, onRelease = null } = {}) {
   const el = $("#toast");
   el.textContent = text;
   if (action) {
@@ -85,15 +85,22 @@ function toast(text, { action = null, onAction = null, duration = 3500 } = {}) {
     button.type = "button";
     button.className = "toast-action";
     button.textContent = action;
+    button.dataset.tip = "Tastenkürzel: Strg+Z";
     button.addEventListener("click", () => { el.hidden = true; onAction(); });
     el.append(button);
   }
+  // Maus oder Tastaturfokus auf der Meldung hält die Zeit an (WCAG 2.2.1); danach läuft sie weiter
+  const hide = () => { toastTimer = setTimeout(() => { el.hidden = true; }, duration); };
+  const hold = () => { clearTimeout(toastTimer); onHold?.(); };
+  const release = () => { hide(); onRelease?.(); };
+  el.onmouseenter = el.onfocusin = hold;
+  el.onmouseleave = el.onfocusout = release;
   el.hidden = false;
   // Bildschirmleser: eine dauerhaft vorhandene Ansage-Fläche meldet zuverlässiger als ein ein- und ausgeblendetes Element
   const live = $("#live");
   if (live) { live.textContent = ""; setTimeout(() => { live.textContent = action ? `${text}. ${action} mit Strg+Z` : text; }, 50); }
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { el.hidden = true; }, duration);
+  hide();
 }
 
 const ICON_ERROR = `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7v6m0 3.6v.1" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>`;

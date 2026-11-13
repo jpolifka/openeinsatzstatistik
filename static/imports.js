@@ -15,7 +15,7 @@ function showUploadError(title, text = "") {
   el.hidden = false;
 }
 
-let uploadBusy = false;
+let uploadBusy = false, bulkRunning = false;
 let uploadGeneration = 0, acceptingReports = 0;
 async function discardUpload() {
   uploadGeneration++;
@@ -119,7 +119,7 @@ function uploadSummary(reports) {
   if (open) parts.push(`${plural(open, "Bericht", "Berichte")} offen`);
   if (!parts.length) return "";
   // Sammelübernahme nur ausdrücklich und nur für Berichte ohne Anmerkung; alles andere bleibt zur Prüfung
-  const bulk = clean > 1 ? `<button type="button" class="btn btn-light" data-accept-clean ${acceptingReports ? "disabled" : ""}>
+  const bulk = clean > 1 ? `<button type="button" class="btn btn-light" data-accept-clean ${acceptingReports || bulkRunning ? "disabled" : ""}>
       ${plural(clean, "Bericht ohne Hinweise", "Berichte ohne Hinweise")} übernehmen</button>` : "";
   return `<div class="message message-info preview-bulk"><span>${parts.join(" · ")}${clean > 1 ? ` · ${clean} davon ohne Hinweise` : ""}</span>${bulk}</div>`;
 }
@@ -186,7 +186,7 @@ function renderPreviews() {
           ${r.shared_with?.length ? `<p class="small muted section-gap">Gemeinsamer Einsatz mit ${esc(r.shared_with.join(", "))} (gleicher Einsatz im BKS-Portal bzw. gleiche Einsatznummer der Leitstelle).</p>` : ""}
           ${r.bks_url ? `<p class="small muted section-gap">BKS-Portal: ${bksLink(r)}</p>` : ""}</div>
         <div class="panel outlined">${attendancePanel(r, { markNew: true, pickLeader: true })}</div>
-        <div class="preview-failure"></div>
+        <div class="preview-failure">${r.failure ? noticeBox("error", r.failure.title, r.failure.text) : ""}</div>
         <div class="preview-footer">
           ${existing && r.can_edit ? `<label class="toggle"><input type="checkbox" data-replace="${i}" ${r.replace ? "checked" : ""}> erfassten Einsatz mit diesem Bericht aktualisieren
             <span class="muted">(manuell ergänzte Fahrzeuge und Personen bleiben)</span></label>` : ""}
@@ -201,43 +201,51 @@ function renderPreviews() {
 }
 
 async function acceptReport(i) {
-  if (uploadBusy) { toast("Bitte das laufende Einlesen abwarten."); return; }
+  if (uploadBusy) { toast("Bitte das laufende Einlesen abwarten."); return false; }
   const r = state.upload.reports[i];
+  if (!r || r.saved) return false;                       // schon gespeichert: nie ein zweites Mal senden
   const card = $(`.preview-card[data-index="${i}"]`);
-  const button = $("[data-accept]", card);
-  button.disabled = true;
+  $("[data-accept]", card).disabled = true;
   acceptingReports++;
+  let ok = false;
   try {
     const saved = await apiJson("/api/reports/accept", "POST",
       { token: state.upload.token, filename: r.filename, fields: r.action ? {} : readForm(card),
         replace: r.replace, revision: r.existing?.revision });
     r.saved = saved;
+    r.failure = null;
     state.dataChanged = true;
     toast(saved.message || `Einsatz ${saved.number ?? ""}/${saved.year} ${r.existing ? "aktualisiert" : "übernommen"}`);
-    keepPreviewInput();
-    renderPreviews();
-    return true;
+    ok = true;
   } catch (err) {
-    button.disabled = false;
-    // Das Formular bleibt mit den Eingaben stehen; der Fehler erscheint an der Karte und nennt den Bericht
-    const failure = $(".preview-failure", card);
-    if (failure) failure.innerHTML = noticeBox("error", `Einsatz ${r.number ?? ""}${r.number ? "/" + r.year : ""} (${r.filename}) wurde nicht übernommen.`,
-      `${esc(err.message)} Ihre Eingaben bleiben erhalten. Bitte erneut „${r.existing ? "Aktualisieren" : "In Statistik übernehmen"}“ wählen.`);
-    else await reportError("Der Bericht wurde nicht übernommen.", err);
-    return false;
+    // Die Karte bleibt mit den Eingaben stehen; der Fehler erscheint an ihr und nennt den Bericht
+    r.failure = { title: `Einsatz ${r.number ?? ""}${r.number ? "/" + r.year : ""} (${r.filename}) wurde nicht übernommen.`,
+      text: `${esc(err.message)} Ihre Eingaben bleiben erhalten. Bitte erneut „${r.existing ? "Aktualisieren" : "In Statistik übernehmen"}“ wählen.` };
   } finally {
     acceptingReports--;
   }
+  keepPreviewInput();
+  renderPreviews();                                      // erst nach dem Zählen: Sammelknopf und Karten stimmen wieder
+  return ok;
 }
 
-// Alle Berichte ohne Hinweise nacheinander übernehmen; Berichte mit Anmerkungen bleiben zur Prüfung stehen
+// Alle Berichte ohne Hinweise nacheinander übernehmen; Berichte mit Anmerkungen bleiben zur Prüfung stehen.
+// Ein zweiter Aufruf (Doppelklick) tut nichts, solange der erste läuft.
 async function acceptCleanReports() {
-  const indexes = state.upload.reports.map((r, i) => (isClean(r) ? i : -1)).filter((i) => i >= 0);
-  let saved = 0;
-  for (const i of indexes) {
-    if (await acceptReport(i)) saved++; else break;      // beim ersten Fehler anhalten: der Rest bleibt unberührt
+  if (bulkRunning || acceptingReports || uploadBusy) return;
+  bulkRunning = true;
+  const planned = state.upload.reports.filter(isClean);
+  let saved = 0, failed = null;
+  try {
+    for (const r of planned) {
+      if (r.saved || !isClean(r)) continue;              // inzwischen geändert oder gespeichert
+      if (await acceptReport(state.upload.reports.indexOf(r))) saved++; else { failed = r; break; }   // beim ersten Fehler anhalten
+    }
+  } finally {
+    bulkRunning = false;
+    renderPreviews();
   }
-  const left = indexes.length - saved;
-  toast(left ? `${plural(saved, "Bericht", "Berichte")} übernommen, ${left} offen. Bitte die Meldung am Bericht lesen.`
-             : `${plural(saved, "Bericht", "Berichte")} übernommen`);
+  const left = planned.length - saved;
+  toast(failed ? `${plural(saved, "Bericht", "Berichte")} übernommen. Angehalten bei ${failed.filename}; ${plural(left, "Bericht", "Berichte")} offen.`
+               : `${plural(saved, "Bericht", "Berichte")} übernommen`, { duration: failed ? 8000 : 3500 });
 }

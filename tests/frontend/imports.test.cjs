@@ -125,14 +125,21 @@ test("Offene Vorschauen werden vor dem Einlesen nur nach Bestätigung verworfen"
 });
 
 test("Fehler beim Übernehmen nennt den Bericht und lässt die Vorschau offen", async () => {
-  const { context, errors } = setup();
+  const { context } = setup();
   context.state.upload = { token: "t", reports: [{ filename: "a.xlsx", number: 5, year: 2025 }] };
   context.apiJson = async () => { throw new Error("Revision veraltet"); };
-  context.$ = (key) => key.includes("preview-failure") ? failure : { hidden: false, disabled: false, innerHTML: "" };
-  const failure = { innerHTML: "" };
   await context.acceptReport(0);
-  assert.equal(context.state.upload.reports[0].saved, undefined);
-  assert.equal(errors.length + (failure.innerHTML ? 1 : 0), 1);
+  const r = context.state.upload.reports[0];
+  assert.ok(!r.saved);
+  assert.match(r.failure.title, /5\/2025 \(a\.xlsx\) wurde nicht übernommen/);
+  assert.match(r.failure.text, /Revision veraltet/);
+});
+
+test("Ein bereits gespeicherter Bericht wird nie ein zweites Mal gesendet", async () => {
+  const { context, calls } = setup();
+  context.state.upload = { token: "t", reports: [{ filename: "a.xlsx", saved: { number: 1, year: 2025 } }] };
+  assert.equal(await context.acceptReport(0), false);
+  assert.equal(calls.length, 0);
 });
 
 test("Sammelübernahme nimmt nur Berichte ohne Hinweise und hält beim ersten Fehler an", async () => {
@@ -145,4 +152,25 @@ test("Sammelübernahme nimmt nur Berichte ohne Hinweise und hält beim ersten Fe
   await vm.runInContext("acceptCleanReports()", context);
   assert.deepEqual(calls.map((c) => c[2].filename), ["a.xlsx", "c.xlsx"]);
   assert.match(toasts.at(-1), /2 Berichte übernommen/);
+});
+
+test("Doppelter Aufruf der Sammelübernahme sendet jeden Bericht nur einmal", async () => {
+  const { context, calls } = setup();
+  const clean = (name) => ({ filename: name, number: 1, year: 2025, warnings: [], people: [] });
+  context.state.upload = { token: "t", reports: [clean("a.xlsx"), clean("b.xlsx")] };
+  await Promise.all([vm.runInContext("acceptCleanReports()", context), vm.runInContext("acceptCleanReports()", context)]);
+  assert.deepEqual(calls.map((c) => c[2].filename), ["a.xlsx", "b.xlsx"]);
+  assert.equal(vm.runInContext("bulkRunning", context), false);          // danach wieder bedienbar
+});
+
+test("Sammelübernahme hält beim Fehler an, nennt den Bericht und gibt den Knopf wieder frei", async () => {
+  const { context, calls, toasts } = setup();
+  const clean = (name) => ({ filename: name, number: 1, year: 2025, warnings: [], people: [] });
+  context.state.upload = { token: "t", reports: [clean("a.xlsx"), clean("b.xlsx"), clean("c.xlsx")] };
+  context.apiJson = async (...args) => { calls.push(args); if (args[2].filename === "b.xlsx") throw new Error("Revision veraltet"); return { number: 1, year: 2025 }; };
+  await vm.runInContext("acceptCleanReports()", context);
+  assert.deepEqual(calls.map((c) => c[2].filename), ["a.xlsx", "b.xlsx"]);   // c bleibt unberührt
+  assert.match(toasts.at(-1), /1 Bericht übernommen\. Angehalten bei b\.xlsx; 2 Berichte offen/);
+  assert.equal(vm.runInContext("bulkRunning", context), false);
+  assert.ok(context.state.upload.reports[1].failure);
 });

@@ -114,6 +114,27 @@ test("Rückgängig vor Ablauf sendet kein DELETE und stellt den Einsatz wieder h
   assert.deepEqual(ctx.calls, []);
 });
 
+test("Solange die Meldung gelesen wird, läuft die Löschfrist nicht ab; danach läuft sie weiter", async () => {
+  const ctx = setup();
+  run(ctx, "state.incidents.incidents = [" + JSON.stringify(incident("a:1")) + ", " + JSON.stringify(incident("a:2", 5)) + "]; deleteIncident('a:1'); deleteIncident('a:2')");
+  assert.match(ctx.toasts.at(-1).text, /2 Löschungen rückgängig möglich/);
+  assert.equal(ctx.timers.size, 2);
+  ctx.toasts.at(-1).onHold();
+  assert.equal(ctx.timers.size, 0);                                   // nichts wird gelöscht, während der Mauszeiger auf der Meldung liegt
+  ctx.toasts.at(-1).onRelease();
+  assert.equal(ctx.timers.size, 2);
+  assert.equal(run(ctx, "pendingDeletes.size"), 2);
+});
+
+test("Verspätetes Eintreffen trägt Symbol und Text, nicht nur Farbe", () => {
+  const ctx = setup();
+  const late = run(ctx, "lateMark(true, 10)"), ok = run(ctx, "lateMark(false, 10)");
+  assert.match(late, /late-icon/);
+  assert.match(late, /nicht innerhalb von 10 Minuten/);
+  assert.doesNotMatch(ok, /late-icon/);
+  assert.match(ok, /\(innerhalb von 10 Minuten\)/);
+});
+
 test("Nach Ablauf geht genau ein DELETE mit der Revision hinaus", async () => {
   const ctx = setup();
   run(ctx, "state.incidents.incidents = [" + JSON.stringify(incident()) + "]; deleteIncident('wehr-a1:7')");
