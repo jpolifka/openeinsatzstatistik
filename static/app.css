@@ -34,6 +34,7 @@
   --error-bg: #FDEBEA;      /* Fehler, nicht gespeichert */
   --error-text: #8C1111;
   --error-line: #D98A8A;
+  --late-text: #9A4A00;     /* verspätet: eigener Ton, nicht vom Wehr-Rot abgeleitet (Symbol und Text stehen dabei) */
   --shade: rgba(0,0,0,.14); /* neutrale Abdunklung (Reiterstreifen, Schatten) */
   --shade-soft: rgba(0,0,0,.08);
   --shade-faint: rgba(0,0,0,.04);
@@ -255,7 +256,8 @@ button, input, select { font: inherit; color: inherit; }
 .vehicle-chips span b { font-size: .85rem; }
 .vehicle-chips span.on { background: var(--brand-mid); border: 0; color: var(--white); }
 .arrival { font-weight: 700; white-space: nowrap; }
-.arrival.late { color: var(--brand); }
+.arrival.late { color: var(--late-text); }
+.late-icon { width: .9em; height: .9em; margin-left: 4px; vertical-align: -.1em; }
 .chevron { width: 22px; height: 22px; color: var(--gray); transition: transform .2s; }
 tr.open .chevron { transform: rotate(180deg); color: var(--brand); }
 .empty-note { padding: 28px; text-align: center; color: var(--gray); margin: 0; }
@@ -281,7 +283,7 @@ tr.open .chevron { transform: rotate(180deg); color: var(--brand); }
 .mini-table .right { text-align: right; }
 .mini-table tr.vehicle-idle td { color: var(--gray); }
 .minutes { font-weight: 700; }
-.minutes.late { color: var(--brand); }
+.minutes.late { color: var(--late-text); }
 .warnings { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: .85rem; }
 .warnings li { padding: 8px 10px; border-radius: 8px; background: var(--warn-bg); color: var(--warn-text); }
 .warnings li.ok { background: var(--light-gray); color: var(--gray); }
@@ -670,7 +672,7 @@ a.tenant-badge { text-decoration: none; }
 .finding-chip { padding: 2px 8px; border-radius: 6px; font-size: .85rem; background: var(--line); color: inherit; }
 .finding-chip.kind-missing { background: var(--brand-light); color: var(--brand-dark); font-weight: 700; }
 
-.todo-mark { color: var(--brand); font-size: .78rem; vertical-align: middle; }
+.todo-mark { color: var(--late-text); font-size: .78rem; vertical-align: middle; }
 .record-actions { white-space: nowrap; }
 .record-actions .incident-link { margin-right: 8px; font-size: .85rem; }
 .detail-grid.record-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.8fr); }

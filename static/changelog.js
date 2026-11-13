@@ -7,6 +7,16 @@
 const CHANGELOG = [
   {
     date: "2026-11-13",
+    version: "2026-11-13.2",
+    items: [
+      "<b>Sammelübernahme sicherer:</b> Ein Doppelklick sendet keinen Bericht zweimal. Bei einem Fehler hält die Übernahme an, der Fehler steht am betroffenen Bericht, die Meldung nennt ihn, und der Knopf ist danach wieder bedienbar.",
+      "<b>Verspätetes Eintreffen:</b> Zu späte Zeiten sind jetzt zusätzlich mit einem Symbol gekennzeichnet und in einem eigenen Ockerton gesetzt, nicht mehr im Rot der Wehr. Bildschirmleser lesen „nicht innerhalb von 10 Minuten“ mit.",
+      "<b>Rückgängig beim Löschen:</b> Die Frist beträgt 15 Sekunden und steht still, solange der Mauszeiger oder die Tastatur auf der Meldung liegt. Mehrere Löschungen hintereinander bleiben einzeln rückgängig zu machen (Strg+Z).",
+      "<b>Stichwortsuche:</b> Die Vorschlagsliste wird Bildschirmlesern als Auswahlfeld mit Trefferzahl und markiertem Eintrag angesagt.",
+    ],
+  },
+  {
+    date: "2026-11-13",
     items: [
       "<b>Berichte einlesen klarer:</b> Das Band über jedem Bericht sagt jetzt mit Wort und Symbol, ob der Bericht <i>bereit</i>, <i>zu prüfen</i> oder <i>übernommen</i> ist. Rot erscheint nur noch bei Fehlern. Was geprüft werden muss (Hinweise, Abweichungen, neue Personen), steht oben in der Karte; neue Personen sind mit „neu“ gekennzeichnet.",
       "<b>Sammelübernahme:</b> Berichte ohne Hinweise, neue Personen und Abweichungen lassen sich mit einem Klick gemeinsam übernehmen. Die übrigen bleiben zur Prüfung stehen.",

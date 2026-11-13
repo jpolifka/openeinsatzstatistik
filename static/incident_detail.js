@@ -8,7 +8,7 @@ function vehicleTable(e) {
       ? `<tr class="vehicle-idle"><td>${esc(v.call_sign)}</td><td colspan="5">nicht im Einsatz</td></tr>`
       : `<tr><td><strong>${esc(v.call_sign)}</strong>${v.substitute ? `<br><span class="small muted">${esc(v.substitute)}</span>` : ""}${v.deployed === 0 ? `<br><span class="small muted">nur bereitgestellt</span>` : ""}</td>
         <td class="right">${orDash(v.crew)}${v.respiratory ? `<br><span class="small muted">${v.respiratory} AGT</span>` : ""}</td><td>${formatTime(v.departed)}</td><td class="right minutes">${num(v.turnout_min)}</td>
-        <td>${formatTime(v.arrived)}</td><td class="right minutes ${v.arrival_min != null && v.arrival_min > limit ? "late" : ""}">${num(v.arrival_min)}</td></tr>`).join("")}
+        <td>${formatTime(v.arrived)}</td><td class="right minutes ${v.arrival_min != null && v.arrival_min > limit ? "late" : ""}">${num(v.arrival_min)}${v.arrival_min != null && v.arrival_min > limit ? lateMark(true, limit) : ""}</td></tr>`).join("")}
     </tbody></table></div>`;
 }
 
@@ -301,7 +301,7 @@ async function stepIncident(delta, from = state.current) {
 
 // ------------------------------------------------------------ Löschen mit „Rückgängig“
 // Der Einsatz verschwindet sofort; gelöscht wird erst nach UNDO_MS (beim Schließen der Seite sofort).
-const UNDO_MS = 8000;
+const UNDO_MS = 15000;
 const pendingDeletes = new Map();             // id -> { incident, timer }
 const deleteUrl = (incident) => `/api/incidents/${encodeURIComponent(incident.id)}?revision=${incident.revision}`;
 
@@ -312,8 +312,17 @@ function deleteIncident(id) {
   if (state.editing === id) { state.editing = null; state.editSnapshot = null; }
   pendingDeletes.set(id, { incident, timer: setTimeout(() => commitDelete(id), UNDO_MS) });
   renderIncidents();
-  toast(`Einsatz ${incident.number ?? ""} vom ${formatDate(incident.started_at)} gelöscht`,
-    { action: "Rückgängig", onAction: () => undoDelete(id), duration: UNDO_MS });
+  const open = pendingDeletes.size;
+  toast(`Einsatz ${incident.number ?? ""} vom ${formatDate(incident.started_at)} gelöscht${open > 1 ? ` (${open} Löschungen rückgängig möglich)` : ""}`,
+    { action: "Rückgängig", onAction: () => undoDelete(id), duration: UNDO_MS, onHold: holdDeletes, onRelease: releaseDeletes });
+}
+
+// Solange die Meldung mit „Rückgängig“ gelesen oder bedient wird, läuft die Frist bis zum endgültigen Löschen nicht ab
+function holdDeletes() {
+  for (const p of pendingDeletes.values()) clearTimeout(p.timer);
+}
+function releaseDeletes() {
+  for (const [id, p] of pendingDeletes) p.timer = setTimeout(() => commitDelete(id), UNDO_MS);
 }
 
 function undoDelete(id) {

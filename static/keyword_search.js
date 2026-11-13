@@ -38,9 +38,14 @@ function showKeywordSuggestions(input) {
     document.body.append(keywordList);
   }
   keywordInput = input;
+  input.setAttribute("role", "combobox");
+  input.setAttribute("aria-autocomplete", "list");
   input.setAttribute("aria-controls", keywordList.id);
   input.setAttribute("aria-expanded", "true");
-  keywordList.innerHTML = matches.map((k, i) => `<li role="option" data-code="${esc(k.code)}" class="${i ? "" : "active"}">
+  input.setAttribute("aria-activedescendant", "keyword-option-0");
+  const live = $("#live");
+  if (live) live.textContent = `${plural(matches.length, "Vorschlag", "Vorschläge")}, mit Pfeiltasten wählen`;
+  keywordList.innerHTML = matches.map((k, i) => `<li role="option" id="keyword-option-${i}" aria-selected="${i === 0}" data-code="${esc(k.code)}" class="${i ? "" : "active"}">
     <b>${esc(k.code)}</b><span>${esc(k.name)}${k.hint ? `<small>${esc(k.hint)}</small>` : ""}</span></li>`).join("");
   const r = input.getBoundingClientRect();
   Object.assign(keywordList.style, { left: `${Math.min(r.left, window.innerWidth - 340)}px`, top: `${r.bottom + 4}px` });
@@ -50,6 +55,7 @@ function showKeywordSuggestions(input) {
 function closeKeywordSuggestions() {
   if (keywordList) keywordList.hidden = true;
   keywordInput?.setAttribute("aria-expanded", "false");
+  keywordInput?.removeAttribute("aria-activedescendant");
   keywordInput = null;
 }
 
@@ -67,7 +73,8 @@ function navigateKeywordSuggestions(e) {
   if (e.key === "ArrowDown" || e.key === "ArrowUp") {
     e.preventDefault();
     const next = (current + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
-    items.forEach((li, i) => li.classList.toggle("active", i === next));
+    items.forEach((li, i) => { li.classList.toggle("active", i === next); li.setAttribute("aria-selected", String(i === next)); });
+    keywordInput?.setAttribute("aria-activedescendant", items[next].id);
     items[next].scrollIntoView({ block: "nearest" });
   } else if (e.key === "Enter") {
     e.preventDefault();

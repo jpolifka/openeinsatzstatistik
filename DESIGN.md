@@ -27,6 +27,7 @@ colors:
   error-bg: "#FDEBEA"
   error-text: "#8C1111"
   error-line: "#D98A8A"
+  late-text: "#9A4A00"
 typography:
   display:
     fontFamily: "Sansation, Segoe UI, system-ui, sans-serif"
@@ -182,6 +183,7 @@ Eine Kennfarbe in Abstufungen, dazu neutrale Grautöne und ein Statusgrün, das 
 - **Haarlinie** (#E4E4E4, `--line`): Rahmen und Trennlinien; Raster in #ECECEC.
 - **Waldgrün** (#1E5A2C auf #E3F1E6): Status „erledigt“.
 - **Bernstein** (#5E3A00 auf #FFF1CC, Linie #E2B24A): Status „zu prüfen“, neue Personen, Prüfhinweise.
+- **Verspätet-Ocker** (#9A4A00, `--late-text`): zu spät eingetroffene Zeiten und Zu-erledigen-Marke; nicht vom Wehr-Rot abgeleitet, steht immer mit Symbol und verstecktem Text („nicht innerhalb von 10 Minuten“).
 - **Fehlerrot** (#8C1111 auf #FDEBEA, Linie #D98A8A): Fehlermeldungen und „nicht gespeichert“; immer mit Symbol und Überschrift, auch in Wehren mit rotem Theme.
 
 ### Named Rules

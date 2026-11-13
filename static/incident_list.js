@@ -186,12 +186,16 @@ function renderListControls(list) {
 
 const isIdle = (v) => v.crew == null && !v.departed && !v.arrived;
 
+// „Zu spät“ trägt Symbol und Text, nicht nur die Farbe (für Bildschirmleser als Text vorhanden)
+const LATE_ICON = `<svg class="late-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5 2.8 19.5h18.4L12 3.5Z" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/></svg>`;
+const lateMark = (late, limit) => `${late ? LATE_ICON : ""}<span class="visually-hidden"> (${late ? "nicht " : ""}innerhalb von ${limit} Minuten)</span>`;
+
 function vehicleChips(e) {
   return `<div class="vehicle-chips">${e.vehicles.map((v) => {
     const short = esc(v.call_sign.slice(3));
-    if (isIdle(v)) return `<span data-tip="${esc(v.call_sign)}: nicht im Einsatz">${short}</span>`;
+    if (isIdle(v)) return `<span role="img" aria-label="${esc(v.call_sign)}: nicht im Einsatz" data-tip="${esc(v.call_sign)}: nicht im Einsatz">${short}</span>`;
     const tip = `${esc(v.substitute || v.call_sign)} · Stärke ${orDash(v.crew)}\nEintreffen ${minutes(v.arrival_min)}`;
-    return `<span class="on" data-tip="${tip}">${short}<b>${orDash(v.crew)}</b></span>`;
+    return `<span class="on" role="img" aria-label="${tip.replace("\n", ", ")}" data-tip="${tip}">${short}<b>${orDash(v.crew)}</b></span>`;
   }).join("")}</div>`;
 }
 
@@ -200,7 +204,7 @@ function renderIncidents() {
   const filters = [{ code: "all", name: "Alle" }, ...config.categories];
   const count = (code) => code === "all" ? list.length : list.filter((e) => categoryOf(e.keyword) === code).length;
   $("#category-filter").innerHTML = filters.map((c) =>
-    `<button type="button" data-category="${c.code}" class="${state.category === c.code ? "active" : ""}" ${c.code !== "all" ? `data-tip="${c.name}"` : ""}>${c.code === "all" ? c.name : c.code}<span class="count">${count(c.code)}</span></button>`).join("");
+    `<button type="button" data-category="${c.code}" class="${state.category === c.code ? "active" : ""}" aria-pressed="${state.category === c.code}" ${c.code !== "all" ? `data-tip="${c.name}"` : ""}>${c.code === "all" ? c.name : c.code}<span class="count">${count(c.code)}</span></button>`).join("");
 
   renderListControls(list);
   const visible = visibleIncidents();
@@ -212,12 +216,12 @@ function renderIncidents() {
   $("#incident-table tbody").innerHTML = visible.map((e) => {
     const open = state.expanded.has(e.id);
     const arrival = e.arrival_min == null ? `<span class="muted">–</span>`
-      : `<span class="arrival ${e.on_time ? "" : "late"}" data-tip="${e.on_time ? "innerhalb" : "nicht innerhalb"} von ${limit} Minuten">${minutes(e.arrival_min)}</span>`;
+      : `<span class="arrival ${e.on_time ? "" : "late"}" data-tip="${e.on_time ? "innerhalb" : "nicht innerhalb"} von ${limit} Minuten">${minutes(e.arrival_min)}${lateMark(!e.on_time, limit)}</span>`;
     return `<tr class="row ${open ? "open" : ""}" data-id="${e.id}">
       <td><button type="button" class="btn btn-light btn-small" aria-expanded="${open}" aria-label="Details zu Einsatz ${esc(e.number ?? "ohne Nummer")}">${orDash(e.number)}</button></td>
       <td><div>${formatDate(e.started_at)}</div><div class="time">${weekdayShort(e.started_at)} ${formatTime(e.started_at)}${e.weekend_or_holiday ? " · WE/FT" : ""}</div></td>
       <td><span class="keyword ${categoryOf(e.keyword).toLowerCase()}" ${keywordName(e) ? `data-tip="${esc(keywordName(e))}"` : ""}>${esc(e.keyword)}${e.subcode ? "." + esc(e.subcode) : ""}</span></td>
-      <td><div class="incident-title">${esc(e.description)}${todoReasons(e).length ? ` <span class="todo-mark" data-tip="${esc(todoReasons(e).join("\n"))}">●</span>` : ""}</div><div class="incident-place">${withTenant ? `<span class="tenant-badge">${esc(tenantNames[e.tenant] || e.tenant)}</span>` : ""}${esc(e.place)}</div></td>
+      <td><div class="incident-title">${esc(e.description)}${todoReasons(e).length ? ` <span class="todo-mark" role="img" aria-label="Zu erledigen: ${esc(todoReasons(e).join(", "))}" data-tip="${esc(todoReasons(e).join("\n"))}">●</span>` : ""}</div><div class="incident-place">${withTenant ? `<span class="tenant-badge">${esc(tenantNames[e.tenant] || e.tenant)}</span>` : ""}${esc(e.place)}</div></td>
       <td>${e.unit_leader ? esc(e.unit_leader) : `<span class="muted">–</span>`}</td>
       <td>${vehicleChips(e)}</td>
       <td class="right">${arrival}</td>
