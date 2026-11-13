@@ -250,9 +250,10 @@ Die Vorlage ist ein Muster und keine Rechtsberatung.
 ## Bedienung
 
 1. **Bericht einlesen** (oben rechts): Bericht hineinziehen, mehrere auch als ZIP-Datei. Die Vorschau zeigt erkannte
-   Felder, Fahrzeuge, Anwesenheit und Prüfhinweise. Berichte ohne Anmerkungen (keine
-   Prüfhinweise, keine neuen Personen, keine Abweichungen) werden direkt übernommen, angezeigt
-   werden nur die übrigen.
+   Felder, Fahrzeuge, Anwesenheit und Prüfhinweise; was zu prüfen ist, steht
+   oben in der Karte. Berichte ohne Anmerkungen (keine Prüfhinweise, keine neuen Personen, keine
+   Abweichungen) lassen sich mit **n Berichte ohne Hinweise übernehmen** in einem Schritt
+   speichern; übernommen wird nie ohne ausdrücklichen Klick.
 2. Felder wie Einheitsführung oder Zeiten bei Bedarf korrigieren, dann **In Statistik übernehmen**.
 3. Ist der Bericht schon erfasst (gleiche Berichtsnummer im BKS-Portal, bei älteren Einsätzen
    gleiche Nr. und Jahr), werden die Abweichungen angezeigt; **Aktualisieren** übernimmt den

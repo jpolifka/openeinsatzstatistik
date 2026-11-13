@@ -6,6 +6,15 @@
 // noch ein Eintrag hinzu, bekommt er `version` ("JJJJ-MM-TT.2", dann .3 …); ohne `version` gilt das Datum.
 const CHANGELOG = [
   {
+    date: "2026-11-13",
+    items: [
+      "<b>Berichte einlesen klarer:</b> Das Band über jedem Bericht sagt jetzt mit Wort und Symbol, ob der Bericht <i>bereit</i>, <i>zu prüfen</i> oder <i>übernommen</i> ist. Rot erscheint nur noch bei Fehlern. Was geprüft werden muss (Hinweise, Abweichungen, neue Personen), steht oben in der Karte; neue Personen sind mit „neu“ gekennzeichnet.",
+      "<b>Sammelübernahme:</b> Berichte ohne Hinweise, neue Personen und Abweichungen lassen sich mit einem Klick gemeinsam übernehmen. Die übrigen bleiben zur Prüfung stehen.",
+      "<b>Rückfragen und Fehlermeldungen:</b> Statt der Browser-Fenster erscheinen eigene Dialoge, deren Knöpfe sagen, was passiert („Vorschauen verwerfen“). Fehlermeldungen nennen den betroffenen Bericht, was nicht gespeichert wurde und wie es weitergeht; Ihre Eingaben bleiben stehen.",
+      "<b>Bedienung mit Tastatur und Bildschirmleser:</b> Spaltenköpfe der Einsatzliste sind echte Knöpfe, der aktive Reiter wird angesagt, Meldungen unten werden vorgelesen, und jede Ansicht hat einen eigenen Titel im Browser-Tab.",
+    ],
+  },
+  {
     date: "2026-10-16",
     items: [
       "<b>Kostenersatz:</b> Abgerechnet werden nur noch die ausgerückten und eingesetzten Fahrzeuge und die auf ihnen eingetragene Mannschaftsstärke. Anwesende im Feuerwehrhaus und Fahrzeuge, die nicht eingesetzt wurden („nur bereit“), kosten nichts; dazu erscheint ein Hinweis.",

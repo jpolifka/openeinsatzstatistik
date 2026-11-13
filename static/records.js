@@ -68,8 +68,10 @@ function renderNotices() {
 // Weitergegebene Berichte einer Wehr lesen und wie hochgeladene PDFs zur Übernahme anzeigen
 async function readPendingReports(slug) {
   if (uploadBusy || acceptingReports) { toast("Bitte den laufenden Import abwarten."); return; }
-  if (state.upload.reports.some((r) => !r.saved && !isUnchanged(r)) &&
-      !window.confirm("Offene Vorschauen verwerfen und bereitliegende Berichte prüfen?")) return;
+  const open = state.upload.reports.filter((r) => !r.saved && !isUnchanged(r)).length;
+  if (open && !await askConfirm({ title: "Offene Vorschauen verwerfen?",
+    text: `${plural(open, "Bericht ist", "Berichte sind")} noch nicht übernommen. Stattdessen werden die bereitliegenden Berichte gelesen.`,
+    confirm: "Verwerfen und Berichte prüfen", danger: true })) return;
   await discardUpload();
   uploadBusy = true;
   const generation = uploadGeneration;
@@ -114,7 +116,7 @@ $("#notices").addEventListener("click", async (e) => {
       await loadNotices();
     }
   } catch (err) {
-    alert(err.message);
+    await reportError("Die Aktion ist fehlgeschlagen.", err);
   }
 });
 document.addEventListener("app:data", loadNotices);
@@ -248,20 +250,21 @@ $("#view-records").addEventListener("click", async (e) => {
   const open = e.target.closest("[data-open-incident]");
   if (open) {
     e.preventDefault();
-    try { await openIncident(open.dataset.openIncident, Number(open.dataset.year)); } catch (err) { alert(err.message); }
+    try { await openIncident(open.dataset.openIncident, Number(open.dataset.year)); } catch (err) { await reportError("Der Einsatz konnte nicht geöffnet werden.", err); }
     return;
   }
   const all = e.target.closest("[data-review-all]");
   if (all) {
     const n = all.dataset.reviewAll;
-    if (!window.confirm(`Alle ${n} offenen Befunde als geprüft vermerken?`)) return;
+    if (!await askConfirm({ title: `Alle ${n} offenen Befunde als geprüft vermerken?`,
+      text: "Die Befunde werden als geprüft eingetragen. Der Vermerk nennt Sie als Prüfer. Einzelne Vermerke lassen sich danach wieder zurücknehmen.", confirm: "Alle vermerken" })) return;
     try {
       const done = await apiJson(`/api/records/review-all?year=${state.year}`, "POST", {});
       toast(`${plural(done.reviewed, "Einsatz", "Einsätze")} bestätigt`);
       await loadRecords();
       renderRecords();
     } catch (err) {
-      alert(err.message);
+      await reportError("Die Befunde wurden nicht vermerkt.", err);
     }
     return;
   }
@@ -275,7 +278,7 @@ $("#view-records").addEventListener("click", async (e) => {
       await loadRecords();
       renderRecords();
     } catch (err) {
-      alert(err.message);
+      await reportError("Der Prüfvermerk wurde nicht gespeichert.", err);
     }
     return;
   }

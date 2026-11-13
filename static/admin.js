@@ -185,9 +185,10 @@ function updateDirty() {
 }
 
 // Vor dem Wechsel der Wehr: ungespeicherte Änderungen nur nach Rückfrage verwerfen
-function confirmDiscard() {
+async function confirmDiscard() {
   if (!settingsDirty()) return true;
-  if (!confirm("Die Änderungen an den Einstellungen sind noch nicht gespeichert. Verwerfen?")) return false;
+  if (!await askConfirm({ title: "Änderungen verwerfen?", text: "Die Änderungen an den Einstellungen sind noch nicht gespeichert.",
+    confirm: "Änderungen verwerfen", cancel: "Weiter bearbeiten", danger: true })) return false;
   forgetAdminData();
   return true;
 }
@@ -274,10 +275,11 @@ async function runAdminAction(button) {
       return rerender();
     }
     case "go-vg":
-      if (!confirmDiscard()) return;
+      if (!await confirmDiscard()) return;
       return adminGo({ vg: adminTenantVg().slug, saved: null, parseResult: null, keywordEdit: null });
     case "select-tenant":
-      if (settingsDirty() && !confirm("Die Änderungen sind noch nicht gespeichert. Trotzdem wechseln?")) return;
+      if (settingsDirty() && !await askConfirm({ title: "Trotzdem die Wehr wechseln?", text: "Die Änderungen an den Einstellungen sind noch nicht gespeichert.",
+        confirm: "Verwerfen und wechseln", cancel: "Hier bleiben", danger: true })) return;
       await apiJson("/api/scope", "POST", { key: `t:${admin.slug}` });
       forgetAdminData();                              // kein Rückfrage-Dialog beim Neuladen
       location.reload();
@@ -308,7 +310,9 @@ async function runAdminAction(button) {
     }
     case "remove-vehicle": {
       const v = list[i];
-      if (v.incidents && !confirm(`${v.name || v.call_sign} hat Daten in ${v.incidents} Einsätzen. Ohne Eintrag in der Liste erscheinen sie nicht mehr in Auswertung und Export (die Daten bleiben erhalten). Entfernen?`)) return;
+      if (v.incidents && !await askConfirm({ title: `${v.name || v.call_sign} aus der Liste entfernen?`,
+        text: `${plural(v.incidents, "Einsatz hat", "Einsätze haben")} Daten zu diesem Fahrzeug. Ohne Eintrag in der Liste erscheinen sie nicht mehr in Auswertung und Export. Die Daten bleiben erhalten.`,
+        confirm: "Fahrzeug entfernen", danger: true })) return;
       list.splice(i, 1);
       return rerender();
     }
@@ -354,7 +358,9 @@ async function runAdminAction(button) {
     case "keyword-delete": {
       const k = admin.keywords.keywords.find((x) => x.code === code);
       const own = admin.vg || k?.source === "own";
-      if (own && !confirm(`${code} löschen? Alte Einsätze behalten das Stichwort, zeigen aber keine Bezeichnung mehr. Deaktivieren erhält sie.`)) return;
+      if (own && !await askConfirm({ title: `Stichwort ${code} löschen?`,
+        text: "Alte Einsätze behalten das Stichwort, zeigen aber keine Bezeichnung mehr. Deaktivieren erhält die Bezeichnung.",
+        confirm: "Stichwort löschen", danger: true })) return;
       admin.keywords = { ...(await api(keywordsUrl(`/${encodeURIComponent(code)}`), { method: "DELETE" })), scope: keywordsScope() };
       return keywordsChanged(own ? "Stichwort gelöscht" : "Wie bei der VG");
     }
@@ -362,12 +368,14 @@ async function runAdminAction(button) {
       admin.keywords = { ...(await apiJson(keywordsUrl("/template"), "POST", {})), scope: keywordsScope() };
       return keywordsChanged("Stichworte ergänzt");
     case "keywords-reset":
-      if (!confirm(admin.vg ? "Katalog der VG verwerfen und wieder die Vorlage verwenden?"
-        : "Alle Abweichungen dieser Wehr aufheben und den Katalog der VG verwenden?")) return;
+      if (!await askConfirm({ title: admin.vg ? "Katalog der VG verwerfen?" : "Abweichungen der Wehr aufheben?",
+        text: admin.vg ? "Die Vorlage wird wieder verwendet." : "Der Katalog der VG wird wieder verwendet.",
+        confirm: admin.vg ? "Katalog verwerfen" : "Abweichungen aufheben", danger: true })) return;
       admin.keywords = { ...(await api(keywordsUrl(), { method: "DELETE" })), scope: keywordsScope() };
       return keywordsChanged(admin.vg ? "Vorlage wird verwendet" : "Katalog der VG wird verwendet");
     case "keywords-import": {
-      if (mode === "replace" && !confirm("Den ganzen Katalog durch die Datei ersetzen?")) return;
+      if (mode === "replace" && !await askConfirm({ title: "Den ganzen Katalog ersetzen?", text: "Alle bisherigen Stichworte werden durch den Inhalt der Datei ersetzt.",
+        confirm: "Katalog ersetzen", danger: true })) return;
       const form = new FormData();
       form.append("file", admin.importFile);
       admin.keywords = { ...(await api(keywordsUrl(`/import?mode=${mode}`), { method: "POST", body: form })), scope: keywordsScope() };
@@ -386,7 +394,7 @@ async function runAdminAction(button) {
       return;
     }
     case "revoke":
-      if (!confirm(`Rolle von ${email} in diesem Bereich entfernen?`)) return;
+      if (!await askConfirm({ title: `Rolle von ${email} entfernen?`, text: "Die Rolle wird nur in diesem Bereich entzogen.", confirm: "Rolle entfernen", danger: true })) return;
       setMemberships(await api(`/api/admin/memberships?${new URLSearchParams({ email, scope, slug, role: key })}`, { method: "DELETE" }));
       admin.events = null;
       return rerender();
@@ -425,24 +433,24 @@ async function runAdminAction(button) {
       return rerender();
     }
     case "role-delete":
-      if (!confirm(`Rolle „${admin.roleDraft.label}“ löschen?`)) return;
+      if (!await askConfirm({ title: `Rolle „${admin.roleDraft.label}“ löschen?`, confirm: "Rolle löschen", danger: true })) return;
       admin.roles = await api(`/api/admin/roles/${admin.roleDraft.id}`, { method: "DELETE" });
       admin.roleDraft = null;
       admin.memberships = admin.events = null;
       toast("Rolle gelöscht");
       return rerender();
     case "session-end":
-      if (!confirm(`Sitzung von ${email} beenden? Die Person ist sofort abgemeldet.`)) return;
+      if (!await askConfirm({ title: `Sitzung von ${email} beenden?`, text: "Die Person ist sofort abgemeldet.", confirm: "Sitzung beenden", danger: true })) return;
       admin.sessions = await api(`/api/super/sessions/${button.dataset.id}`, { method: "DELETE" });
       toast("Sitzung beendet");
       return rerender();
     case "sessions-user":
-      if (!confirm(`Alle Sitzungen von ${email} beenden?`)) return;
+      if (!await askConfirm({ title: `Alle Sitzungen von ${email} beenden?`, text: "Die Person ist überall sofort abgemeldet.", confirm: "Alle Sitzungen beenden", danger: true })) return;
       admin.sessions = await api(`/api/super/sessions?email=${encodeURIComponent(email)}`, { method: "DELETE" });
       toast("Sitzungen beendet");
       return rerender();
     case "sessions-others":
-      if (!confirm("Alle anderen Benutzer abmelden? Sie müssen sich neu per Anmeldelink anmelden.")) return;
+      if (!await askConfirm({ title: "Alle anderen Benutzer abmelden?", text: "Sie müssen sich neu per Anmeldelink anmelden.", confirm: "Alle abmelden", danger: true })) return;
       admin.sessions = await api("/api/super/sessions?others=true", { method: "DELETE" });
       toast("Alle anderen abgemeldet");
       return rerender();
@@ -547,7 +555,7 @@ async function runFeeAction(action, data) {
     case "fee-add-vehicle": admin.feeDraft.rates.vehicles.push({ code: "", name: "", rate: 0 }); break;
     case "fee-remove-vehicle": admin.feeDraft.rates.vehicles.splice(Number(data.index), 1); break;
     case "fee-delete":
-      if (!confirm(`Fassung „${find().name}“ löschen?`)) return;
+      if (!await askConfirm({ title: `Fassung „${find().name}“ löschen?`, confirm: "Fassung löschen", danger: true })) return;
       admin.fees = { vg: admin.vg, ...(await api(`${url}/${data.id}`, { method: "DELETE" })) };
       toast("Fassung gelöscht");
       break;
@@ -581,7 +589,7 @@ $("#view-admin").addEventListener("click", async (e) => {
     const after = adminData();
     admin.section = previous;
     if (before && before !== after) {
-      if (!confirmDiscard()) return;
+      if (!await confirmDiscard()) return;
       admin.saved = null;
     }
     remember("admin-section", section.dataset.adminSection);
@@ -647,14 +655,14 @@ $("#view-admin").addEventListener("change", async (e) => {
   const t = e.target;
   try {
     if (t.dataset.adminTenant !== undefined) {
-      if (!confirmDiscard()) { t.value = admin.vg ? `vg:${admin.vg}` : admin.slug; return; }
+      if (!await confirmDiscard()) { t.value = admin.vg ? `vg:${admin.vg}` : admin.slug; return; }
       const vg = t.value.startsWith("vg:") ? t.value.slice(3) : null;
       await adminGo({ vg, ...(vg ? {} : { slug: t.value }), saved: null, parseResult: null, keywordEdit: null });
       return;
     }
     if (t.dataset.fleetTenant !== undefined) {         // Fahrzeug wechselt die Wehr (Fahrzeuge der VG)
       const [from, i] = t.dataset.fleetTenant.split(":").map(Number);
-      if (!moveFleetVehicle(from, i, t.value === "" ? null : Number(t.value))) t.value = String(from);
+      if (!await moveFleetVehicle(from, i, t.value === "" ? null : Number(t.value))) t.value = String(from);
       renderAdmin();
       return;
     }

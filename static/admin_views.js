@@ -351,12 +351,17 @@ function assignVehicle(name, tenant) {
 }
 
 // Fahrzeug einer Wehr zu einer anderen (target: Index) bzw. aus den Listen nehmen (null); false = abgebrochen
-function moveFleetVehicle(from, i, target) {
+async function moveFleetVehicle(from, i, target) {
   const f = admin.vgFleet, source = f.tenants[from], v = source.fleet[i];
   const name = v.name || v.suggested_name;
-  if (target !== null && !name) { alert("Bitte zuerst den Funkrufnamen eintragen."); return false; }
+  if (target !== null && !name) {
+    await askConfirm({ title: "Funkrufname fehlt.", text: "Bitte zuerst den Funkrufnamen des Fahrzeugs eintragen, dann die Wehr wechseln.", confirm: "Verstanden", cancel: null });
+    return false;
+  }
   const to = target === null ? "keiner Wehr" : f.tenants[target].name;
-  if (v.incidents && !confirm(`${name || v.call_sign} hat Daten in ${v.incidents} Einsätzen von ${source.name}. Sie bleiben dort, ab dem Speichern wird es aber ${to} zugeordnet. Fortfahren?`)) return false;
+  if (v.incidents && !await askConfirm({ title: `${name || v.call_sign} ${target === null ? "aus allen Listen nehmen" : `${to} zuordnen`}?`,
+    text: `${plural(v.incidents, "Einsatz von", "Einsätze von")} ${source.name} haben Daten dazu. Sie bleiben dort, ab dem Speichern wird das Fahrzeug aber ${to} zugeordnet.`,
+    confirm: "Zuordnung ändern", danger: true })) return false;
   source.fleet.splice(i, 1);
   const keys = [v.call_sign, v.name].filter(Boolean);
   for (const x of source.fleet) if (keys.includes(x.replaced_by)) x.replaced_by = "";

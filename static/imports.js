@@ -8,9 +8,10 @@ function sourceLabel(e) {
   return SOURCES[e.source] ? `${SOURCES[e.source]} · ${esc(e.filename)}` : "Einsatzübersicht (Excel)";
 }
 
-function showUploadError(html) {
+/** Fehler im Einlese-Dialog: title nennt, was nicht geklappt hat; text (bereits maskiert) die Ursache und den nächsten Schritt. */
+function showUploadError(title, text = "") {
   const el = $("#pdf-error");
-  el.innerHTML = html;
+  el.innerHTML = noticeBox("error", title, text);
   el.hidden = false;
 }
 
@@ -24,13 +25,15 @@ async function discardUpload() {
   renderPreviews();
 }
 async function readPdfs(files) {
-  if (acceptingReports) { showUploadError("Eine Übernahme läuft. Bitte warten."); return; }
-  if (uploadBusy) { showUploadError("Ein Import wird bereits gelesen. Bitte warten."); return; }
-  if (state.upload.reports.some((r) => !r.saved && !isUnchanged(r)) &&
-      !window.confirm("Offene Vorschauen verwerfen und neue Berichte einlesen?")) return;
+  if (acceptingReports) { showUploadError("Eine Übernahme läuft.", "Bitte warten, bis sie fertig ist."); return; }
+  if (uploadBusy) { showUploadError("Ein Import wird bereits gelesen.", "Bitte warten, bis er fertig ist."); return; }
+  const open = state.upload.reports.filter((r) => !r.saved && !isUnchanged(r)).length;
+  if (open && !await askConfirm({ title: "Offene Vorschauen verwerfen?",
+    text: `${plural(open, "Bericht ist", "Berichte sind")} noch nicht übernommen. Korrekturen daran gehen verloren.`,
+    confirm: "Vorschauen verwerfen und neu einlesen", danger: true })) return;
   files = [...files].filter((f) => /\.(pdf|xlsx|zip)$/i.test(f.name));
   $("#pdf-error").hidden = true;
-  if (!files.length) { showUploadError("Bitte eine PDF-, Excel- oder ZIP-Datei wählen."); return; }
+  if (!files.length) { showUploadError("Keine passende Datei gewählt.", "Bitte eine PDF-, Excel- oder ZIP-Datei wählen."); return; }
   uploadBusy = true;
   const generation = ++uploadGeneration;
   $("#progress").hidden = false;
@@ -45,7 +48,7 @@ async function readPdfs(files) {
     if (state.upload.token) await apiJson("/api/reports/cancel", "POST", { token: state.upload.token });
     await showUploadResult(data);
   } catch (e) {
-    showUploadError(esc(e.message));
+    showUploadError("Die Berichte konnten nicht gelesen werden.", `${esc(e.message)} Es wurde nichts gespeichert. Bitte die Dateien erneut einlesen.`);
   } finally {
     $("#progress").hidden = true;
     uploadBusy = false;
@@ -75,7 +78,12 @@ async function showUploadResult(data) {
   // Erfasster Einsatz: Aktualisieren ist vorausgewählt (manuell ergänzte Fahrzeuge und Personen bleiben)
   state.upload = { token: data.token, reports: data.reports.map((r) => ({ ...r, replace: Boolean(r.existing && r.can_edit), saved: null })),
                    errors: data.errors, notes: data.notes || [] };
-  if (data.errors.length) showUploadError(data.errors.map((e) => `${esc(e.file)}: ${esc(e.message)}`).join("<br>"));
+  if (data.errors.length) {
+    showUploadError(`${plural(data.errors.length, "Datei konnte", "Dateien konnten")} nicht gelesen werden.`,
+      `${data.errors.map((e) => `${esc(e.file)}: ${esc(e.message)}`).join("<br>")}${data.reports.length ? "<br>Die übrigen Berichte stehen unten zur Prüfung bereit." : ""}`);
+  } else {
+    $("#pdf-error").hidden = true;
+  }
   renderPreviews();
 }
 
@@ -99,29 +107,41 @@ function uploadNotes(notes) {
   return notes.length ? `<div class="message message-info">${notes.map((n) => `${esc(n.file)}: ${esc(n.message)}`).join("<br>")}</div>` : "";
 }
 
+// Ohne Hinweise, ohne neue Personen, noch nicht erfasst: kann in einem Schritt übernommen werden
+const isClean = (r) => !r.action && !r.saved && !r.existing && !reviewReasons(r).length;
+
 function uploadSummary(reports) {
-  const auto = reports.filter((r) => r.auto).length, unchanged = reports.filter(isUnchanged).length;
+  const unchanged = reports.filter(isUnchanged).length;
   const open = reports.filter((r) => !r.saved && !isUnchanged(r)).length;
+  const clean = reports.filter(isClean).length;
   const parts = [];
-  if (auto) parts.push(`${plural(auto, "Einsatz", "Einsätze")} ohne Anmerkungen übernommen`);
   if (unchanged) parts.push(`${plural(unchanged, "Einsatz", "Einsätze")} bereits unverändert erfasst`);
-  if (open) parts.push(`${plural(open, "Bericht", "Berichte")} zu prüfen`);
-  return parts.length ? `<div class="message message-info">${parts.join(" · ")}</div>` : "";
+  if (open) parts.push(`${plural(open, "Bericht", "Berichte")} offen`);
+  if (!parts.length) return "";
+  // Sammelübernahme nur ausdrücklich und nur für Berichte ohne Anmerkung; alles andere bleibt zur Prüfung
+  const bulk = clean > 1 ? `<button type="button" class="btn btn-light" data-accept-clean ${acceptingReports ? "disabled" : ""}>
+      ${plural(clean, "Bericht ohne Hinweise", "Berichte ohne Hinweise")} übernehmen</button>` : "";
+  return `<div class="message message-info preview-bulk"><span>${parts.join(" · ")}${clean > 1 ? ` · ${clean} davon ohne Hinweise` : ""}</span>${bulk}</div>`;
 }
 
 function previewStatus(r) {
   const existing = r.existing;
-  const status = (cls, number, title, sub) =>
-    `<div class="preview-status ${cls}"><span class="number">${number}</span><div><strong>${title}</strong><span>${sub}</span></div></div>`;
-  if (r.saved) return status("done", "✓", `Einsatz ${r.saved.number ?? ""}/${r.saved.year} ist in der Statistik`,
+  // Neutral = bereit, Bernstein = zu prüfen, Grün = übernommen; das Wort steht immer dabei
+  const status = (cls, tag, lead, title, sub) =>
+    `<div class="preview-status ${cls}">${lead}<div><strong>${title}</strong><span class="status-sub">${sub}</span></div><span class="status-tag">${tag}</span></div>`;
+  const number = (n) => `<span class="number">${n}</span>`;
+  if (r.saved) return status("done", "Übernommen", ICON_CHECK.replace("<svg", '<svg class="status-icon"'),
+    `Einsatz ${r.saved.number ?? ""}/${r.saved.year} ist in der Statistik`,
     esc(r.filename) + (r.saved.postprocessing_pending ? " · Gespeichert; zentrale Nachverarbeitung noch offen. Kein erneuter Import nötig." : ""));
   if (existing) {
     const origin = { pdf: "aus einer PDF", bks_xlsx: "aus einem Excel-Export" }[existing.source] || "aus der Einsatzübersicht (Excel)";
     const diffs = existing.differences.length ? plural(existing.differences.length, "Abweichung", "Abweichungen") : "keine Abweichungen";
-    return status("existing", r.number ?? "?", `Einsatz ${r.number}/${r.year} ist bereits erfasst`, `${origin} · ${diffs}`);
+    return status("existing review", "Zu prüfen", number(r.number ?? "?"), `Einsatz ${r.number}/${r.year} ist bereits erfasst`, `${origin} · ${diffs}`);
   }
-  return status("", r.number ?? "?", `Neuer Einsatz ${r.number ?? ""}${r.number ? "/" + r.year : ""}${config.vg ? ` · ${esc(r.tenant_name)}` : ""}`,
-    [esc(r.filename), ...reviewReasons(r).map(esc)].join(" · "));
+  const reasons = reviewReasons(r);
+  return status(reasons.length ? "review" : "", reasons.length ? "Zu prüfen" : "Bereit", number(r.number ?? "?"),
+    `Neuer Einsatz ${r.number ?? ""}${r.number ? "/" + r.year : ""}${config.vg ? ` · ${esc(r.tenant_name)}` : ""}`,
+    [esc(r.filename), ...reasons.map(esc)].join(" · "));
 }
 
 function differencesTable(existing) {
@@ -139,6 +159,13 @@ function keepPreviewInput() {
   }
 }
 
+// Zuerst, was geprüft werden muss: Hinweise, Abweichungen zum erfassten Einsatz; ohne Anlass nur die ruhige Bestätigung
+function reviewPanel(r) {
+  const hasReview = r.warnings.length || r.existing?.differences.length;
+  if (!hasReview) return `<div class="panel outlined"><h4>Prüfhinweise${helpButton("warnings")}</h4>${warningsList([], "Keine Prüfhinweise")}</div>`;
+  return `<div class="panel outlined preview-review"><h4>Zu prüfen${helpButton("warnings")}</h4>${warningsList(r.warnings)}${differencesTable(r.existing)}</div>`;
+}
+
 function renderPreviews() {
   const reports = state.upload.reports;
   $("#dropzone").classList.toggle("compact", reports.length > 0);
@@ -147,25 +174,25 @@ function renderPreviews() {
       <h3>${esc(r.title)}</h3><p>${esc(r.filename)}</p><p>${esc(r.saved?.message || r.message)}</p>
       ${r.saved ? "" : `<button type="button" class="btn btn-primary" data-accept="${i}">${r.action === "master" ? "Stammdatensatz speichern" : "Bericht weitergeben"}</button>`}
       </div></div>`;
-    if (r.auto || isUnchanged(r)) return "";
+    if (isUnchanged(r)) return "";
     const existing = r.existing;
     return `<div class="preview-card" data-index="${i}">
       ${previewStatus(r)}
       ${r.saved ? "" : `<div class="preview-body">
+        ${reviewPanel(r)}
         ${formFields(r)}
-        <div class="preview-grid">
-          <div class="panel outlined"><h4>Fahrzeuge${helpButton("vehicles")}</h4>${vehicleTable(r)}
-            <p class="small muted section-gap">Zeit bis Eintreffen des ersten Fahrzeugs: <b>${minutes(r.arrival_min)}</b> · Gesamtstärke ${r.crew_total}</p></div>
-          <div class="panel outlined"><h4>Prüfhinweise${helpButton("warnings")}</h4>${warningsList(r.warnings, "Keine Prüfhinweise")}${differencesTable(existing)}
-            ${r.shared_with?.length ? `<p class="small muted section-gap">Gemeinsamer Einsatz mit ${esc(r.shared_with.join(", "))} (gleicher Einsatz im BKS-Portal bzw. gleiche Einsatznummer der Leitstelle).</p>` : ""}
-            ${r.bks_url ? `<p class="small muted section-gap">BKS-Portal: ${bksLink(r)}</p>` : ""}</div>
-        </div>
+        <div class="panel outlined"><h4>Fahrzeuge${helpButton("vehicles")}</h4>${vehicleTable(r)}
+          <p class="small muted section-gap">Zeit bis Eintreffen des ersten Fahrzeugs: <b>${minutes(r.arrival_min)}</b> · Gesamtstärke ${r.crew_total}</p>
+          ${r.shared_with?.length ? `<p class="small muted section-gap">Gemeinsamer Einsatz mit ${esc(r.shared_with.join(", "))} (gleicher Einsatz im BKS-Portal bzw. gleiche Einsatznummer der Leitstelle).</p>` : ""}
+          ${r.bks_url ? `<p class="small muted section-gap">BKS-Portal: ${bksLink(r)}</p>` : ""}</div>
         <div class="panel outlined">${attendancePanel(r, { markNew: true, pickLeader: true })}</div>
+        <div class="preview-failure"></div>
         <div class="preview-footer">
           ${existing && r.can_edit ? `<label class="toggle"><input type="checkbox" data-replace="${i}" ${r.replace ? "checked" : ""}> erfassten Einsatz mit diesem Bericht aktualisieren
             <span class="muted">(manuell ergänzte Fahrzeuge und Personen bleiben)</span></label>` : ""}
           ${existing && !r.can_edit ? `<span class="muted">Einen erfassten Einsatz aktualisiert, wer Einsätze bearbeiten darf.</span>` : ""}
-          <button type="button" class="btn btn-primary" data-accept="${i}" ${existing && !r.replace ? "disabled" : ""}>
+          ${existing && r.can_edit && !r.replace ? `<span class="small muted" id="replace-hint-${i}">Zum Aktualisieren erst das Feld links ankreuzen.</span>` : ""}
+          <button type="button" class="btn btn-primary" data-accept="${i}" ${existing && !r.replace ? `disabled aria-describedby="replace-hint-${i}"` : ""}>
             ${existing ? "Aktualisieren" : "In Statistik übernehmen"}</button>
         </div>
       </div>`}
@@ -189,10 +216,28 @@ async function acceptReport(i) {
     toast(saved.message || `Einsatz ${saved.number ?? ""}/${saved.year} ${r.existing ? "aktualisiert" : "übernommen"}`);
     keepPreviewInput();
     renderPreviews();
+    return true;
   } catch (err) {
     button.disabled = false;
-    alert(err.message);
+    // Das Formular bleibt mit den Eingaben stehen; der Fehler erscheint an der Karte und nennt den Bericht
+    const failure = $(".preview-failure", card);
+    if (failure) failure.innerHTML = noticeBox("error", `Einsatz ${r.number ?? ""}${r.number ? "/" + r.year : ""} (${r.filename}) wurde nicht übernommen.`,
+      `${esc(err.message)} Ihre Eingaben bleiben erhalten. Bitte erneut „${r.existing ? "Aktualisieren" : "In Statistik übernehmen"}“ wählen.`);
+    else await reportError("Der Bericht wurde nicht übernommen.", err);
+    return false;
   } finally {
     acceptingReports--;
   }
+}
+
+// Alle Berichte ohne Hinweise nacheinander übernehmen; Berichte mit Anmerkungen bleiben zur Prüfung stehen
+async function acceptCleanReports() {
+  const indexes = state.upload.reports.map((r, i) => (isClean(r) ? i : -1)).filter((i) => i >= 0);
+  let saved = 0;
+  for (const i of indexes) {
+    if (await acceptReport(i)) saved++; else break;      // beim ersten Fehler anhalten: der Rest bleibt unberührt
+  }
+  const left = indexes.length - saved;
+  toast(left ? `${plural(saved, "Bericht", "Berichte")} übernommen, ${left} offen. Bitte die Meldung am Bericht lesen.`
+             : `${plural(saved, "Bericht", "Berichte")} übernommen`);
 }
