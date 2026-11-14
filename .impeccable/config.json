@@ -1,0 +1,26 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          "static/index.html"
+        ],
+        "createdAt": "2026-11-13T21:34:22.457Z",
+        "reason": "Fehlalarm: .topbar-title hat padding-left 22px (app.css), Befund aus dem gerenderten DOM ohne Quellzeile"
+      },
+      {
+        "rule": "marquee",
+        "value": "*",
+        "files": [
+          "static/index.html"
+        ],
+        "createdAt": "2026-11-13T21:34:22.480Z",
+        "reason": "Fehlalarm: unbestimmter Ladebalken beim Einlesen, unter prefers-reduced-motion abgeschaltet (app.css)"
+      }
+    ]
+  }
+}

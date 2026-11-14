@@ -15,6 +15,7 @@ colors:
   light-gray: "#F2F2F2"
   white: "#FFFFFF"
   line: "#E4E4E4"
+  field-line: "#858585"
   gridline: "#ECECEC"
   track: "#F3E4E5"
   series-night: "#A80000"
@@ -180,7 +181,8 @@ Eine Kennfarbe in Abstufungen, dazu neutrale Grautöne und ein Statusgrün, das 
 - **Kartenweiß** (#FFFFFF): Karten, Eingaben, Dialoge.
 - **Tintengrau** (#333333, `--text`): Fließtext.
 - **Beschriftungsgrau** (#6B6B6B, `--gray`): Sekundärtext; 4,8:1 auf hellem Grau.
-- **Haarlinie** (#E4E4E4, `--line`): Rahmen und Trennlinien; Raster in #ECECEC.
+- **Haarlinie** (#E4E4E4, `--line`): Trennlinien in Karten und Tabellen; Raster in #ECECEC. Nicht für Bedienelemente.
+- **Feldlinie** (#858585, `--field-line`): Rahmen von Eingaben, Auswahlfeldern, Suchfeld, Farbwahl und Outline-Knöpfen; 3,7:1 auf Weiß, 3,3:1 auf Rosa-Papier.
 - **Waldgrün** (#1E5A2C auf #E3F1E6): Status „erledigt“.
 - **Bernstein** (#5E3A00 auf #FFF1CC, Linie #E2B24A): Status „zu prüfen“, neue Personen, Prüfhinweise.
 - **Verspätet-Ocker** (#9A4A00, `--late-text`): zu spät eingetroffene Zeiten und Zu-erledigen-Marke; nicht vom Wehr-Rot abgeleitet, steht immer mit Symbol und verstecktem Text („nicht innerhalb von 10 Minuten“).
@@ -190,6 +192,8 @@ Eine Kennfarbe in Abstufungen, dazu neutrale Grautöne und ein Statusgrün, das 
 **The Wehr-Token Rule.** Jede Farbe der Marke kommt aus einem `--brand-*`-Token. Feste Hex-Werte in Regeln sind nur für neutrale Grautöne zulässig und gehören auch dann auf Tokens.
 
 **The One Voice Rule.** Eine Kennfarbe pro Wehr. Weitere Farben entstehen nur durch Abstufung (heller, dunkler), nie durch einen zweiten Farbton. Ausnahme sind die Statusfarben unten: Sie gehören keiner Wehr und bleiben in jedem Theme gleich.
+
+**The Control-Edge Rule.** Alles, was man anklicken oder ausfüllen kann, hat einen Rand mit mindestens 3:1 (`--field-line`). `--line` trennt nur Inhalt.
 
 **The Status Rule.** Rot der Wehr bedeutet Marke, nie Fehler. Zustände tragen eigene, von der Wehr unabhängige Töne: neutral = bereit, Bernstein (`--warn-*`) = zu prüfen, Grün (`--ok-*`) = erledigt, Fehlerrot (`--error-*`) = nicht gespeichert. Jeder Status nennt sich außerdem mit einem Wort (und meist einem Symbol); Farbe allein trägt nie die Bedeutung.
 
@@ -244,7 +248,8 @@ Abgerundete, freundliche Formen mit gestaffelten Radien: 6 px (Chips), 8 px (Ein
 - **Primär:** Marken-Rot mit weißer Schrift und farbigem Schatten; Hover dunkler (`--brand-hover`).
 - **Hell:** Rosenschimmer mit dunkelrotem Text, für Zweitaktionen.
 - **Weiß / Outline:** weißer Grund, graue Schrift, Linie; Hover färbt den Rahmen.
-- **Zustände:** Fokus zeigt einen 3-px-Ring in `--brand-accent`; deaktiviert mit 50 % Deckkraft; Druck verschiebt um 1 px.
+- **Zustände:** Fokus zeigt einen 3-px-Ring in `--brand-accent` (auf dem farbigen Kopf in Weiß); deaktiviert mit 50 % Deckkraft; Druck verschiebt um 1 px.
+- **Touch:** Auf Geräten mit grobem Zeiger (`pointer: coarse`) sind Knöpfe, Segmente, Schließen und Hilfe im Kopf mindestens 44 px hoch bzw. breit.
 
 ### Segmente
 - Hellgraue Leiste mit 10 px Radius, aktiver Eintrag weiß mit roter Schrift und feinem Schatten.
@@ -256,10 +261,10 @@ Abgerundete, freundliche Formen mit gestaffelten Radien: 6 px (Chips), 8 px (Ein
 - Rosenschimmer-Grund, tiefrote Schrift, 6 px Radius, Mindestbreite 58 px, zentriert.
 
 ### Eingaben
-- Weiß, 1 px Linie, 8 px Radius. Fokus: Rahmen in `--brand-accent` und 3-px-Hof in `--brand-light` (statt Systemring).
+- Weiß, 1 px Rand in `--field-line`, 8 px Radius. Fokus: 2-px-Ring in `--brand` mit 1 px Abstand und Rand in `--brand`; kein heller Hof. Jedes Feld hat einen sichtbaren oder `aria-label`-Namen, ein Platzhalter ersetzt ihn nicht. Auf Touchgeräten mindestens 44 px hoch.
 
 ### Navigation
-- Reiter im Kopf: weiße Schrift (82 % → 100 % bei Hover/aktiv), 3-px-Unterstrich weiß für den aktiven Reiter, Streifen als dunkle Überlagerung (14 %); Unterreiter etwas kleiner und heller abgesetzt.
+- Reiter im Kopf: weiße Schrift (`--on-brand-text`, 82 % → 100 % bei Hover/aktiv), 3-px-Unterstrich weiß für den aktiven Reiter, Streifen als dunkle Überlagerung (14 %); Unterreiter etwas kleiner und heller abgesetzt. Alles im Kopf nutzt die Tokens `--on-brand-text`, `--on-brand-fill`, `--on-brand-line`; der Fokusring ist dort weiß (8,2:1 auf dem Verlauf).
 
 ### Dialog
 - 18 px Radius, Kopf weiß mit Linie darunter, Inhalt scrollt. Breiten 1080 / 920 / 760 px.
@@ -274,10 +279,12 @@ Abgerundete, freundliche Formen mit gestaffelten Radien: 6 px (Chips), 8 px (Ein
 - **Do** alle Markenfarben über `--brand-*`-Tokens ansprechen, damit Wehr-Themes greifen.
 - **Do** Kennzahlen immer mit Fallzahl und Abdeckung („n von N“) zeigen und Fehlendes als „nicht angegeben“ darstellen.
 - **Do** Texte in `--gray` nicht kleiner als 0,8 rem setzen und mindestens 4,5:1 Kontrast halten.
-- **Do** Fokus sichtbar halten: 3-px-Ring in `--brand-accent`, Abstand 2 px.
+- **Do** Fokus sichtbar halten: 3-px-Ring in `--brand-accent`, Abstand 2 px; im farbigen Kopf weiß, in Eingabefeldern 2 px `--brand`.
+- **Do** Rahmen von Bedienelementen in `--field-line` setzen und Datentabellenköpfe mit `scope` versehen (macht `markTableHeaders` in `app.js` automatisch).
 - **Do** neue Felder und Kennzahlen in `help.js` erklären und Änderungen in `changelog.js` eintragen.
 
 ### Don't:
+- **Don't** `--brand-accent` auf dem Kopfverlauf als Fokusfarbe verwenden (unter 2:1).
 - **Don't** `--brand-accent` oder `--day` als Textfarbe auf Weiß einsetzen (3,8:1).
 - **Don't** Grautöne unter #6B6B6B für lesbaren Text verwenden; helle Grautöne (#B5B5B5, #BDBDBD) sind nur für Linien und Flächen.
 - **Don't** Schatten in Schatten schachteln oder Karten in Karten ohne Linie darstellen.
