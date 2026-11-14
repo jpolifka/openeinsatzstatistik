@@ -56,3 +56,11 @@ def test_leader_spelling_prefers_known_spelling():
     assert leader_spelling(spellings, "Muster", "Erika") == "E. Muster"
     assert leader_spelling({}, "Beispiel", "Christa") == "Ch. Beispiel"
     assert leader_spelling({}, "Beispiel", "") == "Beispiel"
+
+
+def test_longer_surname_is_another_person():
+    """'Röttgen' ist nicht 'Rott', auch wenn der Vorname gleich ist (Ähnlichkeit des ganzen Namens genügt nicht)."""
+    matcher = NameMatcher([(1, "Rott, Michael")])
+    assert matcher.match("Röttgen", "Michael") is None
+    assert matcher.match("Rott", "Michael") == 1
+    assert matcher.match("Rotr", "Michael") == 1         # ein Buchstabe falsch: Tippfehler

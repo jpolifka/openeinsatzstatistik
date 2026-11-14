@@ -91,13 +91,35 @@ class NameMatcher:
             fitting = [r for r in candidates if _first_names_fit(r[2], first)]
             if fitting:
                 return max(fitting, key=lambda r: (_prefix_match(r[2], first), _similarity(r[2], first)))[0]
-        # 2. Ähnlichkeit des ganzen Namens (Tippfehler) – nicht bei schon verworfenem gleichem Nachnamen
-        full = normalize(last_name) + normalize(first_name)
-        others = [r for r in self.readings if r[0] not in exact]
-        if not others:
-            return None
-        best = max(others, key=lambda r: _similarity(r[1] + r[2], full))
-        return best[0] if _similarity(best[1] + best[2], full) >= 0.85 else None
+        # 2. Tippfehler im Nachnamen: höchstens ein Buchstabe (Fehler, Auslassung, Zusatz, Dreher) Unterschied.
+        #    Kein Treffer bei längeren Abweichungen: 'Röttgen' ist nicht 'Rott'.
+        best = None
+        for last, first in ((last_name, first_name), (first_name, last_name)):
+            last, first = normalize(last), normalize(first)
+            if len(last) < 4:
+                continue
+            for key, known_last, known_first in self.readings:
+                if key in exact or len(known_last) < 4 or not _first_names_fit(known_first, first):
+                    continue
+                if _edit_distance(known_last, last) <= 1:
+                    score = (_prefix_match(known_first, first), _similarity(known_first, first))
+                    if best is None or score > best[0]:
+                        best = (score, key)
+        return best[1] if best else None
+
+
+def _edit_distance(a, b):
+    """Anzahl Einzelbuchstaben-Änderungen (Ersetzen, Einfügen, Löschen, Vertauschen benachbarter Buchstaben)."""
+    rows = [list(range(len(b) + 1))]
+    for i, ca in enumerate(a, 1):
+        row = [i]
+        for j, cb in enumerate(b, 1):
+            cost = min(rows[-1][j] + 1, row[j - 1] + 1, rows[-1][j - 1] + (ca != cb))
+            if i > 1 and j > 1 and ca == b[j - 2] and a[i - 2] == cb:
+                cost = min(cost, rows[-2][j - 2] + 1)
+            row.append(cost)
+        rows.append(row)
+    return rows[-1][-1]
 
 
 def _first_names_fit(known, given):
