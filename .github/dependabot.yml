@@ -11,11 +11,15 @@ updates:
     groups:
       python-packages:
         patterns: ["*"]
-  # Basis-Image des Dockerfiles (python:3.14-slim)
+  # Basis-Image des Dockerfiles (python:3.14-slim): nur Patch-Updates. Der Sprung auf die nächste Python-Version ist
+  # Absicht des Menschen (Wheels aller Pakete prüfen, Lock neu erzeugen), nicht Sache eines automatischen Pull Requests.
   - package-ecosystem: docker
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: python
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
   # Aktionen in .github/workflows
   - package-ecosystem: github-actions
     directory: /
