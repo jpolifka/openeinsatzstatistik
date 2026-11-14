@@ -769,7 +769,7 @@ input, .field :is(input, select, textarea), .admin-table :is(input, select), .in
   .topbar-actions .year-select > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }  /* Beschriftung bleibt für Screenreader */
   #scope-select select { width: 100%; }
   .topbar-actions .btn-white { flex: 1; }
-  .tabs-inner { padding-right: 28px; -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
+  .tabs-inner { padding-right: 28px; -webkit-mask-image: linear-gradient(to right, var(--text) calc(100% - 28px), transparent); mask-image: linear-gradient(to right, var(--text) calc(100% - 28px), transparent); }
   .dialog-header { padding-top: 12px; padding-bottom: 12px; }
   .dialog-header h2 { font-size: 1.15rem; }
   .dialog-header p { font-size: .85rem; }
