@@ -72,7 +72,7 @@ Jeder Endpunkt mit Einsatzdaten holt sich per `Depends(access)` ein `tenancy.Acc
 ## Betrieb
 
 - Container läuft nie als root, sondern als Besitzer von `./daten` (`docker-entrypoint.sh`; `APP_UID`/`APP_GID` übersteuern). Der Port ist standardmäßig an `127.0.0.1` gebunden, anderes nur über `APP_BIND`. Eine öffentliche `BASE_URL` verlangt `ADMIN_EMAILS`.
-- Abhängigkeiten: `requirements.txt` → `requirements.lock` mit SHA256-Hashes (Image installiert mit `--require-hashes`); beim Ändern das Lock neu erzeugen. CI (`.github/workflows/checks.yml`) prüft Python 3.12/3.14, Lock, Sicherheitsaudit, JS-Syntax und Frontend-Tests.
+- Abhängigkeiten: `requirements.txt` → `requirements.lock` mit SHA256-Hashes (Image installiert mit `--require-hashes`); beim Ändern das Lock neu erzeugen. CI (`.github/workflows/checks.yml`) prüft Python 3.14 (wie das Image; 3.15 scheitert noch an fehlenden Wheels für httptools und pydantic-core), Lock, Sicherheitsaudit, JS-Syntax und Frontend-Tests.
 - Sicherung: Zentral-DB, **alle** Wehr-DBs, Assets und AVV-Dateien als konsistenten Bestand sichern, nicht einzelne SQLite-Dateien bei laufenden Schreibern kopieren. Vorschauen liegen im Speicher eines Workers (keine horizontale Skalierung ohne gemeinsamen Speicher).
 
 ## Daten und Datenschutz

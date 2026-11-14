@@ -324,7 +324,7 @@ Tests (pytest) laufen im Docker-Container:
 docker build --target test -t pdf2einsatz-test . && docker run --rm pdf2einsatz-test
 ```
 
-Lokal ohne Docker (Python 3.12):
+Lokal ohne Docker (Python 3.14):
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
