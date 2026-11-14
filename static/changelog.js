@@ -6,6 +6,13 @@
 // noch ein Eintrag hinzu, bekommt er `version` ("JJJJ-MM-TT.2", dann .3 …); ohne `version` gilt das Datum.
 const CHANGELOG = [
   {
+    date: "2026-11-14",
+    items: [
+      "<b>Bedienung per Tastatur besser sichtbar:</b> Der Fokusrahmen ist im roten Kopf weiß und in Eingabefeldern deutlich zu erkennen. Rahmen von Eingabefeldern sind kräftiger.",
+      "<b>Handy und Tablet:</b> Knöpfe, Filter, Kontrollkästchen und das ?-Symbol lassen sich auf Touchgeräten leichter treffen."
+    ]
+  },
+  {
     date: "2026-11-13",
     version: "2026-11-13.2",
     items: [
