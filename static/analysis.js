@@ -26,6 +26,9 @@ function coverageText(valid, total, unit = INCIDENT_UNIT) {
 const round1 = (v) => v == null ? null : Math.round(v * 10) / 10;
 const shareText = (count, total) => total ? `${percent(count / total)} der Einsätze` : "–";
 
+// Leerzustand statt Gerüst aus Strichen und leeren Achsen: sagt, was fehlt und was zu tun ist
+const noIncidentsCard = () => `<div class="card"><p class="empty-note">Im Jahr ${state.year} sind noch keine Einsätze erfasst. Mit „Bericht einlesen“ oben lassen sich Einsatzberichte aus dem BKS-Portal übernehmen; danach erscheint diese Auswertung.</p></div>`;
+
 function notReleased() {
   const hidden = state.evaluation.response_plan_hidden;
   return `<div class="card"><p class="muted">Diese Auswertung ist${hidden.length ? ` für ${esc(hidden.join(", "))}` : ""} noch nicht freigegeben.
@@ -95,7 +98,7 @@ function renderOverview() {
     ${analysisKpi(`Einsätze ${state.year}`, vg ? vg.unique : s.count, vg ? esc(`${vg.participations} Beteiligungen der Wehren`) : `${num(s.per_week, 2)} je Woche`)}
     ${analysisKpi(`Ø Einsatzdauer${helpButton("duration")}`, formatDuration(s.duration_avg_min), esc(coverageText(e.workload.duration.valid, e.workload.duration.total)))}
     ${analysisKpi(`Einsatzstunden${helpButton("operation_hours")}`, formatHours(s.duration_total_min), "Summe aller Einsätze")}
-    ${quote || analysisKpi("Eintreffen", "–", "nicht freigegeben oder keine Einsätze")}
+    ${quote || analysisKpi("Eintreffen", "–", plan ? "noch keine Einsätze mit Eintreffzeit" : "für Sie noch nicht freigegeben")}
   </div><div class="grid grid-2">${openTasksCard(e)}${coverageCard(e)}</div>`;
 }
 
@@ -153,6 +156,11 @@ function groupsCard(t) {
 function renderTimes() {
   const e = state.evaluation, t = e.timing;
   if (!t) { $("#view-times").innerHTML = evaluationToolbar({ exports: false }) + notReleased(); return; }
+  if (!t.total) { $("#view-times").innerHTML = evaluationToolbar({ exports: false }) + noIncidentsCard(); return; }
+  if (!t.turnout.valid && !t.travel.valid && !t.arrival.valid) {   // Einsätze da, aber keine Zeiten: kein Gerüst aus Strichen
+    $("#view-times").innerHTML = evaluationToolbar({ exports: false }) + `<div class="card"><p class="empty-note">Für ${plural(t.total, "Einsatz", "Einsätze")} im Jahr ${state.year} liegen keine Ausrück- und Eintreffzeiten vor. Sie stammen aus den Einsatzberichten; Einsätze ohne Fahrzeugzeiten zeigt die Einsatzliste mit dem Filter „Prüfhinweise“. Bereits erfasste Einsätze erhalten die Zeiten durch erneutes Einlesen des Berichts.</p></div>`;
+    return;
+  }
   $("#view-times").innerHTML = evaluationToolbar({ exports: false }) + `<div class="kpis kpis-4">
     ${analysisKpi(`Ausrückdauer${helpButton("turnout_min")}`, minutes(t.turnout.median), esc(`Median · 90 % ≤ ${minutes(t.turnout.p90)} · ${coverageText(t.turnout.valid, t.turnout.total)}`))}
     ${analysisKpi(`Anfahrtdauer je Fahrzeug${helpButton("travel_min")}`, minutes(t.travel.median), esc(`Median · 90 % ≤ ${minutes(t.travel.p90)} · ${coverageText(t.travel.valid, t.travel.total, VEHICLE_UNIT)}`))}
@@ -197,6 +205,7 @@ function overlapCard(o) {
 
 function renderWorkload() {
   const e = state.evaluation, w = e.workload, s = e.statistics;
+  if (!w.total) { $("#view-load").innerHTML = evaluationToolbar({ exports: false }) + noIncidentsCard(); return; }
   $("#view-load").innerHTML = evaluationToolbar({ exports: false }) + `<div class="kpis kpis-4">
     ${analysisKpi(`Lange Einsätze${helpButton("workload")}`, w.long.count, esc(`ab ${formatDuration(w.long.minutes)} · ${shareText(w.long.count, w.total)}`))}
     ${analysisKpi("Nächtliche Einsätze", w.night.count, esc(shareText(w.night.count, w.total)))}

@@ -180,7 +180,7 @@ function columnChart(groups, { dense = false } = {}) {
   return `<div class="columns">
     <div class="columns-plot">${gridlines.join("")}
       <div class="columns-row">${groups.map((g) => `
-        <div class="columns-group ${g.link ? "linked" : ""}" data-tip="${esc(g.tip)}${g.link ? "\nKlicken: Einsätze anzeigen" : ""}" tabindex="0"${linkAttributes(g.link)}>${g.values.map((v) => `
+        <div class="columns-group ${g.link ? "linked" : ""}" data-tip="${esc(g.tip)}${g.link ? "\nKlicken: Einsätze anzeigen" : ""}" tabindex="0" aria-label="${esc(`${g.axis}: ${g.tip}`.replace(/\n/g, ", "))}"${g.link ? linkAttributes(g.link) : ' role="img"'}>${g.values.map((v) => `
           <div class="column tone-${v.tone || "series"}" style="height:${((v.value || 0) / scale.max) * 100}%">
             ${v.labelled && v.value ? `<span class="column-value">${v.text ?? v.value}</span>` : ""}
           </div>`).join("")}
@@ -745,7 +745,19 @@ function markTableHeaders(root) {
     th.setAttribute("scope", th.colSpan > 1 ? "colgroup" : th.closest("thead") ? "col" : "row");
   }
 }
+// Überschriften ohne Sprung: eine Ebene tiefer als die vorige, höchstens (nur für Screenreader über aria-level)
+function normalizeHeadingLevels(root) {
+  let previous = 1;
+  for (const h of root.querySelectorAll("h1, h2, h3, h4, h5, h6")) {
+    const natural = Number(h.tagName[1]);
+    const level = Math.min(natural, previous + 1);
+    if (level !== natural) h.setAttribute("aria-level", String(level)); else h.removeAttribute("aria-level");
+    previous = level;
+  }
+}
 if (typeof MutationObserver !== "undefined" && typeof document !== "undefined" && document.body) {
-  markTableHeaders(document);
-  new MutationObserver(() => markTableHeaders(document)).observe(document.querySelector("main.page") || document.body, { childList: true, subtree: true });
+  const tidy = () => { markTableHeaders(document); normalizeHeadingLevels(document); };
+  tidy();
+  // body statt main: auch Dialoge (Import-Vorschau, Hilfe) liegen außerhalb von main
+  new MutationObserver(tidy).observe(document.body, { childList: true, subtree: true });
 }

@@ -181,7 +181,7 @@ function renderPreviews() {
       ${previewStatus(r)}
       ${r.saved ? "" : `<div class="preview-body">
         ${reviewPanel(r)}
-        ${formFields(r)}
+        ${formFields(r, { fold: true })}
         <div class="panel outlined"><h4>Fahrzeuge${helpButton("vehicles")}</h4>${vehicleTable(r)}
           <p class="small muted section-gap">Zeit bis Eintreffen des ersten Fahrzeugs: <b>${minutes(r.arrival_min)}</b> · Gesamtstärke ${r.crew_total}</p>
           ${r.shared_with?.length ? `<p class="small muted section-gap">Gemeinsamer Einsatz mit ${esc(r.shared_with.join(", "))} (gleicher Einsatz im BKS-Portal bzw. gleiche Einsatznummer der Leitstelle).</p>` : ""}
