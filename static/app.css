@@ -233,7 +233,7 @@ button, input, select { font: inherit; color: inherit; }
 .list-card { padding: 0; overflow: hidden; }
 .toolbar { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 14px 18px; border-bottom: 1px solid var(--line); }
 .toolbar-right { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-.search { width: 280px; max-width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 9px 14px; background: var(--white); }
+.search { width: 280px; max-width: 100%; border: 1px solid var(--field-line); border-radius: 10px; padding: 9px 14px; background: var(--white); }
 .table-wrap { overflow-x: auto; }
 .table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 .table > thead > tr > th { background: var(--brand-mid); color: var(--white); font-weight: 700; text-align: left; padding: 11px 12px; font-size: .85rem; white-space: nowrap; }
