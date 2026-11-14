@@ -72,7 +72,7 @@ function openTasksCard(e) {
   const link = (t) => t.link ? `<a href="${esc(t.link)}">${esc(t.text)}</a>` : esc(t.text);
   const items = tasks.map((t) => `<li>${t.parts ? `${esc(t.text)} ${t.parts.map(link).join(", ")}` : link(t)}${t.notices
     ? ` <button type="button" class="btn btn-light btn-small" data-overview-notices>Anzeigen</button>` : ""}</li>`).join("");
-  return `<div class="card"><div class="card-header"><div><h2>Offene Aufgaben${helpButton("overview_tasks")}</h2>
+  return `<div class="card"><div class="card-header"><div><h2>Offene Aufgaben</h2>
     <p class="muted">Was im Jahr ${state.year} noch Aufmerksamkeit braucht – ein Klick zeigt die betroffenen Einsätze.</p></div></div>
     ${tasks.length ? `<ul class="task-list">${items}</ul>` : `<p class="empty-note">Nichts offen: Alle Einsätze des Jahres sind vollständig erfasst.</p>`}</div>`;
 }
@@ -94,20 +94,20 @@ function coverageCard(e) {
   const items = c.rows.filter((r) => r.key !== "leader" || can("people.view")).map((r) => ({
     label: COVERAGE_SHORT[r.key], value: r.valid, text: percent(c.total ? r.valid / c.total : null), tip: `${COVERAGE_LABELS[r.key]}: ${coverageText(r.valid, c.total)}` }));
   const table = dataTable(["Angabe", "Einsätze mit Angabe", "Anteil", "Fehlend"], rows);
-  return chartCard({ id: "coverage", heading: "h2", title: `Datenvollständigkeit${helpButton("data_coverage")}`,
+  return chartCard({ id: "coverage", heading: "h2", title: `Datenvollständigkeit`,
     subtitle: "Wie belastbar sind die Kennzahlen? Einsätze ohne Angabe fließen nicht als Null ein, sondern fehlen in der jeweiligen Kennzahl.",
     chart: c.total ? barChart(items) : `<p class="empty-note">Keine Einsätze im Jahr ${state.year}.</p>`, table });
 }
 
 function renderOverview() {
   const e = state.evaluation, s = e.statistics, plan = e.response_plan;
-  const quote = plan?.total.count ? analysisKpi(`Eintreffen ≤ ${plan.limit} Min.${helpButton("on_time")}`, percent(plan.total.rate),
+  const quote = plan?.total.count ? analysisKpi(`Eintreffen ≤ ${plan.limit} Min.`, percent(plan.total.rate),
     `${plan.total.on_time} von ${plan.total.count} Einsätzen mit Eintreffzeit oder Abbruch`) : "";
   const vg = e.tenants;
   $("#view-overview").innerHTML = evaluationToolbar({ exports: false }) + `<div class="kpis kpis-4">
     ${analysisKpi(`Einsätze ${state.year}`, vg ? vg.unique : s.count, vg ? esc(`${vg.participations} Beteiligungen der Wehren`) : `${num(s.per_week, 2)} je Woche`)}
-    ${analysisKpi(`Ø Einsatzdauer${helpButton("duration")}`, formatDuration(s.duration_avg_min), esc(coverageText(e.workload.duration.valid, e.workload.duration.total)))}
-    ${analysisKpi(`Einsatzstunden${helpButton("operation_hours")}`, formatHours(s.duration_total_min), "Summe aller Einsätze")}
+    ${analysisKpi(`Ø Einsatzdauer`, formatDuration(s.duration_avg_min), esc(coverageText(e.workload.duration.valid, e.workload.duration.total)))}
+    ${analysisKpi(`Einsatzstunden`, formatHours(s.duration_total_min), "Summe aller Einsätze")}
     ${quote || analysisKpi("Eintreffen", "–", plan ? "noch keine Einsätze mit Eintreffzeit" : "für Sie noch nicht freigegeben")}
   </div><div class="grid grid-2">${openTasksCard(e)}${coverageCard(e)}</div>`;
 }
@@ -129,7 +129,7 @@ function timeSummaryCard(t) {
   const items = [["Ausrückdauer", "Ausrücken", t.turnout], ["Anfahrtdauer je Fahrzeug", "Anfahrt", t.travel], ["Zeit bis zum Eintreffen", "Eintreffen", t.arrival]].flatMap(([label, short, d]) => [
     { label: `${short} · Median`, value: d.median ?? 0, text: minutes(d.median), tip: `${label}: Median ${minutes(d.median)}, ${coverageText(d.valid, d.total, short === "Anfahrt" ? VEHICLE_UNIT : INCIDENT_UNIT)}` },
     { label: `${short} · 90 %`, value: d.p90 ?? 0, text: minutes(d.p90), tip: `${label}: 90 % höchstens ${minutes(d.p90)}` }]);
-  return chartCard({ id: "time-summary", title: `Wo entsteht die Zeit?${helpButton("time_distribution")}`,
+  return chartCard({ id: "time-summary", title: `Wo entsteht die Zeit?`,
     subtitle: "Median und 90. Perzentil statt nur Durchschnitt: 9 von 10 Einsätzen (bzw. Fahrzeugen) waren höchstens so langsam.",
     chart: barChart(items), table: dataTable(DISTRIBUTION_HEAD, rows),
     extra: `<p class="small muted section-gap">Die Anfahrtdauer wird je Fahrzeug aus dessen eigenem Ausrücken und Eintreffen berechnet (${esc(coverageText(t.travel.valid, t.travel.total, VEHICLE_UNIT))}).</p>` });
@@ -140,7 +140,7 @@ function buildUpCard(t) {
     values: [{ value: round1(b.crew) ?? 0, text: num(b.crew), labelled: true }] }));
   const table = dataTable(["Minuten nach Alarmierung", "Ø Personen vor Ort", "Einsätze mit Eintreffzeit"],
     t.build_up.map((b) => [`${b.minutes} min`, num(b.crew), `${b.valid} / ${b.total}`]));
-  return chartCard({ id: "build-up", title: `Kräfteaufbau nach Alarmierung${helpButton("build_up")}`,
+  return chartCard({ id: "build-up", title: `Kräfteaufbau nach Alarmierung`,
     subtitle: "Ø Besatzung der eigenen Fahrzeuge, die nach n Minuten eingetroffen waren. Funktionen und Qualifikationen sind nicht erfasst.",
     chart: columnChart(groups), table, extra: `<p class="small muted section-gap">${esc(coverageText(t.build_up[0]?.valid ?? 0, t.total))} (Einsätze mit Eintreffzeit).</p>` });
 }
@@ -158,7 +158,7 @@ function groupsCard(t) {
   const windows = t.by_window.map((w) => ({ ...w, label: `${w.day_type} ${w.hours}` }));
   const areas = t.by_area.map((a) => ({ ...a, label: a.name }));
   const small = [...windows, ...areas].some((g) => g.small && g.count);
-  return `<div class="grid">${plainCard(`Zeiten nach Tageszeit${helpButton("time_groups")}`, "Wann treten Verzögerungen wiederholt auf?", groupTable("Zeitfenster", windows))}</div>
+  return `<div class="grid">${plainCard(`Zeiten nach Tageszeit`, "Wann treten Verzögerungen wiederholt auf?", groupTable("Zeitfenster", windows))}</div>
     <div class="grid">${plainCard("Zeiten nach Ort", "Einsatzgebiet wie im Einsatzgeschehen", groupTable("Ort", areas))}</div>
     ${small ? `<p class="small muted">Zeilen mit weniger als 5 Einsätzen sind als „wenige Fälle“ gekennzeichnet und kaum aussagekräftig.</p>` : ""}`;
 }
@@ -172,9 +172,9 @@ function renderTimes() {
     return;
   }
   $("#view-times").innerHTML = evaluationToolbar({ exports: false }) + `<div class="kpis kpis-4">
-    ${analysisKpi(`Ausrückdauer${helpButton("turnout_min")}`, minutes(t.turnout.median), esc(`Median · 90 % ≤ ${minutes(t.turnout.p90)} · ${coverageText(t.turnout.valid, t.turnout.total)}`))}
-    ${analysisKpi(`Anfahrtdauer je Fahrzeug${helpButton("travel_min")}`, minutes(t.travel.median), esc(`Median · 90 % ≤ ${minutes(t.travel.p90)} · ${coverageText(t.travel.valid, t.travel.total, VEHICLE_UNIT)}`))}
-    ${analysisKpi(`Zeit bis Eintreffen${helpButton("arrival_min")}`, minutes(t.arrival.median), esc(`Median · 90 % ≤ ${minutes(t.arrival.p90)} · ${coverageText(t.arrival.valid, t.arrival.total)}`))}
+    ${analysisKpi(`Ausrückdauer`, minutes(t.turnout.median), esc(`Median · 90 % ≤ ${minutes(t.turnout.p90)} · ${coverageText(t.turnout.valid, t.turnout.total)}`))}
+    ${analysisKpi(`Anfahrtdauer je Fahrzeug`, minutes(t.travel.median), esc(`Median · 90 % ≤ ${minutes(t.travel.p90)} · ${coverageText(t.travel.valid, t.travel.total, VEHICLE_UNIT)}`))}
+    ${analysisKpi(`Zeit bis Eintreffen`, minutes(t.arrival.median), esc(`Median · 90 % ≤ ${minutes(t.arrival.p90)} · ${coverageText(t.arrival.valid, t.arrival.total)}`))}
     ${analysisKpi("Einsätze im Jahr", t.total, e.response_plan_hidden.length ? esc(`ohne ${e.response_plan_hidden.join(", ")} (nicht freigegeben)`) : `Jahr ${state.year}`)}
   </div>
   <div class="grid grid-2">${timeSummaryCard(t)}${buildUpCard(t)}</div>${groupsCard(t)}`;
@@ -186,7 +186,7 @@ function workloadCard(w, s) {
     p.staff_hours == null ? "–" : `${num(p.staff_hours, 0)} h${p.staff_recorded < p.staff_total ? ` (${p.staff_recorded} von ${p.staff_total} Einsätzen erfasst)` : ""}`];
   const rows = [part(`Lang (ab ${formatDuration(w.long.minutes)})`, w.long), part("Nachts", w.night), part("Samstag, Sonntag, Feiertag", w.weekend)];
   const items = rows.map(([label, count]) => ({ label, value: count, tip: `${label}: ${count} von ${w.total} Einsätzen` }));
-  return chartCard({ id: "workload", title: `Belastung durch lange und nächtliche Einsätze${helpButton("workload")}`,
+  return chartCard({ id: "workload", title: `Belastung durch lange und nächtliche Einsätze`,
     subtitle: "Welche Belastung steckt hinter der reinen Einsatzanzahl? Ein Einsatz kann in mehreren Zeilen vorkommen.",
     chart: barChart(items), table: dataTable(["Art", "Einsätze", "Anteil", "Einsatzstunden", "Personalstunden"], rows),
     extra: `<p class="small muted section-gap">Personalstunden = Einsatzdauer × erfasste Anwesende; ohne Anwesenheit fehlen sie (${esc(coverageText(s.staff_recorded, s.staff_total))}).</p>` });
@@ -203,7 +203,7 @@ function durationCard(w) {
 
 function overlapCard(o) {
   const hours = o.overlap_minutes ? formatDuration(o.overlap_minutes) : "0 min";
-  return `<div class="card"><div class="card-header"><div><h3>Zeitliche Überschneidung${helpButton("overlaps")}</h3>
+  return `<div class="card"><div class="card-header"><div><h3>Zeitliche Überschneidung</h3>
     <p class="muted">Wann waren mehrere Einsätze gleichzeitig offen? Das heißt nicht, dass dieselben Kräfte gebunden waren.</p></div></div>
     <div class="stat-mini">
       <div><b>${o.incidents_with_overlap}</b><span>Einsätze mit Überschneidung</span></div>
@@ -217,10 +217,10 @@ function renderWorkload() {
   const e = state.evaluation, w = e.workload, s = e.statistics;
   if (!w.total) { $("#view-load").innerHTML = evaluationToolbar({ exports: false }) + noIncidentsCard(); return; }
   $("#view-load").innerHTML = evaluationToolbar({ exports: false }) + `<div class="kpis kpis-4">
-    ${analysisKpi(`Lange Einsätze${helpButton("workload")}`, w.long.count, esc(`ab ${formatDuration(w.long.minutes)} · ${shareText(w.long.count, w.total)}`))}
+    ${analysisKpi(`Lange Einsätze`, w.long.count, esc(`ab ${formatDuration(w.long.minutes)} · ${shareText(w.long.count, w.total)}`))}
     ${analysisKpi("Nächtliche Einsätze", w.night.count, esc(shareText(w.night.count, w.total)))}
     ${analysisKpi("Samstag, Sonntag, Feiertag", w.weekend.count, esc(shareText(w.weekend.count, w.total)))}
-    ${analysisKpi(`Gleichzeitig offen${helpButton("overlaps")}`, w.overlap.incidents_with_overlap, esc(`höchstens ${w.overlap.max_concurrent} zugleich`))}
+    ${analysisKpi(`Gleichzeitig offen`, w.overlap.incidents_with_overlap, esc(`höchstens ${w.overlap.max_concurrent} zugleich`))}
   </div>
   <div class="grid grid-2">${workloadCard(w, s)}${durationCard(w)}</div><div class="grid">${overlapCard(w.overlap)}</div>`;
 }

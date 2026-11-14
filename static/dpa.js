@@ -67,7 +67,7 @@ function renderDpa() {
   const items = dpaState.data.items;
   const blocked = config.dpa_blocked.length > 0;
   $("#view-dpa").innerHTML = `${dpaState.error ? errorBox(dpaState.error) : ""}
-    <div class="card"><h2>Auftragsverarbeitung${helpButton("dpa")}</h2>
+    <div class="card"><h2>Auftragsverarbeitung</h2>
       <p>Die Einsatzstatistik verarbeitet Namen und Anwesenheiten im Auftrag der Verbandsgemeinde als Träger der Feuerwehr.
       Dafür braucht es einen Vertrag zur Auftragsverarbeitung (Art. 28 DSGVO).
       ${blocked ? "<b>Bis er vorliegt, sind die Einsatzdaten der betroffenen Wehren gesperrt.</b>" : ""}</p></div>

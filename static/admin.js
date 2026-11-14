@@ -168,7 +168,7 @@ const adminField = (label, input, span = "", help = "") => {
   const existing = input.match(/<(?:input|select|textarea)\b[^>]*\bid="([^"]+)"/);
   const id = existing?.[1] || `admin-field-${++adminFieldSequence}`;
   const control = existing ? input : input.replace(/<(input|select|textarea)\b/, `<$1 id="${id}"`);
-  return `<div class="field ${span}"><span><label for="${id}">${label}</label>${help ? helpButton(help) : ""}</span>${control}</div>`;
+  return `<div class="field ${span}"><span><label for="${id}">${label}</label></span>${control}</div>`;
 };
 const textInput = (path, value, attributes = "") =>
   `<input type="text" data-bind="${path}" value="${esc(value ?? "")}" ${attributes}>`;
@@ -515,7 +515,7 @@ function feesSection() {
     <td class="right"><button type="button" class="btn btn-light btn-small" data-admin-action="fee-edit" data-id="${x.id}">Bearbeiten</button>
       <button type="button" class="btn btn-light btn-small" data-admin-action="fee-copy" data-id="${x.id}">Als neue Fassung</button>
       <button type="button" class="btn btn-outline btn-small" data-admin-action="fee-delete" data-id="${x.id}">Löschen</button></td></tr>`).join("");
-  return `<p class="small muted">Kostensätze der Satzung über den Kostenersatz der Feuerwehr. Für einen Einsatz gilt die Fassung, die am Einsatztag gilt. Den Fahrzeugtyp eines Fahrzeugs bestimmt seine Bezeichnung in der Fahrzeugliste der Wehr (z. B. „HLF 20“).${helpButton("fees")}</p>
+  return `<p class="small muted">Kostensätze der Satzung über den Kostenersatz der Feuerwehr. Für einen Einsatz gilt die Fassung, die am Einsatztag gilt. Den Fahrzeugtyp eines Fahrzeugs bestimmt seine Bezeichnung in der Fahrzeugliste der Wehr (z. B. „HLF 20“).</p>
     <div class="table-wrap section-gap"><table class="mini-table admin-table"><thead><tr><th>Fassung</th><th>gültig ab</th><th class="right">Fahrzeugtypen</th><th></th></tr></thead>
       <tbody>${rows || `<tr><td colspan="4" class="muted">Noch keine Gebührenordnung hinterlegt.</td></tr>`}</tbody></table></div>
     ${draft ? "" : `<button type="button" class="btn btn-light btn-small section-gap" data-admin-action="fee-new">Neue Fassung</button>`}

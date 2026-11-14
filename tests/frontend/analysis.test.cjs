@@ -13,7 +13,7 @@ function load(extra = {}) {
     $: el, esc: (s) => String(s ?? ""), num: (n) => n == null ? "–" : String(n), percent: (q) => q == null ? "–" : `${Math.round(q * 100)} %`,
     minutes: (m) => m == null ? "–" : `${m} min`, plural: (n, one, many) => `${n} ${n === 1 ? one : many}`,
     formatDuration: (m) => m == null ? "–" : `${m} min`, formatHours: (m) => m == null ? "–" : `${Math.round(m / 60)} h`,
-    helpButton: () => "", shareOf: (c, t) => `${c}/${t}`, can: (p) => context.config.permissions.includes(p),
+    shareOf: (c, t) => `${c}/${t}`, can: (p) => context.config.permissions.includes(p),
     evaluationToolbar: () => "", listLink: (f) => `#incidents?${new URLSearchParams(f)}`, loadEvaluation: async () => {}, loadIncidents: async () => {},
     chartCard: ({ title, chart, table }) => `[${title}]${chart}${table}`, barChart: (items) => items.map((i) => `${i.label}=${i.text ?? i.value}`).join(";"),
     columnChart: (groups) => groups.map((g) => `${g.axis}=${g.values[0].text}`).join(";"), dataTable: (head, rows) => rows.map((r) => r.join("|")).join("\n"),

@@ -271,9 +271,15 @@ Abgerundete, freundliche Formen mit gestaffelten Radien: 6 px (Chips), 8 px (Ein
 ### Zahlen
 - Ziffern in Daten (Tabellen, Kennzahlen, Chips, Eingaben) kommen aus `--font-num`: eine Systemschrift mit eindeutiger Eins und Null (`@font-face "Ziffern"`, nur U+0030–0039); Buchstaben und Überschriften bleiben Sansation, weil dort Eins und I, Null und O verwechselt werden.
 
+### Zeitstrahl
+- Im Einsatzdetail zeigt ein Zeitstrahl je Fahrzeug Ausrücken (`--brand-accent`) und Anfahrt (`--brand`) auf einer Minutenachse ab Alarm; die Zeitgrenze ist eine gestrichelte Linie in `--late-text`. Verspätung steht zusätzlich als Wort und △. Ein Umschalter „Zeitstrahl / Tabelle“ hält die genauen Werte erreichbar; die Wahl bleibt erhalten.
+
+### Hilfe
+- Es gibt eine gesammelte Hilfe (das `?` im Kopf, passend zur Ansicht), keine `?`-Symbole an einzelnen Feldern oder Kennzahlen. Erklärungen stehen in `help.js`.
+
 ### Import-Vorschau
 - Bei mehreren Berichten ist nur der erste aufgeklappt, die übrigen zeigen ihr Statusband mit „Öffnen“; nach der Übernahme öffnet sich der nächste. Fehlende Angaben im Formular sind Bernstein mit dem Wort „fehlt“ (nie Rosa: Rot der Wehr ist Marke).
-- Prüfhinweise zuerst, dann die Kernfelder; seltene Angaben liegen in „Weitere Angaben“ (`<details>`, offen, wenn der Bericht etwas enthält). Die Übernahme ist eine feste Fußleiste am Dialogrand.
+- Sichtbar sind nur Prüfhinweise, die Anwesenden (neue Personen) und ein Einzeiler zum Einsatz; alle Felder, Zeiten und Fahrzeuge liegen hinter „Alle Felder“ (`<details>`, merkt sich je Bericht den Zustand). Die Übernahme ist eine feste Fußleiste am Dialogrand. Im Bearbeiten-Formular des Einsatzes liegen seltene Angaben in „Weitere Angaben“.
 
 ### Navigation
 - Reiter im Kopf: weiße Schrift (`--on-brand-text`, 82 % → 100 % bei Hover/aktiv), 3-px-Unterstrich weiß für den aktiven Reiter, Streifen als dunkle Überlagerung (14 %); Unterreiter etwas kleiner und heller abgesetzt. Alles im Kopf nutzt die Tokens `--on-brand-text`, `--on-brand-fill`, `--on-brand-line`; der Fokusring ist dort weiß (8,2:1 auf dem Verlauf).

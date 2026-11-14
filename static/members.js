@@ -48,7 +48,7 @@ function renderMembers() {
       <p class="muted small">${plural(list.length, "Person", "Personen")} · ${plural(a.incident_count, "Einsatz", "Einsätze")} · Stunden = Einsatzdauer je Teilnahme</p></div></div>
     <div class="table-wrap"><table class="table">
       <thead><tr><th class="col-number">#</th>${MEMBER_COLUMNS.map(([f, title, cls, help]) =>
-        `<th class="sortable ${cls}" data-sort="${f}">${title}${field === f ? (descending ? " ▾" : " ▴") : ""}${help ? helpButton(help) : ""}</th>`).join("")}</tr></thead>
+        `<th class="sortable ${cls}" data-sort="${f}">${title}${field === f ? (descending ? " ▾" : " ▴") : ""}</th>`).join("")}</tr></thead>
       <tbody>${list.map((m, i) => `<tr class="row ${state.openMembers.has(m.id) ? "open" : ""}" data-member="${m.id}">
         <td class="muted">${i + 1}</td>
         <td><strong>${esc(m.name)}</strong></td>

@@ -25,6 +25,7 @@ const state = {
   warnOnly: false,                            // nur Einsätze mit aktuellen Prüfhinweisen
   filters: {},                                // Filter aus der Auswertung (Monat, Ort, …), siehe LIST_FILTERS
   incidentSort: sortFrom(recall("incident-sort")),
+  vehicleView: recall("vehicle-view") === "table" ? "table" : "timeline",
   current: null,                              // zuletzt geöffneter Einsatz (Tasten j/k/e, Vor/Zurück)
   editSnapshot: null,                         // Stand des Formulars beim Öffnen – Vergleich für „ungespeichert“
   tableCards: new Set(recallList("table-cards")),   // Diagramme, die als Tabelle angezeigt werden (gemerkt)
@@ -483,7 +484,7 @@ $("#view-incidents").addEventListener("click", (e) => {
   }
   if (e.target.closest("[data-clear-filters]")) { clearListFilters(); renderIncidents(); return; }
   const th = e.target.closest("[data-sort-incidents]");
-  if (th && !e.target.closest(".help-btn")) {
+  if (th) {
     const field = th.dataset.sortIncidents, { incidentSort: sort } = state;
     // Erster Klick: Zahlen und Datum absteigend, Stichwort aufsteigend; weiterer Klick dreht um
     state.incidentSort = { field, descending: sort.field === field ? !sort.descending : field !== "keyword" };
@@ -497,6 +498,8 @@ $("#btn-export").addEventListener("click", () => { location.href = `/api/export?
 $("#incident-table tbody").addEventListener("click", async (e) => {
   const chip = e.target.closest("[data-leader]");
   if (chip) { pickLeader(chip); return; }
+  const vehicleView = e.target.closest("[data-vehicle-view]");
+  if (vehicleView) { state.vehicleView = vehicleView.dataset.vehicleView; remember("vehicle-view", state.vehicleView); renderIncidents(); return; }
   const action = e.target.closest("[data-action]");
   if (action) { handleIncidentAction(action.dataset.action, action.dataset.id, action); return; }
   if (e.target.closest("tr.detail")) return;
@@ -629,6 +632,12 @@ $("#previews").addEventListener("change", (e) => {
   state.upload.reports[i].replace = e.target.checked;
   renderPreviews();
 });
+// „Alle Felder“ merkt sich je Bericht, ob es offen ist (die Vorschau wird nach jeder Übernahme neu gezeichnet)
+$("#previews").addEventListener("toggle", (e) => {
+  const details = e.target.closest?.("details[data-fields]");
+  const report = details && state.upload.reports[Number(details.dataset.fields)];
+  if (report) report.allFields = details.open;
+}, true);
 $("#previews").addEventListener("click", (e) => {
   const chip = e.target.closest("[data-leader]");
   if (chip) { pickLeader(chip); return; }

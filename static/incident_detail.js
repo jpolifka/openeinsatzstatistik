@@ -1,5 +1,42 @@
 // Einsatz: Detailansicht, Bearbeiten, Ungespeicherte Änderungen, Löschen mit „Rückgängig“. Wird vor app.js geladen.
 
+// Zeitstrahl: je Fahrzeug Ausrücken (ab Alarm) und Anfahrt bis zum Eintreffen auf einer Minutenachse, gestrichelt die Zeitgrenze
+function vehicleTimeline(e) {
+  const limit = config.default_limit;
+  const times = e.vehicles.filter((v) => !isIdle(v)).flatMap((v) => [v.turnout_min, v.arrival_min]).filter((m) => m != null);
+  if (!times.length) return `<p class="empty-note">Keine Ausrück- und Eintreffzeiten vorhanden.</p>`;
+  const { max, step } = niceScale(Math.max(limit, ...times) * 1.2, true);   // etwas Luft hinter dem letzten Fahrzeug und der Zeitgrenze
+  const at = (minutes) => Math.round(Math.min(100, Math.max(0, (minutes / max) * 100)) * 100) / 100;
+  const ticks = [];
+  for (let m = 0; m <= max; m += step) ticks.push(`<span style="left:${at(m)}%">${m}</span>`);
+  const rows = e.vehicles.map((v) => {
+    if (isIdle(v)) return `<div class="tl-row"><span class="tl-name">${esc(v.call_sign)}</span><span class="tl-idle">nicht im Einsatz</span></div>`;
+    const out = v.turnout_min, arrival = v.arrival_min, late = arrival != null && arrival > limit;
+    const say = [out != null && `Ausrücken nach ${num(out)} min`, arrival != null && `Eintreffen nach ${num(arrival)} min${late ? `, nicht innerhalb von ${limit} min` : ""}`]
+      .filter(Boolean).join(", ") || "keine Zeiten";
+    // Die Beschriftung steht hinter dem Balkenende, bei spätem Ende davor (rechter Rand)
+    const label = arrival == null ? "" : `<span class="tl-label ${late ? "late" : ""} ${at(arrival) > 78 ? "inside" : ""}" style="${at(arrival) > 78 ? `right:${100 - at(arrival)}%` : `left:${at(arrival)}%`}">${num(arrival)} min${late ? lateMark(true, limit) : ""}</span>`;
+    return `<div class="tl-row" role="img" aria-label="${esc(`${v.call_sign}: ${say}`)}">
+      <span class="tl-name">${esc(v.call_sign)}</span>
+      <div class="tl-track"><span class="tl-limit" style="left:${at(limit)}%"></span>
+        ${out != null ? `<span class="tl-turnout" style="width:${at(out)}%"></span>` : ""}
+        ${arrival != null ? `<span class="tl-travel" style="left:${at(out ?? 0)}%;width:${Math.max(0.6, at(arrival) - at(out ?? 0))}%"></span>` : ""}${label}</div></div>`;
+  }).join("");
+  return `<div class="timeline" role="group" aria-label="Zeitstrahl der Fahrzeuge in Minuten nach Alarmierung">${rows}
+    <div class="tl-row tl-axis" aria-hidden="true"><span class="tl-name"></span><div class="tl-track plain">${ticks.join("")}</div></div>
+    <p class="tl-legend small muted"><span><i class="tl-key turnout"></i>Ausrücken</span><span><i class="tl-key travel"></i>Anfahrt</span><span>gestrichelt: ${limit} Minuten</span></p></div>`;
+}
+
+// Fahrzeuge eines Einsatzes: Zeitstrahl oder Tabelle (Umschalter, die Wahl bleibt erhalten)
+function vehiclePanel(e) {
+  const hasTimes = e.vehicles.some((v) => !isIdle(v));
+  const view = hasTimes && state.vehicleView !== "table" ? "timeline" : "table";
+  const switcher = hasTimes ? `<div class="segments" role="group" aria-label="Darstellung der Fahrzeuge">
+    ${[["timeline", "Zeitstrahl"], ["table", "Tabelle"]].map(([key, label]) =>
+      `<button type="button" data-vehicle-view="${key}" class="${view === key ? "active" : ""}" aria-pressed="${view === key}">${label}</button>`).join("")}</div>` : "";
+  return `<div class="panel"><div class="panel-head"><h4>Fahrzeuge</h4>${switcher}</div>${view === "timeline" ? vehicleTimeline(e) : vehicleTable(e)}</div>`;
+}
+
 function vehicleTable(e) {
   const limit = config.default_limit;
   return `<div class="table-wrap"><table class="mini-table"><thead><tr>
@@ -33,6 +70,9 @@ function pickLeader(chip) {
   const input = $('input[name="unit_leader"]', form);
   input.value = chip.dataset.leader;
   input.classList.remove("missing");
+  input.closest?.(".field")?.querySelector?.(".field-missing")?.remove();
+  const line = $("[data-oneline-leader]", form);            // Einzeiler der Vorschau
+  if (line) line.textContent = `Einheitsführung ${chip.dataset.leader}`;
   highlightLeader(form);
 }
 
@@ -50,12 +90,12 @@ function warningsList(warnings, emptyText = "") {
 function attendancePanel(e, options = {}) {
   // Ohne Recht auf Anwesenheit (z. B. Wehrleiter) nur die Anzahl
   if (!e.people_visible) {
-    return `<h4>Anwesenheit · ${e.people_count} Personen${helpButton("attendance")}</h4>
+    return `<h4>Anwesenheit · ${e.people_count} Personen</h4>
       <p class="small muted">Die Namen sehen nur Rollen der Wehr mit Recht auf die Anwesenheit (z. B. Wehrführer, Erfasser).</p>`;
   }
   const newCount = options.markNew ? e.people.filter((p) => p.new).length : 0;
   const hint = options.pickLeader && e.people.length ? `<p class="small muted">Einen Namen anklicken, um die Person als Einheitsführung einzutragen.</p>` : "";
-  return `<h4>Anwesenheit · ${e.people.length} Personen${newCount ? ` · ${newCount} neu` : ""}${helpButton("attendance")}</h4>
+  return `<h4>Anwesenheit · ${e.people.length} Personen${newCount ? ` · ${newCount} neu` : ""}</h4>
     ${hint}<div class="people">${peopleChips(e, options)}</div>`;
 }
 
@@ -73,7 +113,7 @@ function reportDetailsPanel(e) {
   ].filter(([, , value]) => value != null && value !== "");
   if (!rows.length) return "";
   return `<div class="panel"><h4>Weitere Angaben</h4><dl class="facts">${rows.map(([label, key, value]) =>
-    `<dt>${label}${helpButton(key)}</dt><dd>${esc(value)}</dd>`).join("")}</dl></div>`;
+    `<dt>${label}</dt><dd>${esc(value)}</dd>`).join("")}</dl></div>`;
 }
 
 function incidentDetail(e) {
@@ -82,27 +122,27 @@ function incidentDetail(e) {
     <div class="panel"><h4>Einsatz</h4><dl class="facts">
       <dt>Beginn</dt><dd>${formatDateTime(e.started_at)}</dd>
       <dt>Ende</dt><dd>${formatDateTime(e.ended_at)}</dd>
-      <dt>Dauer${helpButton("duration")}</dt><dd>${formatDuration(e.duration_min)}</dd>
-      <dt>Zeitfenster${helpButton("time_window")}</dt><dd>${e.weekend_or_holiday ? "Sa/So/Feiertag" : "Werktag"}, ${e.daytime ? "Tag" : "Nacht"}</dd>
+      <dt>Dauer</dt><dd>${formatDuration(e.duration_min)}</dd>
+      <dt>Zeitfenster</dt><dd>${e.weekend_or_holiday ? "Sa/So/Feiertag" : "Werktag"}, ${e.daytime ? "Tag" : "Nacht"}</dd>
       <dt>Ort</dt><dd>${esc(e.place || "–")}</dd>
-      ${e.people_visible !== false ? `<dt>Einheitsführung${helpButton("unit_leader")}</dt><dd>${esc(e.unit_leader || "–")}</dd>` : ""}
-      <dt>Gerätehaus${helpButton("station_staff")}</dt><dd>${e.station_staff}</dd>
+      ${e.people_visible !== false ? `<dt>Einheitsführung</dt><dd>${esc(e.unit_leader || "–")}</dd>` : ""}
+      <dt>Gerätehaus</dt><dd>${e.station_staff}</dd>
       <dt>Quelle</dt><dd class="small">${sourceLabel(e)}</dd>
-      ${e.bks_url ? `<dt>BKS-Portal${helpButton("bks_url")}</dt><dd class="small">${bksLink(e)}</dd>` : ""}
+      ${e.bks_url ? `<dt>BKS-Portal</dt><dd class="small">${bksLink(e)}</dd>` : ""}
     </dl></div>
-    <div class="panel"><h4>Fahrzeuge${helpButton("vehicles")}</h4>${vehicleTable(e)}</div>
+    ${vehiclePanel(e)}
     ${reportDetailsPanel(e)}
     <div class="panel"><h4>Kennzahlen</h4><dl class="facts">
-      <dt>Ausrückdauer${helpButton("turnout_min")}</dt><dd>${minutes(e.turnout_min)}</dd>
-      <dt>Zeit bis Eintreffen${helpButton("arrival_min")}</dt><dd>${minutes(e.arrival_min)}</dd>
-      <dt>${limit} Min. erreicht${helpButton("on_time")}</dt><dd>${e.on_time == null ? "–" : e.on_time ? "ja" : "nein"}</dd>
-      <dt>Stärke Eintreffen${helpButton("crew_on_arrival")}</dt><dd>${orDash(e.crew_on_arrival)}</dd>
-      <dt>zusätzlich bis ${limit} Min.${helpButton("crew_within_limit")}</dt><dd>${orDash(e.crew_within_limit)}</dd>
-      <dt>zusätzlich ${limit}–${config.second_limit} Min.${helpButton("crew_within_second")}</dt><dd>${orDash(e.crew_within_second)}</dd>
-      <dt>Gesamtstärke${helpButton("crew_total")}</dt><dd>${e.crew_total}</dd>
+      <dt>Ausrückdauer</dt><dd>${minutes(e.turnout_min)}</dd>
+      <dt>Zeit bis Eintreffen</dt><dd>${minutes(e.arrival_min)}</dd>
+      <dt>${limit} Min. erreicht</dt><dd>${e.on_time == null ? "–" : e.on_time ? "ja" : "nein"}</dd>
+      <dt>Stärke Eintreffen</dt><dd>${orDash(e.crew_on_arrival)}</dd>
+      <dt>zusätzlich bis ${limit} Min.</dt><dd>${orDash(e.crew_within_limit)}</dd>
+      <dt>zusätzlich ${limit}–${config.second_limit} Min.</dt><dd>${orDash(e.crew_within_second)}</dd>
+      <dt>Gesamtstärke</dt><dd>${e.crew_total}</dd>
     </dl>
     <h4 class="section-gap">Aktueller Datenstand</h4>${warningsList(e.current_warnings || [], "Keine aktuellen Prüfhinweise")}
-    ${e.warnings.length ? `<h4 class="section-gap">Hinweise beim Import${helpButton("warnings")}</h4><p class="small muted">Historische Hinweise aus dem Bericht; spätere Korrekturen sind hier nicht berücksichtigt.</p>${warningsList(e.warnings)}` : ""}
+    ${e.warnings.length ? `<h4 class="section-gap">Hinweise beim Import</h4><p class="small muted">Historische Hinweise aus dem Bericht; spätere Korrekturen sind hier nicht berücksichtigt.</p>${warningsList(e.warnings)}` : ""}
     </div>
     <div class="panel full">${attendancePanel(e)}</div>
     <div class="actions panel full bare">
@@ -145,7 +185,7 @@ function formFields(e, { fold = false } = {}) {
     // Nummerierung nach Datum: die Nr. vergibt die App
     const extra = name === "number" && config.numbering === "by_date" ? ' readonly data-tip="Wird nach dem Einsatzbeginn vergeben"' : "";
     const id = `${prefix}-${name}`;
-    return `<div class="field ${span}"><span><label for="${id}">${title}</label>${helpButton(name)}${missing ? '<em class="field-missing">fehlt</em>' : ""}</span><input id="${id}" name="${name}" type="${type}" value="${esc(value ?? "")}" ${attributes}${extra}
+    return `<div class="field ${span}"><span><label for="${id}">${title}</label>${missing ? '<em class="field-missing">fehlt</em>' : ""}</span><input id="${id}" name="${name}" type="${type}" value="${esc(value ?? "")}" ${attributes}${extra}
       class="${missing ? "missing" : ""}"></div>`;
   }
 }
@@ -184,7 +224,7 @@ function peopleEditPanel() {
       <button type="button" class="person" data-leader="${esc(p.leader_name)}" data-tip="${esc([p.role, p.vehicle, `Klicken: als Einheitsführung eintragen (${p.leader_name})`].filter(Boolean).join(" · "))}">${esc(p.name)}${p.vehicle ? `<small>${esc(p.vehicle)}</small>` : ""}</button>
       <button type="button" class="person-remove" data-action="remove-person" data-index="${i}" aria-label="${esc(p.name)} entfernen">×</button>
     </span>`).join("");
-  return `<h4>Anwesenheit · ${people.length} Personen${helpButton("attendance")}</h4>
+  return `<h4>Anwesenheit · ${people.length} Personen</h4>
     <p class="small muted">Einen Namen anklicken, um die Person als Einheitsführung einzutragen; × entfernt sie aus dem Einsatz.</p>
     <div class="people">${chips || `<span class="muted">Keine Anwesenheit erfasst</span>`}</div>
     <div class="person-add">
@@ -257,7 +297,7 @@ async function startEditing(id) {
 function editForm(e) {
   return `<div class="detail-grid" data-form="${e.id}">
     <div class="panel full"><h4>Einsatz ${e.number ?? ""} bearbeiten</h4>${formFields(e, { fold: true })}</div>
-    <div class="panel full"><h4>Fahrzeuge${helpButton("vehicles")}</h4>
+    <div class="panel full"><h4>Fahrzeuge</h4>
       <p class="small muted">Stärke und Zeiten korrigieren oder ein Fahrzeug ergänzen („dabei“). Manuell ergänzte Fahrzeuge und Personen bleiben erhalten, wenn der Bericht später erneut eingelesen wird.</p>
       ${vehicleEditTable(e)}</div>
     <div class="panel full" data-people-edit>${state.editDraft.visible ? peopleEditPanel() : attendancePanel(e)}</div>

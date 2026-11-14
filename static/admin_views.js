@@ -108,9 +108,9 @@ function unitSection() {
       Farben und Logos von ${esc(s.name)} erscheinen, wenn diese Wehr ausgewählt ist.
       <button type="button" class="btn btn-light btn-small" data-admin-action="select-tenant">${esc(s.name)} auswählen</button></div>` : "";
   return `${elsewhere}<div class="form-grid">${adminField("Name der Wehr", textInput("name", s.name, 'maxlength="80"'), "span-4")}</div>
-    <h3 class="section-gap">Farben${helpButton("admin_colors")} ${inheritNote("colors")}</h3>
+    <h3 class="section-gap">Farben ${inheritNote("colors")}</h3>
     ${colorFields()}
-    <h3 class="section-gap">Logos${helpButton("admin_logos")}</h3>
+    <h3 class="section-gap">Logos</h3>
     <p class="small muted">PNG, JPEG oder WebP, höchstens 512 KB. Wird sofort gespeichert.</p>
     <div class="logo-slots">${logos}</div>
     ${saveButton()}`;
@@ -118,8 +118,8 @@ function unitSection() {
 
 function vgUnitSection() {
   const d = admin.vgSettings;
-  return `<p class="small muted">Vorgaben der ${esc(d.vg.name)} für alle ihre Wehren. Eine Wehr kann bei sich abweichen; ihren Namen und ihre Logos pflegt jede Wehr selbst (oben die Wehr auswählen).${helpButton("admin_vg_defaults")}</p>
-    <h3 class="section-gap">Farben${helpButton("admin_colors")}</h3>
+  return `<p class="small muted">Vorgaben der ${esc(d.vg.name)} für alle ihre Wehren. Eine Wehr kann bei sich abweichen; ihren Namen und ihre Logos pflegt jede Wehr selbst (oben die Wehr auswählen).</p>
+    <h3 class="section-gap">Farben</h3>
     ${colorFields()}
     ${overridesNote("colors")}
     ${saveButton()}`;
@@ -294,7 +294,7 @@ function fleetSection() {
   const s = admin.settings;
   const emptyRow = s.fleet.some((v) => !v.name && !v.call_sign);
   const vg = adminTenantVg();
-  return `<p class="small muted">Reihenfolge wie in der Einsatzübersicht. Funkrufname genau wie im BKS-Bericht – zur Auswahl stehen die Fahrzeuge aus den bisher eingelesenen Berichten (<a href="${esc(s.call_sign_directory)}" target="_blank" rel="noopener">Funkrufnamenverzeichnis RLP</a>). Neue eigene Fahrzeuge aus BKS-Berichten werden beim Übernehmen automatisch hinten angefügt (im Dienst ab Einsatztag).${vg ? ` Alle Fahrzeuge der VG auf einmal: oben „Wehrleitung · ${esc(vg.name)}“ wählen.` : ""}${helpButton("admin_fleet")}</p>
+  return `<p class="small muted">Reihenfolge wie in der Einsatzübersicht. Funkrufname genau wie im BKS-Bericht – zur Auswahl stehen die Fahrzeuge aus den bisher eingelesenen Berichten (<a href="${esc(s.call_sign_directory)}" target="_blank" rel="noopener">Funkrufnamenverzeichnis RLP</a>). Neue eigene Fahrzeuge aus BKS-Berichten werden beim Übernehmen automatisch hinten angefügt (im Dienst ab Einsatztag).${vg ? ` Alle Fahrzeuge der VG auf einmal: oben „Wehrleitung · ${esc(vg.name)}“ wählen.` : ""}</p>
     ${knownDatalist()}
     ${fleetTools()}
     <div class="table-wrap table-scroll"><table class="${fleetTableClass()}">${fleetHead(false)}
@@ -325,7 +325,7 @@ function vgFleetSection() {
     `<option value="${j}">${esc(t.name)}</option>`).join("")}</select>`;
   const openRow = (v) => `<tr><td><b>${esc(v.name)}</b><div class="small muted">${esc(v.description)}</div></td><td>${typeCell(v.label)}</td><td>${assign(v)}</td></tr>`;
   const own = f.unassigned.filter((v) => v.vg), others = f.unassigned.filter((v) => !v.vg);
-  return `<p class="small muted">Alle Fahrzeuge der VG in einer Tabelle, gruppiert nach Wehr. Über „Wehr“ wechselt ein Fahrzeug die Wehr; Einsätze mit seinen Daten bleiben bei der bisherigen Wehr, dort wird es ab dann nicht mehr zugeordnet. Gespeichert wird alles zusammen. (<a href="${esc(f.call_sign_directory)}" target="_blank" rel="noopener">Funkrufnamenverzeichnis RLP</a>)${helpButton("admin_vg_vehicles")}</p>
+  return `<p class="small muted">Alle Fahrzeuge der VG in einer Tabelle, gruppiert nach Wehr. Über „Wehr“ wechselt ein Fahrzeug die Wehr; Einsätze mit seinen Daten bleiben bei der bisherigen Wehr, dort wird es ab dann nicht mehr zugeordnet. Gespeichert wird alles zusammen. (<a href="${esc(f.call_sign_directory)}" target="_blank" rel="noopener">Funkrufnamenverzeichnis RLP</a>)</p>
     ${knownDatalist()}
     ${fleetTools()}
     <div class="table-wrap table-scroll"><table class="${fleetTableClass()}">${fleetHead(true)}<tbody>${groups}</tbody></table></div>
@@ -437,7 +437,7 @@ function bksSection() {
     ...result.units.map((u) => `<li><b>${esc(u.unit)}</b> → ${u.own ? "<b>Bericht dieser Wehr</b>" : "Bericht einer anderen Einheit"}</li>`),
     ...result.vehicles.map((v) => `<li><b>${esc(v.name)}</b> → ${fleetMatch(v)}${v.description ? `<br><span class="small muted">${esc(v.description)}</span>` : ""}</li>`),
   ] : [];
-  return `<p class="small muted">So erkennt die App im Einsatzbericht des BKS-Portals, von welcher Wehr ein Bericht stammt und welche Fahrzeuge dazugehören.${helpButton("admin_bks")}</p>
+  return `<p class="small muted">So erkennt die App im Einsatzbericht des BKS-Portals, von welcher Wehr ein Bericht stammt und welche Fahrzeuge dazugehören.</p>
     <div class="form-grid">
       ${adminField(`Kennung der VG ${inheritNote("bks_code")}`, `<input type="text" data-bks="code" value="${esc(s.bks_code || "")}" placeholder="NR#.ABC" spellcheck="false">`, "span-2")}
       ${adminField("Standort", `<input type="text" data-bks="station" value="${esc(s.station || "")}" placeholder="02" maxlength="2" class="narrow">`)}
@@ -465,7 +465,7 @@ function vgBksSection() {
     ...result.vehicles.map((v) => `<li><b>${esc(v.name)}</b> → ${v.tenant ? `Fahrzeug von ${owner(v.tenant)}`
       : v.block ? `geführt bei <b>${esc(v.block.tenant)}</b> im Block ${esc(v.block.call_sign)}` : `Fahrzeug von ${owner(null)}`}${v.description ? `<br><span class="small muted">${esc(v.description)}</span>` : ""}</li>`),
   ] : [];
-  return `<p class="small muted">Kennung der VG und Standort jeder Wehr ergeben die Einheit in der Kopfzeile des Berichts (z. B. „FW NR#.ABC 02“) und die Funkrufnamen ihrer Fahrzeuge. Das Testfeld zeigt, welcher Wehr die App einen Bericht bzw. ein Fahrzeug zuordnet (gespeicherter Stand).${helpButton("admin_bks")}</p>
+  return `<p class="small muted">Kennung der VG und Standort jeder Wehr ergeben die Einheit in der Kopfzeile des Berichts (z. B. „FW NR#.ABC 02“) und die Funkrufnamen ihrer Fahrzeuge. Das Testfeld zeigt, welcher Wehr die App einen Bericht bzw. ein Fahrzeug zuordnet (gespeicherter Stand).</p>
     <div class="form-grid">
       ${adminField("Kennung der VG", textInput("bks_code", d.bks_code || "", 'placeholder="NR#.ABC" spellcheck="false"'), "span-2")}
       ${adminField("FEZ-Kennung", textInput("control_center", d.control_center, 'spellcheck="false"'), "span-2")}
@@ -504,7 +504,7 @@ function placesSection() {
     <td class="center"><input type="checkbox" data-plan-place="${i}" ${s.plan_places.includes(p.name) ? "checked" : ""} aria-label="Zählt zum Ausrückebereich"></td>
     <td><button type="button" class="icon-button" data-admin-action="remove-place" data-index="${i}" aria-label="entfernen">✕</button></td>
   </tr>`).join("");
-  return `<p class="small muted">Das Einsatzgebiet ist der Ort, mit dessen Namen der Einsatzort beginnt (z. B. „Musterstadt-Nord“ → Musterstadt). Nur Orte mit Haken zählen zum Ausrückebereich der Auswertung „Eintreffen und verfügbare Kräfte“.${helpButton("admin_places")}</p>
+  return `<p class="small muted">Das Einsatzgebiet ist der Ort, mit dessen Namen der Einsatzort beginnt (z. B. „Musterstadt-Nord“ → Musterstadt). Nur Orte mit Haken zählen zum Ausrückebereich der Auswertung „Eintreffen und verfügbare Kräfte“.</p>
     <h3 class="section-gap">Orte ${inheritNote("places")}</h3>
     <div class="table-wrap"><table class="mini-table admin-table"><thead><tr><th>Ort</th><th>Ausrückebereich</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
     <button type="button" class="btn btn-light btn-small section-gap" data-admin-action="add-place">Ort hinzufügen</button>
@@ -526,7 +526,7 @@ function vgPlacesSection() {
       : `<input type="checkbox" data-plan-place="${j}:${i}" ${t.plan_places.includes(p.name) ? "checked" : ""} aria-label="${esc(p.name)} im Ausrückebereich von ${esc(t.name)}">`}</td>`).join("")}
     <td><button type="button" class="icon-button" data-admin-action="remove-place" data-index="${i}" aria-label="entfernen">✕</button></td>
   </tr>`).join("");
-  return `<p class="small muted">Orte der VG für die Zuordnung des Einsatzgebiets (ein Einsatz gehört zu dem Ort, mit dessen Namen der Einsatzort beginnt). Die Haken je Wehr bilden ihren Ausrückebereich für die Auswertung „Eintreffen und verfügbare Kräfte“.${helpButton("admin_places")}</p>
+  return `<p class="small muted">Orte der VG für die Zuordnung des Einsatzgebiets (ein Einsatz gehört zu dem Ort, mit dessen Namen der Einsatzort beginnt). Die Haken je Wehr bilden ihren Ausrückebereich für die Auswertung „Eintreffen und verfügbare Kräfte“.</p>
     <div class="table-wrap"><table class="mini-table admin-table"><thead><tr><th>Ort</th>${head}<th></th></tr></thead><tbody>${rows}</tbody></table></div>
     <button type="button" class="btn btn-light btn-small section-gap" data-admin-action="add-place">Ort hinzufügen</button>
     ${overridesNote("places")}
@@ -576,7 +576,7 @@ function keywordsSection() {
         ${reset ? `<button type="button" class="btn btn-outline btn-small" data-admin-action="keywords-reset">${reset}</button>` : ""}
       </span>
     </div>
-    <h3 class="section-gap">${edit.code && k.keywords.some((x) => x.code === edit.code) ? "Stichwort ändern" : "Stichwort hinzufügen"}${helpButton("admin_keywords")}</h3>
+    <h3 class="section-gap">${edit.code && k.keywords.some((x) => x.code === edit.code) ? "Stichwort ändern" : "Stichwort hinzufügen"}</h3>
     <div class="form-grid">
       ${adminField("Stichwort", `<input type="text" id="keyword-code" value="${esc(edit.code)}" placeholder="B2.07" maxlength="5">`)}
       ${adminField("Bezeichnung", `<input type="text" id="keyword-name" value="${esc(edit.name)}" maxlength="120">`, "span-2")}
@@ -622,12 +622,12 @@ function usersSection() {
       <div class="field"><span>&nbsp;</span><button type="button" class="btn btn-primary" data-admin-action="grant">Zuordnen</button></div>
     </div>` : `<p class="small muted">Rollen vergeben darfst du nicht – hier stehen nur die Zuordnungen.</p>`;
   return `<p class="small muted">Wer eine Zuordnung hat, kann sich mit seiner E-Mail-Adresse anmelden. Eine Person kann mehrere Rollen haben;
-    ihre Rechte addieren sich. Eigene Zuordnungen ändert jemand anderes.${helpButton("admin_users")}</p>
+    ihre Rechte addieren sich. Eigene Zuordnungen ändert jemand anderes.</p>
     <div class="section-gap">${form}</div>
     <div class="table-wrap section-gap"><table class="mini-table admin-table"><thead><tr><th>E-Mail</th><th>Bereich</th><th>Rolle</th><th>zuletzt angemeldet</th><th></th></tr></thead>
     <tbody>${rows || `<tr><td colspan="5" class="muted">Noch keine Zuordnungen.</td></tr>`}</tbody></table></div>
     ${admin.effective ? effectivePanel() : ""}
-    <h3 class="section-gap">Protokoll${helpButton("admin_role_events")}</h3>
+    <h3 class="section-gap">Protokoll</h3>
     ${admin.events ? eventsTable() : `<button type="button" class="btn btn-light btn-small" data-admin-action="events">Protokoll anzeigen</button>`}`;
 }
 
@@ -635,7 +635,7 @@ function effectivePanel() {
   const e = admin.effective;
   const areas = e.areas.map((a) => `<h4 class="section-gap">${esc(a.name)}</h4>
     <div class="table-wrap"><table class="mini-table admin-table"><thead><tr><th>Recht</th><th>über</th></tr></thead><tbody>
-    ${a.permissions.map((p) => `<tr><td>${esc(p.label)}${helpButton(permissionHelpKey(p.key))}</td><td class="small muted">${p.from.map(esc).join(", ")}</td></tr>`).join("")}
+    ${a.permissions.map((p) => `<tr><td>${esc(p.label)}</td><td class="small muted">${p.from.map(esc).join(", ")}</td></tr>`).join("")}
     </tbody></table></div>`).join("");
   return `<div class="message message-info section-gap"><b>Rechte von ${esc(e.email)}</b>${e.superadmin ? " – Superadmin: darf alles" : ""}
     <button type="button" class="icon-button" data-admin-action="effective-close" aria-label="schließen">✕</button>
@@ -681,12 +681,12 @@ function rolesSection() {
       if (r.effective.includes(p.key)) return `<td class="center muted" data-tip="geerbt von ${esc(roleById(r.parent)?.label || "")}">○</td>`;
       return "<td></td>";
     }).join("");
-    return `${groupRow}<tr><td>${esc(p.label)}${helpButton(permissionHelpKey(p.key))}</td>${cells}</tr>`;
+    return `${groupRow}<tr><td>${esc(p.label)}</td>${cells}</tr>`;
   }).join("");
   const users = `<tr class="group-row"><th colspan="${roles.length + 1}">Zuordnungen</th></tr>
     <tr><td>Personen mit dieser Rolle</td>${roles.map((r) => `<td class="center">${r.members}</td>`).join("")}</tr>`;
   return `<p class="small muted">● eigenes Recht, ○ geerbt. Rollen eines Bereichs „VG“ gelten in allen Wehren der VG.
-    Rechte, Vererbung und wer eine Rolle vergeben darf, stehen im Editor (Klick auf den Namen).${helpButton("admin_roles")}</p>
+    Rechte, Vererbung und wer eine Rolle vergeben darf, stehen im Editor (Klick auf den Namen).</p>
     ${admin.roleDraft ? roleEditor() : ""}
     ${canCreate && !admin.roleDraft ? `<div class="admin-actions left"><button type="button" class="btn btn-primary btn-small" data-admin-action="role-new">Neue Rolle</button></div>` : ""}
     <div class="table-wrap section-gap"><table class="mini-table admin-table role-matrix"><thead><tr><th>Recht</th>${head}</tr></thead>
@@ -726,7 +726,7 @@ function roleEditor() {
     const note = wrongScope ? `nur für Rollen ${p.scopes.map((x) => admin.roles.scopes[x] === "VG" ? "der VG" : "einer Wehr").join(" oder ")}`
       : fromParent ? "geerbt" : p.requires.length ? `setzt voraus: ${p.requires.map((k) => permissions.find((x) => x.key === k).label).join(", ")}` : "";
     return `${heading}<label class="check ${wrongScope ? "muted" : ""}"><input type="checkbox" data-role-permission="${p.key}"
-      ${checked ? "checked" : ""} ${wrongScope || fromParent || readOnly ? "disabled" : ""}> ${esc(p.label)}${helpButton(permissionHelpKey(p.key))}
+      ${checked ? "checked" : ""} ${wrongScope || fromParent || readOnly ? "disabled" : ""}> ${esc(p.label)}
       ${note ? `<span class="small muted">${esc(note)}</span>` : ""}</label>`;
   }).join("");
   const granters = others.filter((r) => r.effective.includes("users.grant"));
@@ -735,7 +735,7 @@ function roleEditor() {
     ${d[field].includes(r.id) ? "checked" : ""} ${disabled}> ${esc(r.label)} <span class="small muted">${admin.roles.scopes[r.scope]}</span></label>`).join("")
     || `<span class="small muted">keine</span>`;
   return `<div class="role-editor section-gap">
-    <h3>${d.id === null ? "Neue Rolle" : esc(d.label)}${helpButton("admin_role_editor")}
+    <h3>${d.id === null ? "Neue Rolle" : esc(d.label)}
       ${readOnly ? `<span class="tenant-badge">nur ansehen</span>` : ""}</h3>
     <div class="form-grid">
       ${adminField("Bezeichnung", `<input type="text" data-role="label" value="${esc(d.label)}" maxlength="60" ${disabled}>`, "span-2")}
@@ -746,7 +746,7 @@ function roleEditor() {
     </div>
     <h4 class="section-gap">Rechte</h4>
     <div class="check-grid">${checks}</div>
-    <h4 class="section-gap">Verteilung${helpButton("admin_role_grants")}</h4>
+    <h4 class="section-gap">Verteilung</h4>
     <div class="check-columns">
       <div><div class="check-group">Diese Rolle dürfen vergeben</div>${roleChecks(granters, "granted_by")}</div>
       ${effective.has("users.grant") ? `<div><div class="check-group">Inhaber dieser Rolle vergeben</div>${roleChecks(grantable, "grants")}</div>` : ""}

@@ -173,8 +173,8 @@ function keepPreviewInput() {
 // Zuerst, was geprüft werden muss: Hinweise, Abweichungen zum erfassten Einsatz; ohne Anlass nur die ruhige Bestätigung
 function reviewPanel(r) {
   const hasReview = r.warnings.length || r.existing?.differences.length;
-  if (!hasReview) return `<div class="panel outlined"><h4>Prüfhinweise${helpButton("warnings")}</h4>${warningsList([], "Keine Prüfhinweise")}</div>`;
-  return `<div class="panel outlined preview-review"><h4>Zu prüfen${helpButton("warnings")}</h4>${warningsList(r.warnings)}${differencesTable(r.existing)}</div>`;
+  if (!hasReview) return `<div class="panel outlined"><h4>Prüfhinweise</h4>${warningsList([], "Keine Prüfhinweise")}</div>`;
+  return `<div class="panel outlined preview-review"><h4>Zu prüfen</h4>${warningsList(r.warnings)}${differencesTable(r.existing)}</div>`;
 }
 
 function renderPreviews() {
@@ -191,12 +191,18 @@ function renderPreviews() {
       ${previewStatus(r, i)}
       ${r.saved || !r.open ? "" : `<div class="preview-body">
         ${reviewPanel(r)}
-        ${formFields(r, { fold: true })}
-        <div class="panel outlined"><h4>Fahrzeuge${helpButton("vehicles")}</h4>${vehicleTable(r)}
-          <p class="small muted section-gap">Zeit bis Eintreffen des ersten Fahrzeugs: <b>${minutes(r.arrival_min)}</b> · Gesamtstärke ${r.crew_total}</p>
-          ${r.shared_with?.length ? `<p class="small muted section-gap">Gemeinsamer Einsatz mit ${esc(r.shared_with.join(", "))} (gleicher Einsatz im BKS-Portal bzw. gleiche Einsatznummer der Leitstelle).</p>` : ""}
-          ${r.bks_url ? `<p class="small muted section-gap">BKS-Portal: ${bksLink(r)}</p>` : ""}</div>
+        ${reportSummary(r)}
         <div class="panel outlined">${attendancePanel(r, { markNew: true, pickLeader: true })}</div>
+        <details class="all-fields" data-fields="${i}" ${r.allFields ? "open" : ""}>
+          <summary>Alle Felder<span class="muted">Zeiten, Angaben und Fahrzeuge prüfen oder ändern</span></summary>
+          <div class="all-fields-body">
+            ${formFields(r)}
+            <div class="panel outlined"><h4>Fahrzeuge</h4>${vehicleTable(r)}
+              <p class="small muted section-gap">Zeit bis Eintreffen des ersten Fahrzeugs: <b>${minutes(r.arrival_min)}</b> · Gesamtstärke ${r.crew_total}</p>
+              ${r.shared_with?.length ? `<p class="small muted section-gap">Gemeinsamer Einsatz mit ${esc(r.shared_with.join(", "))} (gleicher Einsatz im BKS-Portal bzw. gleiche Einsatznummer der Leitstelle).</p>` : ""}
+              ${r.bks_url ? `<p class="small muted section-gap">BKS-Portal: ${bksLink(r)}</p>` : ""}</div>
+          </div>
+        </details>
         <div class="preview-failure">${r.failure ? noticeBox("error", r.failure.title, r.failure.text) : ""}</div>
         <div class="preview-footer">
           ${existing && r.can_edit ? `<label class="toggle"><input type="checkbox" data-replace="${i}" ${r.replace ? "checked" : ""}> erfassten Einsatz mit diesem Bericht aktualisieren
@@ -305,4 +311,16 @@ function openNextReport(after = -1, closedOnly = false) {
   reports[next].open = true;
   renderPreviews();
   focusReport(next);
+}
+
+// Einzeiler der Vorschau: das Wichtigste eines Einsatzes, damit nicht jedes Feld gelesen werden muss
+function reportSummary(r) {
+  const when = r.started_at ? `${formatDate(r.started_at)} ${formatTime(r.started_at)}${r.ended_at ? `–${formatTime(r.ended_at)}` : ""}` : "";
+  const code = r.keyword ? `<span class="keyword ${categoryOf(r.keyword).toLowerCase()}">${esc(r.keyword)}${r.subcode ? "." + esc(r.subcode) : ""}</span>` : "";
+  const leader = r.people_visible === false ? ""
+    : `<span data-oneline-leader>${r.unit_leader ? `Einheitsführung ${esc(r.unit_leader)}` : '<em class="field-missing">Einheitsführung fehlt</em>'}</span>`;
+  const used = (r.vehicles || []).filter((v) => !isIdle(v)).length;
+  const parts = [r.place && esc(r.place), when, leader, plural(used, "Fahrzeug", "Fahrzeuge"),
+    r.arrival_min != null && `Eintreffen nach ${minutes(r.arrival_min)}`].filter(Boolean);
+  return `<p class="preview-oneline">${code} <strong>${esc(r.description || "Einsatz ohne Beschreibung")}</strong><span class="oneline-rest">${parts.join(" · ")}</span></p>`;
 }
