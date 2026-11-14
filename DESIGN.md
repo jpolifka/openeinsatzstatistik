@@ -18,7 +18,8 @@ colors:
   field-line: "#858585"
   gridline: "#ECECEC"
   track: "#F3E4E5"
-  series-night: "#A80000"
+  series: "#4A4A4A"
+  series-night: "#2E2E2E"
   series-previous: "#8F8F8F"
   ok-bg: "#E3F1E6"
   ok-text: "#1E5A2C"
@@ -154,7 +155,7 @@ components:
 
 **Creative North Star: „Die Wachbuch-Auswertung“**
 
-Die Oberfläche soll wirken wie ein sauber geführtes Einsatzbuch: sachlich, nachvollziehbar, ohne Effekte. Weiße Karten liegen auf einem blassen, rötlich getönten Grund; Zahlen stehen groß und ruhig, jede mit Fallzahl und Abdeckung daneben. Rot ist die Kennfarbe der Wehr und trägt Orientierung (Kopf, Hauptaktion, Überschriften, Diagrammreihen), nicht Dekoration.
+Die Oberfläche soll wirken wie ein sauber geführtes Einsatzbuch: sachlich, nachvollziehbar, ohne Effekte. Weiße Karten liegen auf einem blassen, rötlich getönten Grund; Zahlen stehen groß und ruhig, jede mit Fallzahl und Abdeckung daneben. Rot ist die Kennfarbe der Wehr und trägt Orientierung (Kopf, Hauptaktion, Überschriften, Erreichungsgrad), nicht Dekoration. Die Diagrammreihen sind neutral grau.
 
 Gearbeitet wird überwiegend am Desktop, in Maske und Tabelle: Berichte prüfen, Listen filtern, Kennzahlen lesen. Die Dichte ist mittel. Karten haben reichlich Innenabstand, Tabellen sind kompakt und mit tabellarischen Ziffern gesetzt.
 
@@ -172,13 +173,13 @@ Die Farben gehören der jeweiligen Wehr: Alle Rottöne sind Tokens, die `/api/th
 Eine Kennfarbe in Abstufungen, dazu neutrale Grautöne und ein Statusgrün, das unabhängig von der Wehr bleibt.
 
 ### Primary
-- **Signalrot der Wehr** (#D90000, `--brand`): Überschriften, Hauptaktion, aktive Reiter-Akzente, Diagrammreihe.
+- **Signalrot der Wehr** (#D90000, `--brand`): Überschriften, Hauptaktion, aktive Reiter-Akzente, Erreichungsgrad.
 - **Tiefes Wachrot** (#7A0000, `--brand-dark`): Anfang des Kopfverlaufs, Hero-Kennzahl, Summenfenster, Text auf hellen Rotflächen.
 - **Verlaufsrot** (#A30000, `--brand-gradient`): Mitte des Kopfverlaufs.
 
 ### Secondary
 - **Gedämpftes Rot** (#C9363F, `--brand-mid`): Tabellenköpfe, Panel-Überschriften, sekundäre Flächen.
-- **Helles Akzentrot** (#E0525C, `--brand-accent`): Fokusring, Hover-Rahmen, gestrichelter Rahmen der Ablage, Tagesreihe. Weiß darauf hat nur 3,8:1; nicht als Textfarbe verwenden.
+- **Helles Akzentrot** (#E0525C, `--brand-accent`): Fokusring, Hover-Rahmen, gestrichelter Rahmen der Ablage. Weiß darauf hat nur 3,8:1; nicht als Textfarbe verwenden.
 
 ### Neutral
 - **Rosa-Papier** (#FCEEEF, `--brand-pale`): Seitenhintergrund.
@@ -289,7 +290,7 @@ Abgerundete, freundliche Formen mit gestaffelten Radien: 6 px (Chips), 8 px (Ein
 - **Rückfrage** (`askConfirm`): schmaler Dialog (460 px) statt `window.confirm`/`alert`. Die Knöpfe nennen die Folge („Vorschauen verwerfen“), bei zerstörerischen Aktionen ist der Fokus auf „Abbrechen“ und der Bestätigen-Knopf fehlerrot. Fehler nach einer Aktion nennen, was nicht geschehen ist, die Ursache und den nächsten Schritt (`reportError`).
 
 ### Diagramme (Signatur)
-- Balkenlisten mit Beschriftung links, Wert rechts, dünner Bezugslinie; Säulen bis 24 px Breite. Reihen: `--series` (#D90000), Tag `--day`, Nacht `--night`, Vorjahr `--previous` (grau). Beschriftungen immer in `--gray`.
+- Balkenlisten mit Beschriftung links, Wert rechts, dünner Bezugslinie; Säulen bis 24 px Breite. Reihen sind neutral und gehören nicht zum Wehr-Theme: `--series` (Graphit #4A4A4A), Tag `--day` (#8F8F8F), Nacht `--night` (#2E2E2E), Vorjahr `--previous` (#8F8F8F), alle mindestens 3:1 auf Weiß. Rot der Wehr gehört dem, worauf es ankommt (Erreichungsgrad, Fokus, Zeitstrahl). Beschriftungen immer in `--gray`.
 
 ## Do's and Don'ts
 
@@ -303,7 +304,7 @@ Abgerundete, freundliche Formen mit gestaffelten Radien: 6 px (Chips), 8 px (Ein
 
 ### Don't:
 - **Don't** Sansation für Ziffern in Daten verwenden (1 = I, 0 = O).
-- **Don't** den Seitentitel umbrechen lassen: Der Kopf hat in jeder Ansicht dieselbe Höhe (Titel einzeilig, Beschriftungen von Wehr und Jahr entfallen bis 1360 px).
+- **Don't** den Seitentitel umbrechen lassen: Der Kopf hat in jeder Ansicht dieselbe Höhe (Titel einzeilig, Beschriftungen von Wehr und Jahr entfallen bis 1560 px).
 - **Don't** leere Diagramme mit Strichen zeigen; Leerzustände sagen, was fehlt und was zu tun ist.
 - **Don't** `--brand-accent` auf dem Kopfverlauf als Fokusfarbe verwenden (unter 2:1).
 - **Don't** `--brand-accent` oder `--day` als Textfarbe auf Weiß einsetzen (3,8:1).

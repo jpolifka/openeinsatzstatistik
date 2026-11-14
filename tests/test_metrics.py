@@ -310,3 +310,13 @@ def test_abort_reasons_ignore_standard_suffix_in_brackets():
     incidents = [make_incident(id=n, abort_reason=t) for n, t in enumerate(texts, 1)]
     reasons = metrics.aborts(metrics.evaluate(incidents, CFG))["reasons"]
     assert reasons == [{"reason": "Täuschungsalarm einer automatischen BMA", "count": 3, "kind": "false_alarm"}]
+
+
+def test_unreadable_vehicle_times_do_not_break_the_evaluation():
+    """Eine fehlerhafte Fahrzeugzeit ergibt „nicht angegeben“, statt die ganze Auswertung abstürzen zu lassen."""
+    incident = make_incident(vehicles={
+        "02/45": vehicle("02/45", 6, "kaputt", "2025-03-12T10:07:00"),     # Text bzw. ISO-Zeitstempel statt Uhrzeit
+    })
+    m = metrics.incident_metrics(incident, CFG)
+    assert m["vehicles"]["02/45"]["turnout_min"] is None
+    assert m["vehicles"]["02/45"]["arrival_min"] == 7

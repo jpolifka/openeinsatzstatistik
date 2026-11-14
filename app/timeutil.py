@@ -32,13 +32,24 @@ def time_text(value):
 
 
 def parse_time(text):
-    """'HH:MM:SS' -> time (oder None)."""
-    return dt.time.fromisoformat(text) if text else None
+    """'HH:MM:SS' -> time (oder None). Unlesbare Werte (auch ein ISO-Zeitstempel) ergeben die Uhrzeit bzw. None,
+    damit eine fehlerhafte Zeile nicht die ganze Auswertung zum Absturz bringt."""
+    if not text:
+        return None
+    try:
+        return dt.time.fromisoformat(text)
+    except ValueError:
+        try:
+            return dt.datetime.fromisoformat(text).time()
+        except ValueError:
+            return None
 
 
 def seconds_of_day(value):
     """Sekunden seit Mitternacht für time, datetime oder 'HH:MM:SS'."""
     t = parse_time(value) if isinstance(value, str) else as_time(value)
+    if t is None and isinstance(value, str):
+        return None            # unlesbarer Text: nicht angegeben (fehlendes Argument bleibt ein Programmierfehler)
     return t.hour * 3600 + t.minute * 60 + t.second
 
 

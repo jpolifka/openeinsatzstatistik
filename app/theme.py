@@ -13,7 +13,6 @@ HEX = re.compile(r"#[0-9A-Fa-f]{6}")
 WHITE, BLACK = (255, 255, 255), (0, 0, 0)
 MIN_TEXT_CONTRAST = 4.5        # weiße Schrift auf Kopfzeile, Knöpfen, Tabellenköpfen (WCAG AA)
 MIN_CHART_CONTRAST = 3.0       # Diagrammfarben gegen den weißen Hintergrund
-MIN_SERIES_CONTRAST = 1.5      # Tag gegen Nacht in den Diagrammen
 
 # Neutrales Farbschema: Anmeldung, Gesamtansicht einer VG, Wehren ohne Zuordnung
 NEUTRAL = {"brand": "#37506B", "brand_dark": "#1D2B3A"}
@@ -92,10 +91,6 @@ def palette(colors):
     brand = _rgb(colors["brand"])
     dark = _rgb(colors["brand_dark"]) if "brand_dark" in colors else _darken_until(_mix(brand, BLACK, 0.45), 7)
     mid = _darken_until(_mix(brand, WHITE, 0.12), MIN_TEXT_CONTRAST)
-    day = _darken_until(_mix(brand, WHITE, 0.3), MIN_CHART_CONTRAST)
-    night = _mix(brand, BLACK, 0.22)
-    while contrast(day, night) < MIN_SERIES_CONTRAST and _luminance(night) > 0.01:
-        night = _mix(night, BLACK, 0.1)
     r, g, b = (round(c) for c in dark)
     deep = lambda share: ",".join(str(round(c)) for c in _mix(dark, BLACK, share))   # noqa: E731
     return {
@@ -113,9 +108,6 @@ def palette(colors):
         "--shadow": f"0 1px 2px rgba({deep(0.58)},.06), 0 6px 20px rgba({r},{g},{b},.06)",
         "--dialog-shadow": f"0 30px 80px rgba({deep(0.5)},.35)",
         "--backdrop": f"rgba({deep(0.67)},.45)",
-        "--series": _hex(brand),
-        "--day": _hex(day),
-        "--night": _hex(night),
         "--track": _hex(_mix(brand, WHITE, 0.89)),
     }
 

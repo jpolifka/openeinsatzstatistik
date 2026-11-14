@@ -110,7 +110,7 @@ function renderOverview() {
     ${analysisKpi(`Einsätze ${state.year}`, vg ? vg.unique : s.count, vg ? esc(`${vg.participations} Beteiligungen der Wehren`) : `${num(s.per_week, 2)} je Woche`)}
     ${analysisKpi(`Ø Einsatzdauer`, formatDuration(s.duration_avg_min), esc(coverageText(e.workload.duration.valid, e.workload.duration.total)))}
     ${analysisKpi(`Einsatzstunden`, formatHours(s.duration_total_min), "Summe aller Einsätze")}
-    ${quote || analysisKpi("Eintreffen", "–", plan ? "noch keine Einsätze mit Eintreffzeit" : "für Sie noch nicht freigegeben")}
+    ${quote || analysisKpi("Eintreffen", "–", plan ? planEmptyReason(plan) : "für Sie noch nicht freigegeben")}
   </div><div class="grid grid-2">${openTasksCard(e)}${coverageCard(e)}</div>`;
 }
 

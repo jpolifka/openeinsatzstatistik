@@ -7,6 +7,16 @@
 const CHANGELOG = [
   {
     date: "2026-11-14",
+    version: "2026-11-14.6",
+    items: [
+      "<b>Einsatzliste:</b> Die Liste zeigt zuerst 25 Einsätze; „Weitere anzeigen“ lädt die nächsten. Beim Drucken erscheinen alle.",
+      "<b>Auswertungen:</b> Wo Angaben ganz fehlen, steht ein Satz mit Weg zu den betroffenen Einsätzen statt leerer Kacheln. Die Diagramme sind jetzt grau; das Rot der Wehr bleibt für Erreichungsgrad und Hervorhebungen.",
+      "<b>Kopf und Handy:</b> Der Seitentitel bleibt bis 1560 px Breite einzeilig. Auf Touchgeräten sind Auswahlfelder, Sortierknöpfe und Links 44 px hoch.",
+      "<b>Fehler beim Laden:</b> Die Meldung nennt, was nicht geladen werden konnte, und wie es weitergeht. Eine fehlerhafte Fahrzeugzeit bringt nicht mehr die ganze Auswertung zum Absturz.",
+    ],
+  },
+  {
+    date: "2026-11-14",
     version: "2026-11-14.5",
     items: [
       "<b>Personal:</b> Die Tabelle lässt sich jetzt auch mit der Tastatur sortieren und aufklappen (Pfeil rechts zeigt, dass sich eine Zeile öffnet). Die Balken sind schlanker, die Zahl steht vor dem Balken. Auf dem Handy zeigt jede Zeile Beteiligung und Stunden unter dem Namen.",

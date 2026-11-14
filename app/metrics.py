@@ -50,7 +50,8 @@ def _minutes_after(start_seconds, time_text):
     """Minuten ab Einsatzbeginn wie Excel MOD(…;1): über Mitternacht weitergezählt."""
     if not time_text or start_seconds is None:
         return None
-    return ((seconds_of_day(time_text) - start_seconds) % 86400) / 60
+    seconds = seconds_of_day(time_text)
+    return None if seconds is None else ((seconds - start_seconds) % 86400) / 60
 
 
 def incident_metrics(incident, cfg, limit=None):
@@ -455,7 +456,8 @@ def alarm_systems(evaluated):
 
 def _clock_minutes(start, end):
     """Minuten zwischen zwei Uhrzeiten (HH:MM:SS), über Mitternacht weitergezählt."""
-    return ((seconds_of_day(end) - seconds_of_day(start)) % 86400) / 60 if start and end else None
+    first, last = seconds_of_day(start), seconds_of_day(end)
+    return None if first is None or last is None else ((last - first) % 86400) / 60
 
 
 def vehicle_usage(evaluated, cfg):
