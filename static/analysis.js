@@ -74,7 +74,7 @@ function openTasksCard(e) {
     ? ` <button type="button" class="btn btn-light btn-small" data-overview-notices>Anzeigen</button>` : ""}</li>`).join("");
   return `<div class="card"><div class="card-header"><div><h2>Offene Aufgaben</h2>
     <p class="muted">Was im Jahr ${state.year} noch Aufmerksamkeit braucht – ein Klick zeigt die betroffenen Einsätze.</p></div></div>
-    ${tasks.length ? `<ul class="task-list">${items}</ul>` : `<p class="empty-note">Nichts offen: Alle Einsätze des Jahres sind vollständig erfasst.</p>`}</div>`;
+    ${tasks.length ? `<ul class="task-list">${items}</ul>` : `<p class="all-clear"><span class="record-status ok">Nichts offen</span> Alle Einsätze des Jahres sind vollständig erfasst.</p>`}</div>`;
 }
 
 const COVERAGE_LABELS = {
@@ -96,7 +96,9 @@ function coverageCard(e) {
   const table = dataTable(["Angabe", "Einsätze mit Angabe", "Anteil", "Fehlend"], rows);
   return chartCard({ id: "coverage", heading: "h2", title: `Datenvollständigkeit`,
     subtitle: "Wie belastbar sind die Kennzahlen? Einsätze ohne Angabe fließen nicht als Null ein, sondern fehlen in der jeweiligen Kennzahl.",
-    chart: c.total ? barChart(items) : `<p class="empty-note">Keine Einsätze im Jahr ${state.year}.</p>`, table });
+    chart: !c.total ? `<p class="empty-note">Keine Einsätze im Jahr ${state.year}.</p>`
+      // Sechs gleich lange Balken sagen nichts: bei voller Abdeckung genügt ein Satz, die Tabelle bleibt erreichbar
+      : c.rows.every((r) => r.valid === c.total) ? `<p class="all-clear"><span class="record-status ok">Vollständig</span> ${items.length === 1 ? "Die Angabe liegt" : `Alle ${items.length} Angaben liegen`} für ${c.total === 1 ? "den Einsatz" : `alle ${c.total} Einsätze`} vor.</p>` : barChart(items), table });
 }
 
 function renderOverview() {
@@ -126,12 +128,13 @@ const DISTRIBUTION_HEAD = ["", "Fälle", "Ø", "Median", "90 % höchstens"];
 function timeSummaryCard(t) {
   const rows = [distributionRow("Ausrückdauer", t.turnout), distributionRow("Anfahrtdauer je Fahrzeug", t.travel),
     distributionRow("Zeit bis zum Eintreffen", t.arrival)];
-  const items = [["Ausrückdauer", "Ausrücken", t.turnout], ["Anfahrtdauer je Fahrzeug", "Anfahrt", t.travel], ["Zeit bis zum Eintreffen", "Eintreffen", t.arrival]].flatMap(([label, short, d]) => [
-    { label: `${short} · Median`, value: d.median ?? 0, text: minutes(d.median), tip: `${label}: Median ${minutes(d.median)}, ${coverageText(d.valid, d.total, short === "Anfahrt" ? VEHICLE_UNIT : INCIDENT_UNIT)}` },
-    { label: `${short} · 90 %`, value: d.p90 ?? 0, text: minutes(d.p90), tip: `${label}: 90 % höchstens ${minutes(d.p90)}` }]);
+  // Je Größe zwei Balken: Median in der Reihenfarbe, 90 % heller; die Gruppe steht unter einer Überschrift
+  const items = [["Ausrückdauer", "Ausrücken", t.turnout], ["Anfahrtdauer je Fahrzeug", "Anfahrt", t.travel], ["Zeit bis zum Eintreffen", "Eintreffen", t.arrival]].flatMap(([label, short, d], n) => [
+    { label: short, gap: n > 0, value: d.median ?? 0, text: minutes(d.median), tip: `${label}: Median ${minutes(d.median)}, ${coverageText(d.valid, d.total, short === "Anfahrt" ? VEHICLE_UNIT : INCIDENT_UNIT)}` },
+    { label: "", hint: "90 % höchstens", tone: "accent", value: d.p90 ?? 0, text: minutes(d.p90), tip: `${label}: 90 % höchstens ${minutes(d.p90)}` }]);
   return chartCard({ id: "time-summary", title: `Wo entsteht die Zeit?`,
     subtitle: "Median und 90. Perzentil statt nur Durchschnitt: 9 von 10 Einsätzen (bzw. Fahrzeugen) waren höchstens so langsam.",
-    chart: barChart(items), table: dataTable(DISTRIBUTION_HEAD, rows),
+    chart: barChart(items) + legend([["series", "Median"], ["accent", "90 % höchstens"]]), table: dataTable(DISTRIBUTION_HEAD, rows),
     extra: `<p class="small muted section-gap">Die Anfahrtdauer wird je Fahrzeug aus dessen eigenem Ausrücken und Eintreffen berechnet (${esc(coverageText(t.travel.valid, t.travel.total, VEHICLE_UNIT))}).</p>` });
 }
 

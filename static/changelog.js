@@ -7,6 +7,14 @@
 const CHANGELOG = [
   {
     date: "2026-11-14",
+    version: "2026-11-14.5",
+    items: [
+      "<b>Personal:</b> Die Tabelle lässt sich jetzt auch mit der Tastatur sortieren und aufklappen (Pfeil rechts zeigt, dass sich eine Zeile öffnet). Die Balken sind schlanker, die Zahl steht vor dem Balken. Auf dem Handy zeigt jede Zeile Beteiligung und Stunden unter dem Namen.",
+      "<b>Auswertungen:</b> In „Wo entsteht die Zeit?“ sind Median und „90 % höchstens“ getrennte, farblich unterscheidbare Balken mit Legende. Sind alle Angaben vollständig, steht dort ein Satz statt sechs gleich langer Balken. Zahlen im Fließtext sind eindeutig lesbar (111 statt „III“).",
+    ]
+  },
+  {
+    date: "2026-11-14",
     version: "2026-11-14.4",
     items: [
       "<b>Einlesen: erst das Wichtige.</b> Die Vorschau zeigt Prüfhinweise, die Anwesenden mit neuen Personen und eine Zeile zum Einsatz (Stichwort, Ort, Zeit, Einheitsführung, Fahrzeuge, Eintreffen). Alle Felder, Zeiten und Fahrzeuge stehen dahinter unter „Alle Felder“ und lassen sich dort wie bisher ändern.",
