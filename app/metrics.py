@@ -456,6 +456,8 @@ def alarm_systems(evaluated):
 
 def _clock_minutes(start, end):
     """Minuten zwischen zwei Uhrzeiten (HH:MM:SS), über Mitternacht weitergezählt."""
+    if not start or not end:
+        return None            # Zeit nicht im Bericht angegeben
     first, last = seconds_of_day(start), seconds_of_day(end)
     return None if first is None or last is None else ((last - first) % 86400) / 60
 
