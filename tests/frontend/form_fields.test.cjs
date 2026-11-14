@@ -10,7 +10,7 @@ const FIELDS = [["number", "Nr.", "number", "", ""], ["place", "Ort", "text", "s
   ["abort_reason", "Einsatzabbruch", "text", "span-4", ""], ["rescued", "Menschen gerettet", "number", "", ""]];
 
 function render(incident, options) {
-  const context = vm.createContext({ config: { incident_fields: FIELDS }, esc: (s) => String(s), helpButton: () => "" });
+  const context = vm.createContext({ config: { incident_fields: FIELDS }, esc: (s) => String(s) });
   vm.runInContext(code + "\nthis.formFields = formFields;", context);
   return context.formFields(incident, options);
 }

@@ -9,7 +9,8 @@ const read = (file) => fs.readFileSync(`static/${file}`, "utf8");
 const app = read("app.js");
 // Reine Hilfsfunktionen aus app.js (Sortierung, esc, Formate), ohne den Seitenaufbau
 const helpers = app.slice(app.indexOf("const INCIDENT_SORTS"), app.indexOf("// Fachkonstanten"))
-  + app.slice(app.indexOf("const esc ="), app.indexOf("const ICON_CLOSE"));
+  + app.slice(app.indexOf("const esc ="), app.indexOf("const ICON_CLOSE"))
+  + app.slice(app.indexOf("function niceScale"), app.indexOf("// Ziel in der Einsatzliste"));
 
 function element() {
   return { innerHTML: "", textContent: "", value: "", hidden: false, dataset: {},
@@ -34,7 +35,7 @@ function setup(overrides = {}) {
     config: { default_limit: 10, second_limit: 15, categories: [], tenants: [], vg: null, keyword_catalog: [] },
     $: (key) => { if (!elements.has(key)) elements.set(key, element()); return elements.get(key); },
     $$: () => [],
-    helpButton: () => "", keywordName: () => undefined, toast: (text, options) => toasts.push({ text, ...options }),
+    keywordName: () => undefined, toast: (text, options) => toasts.push({ text, ...options }),
     api: async (url, options) => { calls.push({ url, options }); return {}; },
     loadYears: async () => {}, showView: async () => {},
     fetch: (url, options) => calls.push({ url, options, keepalive: true }),
@@ -238,4 +239,22 @@ test("Einsatzliste maskiert Beschreibung, Ort, Fahrzeuge, Hinweise und Wehr", ()
   const html = ctx.elements.get("#incident-table tbody").innerHTML;
   assert.ok(html.includes("row"), "Zeile wurde gezeichnet");
   assertInert(html);
+});
+
+test("Zeitstrahl: Balken, Zeitgrenze und maskierte Namen; ohne Zeiten bleibt die Tabelle", () => {
+  const { context } = setup();
+  const e = { vehicles: [
+    { call_sign: "02/45", crew: 6, departed: "10:02:00", arrived: "10:08:00", turnout_min: 2, arrival_min: 8 },
+    { call_sign: "<b>02/24</b>", crew: 4, departed: "10:03:00", arrived: "10:14:00", turnout_min: 3, arrival_min: 14 },
+    { call_sign: "01/10" }] };
+  const html = vm.runInContext(`vehicleTimeline(${JSON.stringify(e)})`, context);
+  assert.match(html, /class="tl-limit"/);
+  assert.match(html, /02\/45: Ausrücken nach 2[^,]* min, Eintreffen nach 8[^,]* min/);
+  assert.match(html, /nicht innerhalb von 10 min/);                 // verspätet steht im Text, nicht nur in der Farbe
+  assert.doesNotMatch(html, /<b>02\/24<\/b>/);                      // Name maskiert
+  assert.match(html, /nicht im Einsatz/);
+  const idle = { vehicles: [{ call_sign: "01/10" }] };
+  const panel = vm.runInContext(`vehiclePanel(${JSON.stringify(idle)})`, context);
+  assert.doesNotMatch(panel, /data-vehicle-view/);                  // nichts umzuschalten
+  assert.match(panel, /<table/);
 });

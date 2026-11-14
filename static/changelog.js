@@ -7,6 +7,15 @@
 const CHANGELOG = [
   {
     date: "2026-11-14",
+    version: "2026-11-14.4",
+    items: [
+      "<b>Einlesen: erst das Wichtige.</b> Die Vorschau zeigt Prüfhinweise, die Anwesenden mit neuen Personen und eine Zeile zum Einsatz (Stichwort, Ort, Zeit, Einheitsführung, Fahrzeuge, Eintreffen). Alle Felder, Zeiten und Fahrzeuge stehen dahinter unter „Alle Felder“ und lassen sich dort wie bisher ändern.",
+      "<b>Fahrzeuge als Zeitstrahl:</b> Im Einsatzdetail zeigt ein Zeitstrahl je Fahrzeug Ausrücken und Anfahrt bis zum Eintreffen, mit der Zeitgrenze als gestrichelter Linie. Ein Umschalter „Zeitstrahl / Tabelle“ bringt die genaue Tabelle zurück; die Wahl bleibt erhalten.",
+      "<b>Eine gesammelte Hilfe:</b> Die vielen ?-Symbole an Feldern und Kennzahlen entfallen. Das ? im Kopf öffnet die Hilfe passend zur gerade offenen Ansicht und enthält alle Erklärungen."
+    ]
+  },
+  {
+    date: "2026-11-14",
     version: "2026-11-14.3",
     items: [
       "<b>Mehrere Berichte einlesen:</b> Zuerst ist nur der erste Bericht aufgeklappt, die übrigen zeigen ihr Statusband und öffnen sich per Klick. Nach „In Statistik übernehmen“ springt die Ansicht zum nächsten offenen Bericht; „Nächster offener Bericht“ und „2 von 3 übernommen“ stehen in der Statuszeile.",

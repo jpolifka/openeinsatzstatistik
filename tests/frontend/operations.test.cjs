@@ -14,7 +14,7 @@ function load() {
     minutes: (m) => m == null ? "–" : `${m} min`, plural: (n, one, many) => `${n} ${n === 1 ? one : many}`,
     formatDuration: (m) => m == null ? "–" : `${m} min`, formatHours: (m) => m == null ? "–" : `${Math.round(m / 60)} h`,
     formatDate: (iso) => iso ? iso.slice(0, 10) : "–",
-    helpButton: () => "", shareOf: (c, t) => `${c}/${t}`, can: () => true,
+    shareOf: (c, t) => `${c}/${t}`, can: () => true,
     evaluationToolbar: () => "", listLink: () => "#incidents", loadEvaluation: async () => {}, loadIncidents: async () => {},
     chartCard: ({ title, subtitle = "", chart, table, extra = "" }) => `[${title}]${subtitle}${chart}${table}${extra}`, barChart: (items) => items.map((i) => `${i.label}=${i.text ?? i.value}`).join(";"),
     columnChart: () => "", dataTable: (head, rows) => rows.map((r) => r.join("|")).join("\n"),

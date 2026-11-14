@@ -31,17 +31,17 @@ function renderEvaluation() {
     `<div class="kpi ${hero ? "hero" : ""}"><span class="kpi-title">${title}</span><span class="kpi-value">${value}</span><span class="kpi-sub">${sub}</span></div>`;
   const vg = state.evaluation.tenants;
   const kpis = `<div class="kpis">
-    ${vg ? kpi(`Einsätze ${state.year}${helpButton("participations")}`, vg.unique,
+    ${vg ? kpi(`Einsätze ${state.year}`, vg.unique,
       esc(`${vg.participations} Beteiligungen der Wehren${vg.without_dispatch_number ? ` · ${vg.without_dispatch_number} ohne BKS-Stammdatensatz und Leitstellen-Nr.` : ""}`), true)
       : kpi(`Einsätze ${state.year}`, s.count, esc(comparison), true)}
-    ${kpi(`Einsätze / Woche${helpButton("per_week")}`, num(s.per_week, 2), currentYear ? "bis zur aktuellen KW" : "im ganzen Jahr")}
-    ${kpi(`Ø Einsatzdauer${helpButton("duration")}`, formatDuration(s.duration_avg_min),
+    ${kpi(`Einsätze / Woche`, num(s.per_week, 2), currentYear ? "bis zur aktuellen KW" : "im ganzen Jahr")}
+    ${kpi(`Ø Einsatzdauer`, formatDuration(s.duration_avg_min),
       state.evaluation.workload.duration.valid < state.evaluation.workload.duration.total
         ? `Alarm bis Einsatzende · ${state.evaluation.workload.duration.valid} von ${state.evaluation.workload.duration.total} Einsätzen` : "Alarm bis Einsatzende")}
-    ${kpi(`Einsatzstunden${helpButton("operation_hours")}`, formatHours(s.duration_total_min), "Summe aller Einsätze")}
-    ${kpi(`Personalstunden${helpButton("staff_hours")}`, s.staff_hours == null ? "–" : `${num(s.staff_hours, 0)}<small>h</small>`,
+    ${kpi(`Einsatzstunden`, formatHours(s.duration_total_min), "Summe aller Einsätze")}
+    ${kpi(`Personalstunden`, s.staff_hours == null ? "–" : `${num(s.staff_hours, 0)}<small>h</small>`,
       s.staff_recorded < s.staff_total ? `Unvollständig: Anwesenheit und Dauer für ${s.staff_recorded} von ${s.staff_total} Einsätzen` : `Ø ${num(s.attendees_avg, 1)} Personen je Einsatz`)}
-    ${plan ? kpi(`Eintreffen ≤ ${plan.limit} Min.${helpButton("on_time")}`, percent(plan.total.rate), `${plan.total.on_time} von ${plan.total.count} Einsätzen mit Eintreffzeit oder Abbruch`) : ""}
+    ${plan ? kpi(`Eintreffen ≤ ${plan.limit} Min.`, percent(plan.total.rate), `${plan.total.on_time} von ${plan.total.count} Einsätzen mit Eintreffzeit oder Abbruch`) : ""}
   </div>`;
 
   $("#view-evaluation").innerHTML = evaluationToolbar() + kpis + (plan ? responsePlanCard(plan, previousPlan) : "") + (vg ? tenantsCard(vg) : "") + `
@@ -75,7 +75,7 @@ function tenantsCard(vg) {
   const items = vg.rows.map((r) => ({ label: r.name, value: r.count, tip: `${r.name}: ${r.count} Einsätze`,
     link: listLink({ tenants: config.tenants.find((t) => t.name === r.name)?.slug }) }));
   const extra = keyFigures([[vg.unique, "Einsätze ohne Doppelte"], [vg.participations - vg.unique, "gemeinsame Beteiligungen"]]);
-  return `<div class="grid">${chartCard({ id: "tenants", title: `Wehren${helpButton("participations")}`,
+  return `<div class="grid">${chartCard({ id: "tenants", title: `Wehren`,
     subtitle: "Einsätze je Wehr; ein gemeinsamer Einsatz zählt bei jeder beteiligten Wehr", chart: barChart(items), table, extra })}</div>`;
 }
 
@@ -124,7 +124,7 @@ function responsePlanCard(plan, previousPlan) {
     ${plan.without_times ? `${plural(plan.without_times, "Einsatz", "Einsätze")} ohne Eintreffzeit nicht berücksichtigt (Excel zählte sie mit 0 min als erreicht).` : ""}${hidden}</p>`;
   return chartCard({
     id: "plan", heading: "h2", className: "plan grid", chartLabel: "Kacheln", controls: release + limitSwitch, extra: footer,
-    title: `Eintreffen und verfügbare Kräfte${helpButton("response_plan")}`,
+    title: `Eintreffen und verfügbare Kräfte`,
     subtitle: plan.places.length ? `Einsätze ab Alarmstufe ${config.plan_min_level} im Ausrückebereich der Wehr (festgelegt unter Einstellungen → Orte & Zeitgrenzen) – Eintreffen des ersten Fahrzeugs innerhalb von ${limit} Minuten nach Alarmierung; abgebrochene Einsätze ohne Eintreffzeit gelten als rechtzeitig. Das ist eine Eintreffquote – kein vollständiger Nachweis eines Schutzziels und kein Feuerwehrbedarfsplan.` : "Noch kein Ausrückebereich konfiguriert. Bitte unter Einstellungen → Orte & Zeitgrenzen einrichten.",
     chart: `<div class="plan-windows">${plan.windows.map((w) => windowTile(w, false)).join("")}${windowTile(plan.total, true)}</div>`,
     table,
@@ -152,7 +152,7 @@ function levelsCard(s) {
   const items = s.levels.map((l) => ({ label: `Stufe ${l.level}`, value: l.count, tip: `Alarmstufe ${l.level}: ${l.count} Einsätze`,
     link: listLink({ level: l.level }) }));
   const table = dataTable(["Stufe", "Einsätze", "Anteil"], s.levels.map((l) => [`Stufe ${l.level}`, l.count, shareOf(l.count, s.count)]));
-  return chartCard({ id: "levels", title: `Alarmstufen${helpButton("alarm_level")}`, subtitle: "zweite Ziffer des Stichworts (z. B. H<b>2</b>)", chart: barChart(items), table });
+  return chartCard({ id: "levels", title: `Alarmstufen`, subtitle: "zweite Ziffer des Stichworts (z. B. H<b>2</b>)", chart: barChart(items), table });
 }
 
 function areasCard(s) {
@@ -160,7 +160,7 @@ function areasCard(s) {
   const own = s.areas.filter((a) => config.plan_places.includes(a.name)).reduce((sum, a) => sum + a.count, 0);
   const table = dataTable(["Ort", "Einsätze", "Anteil"], s.areas.map((a) => [esc(a.name), a.count, shareOf(a.count, s.count)]));
   const extra = keyFigures([[own, config.plan_places.join(", ")], [s.count - own, "außerhalb"]]);
-  return chartCard({ id: "areas", title: `Einsatzgebiet${helpButton("area")}`, chart: barChart(items), table, extra });
+  return chartCard({ id: "areas", title: `Einsatzgebiet`, chart: barChart(items), table, extra });
 }
 
 function monthsCard(s) {
@@ -218,7 +218,7 @@ function historyCard(history) {
     const row = MONTH_NAMES.map((_, m) => history.find((h) => h.year === year && h.month === m + 1)?.count ?? "–");
     return [String(year), ...row, `<b>${row.reduce((sum, c) => sum + (Number(c) || 0), 0)}</b>`];
   }));
-  return chartCard({ id: "history", title: `Verlauf${helpButton("history")}`, subtitle: `Einsätze je Monat seit ${years[0]}`, chart, table });
+  return chartCard({ id: "history", title: `Verlauf`, subtitle: `Einsätze je Monat seit ${years[0]}`, chart, table });
 }
 
 function hoursCard(s) {

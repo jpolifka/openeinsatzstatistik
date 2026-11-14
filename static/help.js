@@ -1,6 +1,6 @@
 "use strict";
 
-// Online-Hilfe: eine Quelle für die ?-Symbole an Feldern/Kennzahlen und das Hilfefenster.
+// Online-Hilfe: eine Quelle für das Hilfefenster (das ? im Kopf öffnet es passend zur Ansicht).
 // Schlüssel = Feld- bzw. Kennzahlname der API. short = Tooltip, text = Erklärung im Hilfefenster (HTML erlaubt).
 // Texte mit Werten der Wehr (Fahrzeuge, Orte, Zeitgrenzen) sind Funktionen: config aus app.js gibt es erst zur Laufzeit.
 const helpList = (values) => values.length ? values.map(esc).join(", ") : "–";
@@ -637,13 +637,6 @@ const HELP_SECTIONS = [
 
 const HELP = Object.fromEntries(HELP_SECTIONS.flatMap((s) => Object.entries(s.entries)));
 
-/** Kleines ?-Symbol: Tooltip mit Kurztext, Klick öffnet das Hilfefenster an der Stelle. */
-function helpButton(key) {
-  const h = HELP[key];
-  if (!h) return "";
-  return `<button type="button" class="help-btn" data-help="${key}" data-tip="${esc(helpValue(h.short))}" aria-label="Hilfe: ${esc(helpValue(h.title))}">?</button>`;
-}
-
 function helpContent() {
   return HELP_SECTIONS.map((s) => `<section class="help-section" id="help-${s.id}">
     <h3>${s.title}</h3>${s.intro ? `<p class="muted">${s.intro}</p>` : ""}
@@ -741,18 +734,8 @@ async function sendFeedback(form) {
   }
 }
 
-document.addEventListener("click", (e) => {
-  const button = e.target.closest("[data-help]");
-  if (!button) return;
-  e.preventDefault();          // ?-Symbol steht teils in <label>/<th> – dort nichts anderes auslösen
-  e.stopPropagation();
-  openHelp(button.dataset.help);
-}, true);
-
-/** Start (aus app.js, sobald $ und config da sind): ?-Symbole der festen Elemente, Kopf-Symbol, Reiter, Feedback. */
+/** Start (aus app.js, sobald $ und config da sind): Kopf-Symbol, Reiter, Feedback. Die Hilfe ist eine gesammelte: das ? im Kopf. */
 function setupHelp() {
-  // Fest in index.html stehende Elemente mit data-help-key bekommen ihr ?-Symbol aus derselben Quelle
-  for (const el of $$("[data-help-key]")) el.insertAdjacentHTML("beforeend", helpButton(el.dataset.helpKey));
   markNews();
   $("#btn-help").addEventListener("click", () => openHelp(helpContext()));
   $("#help-tabs").addEventListener("click", (e) => {

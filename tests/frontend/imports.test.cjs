@@ -106,7 +106,7 @@ test("Verwaltungsfelder behalten bestehende IDs ohne doppelte Attribute", () => 
   const source = fs.readFileSync("static/admin.js", "utf8");
   const start = source.indexOf("const adminField =");
   const end = source.indexOf("const textInput", start);
-  const context = vm.createContext({ helpButton: () => "" });
+  const context = vm.createContext({});
   vm.runInContext("let adminFieldSequence = 0; " + source.slice(start, end) + "; globalThis.field = adminField;", context);
   const html = context.field("Name", '<input id="vg-name" type="text">');
   assert.match(html, /for="vg-name"/);

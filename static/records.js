@@ -51,7 +51,7 @@ function renderNotices() {
   const several = new Set(list.map((n) => n.tenant)).size > 1 || config.vg;
   el.innerHTML = `${jobs.length ? `<div class="message message-info">Gespeichert, zentrale Nachverarbeitung noch offen: ${jobs.map((j) => `${esc(j.tenant_name)} (${j.count})`).join(" · ")}. Automatische Wiederholung jede Minute; nicht erneut importieren.</div>` : ""}<div class="card notices no-print">
     <div class="notices-head">
-      <strong>${plural(list.length, "Hinweis", "Hinweise")}${helpButton("notices")}</strong>
+      <strong>${plural(list.length, "Hinweis", "Hinweise")}</strong>
       <button type="button" class="btn btn-light btn-small" data-notices-toggle>${records.showNotices ? "Ausblenden" : "Anzeigen"}</button>
     </div>
     ${records.showNotices ? `<ul class="notice-list">${list.map((n) => `<li class="notice">
@@ -172,7 +172,7 @@ function recordDetail(entry) {
         : `<p class="muted small">Noch kein Bericht einer Wehr erfasst.</p>`}
       <p class="small muted section-gap">Stammdatensatz ${id}${entry.record.dispatch_number ? ` · Einsatznummer Leitstelle ${esc(entry.record.dispatch_number)}` : ""}${entry.record.first_alarm ? "" : " · Stammdatensatz nicht eingelesen"}</p>
     </div>
-    <div class="panel"><h4>Befunde${helpButton("findings")}</h4>
+    <div class="panel"><h4>Befunde</h4>
       ${findings ? `<table class="mini-table"><thead><tr><th>Wehr</th><th>Art</th><th>Fahrzeug</th><th>Wert</th><th>Stammdatensatz / Leitstelle</th><th>Bericht der Wehr</th></tr></thead><tbody>${findings}</tbody></table>`
         : `<p class="muted small">Keine Abweichungen.</p>`}
     </div>
@@ -206,7 +206,7 @@ function renderRecords() {
         <button type="button" data-records-filter="open" class="${records.onlyOpen ? "active" : ""}">Offen (${open.length})</button>
         <button type="button" data-records-filter="all" class="${records.onlyOpen ? "" : "active"}">Alle (${all.length})</button>
       </div>
-      <div class="toolbar-right">${helpButton("records")}
+      <div class="toolbar-right">
         ${open.length ? `<button type="button" class="btn btn-primary btn-small" data-review-all="${open.length}" data-tip="Alle offenen Befunde als geprüft vermerken">Alle bestätigen (${open.length})</button>` : ""}
         <button type="button" class="btn btn-light btn-small" data-records-print data-tip="Druckansicht, im Druckdialog „Als PDF sichern“">Drucken / PDF</button>
       </div>
@@ -231,7 +231,7 @@ function renderFeeList() {
       <td class="right"><button type="button" class="btn btn-primary btn-small" data-fees="${esc(entry.record.bks_record_id)}">Kostenersatz berechnen</button></td></tr>`).join("");
   $("#view-fees").innerHTML = `<div class="card list-card">
     <div class="toolbar no-print"><strong>Kostenersatz ${state.year}</strong>
-      <div class="toolbar-right">${helpButton("fees")}</div></div>
+      <div class="toolbar-right"></div></div>
     <p class="small muted">Einsatz wählen: Die Kosten werden nach der Gebührenordnung der VG über alle beteiligten Wehren berechnet und lassen sich drucken.</p>
     <div class="table-wrap"><table class="table">
       <thead><tr><th>Datum</th><th>Einsatz</th><th>Wehren</th><th></th></tr></thead><tbody>${rows}</tbody></table>
