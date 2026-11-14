@@ -7,6 +7,17 @@
 const CHANGELOG = [
   {
     date: "2026-11-14",
+    version: "2026-11-14.2",
+    items: [
+      "<b>Zahlen besser lesbar:</b> Ziffern in Tabellen, Kennzahlen, Chips und Eingabefeldern verwechseln Eins und großes I sowie Null und O nicht mehr.",
+      "<b>Einlesen übersichtlicher:</b> In der Vorschau stehen zuerst die Angaben, die jeder Bericht hat. Seltene Angaben (Abbruch, Brandverlauf, gerettete und verletzte Personen) sind unter „Weitere Angaben“ eingeklappt und öffnen sich, sobald der Bericht etwas enthält. „In Statistik übernehmen“ bleibt am unteren Rand sichtbar.",
+      "<b>Leere Auswertungen:</b> Ohne Einsätze oder ohne Zeitangaben erklärt die Auswertung, was fehlt, statt leerer Diagramme.",
+      "<b>Handy:</b> Der Kopf braucht weniger Platz, und die Reiterleiste zeigt am Rand, dass sie weiter läuft.",
+      "<b>Screenreader:</b> Diagrammsäulen haben Namen, Tabellenköpfe im Einlesen-Fenster sind zugeordnet, Überschriften springen nicht mehr."
+    ]
+  },
+  {
+    date: "2026-11-14",
     items: [
       "<b>Bedienung per Tastatur besser sichtbar:</b> Der Fokusrahmen ist im roten Kopf weiß und in Eingabefeldern deutlich zu erkennen. Rahmen von Eingabefeldern sind kräftiger.",
       "<b>Handy und Tablet:</b> Knöpfe, Filter, Kontrollkästchen und das ?-Symbol lassen sich auf Touchgeräten leichter treffen."

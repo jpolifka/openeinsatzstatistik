@@ -123,11 +123,23 @@ function stepButtons(e) {
 }
 
 let formSequence = 0;
-function formFields(e) {
+// Angaben, die nur manche Berichte enthalten (Brandverlauf, Menschenrettung, Abbruch …): in der Vorschau eingeklappt
+const OPTIONAL_FORM_FIELDS = new Set(["abort_reason", "building", "alarm_system", "tactic", "fire_controlled_at", "fire_out_at",
+  "fire_watch_until", "rescued", "rescued_animals", "injured", "injured_firefighters", "deceased"]);
+
+function formFields(e, { fold = false } = {}) {
   const prefix = `incident-form-${++formSequence}`;
   // Einheitsführung ist ein Name: nur mit Recht auf die Anwesenheit (sonst bleibt der gespeicherte Wert)
   const fields = config.incident_fields.filter(([name]) => name !== "unit_leader" || e.people_visible !== false);
-  return `<div class="form-grid">${fields.map(([name, title, type, span, attributes]) => {
+  const grid = (list) => `<div class="form-grid">${list.map(fieldHtml).join("")}</div>`;
+  if (!fold) return grid(fields);
+  const core = fields.filter(([name]) => !OPTIONAL_FORM_FIELDS.has(name));
+  const more = fields.filter(([name]) => OPTIONAL_FORM_FIELDS.has(name));
+  const filled = more.filter(([name]) => e[name] != null && e[name] !== "").length;
+  return grid(core) + (more.length ? `<details class="more-fields"${filled ? " open" : ""}>
+    <summary>Weitere Angaben<span class="muted">${filled ? `${filled} von ${more.length} ausgefüllt` : "keine im Bericht"}</span></summary>${grid(more)}</details>` : "");
+
+  function fieldHtml([name, title, type, span, attributes]) {
     const value = type === "datetime-local" ? (e[name] || "").slice(0, 19) : e[name];
     const missing = name === "unit_leader" && !value;
     // Nummerierung nach Datum: die Nr. vergibt die App
@@ -135,7 +147,7 @@ function formFields(e) {
     const id = `${prefix}-${name}`;
     return `<div class="field ${span}"><span><label for="${id}">${title}</label>${helpButton(name)}</span><input id="${id}" name="${name}" type="${type}" value="${esc(value ?? "")}" ${attributes}${extra}
       class="${missing ? "missing" : ""}"></div>`;
-  }).join("")}</div>`;
+  }
 }
 
 function readForm(el) {

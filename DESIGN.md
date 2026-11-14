@@ -263,6 +263,12 @@ Abgerundete, freundliche Formen mit gestaffelten Radien: 6 px (Chips), 8 px (Ein
 ### Eingaben
 - Weiß, 1 px Rand in `--field-line`, 8 px Radius. Fokus: 2-px-Ring in `--brand` mit 1 px Abstand und Rand in `--brand`; kein heller Hof. Jedes Feld hat einen sichtbaren oder `aria-label`-Namen, ein Platzhalter ersetzt ihn nicht. Auf Touchgeräten mindestens 44 px hoch.
 
+### Zahlen
+- Ziffern in Daten (Tabellen, Kennzahlen, Chips, Eingaben) kommen aus `--font-num`: eine Systemschrift mit eindeutiger Eins und Null (`@font-face "Ziffern"`, nur U+0030–0039); Buchstaben und Überschriften bleiben Sansation, weil dort Eins und I, Null und O verwechselt werden.
+
+### Import-Vorschau
+- Prüfhinweise zuerst, dann die Kernfelder; seltene Angaben liegen in „Weitere Angaben“ (`<details>`, offen, wenn der Bericht etwas enthält). Die Übernahme ist eine feste Fußleiste am Dialogrand.
+
 ### Navigation
 - Reiter im Kopf: weiße Schrift (`--on-brand-text`, 82 % → 100 % bei Hover/aktiv), 3-px-Unterstrich weiß für den aktiven Reiter, Streifen als dunkle Überlagerung (14 %); Unterreiter etwas kleiner und heller abgesetzt. Alles im Kopf nutzt die Tokens `--on-brand-text`, `--on-brand-fill`, `--on-brand-line`; der Fokusring ist dort weiß (8,2:1 auf dem Verlauf).
 
@@ -284,6 +290,8 @@ Abgerundete, freundliche Formen mit gestaffelten Radien: 6 px (Chips), 8 px (Ein
 - **Do** neue Felder und Kennzahlen in `help.js` erklären und Änderungen in `changelog.js` eintragen.
 
 ### Don't:
+- **Don't** Sansation für Ziffern in Daten verwenden (1 = I, 0 = O).
+- **Don't** leere Diagramme mit Strichen zeigen; Leerzustände sagen, was fehlt und was zu tun ist.
 - **Don't** `--brand-accent` auf dem Kopfverlauf als Fokusfarbe verwenden (unter 2:1).
 - **Don't** `--brand-accent` oder `--day` als Textfarbe auf Weiß einsetzen (3,8:1).
 - **Don't** Grautöne unter #6B6B6B für lesbaren Text verwenden; helle Grautöne (#B5B5B5, #BDBDBD) sind nur für Linien und Flächen.
