@@ -41,7 +41,7 @@ function renderEvaluation() {
     ${kpi(`Einsatzstunden`, formatHours(s.duration_total_min), "Summe aller Einsätze")}
     ${kpi(`Personalstunden`, s.staff_hours == null ? "–" : `${num(s.staff_hours, 0)}<small>h</small>`,
       s.staff_recorded < s.staff_total ? `Unvollständig: Anwesenheit und Dauer für ${s.staff_recorded} von ${s.staff_total} Einsätzen` : `Ø ${num(s.attendees_avg, 1)} Personen je Einsatz`)}
-    ${plan ? kpi(`Eintreffen ≤ ${plan.limit} Min.`, percent(plan.total.rate), `${plan.total.on_time} von ${plan.total.count} Einsätzen mit Eintreffzeit oder Abbruch`) : ""}
+    ${plan ? kpi(`Eintreffen ≤ ${plan.limit} Min.`, percent(plan.total.rate), plan.total.count ? `${plan.total.on_time} von ${plan.total.count} Einsätzen mit Eintreffzeit oder Abbruch` : planEmptyReason(plan)) : ""}
   </div>`;
 
   $("#view-evaluation").innerHTML = evaluationToolbar() + kpis + (plan ? responsePlanCard(plan, previousPlan) : "") + (vg ? tenantsCard(vg) : "") + `
@@ -77,6 +77,18 @@ function tenantsCard(vg) {
   const extra = keyFigures([[vg.unique, "Einsätze ohne Doppelte"], [vg.participations - vg.unique, "gemeinsame Beteiligungen"]]);
   return `<div class="grid">${chartCard({ id: "tenants", title: `Wehren`,
     subtitle: "Einsätze je Wehr; ein gemeinsamer Einsatz zählt bei jeder beteiligten Wehr", chart: barChart(items), table, extra })}</div>`;
+}
+
+/** Ohne Einsatz mit Eintreffzeit: ein Satz statt fünf leerer Kacheln, mit Weg zu den Einsätzen, denen sie fehlt. */
+function planEmptyReason(plan) {
+  return plan.without_times ? `${plural(plan.without_times, "Einsatz", "Einsätze")} ohne Eintreffzeit`
+    : `kein Einsatz ab Alarmstufe ${config.plan_min_level} im Ausrückebereich`;
+}
+
+function planEmpty(plan) {
+  if (!plan.without_times) return `<p class="empty-note">In ${state.year} gab es keinen Einsatz ab Alarmstufe ${esc(config.plan_min_level)} im Ausrückebereich der Wehr.</p>`;
+  return `<p class="empty-note">Bei ${plural(plan.without_times, "Einsatz", "Einsätzen")} im Ausrückebereich fehlt die Eintreffzeit, deshalb gibt es noch keine Eintreffquote für ${state.year}.
+    <a href="${esc(listLink({ missing: "arrival" }))}" class="no-print">Diese Einsätze ansehen</a></p>`;
 }
 
 function responsePlanCard(plan, previousPlan) {
@@ -126,7 +138,7 @@ function responsePlanCard(plan, previousPlan) {
     id: "plan", heading: "h2", className: "plan grid", chartLabel: "Kacheln", controls: release + limitSwitch, extra: footer,
     title: `Eintreffen und verfügbare Kräfte`,
     subtitle: plan.places.length ? `Einsätze ab Alarmstufe ${config.plan_min_level} im Ausrückebereich der Wehr (festgelegt unter Einstellungen → Orte & Zeitgrenzen) – Eintreffen des ersten Fahrzeugs innerhalb von ${limit} Minuten nach Alarmierung; abgebrochene Einsätze ohne Eintreffzeit gelten als rechtzeitig. Das ist eine Eintreffquote – kein vollständiger Nachweis eines Schutzziels und kein Feuerwehrbedarfsplan.` : "Noch kein Ausrückebereich konfiguriert. Bitte unter Einstellungen → Orte & Zeitgrenzen einrichten.",
-    chart: `<div class="plan-windows">${plan.windows.map((w) => windowTile(w, false)).join("")}${windowTile(plan.total, true)}</div>`,
+    chart: plan.total.count ? `<div class="plan-windows">${plan.windows.map((w) => windowTile(w, false)).join("")}${windowTile(plan.total, true)}</div>` : planEmpty(plan),
     table,
   });
 }

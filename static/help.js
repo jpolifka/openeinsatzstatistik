@@ -452,7 +452,7 @@ const HELP_SECTIONS = [
       admin_colors: {
         title: "Farben",
         short: "Hauptfarbe (und optional eine dunkle Variante) der Wehr.",
-        text: "Farbe über den Farbwähler, als Hex-Wert (#RRGGBB) oder als Rot/Grün/Blau-Anteile (0–255) einstellen – die drei Eingaben bleiben gleich. Aus der Hauptfarbe leitet die App alle anderen Töne ab (Flächen, Tabellenköpfe, Diagramme Tag/Nacht) und dunkelt sie bei Bedarf so weit ab, dass Schrift und Diagramme lesbar bleiben. Ist die Hauptfarbe selbst zu hell für weiße Schrift (Kontrast unter 4,5:1), lässt sie sich nicht speichern. Ohne eigene Farbe gilt das Standardrot. Die Gesamtansicht einer VG und die Anmeldung sind immer neutral gestaltet.",
+        text: "Farbe über den Farbwähler, als Hex-Wert (#RRGGBB) oder als Rot/Grün/Blau-Anteile (0–255) einstellen – die drei Eingaben bleiben gleich. Aus der Hauptfarbe leitet die App alle anderen Töne ab (Flächen, Tabellenköpfe, Fokusrahmen); die Diagramme sind neutral grau und dunkelt sie bei Bedarf so weit ab, dass Schrift und Diagramme lesbar bleiben. Ist die Hauptfarbe selbst zu hell für weiße Schrift (Kontrast unter 4,5:1), lässt sie sich nicht speichern. Ohne eigene Farbe gilt das Standardrot. Die Gesamtansicht einer VG und die Anmeldung sind immer neutral gestaltet.",
       },
       admin_logos: {
         title: "Logos",

@@ -15,8 +15,8 @@ def test_palette_keeps_text_and_charts_readable(brand):
     p = theme.palette({"brand": brand})
     for token in ("--brand", "--brand-dark", "--brand-mid"):
         assert theme.contrast(p[token], "#FFFFFF") >= theme.MIN_TEXT_CONTRAST or token == "--brand"
-    assert theme.contrast(p["--day"], "#FFFFFF") >= theme.MIN_CHART_CONTRAST
-    assert theme.contrast(p["--day"], p["--night"]) >= theme.MIN_SERIES_CONTRAST
+    assert theme.contrast(p["--brand-accent"], "#FFFFFF") >= theme.MIN_CHART_CONTRAST
+    assert not {"--series", "--day", "--night"} & set(p)      # Diagrammreihen sind neutral und gehören nicht zum Theme
     assert theme.contrast(p["--brand-dark"], "#FFFFFF") >= 7
 
 
@@ -28,7 +28,7 @@ def test_palette_for_random_valid_colors():
             continue
         p = theme.palette({"brand": brand})
         assert theme.contrast(p["--brand-mid"], "#FFFFFF") >= theme.MIN_TEXT_CONTRAST, brand
-        assert theme.contrast(p["--day"], "#FFFFFF") >= theme.MIN_CHART_CONTRAST, brand
+        assert theme.contrast(p["--brand-accent"], "#FFFFFF") >= theme.MIN_CHART_CONTRAST, brand
 
 
 def test_check_and_normalize():

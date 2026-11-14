@@ -17,10 +17,11 @@
   --light-gray: #F2F2F2;   /* neutrale Flächen */
   --white: #FFFFFF;
 
-  /* Diagramme (Tag/Nacht mit validate_palette geprüft: alle Checks bestanden) */
-  --series: #D90000;
-  --day: #E0525C;
-  --night: #A80000;
+  /* Diagramme: neutrale Reihen in Graphit, unabhängig von den Farben der Wehr. Das Rot der Wehr bleibt für das,
+     worauf es ankommt (Erreichungsgrad, Fokus, Zeitstrahl). Alle Töne mindestens 3:1 auf Weiß. */
+  --series: #4A4A4A;
+  --day: #8F8F8F;
+  --night: #2E2E2E;
   --previous: #8F8F8F;
   --gridline: #ECECEC;
   --track: #F3E4E5;
@@ -141,6 +142,7 @@ button, input, select { font: inherit; color: inherit; }
 .segments button { border: 0; background: none; padding: 6px 12px; border-radius: 8px; cursor: pointer; color: var(--gray); font-weight: 700; font-size: .85rem; }
 .segments button.active { background: var(--white); color: var(--brand); box-shadow: 0 1px 3px var(--shade-soft); }
 .segments .count { font-weight: 400; margin-left: 4px; }
+.segments button.empty { font-weight: 400; }          /* Einsatzart ohne Einsätze: leiser, aber weiter wählbar */
 
 /* ------------------------------------------------------------ Kennzahlen */
 .kpis { display: grid; grid-template-columns: 1.35fr repeat(5, minmax(0, 1fr)); gap: 14px; }
@@ -184,7 +186,7 @@ button, input, select { font: inherit; color: inherit; }
 .tone-day { background: var(--day); }
 .tone-night { background: var(--night); }
 .tone-average { background: var(--text); }
-.tone-accent { background: var(--brand-accent); }
+.tone-accent { background: var(--day); }
 .tone-band { background: var(--brand-light); }
 
 /* Verlauf: Linien als SVG, Raster/Achse/Hover als HTML wie bei den Säulen */
@@ -428,6 +430,7 @@ span.message-error { display: inline; border: 0; background: none; padding: 0; }
 .columns-group.linked:hover .column, .columns-group.linked:focus-visible .column { filter: brightness(.88); }
 .window-links { font-size: .85rem; margin: -4px 0 8px; }
 .window-links a { color: var(--brand); }
+.window.total .window-links a { color: var(--white); }       /* auf dem dunklen Grund der Gesamtkachel */
 /* Einsatzliste: Prüfhinweise, Filter aus der Auswertung, Sortierung, Vor/Zurück */
 .toolbar-left { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .warn-filter.active, .todo-filter.active { background: var(--brand); color: var(--white); }
@@ -761,9 +764,17 @@ a.tenant-badge { text-decoration: none; }
   .btn, .btn-small, .segments button, .btn-link, .icon-button { min-height: 44px; }
   .btn-close, .btn-help-header { width: 44px; height: 44px; }
   .toggle, .check { min-height: 44px; }
-  .toggle input, .check input, .admin-table input[type="checkbox"], .vehicle-edit input[type="checkbox"] { width: 22px; height: 22px; }
+  .toggle input, .check input, .admin-table input[type="checkbox"], .vehicle-edit input[type="checkbox"] { width: 22px; height: 22px; flex: none; }
   .field input, .field select, .admin-table input, .admin-table select, .inline-row input, .inline-row select { min-height: 44px; }
+  .topbar-actions select, .search, .color-picker { min-height: 44px; }
+  .sort-button, .members-table .sort-button { min-height: 44px; display: inline-flex; align-items: center; }
+  .members-table .sort-button { display: flex; }
+  .table .btn-small[aria-expanded] { min-width: 44px; }                       /* Nummer öffnet das Detail */
+  .task-list a, .window-links a, .filter-chip button { display: inline-flex; align-items: center; min-height: 44px; }
+  .filter-chip button { min-width: 44px; justify-content: center; }
+  .list-more .btn { min-width: 44px; }
 }
+.list-more { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 16px 0 4px; flex-wrap: wrap; }
 
 /* Zahlen in Daten: eindeutige Ziffern (siehe --font-num); auch im Fließtext der Auswertungen, sonst wird aus „111“ ein „III“ */
 :is(#view-overview, #view-times, #view-load, #view-members) :is(p, small, span, li, th, label) { font-family: var(--font-num); }
@@ -794,10 +805,10 @@ input, .field :is(input, select, textarea), .admin-table :is(input, select), .in
 .preview-bulk-actions { display: inline-flex; gap: 8px; flex-wrap: wrap; }
 @media (pointer: coarse) { .status-toggle { min-height: 44px; } }
 
-/* Kopf: Titel immer einzeilig. Bis 1360 px entfallen die sichtbaren Beschriftungen von Wehr und Jahr (der Wert sagt es,
+/* Kopf: Titel immer einzeilig. Bis 1560 px entfallen die sichtbaren Beschriftungen von Wehr und Jahr (der Wert sagt es,
    Screenreader lesen sie weiter), damit „Zeiten & Kräfte 2026“ nicht umbricht und der Kopf nicht von Ansicht zu Ansicht springt. */
-.topbar h1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-@media (max-width: 1360px) {
+.topbar h1, .topbar-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 1560px) {
   .topbar-actions .year-select > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 }
 /* Fehlende Angabe im Formular: Bernstein mit Wort statt Rosa */

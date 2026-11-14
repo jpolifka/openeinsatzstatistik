@@ -17,10 +17,12 @@ function sortFrom(text) {
 // Fachkonstanten (Fahrzeuge, Orte, Zeitgrenzen, …) kommen von /api/config – hier keine eigenen Kopien.
 let config = null;
 
+const LIST_PAGE = 25;
 const state = {
   years: [], year: null, view: "evaluation", limit: null,
   evaluation: null, incidents: null,
   category: recall("incident-category") || "all", query: "", expanded: new Set(), editing: null,
+  listLimit: LIST_PAGE,                              // so viele Einsätze zeigt die Liste, der Rest folgt mit „Weitere anzeigen“
   todoOnly: false,                            // nur Einsätze, um die man sich kümmern sollte
   warnOnly: false,                            // nur Einsätze mit aktuellen Prüfhinweisen
   filters: {},                                // Filter aus der Auswertung (Monat, Ort, …), siehe LIST_FILTERS
@@ -67,11 +69,11 @@ const ICON_CHEVRON = `<svg class="chevron" viewBox="0 0 24 24" aria-hidden="true
 const ICON_CLOSE = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>`;
 
 async function api(url, options = {}) {
-  const response = await fetch(url, options);
+  const response = await fetch(url, options).catch(() => { throw new Error("Keine Verbindung zum Server."); });
   // Sitzung abgelaufen → zur Anmeldung
   if (response.status === 401) { location.href = "/login"; throw new Error("Anmeldung erforderlich"); }
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.detail || `Fehler ${response.status}`);
+  if (!response.ok) throw new Error(data.detail || (response.status >= 500 ? `Der Server hat einen Fehler gemeldet (${response.status}).` : `Fehler ${response.status}`));
   return data;
 }
 const apiJson = (url, method, body) =>
@@ -162,10 +164,12 @@ function niceScale(max, whole = false) {
 const linkAttributes = (link) => link ? ` data-list-link="${esc(link)}" role="link"` : "";
 
 /** Waagerechte Balken, eine Serie. items: [{label, hint, value, tip, link}] */
-function barChart(items) {
+function barChart(items, emptyText = "Noch keine Einsätze in diesem Zeitraum.") {
+  // Lauter Nullen zeichnen keine Balken, sondern sagen, was fehlt
+  if (!items.some((i) => i.value)) return `<p class="empty-note">${esc(emptyText)}</p>`;
   const max = Math.max(1, ...items.map((i) => i.value));
   return `<div class="bar-list">${items.map((i) => `
-    <div class="bar-row ${i.link && i.value ? "linked" : ""} ${i.gap ? "gap-before" : ""}" data-tip="${esc(i.tip || `${i.label}: ${i.value}`)}${i.link && i.value ? "\nKlicken: Einsätze anzeigen" : ""}" tabindex="0"${i.value ? linkAttributes(i.link) : ""}>
+    <div class="bar-row ${i.link && i.value ? "linked" : ""} ${i.gap ? "gap-before" : ""}" data-tip="${esc(i.tip || `${i.label}: ${i.value}`)}${i.link && i.value ? "\nKlicken: Einsätze anzeigen" : ""}" tabindex="0"${i.value && i.link ? linkAttributes(i.link) : ` role="img" aria-label="${esc(`${i.label}: ${i.text ?? i.value}`)}"`}>
       <span class="bar-label ${i.label ? "" : "hint-only"}">${esc(i.label)}${i.hint ? `<small>${esc(i.hint)}</small>` : ""}</span>
       <span class="bar-track">${i.value ? `<span class="bar ${i.tone ? `tone-${i.tone}` : ""}" style="width:${(i.value / max) * 100}%"></span>` : ""}</span>
       <span class="bar-value">${i.text ?? i.value}</span>
@@ -316,6 +320,7 @@ async function showView() {
   renderSubTabs();
   for (const k of Object.keys(VIEWS)) $(`#view-${k}`).hidden = k !== state.view;
   $("#page-title").textContent = view.noYear ? (view.title || view.label) : `${view.title || view.label} ${state.year}`;
+  $("#page-title").title = $("#page-title").textContent;                // gekürzter Titel bleibt als Hinweis lesbar
   document.title = `${$("#page-title").textContent} · ${appTitle}`;      // Tab und Verlauf unterscheiden die Ansichten
   const section = $(`#view-${state.view}`), run = ++viewRun;
   section.classList.add("loading");
@@ -330,7 +335,8 @@ async function showView() {
     if (run === viewRun) {
       const error = document.createElement("div");
       error.className = "view-load-error";
-      error.innerHTML = errorBox(e.message) + '<button type="button" class="btn btn-light">Erneut versuchen</button>';
+      error.innerHTML = noticeBox("error", "Die Ansicht konnte nicht geladen werden.",
+        `${e.message} Mit „Erneut versuchen“ lädt sie neu. Hilft das nicht, bitte über „?“ → Feedback melden.`) + '<button type="button" class="btn btn-light">Erneut versuchen</button>';
       $("button", error).addEventListener("click", () => showView());
       section.prepend(error);
     }
@@ -483,6 +489,7 @@ $("#view-incidents").addEventListener("click", (e) => {
     return;
   }
   if (e.target.closest("[data-clear-filters]")) { clearListFilters(); renderIncidents(); return; }
+  if (e.target.closest("[data-list-more]")) { state.listLimit += LIST_PAGE; renderIncidents(); return; }
   const th = e.target.closest("[data-sort-incidents]");
   if (th) {
     const field = th.dataset.sortIncidents, { incidentSort: sort } = state;
@@ -781,3 +788,6 @@ if (typeof MutationObserver !== "undefined" && typeof document !== "undefined" &
   // auch beim Wechsel der Ansicht (hidden) und beim Öffnen eines Dialogs (open)
   new MutationObserver(tidy).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden", "open"] });
 }
+
+// Gedruckt wird die ganze Liste, nicht nur die erste Seite
+if (typeof window !== "undefined") window.addEventListener("beforeprint", () => { if (state.incidents && state.listLimit < Infinity) { state.listLimit = Infinity; renderIncidents(); } });

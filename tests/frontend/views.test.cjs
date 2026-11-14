@@ -19,7 +19,7 @@ test("Fehler erhält Seitenstruktur; Wiederholen lädt und zeichnet erneut", asy
     parseHash: () => ({ view: "incidents", params: new URLSearchParams() }), URLSearchParams,
     $: (key) => key === "button" ? { addEventListener: (_, fn) => { retry = fn; } }
       : key === ".view-load-error" ? section.children.find((v) => typeof v === "object") : elements[key],
-    errorBox: (v) => v, Event: class {}, appTitle: "Einsatzstatistik",
+    noticeBox: (kind, title, text = "") => `${kind}|${title}|${text}`, Event: class {}, appTitle: "Einsatzstatistik",
     document: { dispatchEvent() {}, createElement: () => ({ remove() { section.children.shift(); } }) },
   });
   const source = fs.readFileSync("static/app.js", "utf8");
@@ -28,6 +28,7 @@ test("Fehler erhält Seitenstruktur; Wiederholen lädt und zeichnet erneut", asy
   assert.equal(section.children[1], "Tabelle");
   assert.equal(classes.has("loading"), false);
   assert.match(section.children[0].innerHTML, /Erneut versuchen/);
+  assert.match(section.children[0].innerHTML, /konnte nicht geladen werden.*Ausfall/);      // Titel nennt, was nicht geschah; Ursache dahinter
   await retry();
   assert.equal(attempts, 2);
   assert.equal(renders, 1);

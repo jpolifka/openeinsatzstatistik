@@ -204,7 +204,7 @@ function renderIncidents() {
   const filters = [{ code: "all", name: "Alle" }, ...config.categories];
   const count = (code) => code === "all" ? list.length : list.filter((e) => categoryOf(e.keyword) === code).length;
   $("#category-filter").innerHTML = filters.map((c) =>
-    `<button type="button" data-category="${c.code}" class="${state.category === c.code ? "active" : ""}" aria-pressed="${state.category === c.code}" ${c.code !== "all" ? `data-tip="${c.name}"` : ""}>${c.code === "all" ? c.name : c.code}<span class="count">${count(c.code)}</span></button>`).join("");
+    `<button type="button" data-category="${c.code}" class="${state.category === c.code ? "active" : count(c.code) ? "" : "empty"}" aria-pressed="${state.category === c.code}" ${c.code !== "all" ? `data-tip="${c.name}"` : ""}>${c.code === "all" ? c.name : c.code}<span class="count">${count(c.code)}</span></button>`).join("");
 
   renderListControls(list);
   const visible = visibleIncidents();
@@ -213,7 +213,9 @@ function renderIncidents() {
   // Offenes Formular beim Neuzeichnen (Suche, Filter, andere Zeile) samt Eingaben behalten
   const formSelector = state.editing ? `[data-form="${CSS.escape(state.editing)}"]` : null;
   if (formSelector && $(formSelector)) state.editNode = $(formSelector);
-  $("#incident-table tbody").innerHTML = visible.map((e) => {
+  // Erste Seite plus alle aufgeklappten Einsätze (sonst verschwände die Zeile, die man gerade liest)
+  const shown = visible.filter((e, i) => i < state.listLimit || state.expanded.has(e.id));
+  $("#incident-table tbody").innerHTML = shown.map((e) => {
     const open = state.expanded.has(e.id);
     const arrival = e.arrival_min == null ? `<span class="muted">–</span>`
       : `<span class="arrival ${e.on_time ? "" : "late"}" data-tip="${e.on_time ? "innerhalb" : "nicht innerhalb"} von ${limit} Minuten">${minutes(e.arrival_min)}${lateMark(!e.on_time, limit)}</span>`;
@@ -230,6 +232,10 @@ function renderIncidents() {
     </tr>${open ? `<tr class="detail"><td colspan="9">${state.editing === e.id ? editForm(e) : incidentDetail(e)}</td></tr>` : ""}`;
   }).join("");
   if (formSelector && state.editNode && $(formSelector)) $(formSelector).replaceWith(state.editNode);
+  const more = $("#incidents-more");
+  more.hidden = shown.length >= visible.length;
+  more.innerHTML = more.hidden ? "" : `<span class="small muted">${shown.length} von ${visible.length} Einsätzen</span>
+    <button type="button" class="btn btn-light" data-list-more>Weitere ${Math.min(LIST_PAGE, visible.length - shown.length)} anzeigen</button>`;
   $("#incidents-empty").hidden = visible.length > 0;
   $("#incidents-empty").innerHTML = list.length && (state.query || state.category !== "all" || state.warnOnly || state.todoOnly || Object.keys(state.filters).length)
     ? `Keine Einsätze zu diesen Filtern. <button type="button" class="btn btn-link btn-small" data-clear-filters>Alle Filter aufheben</button>`
