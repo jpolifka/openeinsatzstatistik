@@ -42,6 +42,10 @@
   --shadow-toast: 0 10px 30px rgba(0,0,0,.25);
   --line: #E4E4E4;
   --line-strong: #CFCFCF;     /* Achsen und Bezugslinien (kein Text) */
+  --field-line: #858585;      /* Rahmen von Eingaben und Knöpfen (mind. 3:1 zu Weiß) */
+  --on-brand-text: rgba(255,255,255,.82);  /* Text auf dem farbigen Kopf */
+  --on-brand-fill: rgba(255,255,255,.14);
+  --on-brand-line: rgba(255,255,255,.4);
   --radius: 14px;
   --shadow: 0 1px 2px rgba(51, 0, 0, .06), 0 6px 20px rgba(122, 0, 0, .06);
   --dialog-shadow: 0 30px 80px rgba(60, 0, 0, .35);
@@ -67,24 +71,26 @@ p { margin: .25rem 0 0; }
 button, input, select { font: inherit; color: inherit; }
 [hidden] { display: none !important; }
 :focus-visible { outline: 3px solid var(--brand-accent); outline-offset: 2px; }
+/* Auf dem farbigen Kopf trägt nur Weiß (Rot auf Rot hätte unter 2:1) */
+.topbar :focus-visible { outline-color: var(--white); }
 
 /* ------------------------------------------------------------ Kopf */
 .topbar { background: linear-gradient(120deg, var(--brand-dark) 0%, var(--brand-gradient) 45%, var(--brand) 100%); color: var(--white); }
 .topbar-inner { max-width: 1280px; margin: 0 auto; padding: 20px 24px 14px; display: flex; align-items: center; gap: 26px; }
 .topbar-logo { height: 60px; width: auto; display: block; }
-.topbar-title { border-left: 2px solid rgba(255,255,255,.35); padding-left: 22px; flex: 1; min-width: 0; }
+.topbar-title { border-left: 2px solid var(--on-brand-line); padding-left: 22px; flex: 1; min-width: 0; }
 .topbar-sub { font-size: .85rem; margin: 2px 0 0; }
 .topbar h1 { font-size: 1.7rem; }
 .topbar-actions { display: flex; gap: 14px; align-items: center; }
 .year-select { display: flex; align-items: center; gap: 8px; font-size: .85rem; }
 .year-select select {
-  background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.35); color: var(--white);
+  background: var(--on-brand-fill); border: 1px solid var(--on-brand-line); color: var(--white);
   border-radius: 10px; padding: 8px 12px; font-weight: 700; font-size: 1rem; cursor: pointer;
 }
 .year-select option { color: var(--text); }
 .tabs { background: var(--shade); }
 .tabs-inner { max-width: 1280px; margin: 0 auto; padding: 0 24px; display: flex; gap: 4px; }
-.tabs a { color: rgba(255,255,255,.82); text-decoration: none; font-weight: 700; padding: 12px 16px 11px; border-bottom: 3px solid transparent; white-space: nowrap; }
+.tabs a { color: var(--on-brand-text); text-decoration: none; font-weight: 700; padding: 12px 16px 11px; border-bottom: 3px solid transparent; white-space: nowrap; }
 .tabs a:hover { color: var(--white); }
 .tabs a.active { color: var(--white); border-bottom-color: var(--white); }
 .subtabs { background: var(--shade-soft); }
@@ -119,7 +125,7 @@ button, input, select { font: inherit; color: inherit; }
 .btn-light:hover:not(:disabled) { background: var(--brand-light-hover); }
 .btn-white { background: var(--white); color: var(--brand-dark); }
 .btn-white:hover:not(:disabled) { background: var(--brand-pale); }
-.btn-outline { background: var(--white); color: var(--gray); border: 1px solid var(--line); }
+.btn-outline { background: var(--white); color: var(--gray); border: 1px solid var(--field-line); }
 .btn-outline:hover { color: var(--brand-dark); border-color: var(--brand-accent); }
 .btn-small { padding: 6px 12px; font-size: .85rem; }
 
@@ -138,7 +144,7 @@ button, input, select { font: inherit; color: inherit; }
 .kpi-value small { font-size: .92rem; color: var(--gray); margin-left: 3px; }
 .kpi-sub { font-size: .85rem; color: var(--gray); }
 .kpi.hero { background: var(--brand-dark); color: var(--white); }
-.kpi.hero .kpi-title, .kpi.hero .kpi-sub { color: rgba(255,255,255,.8); }
+.kpi.hero .kpi-title, .kpi.hero .kpi-sub { color: var(--on-brand-text); }
 .kpi.hero .kpi-value { font-size: 3.1rem; }
 
 /* ------------------------------------------------------------ Diagramme */
@@ -208,17 +214,17 @@ button, input, select { font: inherit; color: inherit; }
 .window.total { background: var(--brand-dark); border-color: var(--brand-dark); color: var(--white); }
 .window-title { font-weight: 700; font-size: .92rem; line-height: 1.35; }
 .window-title span { display: block; font-weight: 400; font-size: .85rem; color: var(--gray); }
-.window.total .window-title span { color: rgba(255,255,255,.78); }
+.window.total .window-title span { color: var(--on-brand-text); }
 .rate { font-size: 1.9rem; font-weight: 700; line-height: 1; }
 .rate small { font-size: .85rem; font-weight: 400; color: var(--gray); margin-left: 4px; }
-.window.total .rate small { color: rgba(255,255,255,.78); }
+.window.total .rate small { color: var(--on-brand-text); }
 .meter { height: 8px; border-radius: 4px; background: var(--track); overflow: hidden; }
 .meter span { display: block; height: 100%; background: var(--brand); border-radius: 4px; }
 .window.total .meter { background: rgba(255,255,255,.22); }
 .window.total .meter span { background: var(--white); }
 .window-values { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; font-size: .85rem; margin: 0; }
 .window-values dt { color: var(--gray); }
-.window.total .window-values dt { color: rgba(255,255,255,.78); }
+.window.total .window-values dt { color: var(--on-brand-text); }
 .window-values dd { margin: 0; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
 .window.empty .rate { color: var(--gray); }
 .plan-footer { margin-top: 14px; font-size: .85rem; color: var(--gray); }
@@ -302,8 +308,8 @@ button.person:hover:not(.leader) { background: var(--brand-light); color: var(--
 .form-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px 14px; }
 .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .field > span { font-size: .78rem; font-weight: 700; color: var(--gray); }
-.field input { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--white); min-width: 0; width: 100%; }
-.field input:focus { border-color: var(--brand-accent); outline: none; box-shadow: 0 0 0 3px var(--brand-light); }
+.field input { border: 1px solid var(--field-line); border-radius: 8px; padding: 8px 10px; background: var(--white); min-width: 0; width: 100%; }
+.field input:focus { border-color: var(--brand); outline: 2px solid var(--brand); outline-offset: 1px; }
 .field input.missing { border-color: var(--brand-accent); background: var(--brand-pale); }
 .suggestions { position: fixed; z-index: 50; width: 330px; max-width: calc(100vw - 16px); max-height: 300px; overflow-y: auto;
   margin: 0; padding: 4px; list-style: none; background: var(--white); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); }
@@ -490,8 +496,9 @@ kbd { display: inline-block; min-width: 1.4em; padding: 0 5px; border: 1px solid
 .help-btn {
   display: inline-grid; place-items: center; width: 17px; height: 17px; margin-left: 6px; padding: 0;
   border: 1px solid currentColor; border-radius: 50%; background: none; color: var(--gray);
-  font-size: .78rem; font-weight: 700; line-height: 1; cursor: help; vertical-align: 2px; flex: none;
+  font-size: .78rem; font-weight: 700; line-height: 1; cursor: help; vertical-align: 2px; flex: none; position: relative;
 }
+.help-btn::after { content: ""; position: absolute; inset: -6px; }  /* größere Trefferfläche, Kreis bleibt klein */
 .help-btn:hover, .help-btn:focus-visible { opacity: 1; color: var(--brand); }
 h2 .help-btn, h3 .help-btn { color: var(--brand); }
 .help-sample { margin: 0 2px; cursor: default; }
@@ -522,10 +529,10 @@ h2 .help-btn, h3 .help-btn { color: var(--brand); }
 .admin-actions.left { justify-content: flex-start; border-top: 0; padding-top: 0; margin-top: 12px; }
 .admin-status { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 .admin-status .toolbar-right { margin-left: auto; }
-.field select, .field textarea { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--white); min-width: 0; width: 100%; font: inherit; }
-.field select:focus, .field textarea:focus { border-color: var(--brand-accent); outline: none; box-shadow: 0 0 0 3px var(--brand-light); }
+.field select, .field textarea { border: 1px solid var(--field-line); border-radius: 8px; padding: 8px 10px; background: var(--white); min-width: 0; width: 100%; font: inherit; }
+.field select:focus, .field textarea:focus { border-color: var(--brand); outline: 2px solid var(--brand); outline-offset: 1px; }
 .admin-table input[type="text"], .admin-table input[type="date"], .admin-table input[type="number"], .admin-table select, .inline-row input, .inline-row select {
-  border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; background: var(--white); min-width: 0; width: 100%; font: inherit;
+  border: 1px solid var(--field-line); border-radius: 6px; padding: 5px 8px; background: var(--white); min-width: 0; width: 100%; font: inherit;
 }
 .admin-table input.narrow, .inline-row input.narrow { width: 80px; }
 .admin-table input.wide { min-width: 220px; }
@@ -552,7 +559,7 @@ h2 .help-btn, h3 .help-btn { color: var(--brand); }
 .color-field { margin-bottom: 14px; }
 .field-label { font-size: .78rem; font-weight: 700; color: var(--gray); }
 .color-inputs { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-top: 4px; }
-.color-picker { width: 52px; height: 38px; padding: 2px; border: 1px solid var(--line); border-radius: 8px; background: var(--white); cursor: pointer; }
+.color-picker { width: 52px; height: 38px; padding: 2px; border: 1px solid var(--field-line); border-radius: 8px; background: var(--white); cursor: pointer; }
 .color-hex { width: 110px; } .color-channel { width: 70px; }
 .theme-preview { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--brand-pale); }
 .preview-bar { background: linear-gradient(120deg, var(--brand-dark) 0%, var(--brand-gradient) 45%, var(--brand) 100%); color: var(--white); padding: 12px 16px; display: flex; flex-direction: column; }
@@ -621,8 +628,8 @@ a.tenant-badge { text-decoration: none; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 .btn-help-header {
-  width: 38px; height: 38px; border-radius: 50%; border: 1px solid rgba(255,255,255,.45);
-  background: rgba(255,255,255,.14); color: var(--white); font-weight: 700; font-size: 1rem; cursor: pointer; flex: none;
+  width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--on-brand-line);
+  background: var(--on-brand-fill); color: var(--white); font-weight: 700; font-size: 1rem; cursor: pointer; flex: none;
 }
 .btn-help-header:hover { background: rgba(255,255,255,.26); }
 .btn-help-header svg { width: 18px; height: 18px; display: block; margin: auto; }
@@ -694,7 +701,7 @@ a.tenant-badge { text-decoration: none; }
 
 /* Einsatz bearbeiten: Fahrzeuge und Anwesenheit; Einsätze je Kamerad */
 .vehicle-edit input[type="number"], .vehicle-edit input[type="time"], .person-add input, .person-add select {
-  font: inherit; font-size: .85rem; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--white); color: var(--text);
+  font: inherit; font-size: .85rem; padding: 6px 8px; border: 1px solid var(--field-line); border-radius: 8px; background: var(--white); color: var(--text);
 }
 .vehicle-edit input[type="number"] { width: 64px; }
 .vehicle-edit input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--brand); }
@@ -727,3 +734,13 @@ a.tenant-badge { text-decoration: none; }
 .dialog-fees .inline-row input[data-key="label"] { flex: 1 1 240px; width: auto; }
 .dialog-fees .inline-row input[data-key="amount"] { flex: 0 0 110px; }
 .admin-table input.fee-code { width: 130px; }
+
+/* Touch: Bedienelemente mindestens 44 px (WCAG 2.5.5), unabhängig von der Bildschirmbreite */
+@media (pointer: coarse) {
+  .btn, .btn-small, .segments button, .btn-link, .icon-button { min-height: 44px; }
+  .btn-close, .btn-help-header { width: 44px; height: 44px; }
+  .help-btn::after { inset: -14px; }
+  .toggle, .check { min-height: 44px; }
+  .toggle input, .check input, .admin-table input[type="checkbox"], .vehicle-edit input[type="checkbox"] { width: 22px; height: 22px; }
+  .field input, .field select, .admin-table input, .admin-table select, .inline-row input, .inline-row select { min-height: 44px; }
+}

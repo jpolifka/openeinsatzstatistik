@@ -738,3 +738,14 @@ document.addEventListener("keydown", async (e) => {
   await showView();
   document.dispatchEvent(new Event("app:data"));
 })();
+
+// Tabellenköpfe für Screenreader zuordnen: Spaltenköpfe im thead, sonst Zeilenköpfe (auch für später gezeichnete Tabellen)
+function markTableHeaders(root) {
+  for (const th of root.querySelectorAll("th:not([scope])")) {
+    th.setAttribute("scope", th.colSpan > 1 ? "colgroup" : th.closest("thead") ? "col" : "row");
+  }
+}
+if (typeof MutationObserver !== "undefined" && typeof document !== "undefined" && document.body) {
+  markTableHeaders(document);
+  new MutationObserver(() => markTableHeaders(document)).observe(document.querySelector("main.page") || document.body, { childList: true, subtree: true });
+}
