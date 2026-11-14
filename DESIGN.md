@@ -80,6 +80,11 @@ typography:
     fontSize: "1.15rem"
     fontWeight: 700
     lineHeight: 1.2
+  digits:
+    fontFamily: "Ziffern, Sansation, Segoe UI, system-ui, sans-serif"
+    fontSize: "1rem"
+    fontWeight: 400
+    lineHeight: 1.5
   kpi-value:
     fontFamily: "Sansation, Segoe UI, system-ui, sans-serif"
     fontSize: "1.9rem"
