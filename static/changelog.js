@@ -7,6 +7,18 @@
 const CHANGELOG = [
   {
     date: "2026-11-14",
+    version: "2026-11-14.3",
+    items: [
+      "<b>Mehrere Berichte einlesen:</b> Zuerst ist nur der erste Bericht aufgeklappt, die übrigen zeigen ihr Statusband und öffnen sich per Klick. Nach „In Statistik übernehmen“ springt die Ansicht zum nächsten offenen Bericht; „Nächster offener Bericht“ und „2 von 3 übernommen“ stehen in der Statuszeile.",
+      "<b>Sammelübernahme mit neuen Personen:</b> Berichte ohne Prüfhinweise lassen sich auch dann gemeinsam übernehmen, wenn neue Personen darin vorkommen. Vorher nennt ein Dialog, wer angelegt wird.",
+      "<b>Einsatz bearbeiten:</b> Das Formular ist wie die Vorschau gegliedert; seltene Angaben liegen unter „Weitere Angaben“. Eine fehlende Einheitsführung ist jetzt gelb markiert und mit „fehlt“ beschriftet.",
+      "<b>Ruhigerer Kopf:</b> Der Seitentitel bricht nicht mehr um, die Kopfzeile bleibt in allen Ansichten gleich hoch.",
+      "<b>Übersicht:</b> Fehlende Angaben stehen in einer Aufgabe gebündelt, leere Zeitfenster sind eine Zeile statt sechs Striche. Diagrammachsen für Zählwerte zeigen nur ganze Zahlen.",
+      "<b>Kleinigkeiten:</b> Beginn und Ende im Detail zeigen bei fehlender Angabe nur einen Strich, „Quelle“ endet nicht mehr mit einem hängenden Punkt, die Überschriftenebenen stimmen auch nach dem Wechsel der Ansicht."
+    ]
+  },
+  {
+    date: "2026-11-14",
     version: "2026-11-14.2",
     items: [
       "<b>Zahlen besser lesbar:</b> Ziffern in Tabellen, Kennzahlen, Chips und Eingabefeldern verwechseln Eins und großes I sowie Null und O nicht mehr.",

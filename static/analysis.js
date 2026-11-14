@@ -48,10 +48,19 @@ function openTasks(e) {
     const warned = incidents.filter((i) => i.current_warnings?.length).length;
     if (warned) tasks.push({ text: plural(warned, "Einsatz hat", "Einsätze haben") + " Prüfhinweise", link: listLink({ warn: 1 }) });
   }
+  const gaps = [];
   for (const row of e.coverage.rows) {
     const missing = e.coverage.total - row.valid;
     if (!missing || (row.key === "leader" && !can("people.view"))) continue;
-    tasks.push({ text: `${plural(missing, "Einsatz", "Einsätze")} ${MISSING_LABELS[row.key]}`, link: incidents ? listLink({ missing: row.key }) : null });
+    gaps.push({ key: row.key, missing, text: `${plural(missing, "Einsatz", "Einsätze")} ${MISSING_LABELS[row.key]}`, link: incidents ? listLink({ missing: row.key }) : null });
+  }
+  // Viele fehlende Angaben zu einer Aufgabe bündeln statt sechs Zeilen mit fast derselben Zahl
+  if (gaps.length > 2) {
+    const same = gaps.every((g) => g.missing === gaps[0].missing);     // gleiche Zahl: einmal vorn nennen, sonst je Angabe
+    tasks.push({ text: same ? `Angaben fehlen bei ${plural(gaps[0].missing, "Einsatz", "Einsätzen")}:` : `Fehlende Angaben bei bis zu ${plural(Math.max(...gaps.map((g) => g.missing)), "Einsatz", "Einsätzen")}:`,
+      parts: gaps.map((g) => ({ text: same ? COVERAGE_SHORT[g.key] : `${COVERAGE_SHORT[g.key]} (${g.missing})`, link: g.link })) });
+  } else {
+    tasks.push(...gaps);
   }
   const notices = typeof records === "undefined" ? [] : records.notices;
   if (notices.length) tasks.push({ text: plural(notices.length, "Hinweis", "Hinweise") + " an die Wehr", notices: true });
@@ -60,7 +69,8 @@ function openTasks(e) {
 
 function openTasksCard(e) {
   const tasks = openTasks(e);
-  const items = tasks.map((t) => `<li>${t.link ? `<a href="${esc(t.link)}">${esc(t.text)}</a>` : esc(t.text)}${t.notices
+  const link = (t) => t.link ? `<a href="${esc(t.link)}">${esc(t.text)}</a>` : esc(t.text);
+  const items = tasks.map((t) => `<li>${t.parts ? `${esc(t.text)} ${t.parts.map(link).join(", ")}` : link(t)}${t.notices
     ? ` <button type="button" class="btn btn-light btn-small" data-overview-notices>Anzeigen</button>` : ""}</li>`).join("");
   return `<div class="card"><div class="card-header"><div><h2>Offene Aufgaben${helpButton("overview_tasks")}</h2>
     <p class="muted">Was im Jahr ${state.year} noch Aufmerksamkeit braucht – ein Klick zeigt die betroffenen Einsätze.</p></div></div>

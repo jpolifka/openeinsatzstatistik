@@ -5,7 +5,7 @@
 const SOURCES = { pdf: "PDF", bks_xlsx: "Excel-Export BKS" };
 
 function sourceLabel(e) {
-  return SOURCES[e.source] ? `${SOURCES[e.source]} · ${esc(e.filename)}` : "Einsatzübersicht (Excel)";
+  return SOURCES[e.source] ? [SOURCES[e.source], e.filename && esc(e.filename)].filter(Boolean).join(" · ") : "Einsatzübersicht (Excel)";
 }
 
 /** Fehler im Einlese-Dialog: title nennt, was nicht geklappt hat; text (bereits maskiert) die Ursache und den nächsten Schritt. */
@@ -79,6 +79,8 @@ async function showUploadResult(data) {
   // Erfasster Einsatz: Aktualisieren ist vorausgewählt (manuell ergänzte Fahrzeuge und Personen bleiben)
   state.upload = { token: data.token, reports: data.reports.map((r) => ({ ...r, replace: Boolean(r.existing && r.can_edit), saved: null })),
                    errors: data.errors, notes: data.notes || [] };
+  const first = state.upload.reports.findIndex((r) => isPending(r) && !r.action);
+  if (first >= 0) state.upload.reports[first].open = true;     // offen ist zuerst nur ein Bericht, die übrigen zeigen ihr Statusband
   if (data.errors.length) {
     showUploadError(`${plural(data.errors.length, "Datei konnte", "Dateien konnten")} nicht gelesen werden.`,
       `${data.errors.map((e) => `${esc(e.file)}: ${esc(e.message)}`).join("<br>")}${data.reports.length ? "<br>Die übrigen Berichte stehen unten zur Prüfung bereit." : ""}`);
@@ -108,8 +110,11 @@ function uploadNotes(notes) {
   return notes.length ? `<div class="message message-info">${notes.map((n) => `${esc(n.file)}: ${esc(n.message)}`).join("<br>")}</div>` : "";
 }
 
-// Ohne Hinweise, ohne neue Personen, noch nicht erfasst: kann in einem Schritt übernommen werden
-const isClean = (r) => !r.action && !r.saved && !r.existing && !reviewReasons(r).length;
+// Ohne Prüfhinweise, noch nicht erfasst: kann in einem Schritt übernommen werden. Neue Personen sind kein Hindernis;
+// die Sammelübernahme nennt sie vorher im Bestätigungsdialog.
+const isClean = (r) => !r.action && !r.saved && !r.existing && !r.warnings.length && !r.error;
+const isPending = (r) => !r.saved && !isUnchanged(r);
+const newPeopleOf = (r) => r.people.filter((p) => p.new).map((p) => p.name);
 
 function uploadSummary(reports) {
   const unchanged = reports.filter(isUnchanged).length;
@@ -117,19 +122,24 @@ function uploadSummary(reports) {
   const clean = reports.filter(isClean).length;
   const parts = [];
   if (unchanged) parts.push(`${plural(unchanged, "Einsatz", "Einsätze")} bereits unverändert erfasst`);
+  const done = reports.filter((r) => r.saved).length;
   if (open) parts.push(`${plural(open, "Bericht", "Berichte")} offen`);
+  if (done && open) parts.push(`${done} von ${done + open} übernommen`);
   if (!parts.length) return "";
   // Sammelübernahme nur ausdrücklich und nur für Berichte ohne Anmerkung; alles andere bleibt zur Prüfung
   const bulk = clean > 1 ? `<button type="button" class="btn btn-light" data-accept-clean ${acceptingReports || bulkRunning ? "disabled" : ""}>
       ${plural(clean, "Bericht ohne Hinweise", "Berichte ohne Hinweise")} übernehmen</button>` : "";
-  return `<div class="message message-info preview-bulk"><span>${parts.join(" · ")}${clean > 1 ? ` · ${clean} davon ohne Hinweise` : ""}</span>${bulk}</div>`;
+  const next = open > 1 ? `<button type="button" class="btn btn-outline" data-next-report>Nächster offener Bericht</button>` : "";
+  return `<div class="message message-info preview-bulk"><span>${parts.join(" · ")}${clean > 1 ? ` · ${clean} davon ohne Hinweise` : ""}</span><span class="preview-bulk-actions">${next}${bulk}</span></div>`;
 }
 
-function previewStatus(r) {
+function previewStatus(r, i) {
   const existing = r.existing;
-  // Neutral = bereit, Bernstein = zu prüfen, Grün = übernommen; das Wort steht immer dabei
+  // Neutral = bereit, Bernstein = zu prüfen, Grün = übernommen; das Wort steht immer dabei.
+  // Offene Berichte lassen sich über das Band ein- und ausklappen (Knopf für die Tastatur, das ganze Band für die Maus).
+  const toggle = r.saved || r.action ? "" : `<button type="button" class="status-toggle" aria-expanded="${r.open ? "true" : "false"}">${r.open ? "Einklappen" : "Öffnen"}</button>`;
   const status = (cls, tag, lead, title, sub) =>
-    `<div class="preview-status ${cls}">${lead}<div><strong>${title}</strong><span class="status-sub">${sub}</span></div><span class="status-tag">${tag}</span></div>`;
+    `<div class="preview-status ${cls}${toggle ? " toggles" : ""}"${toggle ? ` data-toggle-preview="${i}"` : ""}>${lead}<div><strong>${title}</strong><span class="status-sub">${sub}</span></div><span class="status-tag">${tag}</span>${toggle}</div>`;
   const number = (n) => `<span class="number">${n}</span>`;
   if (r.saved) return status("done", "Übernommen", ICON_CHECK.replace("<svg", '<svg class="status-icon"'),
     `Einsatz ${r.saved.number ?? ""}/${r.saved.year} ist in der Statistik`,
@@ -178,8 +188,8 @@ function renderPreviews() {
     if (isUnchanged(r)) return "";
     const existing = r.existing;
     return `<div class="preview-card" data-index="${i}">
-      ${previewStatus(r)}
-      ${r.saved ? "" : `<div class="preview-body">
+      ${previewStatus(r, i)}
+      ${r.saved || !r.open ? "" : `<div class="preview-body">
         ${reviewPanel(r)}
         ${formFields(r, { fold: true })}
         <div class="panel outlined"><h4>Fahrzeuge${helpButton("vehicles")}</h4>${vehicleTable(r)}
@@ -206,20 +216,23 @@ async function acceptReport(i) {
   const r = state.upload.reports[i];
   if (!r || r.saved) return false;                       // schon gespeichert: nie ein zweites Mal senden
   const card = $(`.preview-card[data-index="${i}"]`);
-  $("[data-accept]", card).disabled = true;
+  const accept = $("[data-accept]", card);
+  if (accept) accept.disabled = true;               // eingeklappte Berichte (Sammelübernahme) haben keinen Knopf
   acceptingReports++;
   let ok = false;
   try {
     const saved = await apiJson("/api/reports/accept", "POST",
-      { token: state.upload.token, filename: r.filename, fields: r.action ? {} : readForm(card),
+      { token: state.upload.token, filename: r.filename, fields: r.action ? {} : r.open ? readForm(card) : storedFormValues(r),
         replace: r.replace, revision: r.existing?.revision });
     r.saved = saved;
     r.failure = null;
+    r.open = false;
     state.dataChanged = true;
     toast(saved.message || `Einsatz ${saved.number ?? ""}/${saved.year} ${r.existing ? "aktualisiert" : "übernommen"}`);
     ok = true;
   } catch (err) {
     // Die Karte bleibt mit den Eingaben stehen; der Fehler erscheint an ihr und nennt den Bericht
+    r.open = true;                                       // der Fehler steht in der geöffneten Karte
     r.failure = { title: `Einsatz ${r.number ?? ""}${r.number ? "/" + r.year : ""} (${r.filename}) wurde nicht übernommen.`,
       text: `${esc(err.message)} Ihre Eingaben bleiben erhalten. Bitte erneut „${r.existing ? "Aktualisieren" : "In Statistik übernehmen"}“ wählen.` };
   } finally {
@@ -227,6 +240,7 @@ async function acceptReport(i) {
   }
   keepPreviewInput();
   renderPreviews();                                      // erst nach dem Zählen: Sammelknopf und Karten stimmen wieder
+  if (ok && !bulkRunning) openNextReport(i);             // nach dem Übernehmen weiter zum nächsten offenen Bericht
   return ok;
 }
 
@@ -234,8 +248,12 @@ async function acceptReport(i) {
 // Ein zweiter Aufruf (Doppelklick) tut nichts, solange der erste läuft.
 async function acceptCleanReports() {
   if (bulkRunning || acceptingReports || uploadBusy) return;
-  bulkRunning = true;
   const planned = state.upload.reports.filter(isClean);
+  const names = [...new Set(planned.flatMap(newPeopleOf))];
+  if (names.length && !await askConfirm({ title: `${plural(planned.length, "Bericht", "Berichte")} übernehmen?`,
+    text: `Dabei ${names.length === 1 ? "wird 1 neue Person" : `werden ${names.length} neue Personen`} angelegt: ${names.slice(0, 8).join("; ")}${names.length > 8 ? ` und ${names.length - 8} weitere` : ""}.`,
+    confirm: "Übernehmen" })) return;
+  bulkRunning = true;
   let saved = 0, failed = null;
   try {
     for (const r of planned) {
@@ -246,7 +264,45 @@ async function acceptCleanReports() {
     bulkRunning = false;
     renderPreviews();
   }
+  if (failed) failed.open = true; else openNextReport(-1);
+  renderPreviews();
   const left = planned.length - saved;
   toast(failed ? `${plural(saved, "Bericht", "Berichte")} übernommen. Angehalten bei ${failed.filename}; ${plural(left, "Bericht", "Berichte")} offen.`
                : `${plural(saved, "Bericht", "Berichte")} übernommen`, { duration: failed ? 8000 : 3500 });
+}
+
+// Die Werte der Maske für einen eingeklappten Bericht (ohne Formular): so, wie readForm sie liefern würde
+function storedFormValues(r) {
+  return Object.fromEntries((config.incident_fields || []).filter(([name]) => name !== "unit_leader" || r.people_visible !== false)
+    .map(([name, , type]) => [name, type === "number" ? (r[name] == null || r[name] === "" ? null : Number(r[name]))
+      : type === "datetime-local" ? (r[name] || "").slice(0, 19) : (r[name] ?? "")]));
+}
+
+function focusReport(i) {
+  const card = $(`.preview-card[data-index="${i}"]`);
+  card?.scrollIntoView?.({ block: "nearest" });
+  $(".status-toggle", card)?.focus?.();
+}
+
+// Band angeklickt: Bericht ein- oder ausklappen (Eingaben bleiben erhalten)
+function toggleReport(i) {
+  const r = state.upload.reports[i];
+  if (!r || r.saved) return;
+  keepPreviewInput();
+  r.open = !r.open;
+  renderPreviews();
+  focusReport(i);
+}
+
+// Nächster Bericht, der noch offen ist (nach `after`, sonst von vorn); er wird geöffnet und bekommt den Fokus
+function openNextReport(after = -1, closedOnly = false) {
+  const reports = state.upload.reports;
+  const candidate = (r) => isPending(r) && !r.action && !(closedOnly && r.open);
+  const found = reports.findIndex((r, j) => j > after && candidate(r));
+  const next = found >= 0 ? found : reports.findIndex(candidate);
+  if (next < 0) return;
+  keepPreviewInput();
+  reports[next].open = true;
+  renderPreviews();
+  focusReport(next);
 }

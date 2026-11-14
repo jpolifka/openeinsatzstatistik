@@ -46,6 +46,7 @@ const orDash = (v) => v ?? "–";
 const pad2 = (n) => String(n).padStart(2, "0");
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const formatDate = (iso) => iso ? `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}` : "–";
+const formatDateTime = (iso) => iso ? `${formatDate(iso)} ${formatTime(iso)}` : "–";
 const formatTime = (iso) => !iso ? "–" : iso.length > 8 ? iso.slice(11, 16) : iso.slice(0, 5);
 const weekdayShort = (iso) => iso ? new Date(iso).toLocaleDateString("de-DE", { weekday: "short" }) : "";
 const MONTH_NAMES = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
@@ -148,10 +149,11 @@ const reportError = (title, err, next = "Bitte erneut versuchen.") =>
   askConfirm({ title, text: `${err?.message || err} ${next}`.trim(), confirm: "Schließen", cancel: null });
 
 // ------------------------------------------------------------ Diagramm-Bausteine
-function niceScale(max) {
+function niceScale(max, whole = false) {
   if (max <= 0) return { max: 1, step: 1 };
   const raw = max / 4, p = 10 ** Math.floor(Math.log10(raw));
-  const step = [1, 2, 5, 10].map((f) => f * p).find((s) => s >= raw);
+  let step = [1, 2, 5, 10].map((f) => f * p).find((s) => s >= raw);
+  if (whole && step < 1) step = 1;               // Zählwerte: keine Achsenmarke bei 0,5
   return { max: Math.ceil(max / step) * step, step };
 }
 
@@ -172,7 +174,7 @@ function barChart(items) {
 /** Säulen. groups: [{axis, tip, link, values: [{value, tone, labelled}]}]; tone = series | previous | day | night */
 function columnChart(groups, { dense = false } = {}) {
   const max = Math.max(0, ...groups.flatMap((g) => g.values.map((v) => v.value || 0)));
-  const scale = niceScale(max);
+  const scale = niceScale(max, groups.every((g) => g.values.every((v) => Number.isInteger(v.value || 0))));
   const gridlines = [];
   for (let v = 0; v <= scale.max; v += scale.step) {
     gridlines.push(`<div class="columns-grid" style="bottom:${(v / scale.max) * 100}%"><span>${v}</span></div>`);
@@ -630,6 +632,9 @@ $("#previews").addEventListener("change", (e) => {
 $("#previews").addEventListener("click", (e) => {
   const chip = e.target.closest("[data-leader]");
   if (chip) { pickLeader(chip); return; }
+  const toggle = e.target.closest("[data-toggle-preview]");
+  if (toggle) { toggleReport(Number(toggle.dataset.togglePreview)); return; }
+  if (e.target.closest("[data-next-report]")) { openNextReport(-1, true); return; }
   const button = e.target.closest("[data-accept]");
   if (button) acceptReport(Number(button.dataset.accept));
   if (e.target.closest("[data-accept-clean]")) acceptCleanReports();
@@ -749,6 +754,7 @@ function markTableHeaders(root) {
 function normalizeHeadingLevels(root) {
   let previous = 1;
   for (const h of root.querySelectorAll("h1, h2, h3, h4, h5, h6")) {
+    if (h.closest("[hidden], dialog:not([open])")) continue;     // verborgene Ansichten und geschlossene Dialoge zählen nicht
     const natural = Number(h.tagName[1]);
     const level = Math.min(natural, previous + 1);
     if (level !== natural) h.setAttribute("aria-level", String(level)); else h.removeAttribute("aria-level");
@@ -759,5 +765,6 @@ if (typeof MutationObserver !== "undefined" && typeof document !== "undefined" &
   const tidy = () => { markTableHeaders(document); normalizeHeadingLevels(document); };
   tidy();
   // body statt main: auch Dialoge (Import-Vorschau, Hilfe) liegen außerhalb von main
-  new MutationObserver(tidy).observe(document.body, { childList: true, subtree: true });
+  // auch beim Wechsel der Ansicht (hidden) und beim Öffnen eines Dialogs (open)
+  new MutationObserver(tidy).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden", "open"] });
 }

@@ -315,7 +315,6 @@ button.person:hover:not(.leader) { background: var(--brand-light); color: var(--
 .field > span { font-size: .78rem; font-weight: 700; color: var(--gray); }
 .field input { border: 1px solid var(--field-line); border-radius: 8px; padding: 8px 10px; background: var(--white); min-width: 0; width: 100%; }
 .field input:focus { border-color: var(--brand); outline: 2px solid var(--brand); outline-offset: 1px; }
-.field input.missing { border-color: var(--brand-accent); background: var(--brand-pale); }
 .suggestions { position: fixed; z-index: 50; width: 330px; max-width: calc(100vw - 16px); max-height: 300px; overflow-y: auto;
   margin: 0; padding: 4px; list-style: none; background: var(--white); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); }
 .suggestions li { display: flex; gap: 10px; padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: .85rem; }
@@ -334,7 +333,7 @@ button.person:hover:not(.leader) { background: var(--brand-light); color: var(--
 .dialog::backdrop { background: var(--backdrop); }
 .dialog[open] { display: flex; flex-direction: column; }
 .dialog-header { display: flex; justify-content: space-between; gap: 16px; padding: 20px 24px; background: var(--white); border-bottom: 1px solid var(--line); }
-.dialog-body { padding: 20px 24px 24px; overflow-y: auto; }
+.dialog-body { padding: 20px 24px 24px; overflow-y: auto; scroll-padding-bottom: 88px; }   /* Fokus und Sprünge landen nicht unter der festen Fußleiste */
 .btn-close { border: 0; background: var(--light-gray); border-radius: 50%; width: 38px; height: 38px; cursor: pointer; display: grid; place-items: center; flex: none; color: var(--gray); }
 .btn-close:hover { background: var(--brand-light); color: var(--brand-dark); }
 .btn-close svg { width: 18px; height: 18px; }
@@ -766,7 +765,6 @@ input, .field :is(input, select, textarea), .admin-table :is(input, select), .in
 @media (max-width: 760px) {
   .topbar-actions { gap: 10px; }
   #scope-select { flex: 1 1 100%; }
-  .topbar-actions .year-select > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }  /* Beschriftung bleibt für Screenreader */
   #scope-select select { width: 100%; }
   .topbar-actions .btn-white { flex: 1; }
   .tabs-inner { padding-right: 28px; -webkit-mask-image: linear-gradient(to right, var(--text) calc(100% - 28px), transparent); mask-image: linear-gradient(to right, var(--text) calc(100% - 28px), transparent); }
@@ -776,3 +774,22 @@ input, .field :is(input, select, textarea), .admin-table :is(input, select), .in
   .preview-footer { margin: 0 -16px -20px; padding: 12px 16px; }
   .preview-footer .btn-primary { flex: 1; }
 }
+
+/* Import: mehrere Berichte, zugeklappt zeigen sie nur das Statusband */
+.preview-status.toggles { cursor: pointer; }
+.preview-status.toggles:hover { filter: brightness(.97); }
+.status-toggle { margin-left: auto; flex: none; border: 1px solid currentColor; border-radius: 999px; background: none; color: inherit; padding: 3px 12px; font-weight: 700; font-size: .85rem; cursor: pointer; }
+.preview-status .status-tag + .status-toggle { margin-left: 4px; }
+.preview-bulk-actions { display: inline-flex; gap: 8px; flex-wrap: wrap; }
+@media (pointer: coarse) { .status-toggle { min-height: 44px; } }
+
+/* Kopf: Titel immer einzeilig. Bis 1360 px entfallen die sichtbaren Beschriftungen von Wehr und Jahr (der Wert sagt es,
+   Screenreader lesen sie weiter), damit „Zeiten & Kräfte 2026“ nicht umbricht und der Kopf nicht von Ansicht zu Ansicht springt. */
+.topbar h1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 1360px) {
+  .topbar-actions .year-select > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
+/* Fehlende Angabe im Formular: Bernstein mit Wort statt Rosa */
+.field input.missing { border-color: var(--warn-line); background: var(--warn-bg); }
+.field-missing { font-style: normal; font-weight: 700; font-size: .78rem; color: var(--warn-text); margin-left: 8px; }
+.vehicle-idle td + td { padding-left: 16px; color: var(--gray); }

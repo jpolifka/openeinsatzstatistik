@@ -80,8 +80,8 @@ function incidentDetail(e) {
   const limit = config.default_limit;
   return `<div class="detail-grid">
     <div class="panel"><h4>Einsatz</h4><dl class="facts">
-      <dt>Beginn</dt><dd>${formatDate(e.started_at)} ${formatTime(e.started_at)}</dd>
-      <dt>Ende</dt><dd>${formatDate(e.ended_at)} ${formatTime(e.ended_at)}</dd>
+      <dt>Beginn</dt><dd>${formatDateTime(e.started_at)}</dd>
+      <dt>Ende</dt><dd>${formatDateTime(e.ended_at)}</dd>
       <dt>Dauer${helpButton("duration")}</dt><dd>${formatDuration(e.duration_min)}</dd>
       <dt>Zeitfenster${helpButton("time_window")}</dt><dd>${e.weekend_or_holiday ? "Sa/So/Feiertag" : "Werktag"}, ${e.daytime ? "Tag" : "Nacht"}</dd>
       <dt>Ort</dt><dd>${esc(e.place || "–")}</dd>
@@ -145,7 +145,7 @@ function formFields(e, { fold = false } = {}) {
     // Nummerierung nach Datum: die Nr. vergibt die App
     const extra = name === "number" && config.numbering === "by_date" ? ' readonly data-tip="Wird nach dem Einsatzbeginn vergeben"' : "";
     const id = `${prefix}-${name}`;
-    return `<div class="field ${span}"><span><label for="${id}">${title}</label>${helpButton(name)}</span><input id="${id}" name="${name}" type="${type}" value="${esc(value ?? "")}" ${attributes}${extra}
+    return `<div class="field ${span}"><span><label for="${id}">${title}</label>${helpButton(name)}${missing ? '<em class="field-missing">fehlt</em>' : ""}</span><input id="${id}" name="${name}" type="${type}" value="${esc(value ?? "")}" ${attributes}${extra}
       class="${missing ? "missing" : ""}"></div>`;
   }
 }
@@ -256,7 +256,7 @@ async function startEditing(id) {
 
 function editForm(e) {
   return `<div class="detail-grid" data-form="${e.id}">
-    <div class="panel full"><h4>Einsatz ${e.number ?? ""} bearbeiten</h4>${formFields(e)}</div>
+    <div class="panel full"><h4>Einsatz ${e.number ?? ""} bearbeiten</h4>${formFields(e, { fold: true })}</div>
     <div class="panel full"><h4>Fahrzeuge${helpButton("vehicles")}</h4>
       <p class="small muted">Stärke und Zeiten korrigieren oder ein Fahrzeug ergänzen („dabei“). Manuell ergänzte Fahrzeuge und Personen bleiben erhalten, wenn der Bericht später erneut eingelesen wird.</p>
       ${vehicleEditTable(e)}</div>

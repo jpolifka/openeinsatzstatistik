@@ -188,3 +188,54 @@ test("Die Dateiliste wird vor der Rückfrage kopiert (der Datei-Dialog leert sie
   await reading;
   assert.equal(api.uploads, 1);
 });
+
+const plain = (name, extra = {}) => ({ filename: name, number: 1, year: 2025, warnings: [], people: [], ...extra });
+
+test("Neue Personen verhindern die Sammelübernahme nicht, der Dialog nennt sie vorher", async () => {
+  const { context, calls, asked } = setup();
+  context.state.upload = { token: "t", reports: [
+    plain("a.xlsx", { people: [{ name: "M. Muster", new: true }, { name: "E. Beispiel", new: false }] }),
+    plain("b.xlsx", { people: [{ name: "M. Muster", new: true }, { name: "K. Probe", new: true }] }),
+    plain("c.xlsx", { warnings: ["Prüfen"] })] };
+  await vm.runInContext("acceptCleanReports()", context);
+  assert.equal(asked.length, 1);
+  assert.match(asked[0].text, /werden 2 neue Personen angelegt: M\. Muster; K\. Probe/);   // einmal je Name, ohne Bekannte
+  assert.deepEqual(calls.map((c) => c[2].filename), ["a.xlsx", "b.xlsx"]);                // Bericht mit Hinweis bleibt stehen
+});
+
+test("Wird der Dialog zur Sammelübernahme abgebrochen, wird nichts gesendet", async () => {
+  const { context, calls, answers } = setup();
+  answers.confirm = false;
+  context.state.upload = { token: "t", reports: [plain("a.xlsx", { people: [{ name: "M. Muster", new: true }] }), plain("b.xlsx")] };
+  await vm.runInContext("acceptCleanReports()", context);
+  assert.equal(calls.length, 0);
+  assert.equal(vm.runInContext("bulkRunning", context), false);
+});
+
+test("Nach dem Übernehmen öffnet sich der nächste offene Bericht, ein Fehler öffnet die eigene Karte", async () => {
+  const { context } = setup();
+  context.state.upload = { token: "t", reports: [plain("a.xlsx", { open: true }), plain("b.xlsx"), plain("c.xlsx")] };
+  assert.equal(await context.acceptReport(0), true);
+  const [a, b, c] = context.state.upload.reports;
+  assert.equal(a.open, false);
+  assert.equal(b.open, true);          // nächster offener
+  assert.ok(!c.open);
+  context.apiJson = async () => { throw new Error("Revision veraltet"); };
+  b.open = false;
+  assert.equal(await context.acceptReport(1), false);
+  assert.equal(b.open, true);          // der Fehler steht in der Karte und muss sichtbar sein
+});
+
+test("Ein eingeklappter Bericht wird mit den gespeicherten Werten der Maske gesendet", async () => {
+  const { context, calls } = setup();
+  context.config = { incident_fields: [["number", "Nr.", "number"], ["place", "Ort", "text"], ["started_at", "Beginn", "datetime-local"], ["rescued", "Gerettet", "number"]] };
+  context.state.upload = { token: "t", reports: [plain("a.xlsx", { place: "Beispielstadt", started_at: "2025-12-03T10:08:30.123", number: "7", rescued: null })] };
+  await context.acceptReport(0);
+  assert.deepEqual(JSON.parse(JSON.stringify(calls[0][2].fields)), { number: 7, place: "Beispielstadt", started_at: "2025-12-03T10:08:30", rescued: null });
+});
+
+test("Zuerst ist nur der erste offene Bericht aufgeklappt", () => {
+  const { context } = setup();
+  context.showUploadResult({ token: "t", errors: [], reports: [plain("a.xlsx"), plain("b.xlsx")] });
+  assert.deepEqual(context.state.upload.reports.map((r) => Boolean(r.open)), [true, false]);
+});

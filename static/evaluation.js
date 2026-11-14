@@ -87,7 +87,9 @@ function responsePlanCard(plan, previousPlan) {
     return w.count ? `<div class="window-links no-print"><a href="${esc(listLink({ plan: 1, window }))}">${plural(w.count, "Einsatz", "Einsätze")}</a>
       ${w.late ? ` · <a href="${esc(listLink({ plan: 1, window, late: limit }))}">${w.late} nicht erreicht</a>` : ""}</div>` : "";
   };
-  const windowTile = (w, isTotal) => `<div class="window ${isTotal ? "total" : ""} ${w.count ? "" : "empty"}">
+  const windowTile = (w, isTotal) => !w.count && !isTotal ? `<div class="window empty">
+      <div class="window-title">${esc(w.day_type)}<span>${esc(w.hours)}</span></div>
+      <p class="small muted">Keine Einsätze mit Eintreffzeit</p></div>` : `<div class="window ${isTotal ? "total" : ""} ${w.count ? "" : "empty"}">
       <div class="window-title">${isTotal ? "Gesamt" : esc(w.day_type)}<span>${isTotal ? "alle Zeitfenster" : esc(w.hours)}</span></div>
       <div class="rate">${percent(w.rate)}<small>${w.on_time} / ${w.count}</small></div>
       ${windowLinks(w, isTotal)}

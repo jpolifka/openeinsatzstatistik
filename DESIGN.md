@@ -272,6 +272,7 @@ Abgerundete, freundliche Formen mit gestaffelten Radien: 6 px (Chips), 8 px (Ein
 - Ziffern in Daten (Tabellen, Kennzahlen, Chips, Eingaben) kommen aus `--font-num`: eine Systemschrift mit eindeutiger Eins und Null (`@font-face "Ziffern"`, nur U+0030–0039); Buchstaben und Überschriften bleiben Sansation, weil dort Eins und I, Null und O verwechselt werden.
 
 ### Import-Vorschau
+- Bei mehreren Berichten ist nur der erste aufgeklappt, die übrigen zeigen ihr Statusband mit „Öffnen“; nach der Übernahme öffnet sich der nächste. Fehlende Angaben im Formular sind Bernstein mit dem Wort „fehlt“ (nie Rosa: Rot der Wehr ist Marke).
 - Prüfhinweise zuerst, dann die Kernfelder; seltene Angaben liegen in „Weitere Angaben“ (`<details>`, offen, wenn der Bericht etwas enthält). Die Übernahme ist eine feste Fußleiste am Dialogrand.
 
 ### Navigation
@@ -296,6 +297,7 @@ Abgerundete, freundliche Formen mit gestaffelten Radien: 6 px (Chips), 8 px (Ein
 
 ### Don't:
 - **Don't** Sansation für Ziffern in Daten verwenden (1 = I, 0 = O).
+- **Don't** den Seitentitel umbrechen lassen: Der Kopf hat in jeder Ansicht dieselbe Höhe (Titel einzeilig, Beschriftungen von Wehr und Jahr entfallen bis 1360 px).
 - **Don't** leere Diagramme mit Strichen zeigen; Leerzustände sagen, was fehlt und was zu tun ist.
 - **Don't** `--brand-accent` auf dem Kopfverlauf als Fokusfarbe verwenden (unter 2:1).
 - **Don't** `--brand-accent` oder `--day` als Textfarbe auf Weiß einsetzen (3,8:1).
