@@ -8,8 +8,8 @@ async function loadMembers() {
 
 // ------------------------------------------------------------ Personal (Einsatzteilnahmen)
 const MEMBER_COLUMNS = [      // [Feld, Titel, CSS-Klassen, Hilfe-Schlüssel]
-  ["name", "Name", ""], ["incidents", "Einsätze", ""], ["rate", "Beteiligung", "right", "participation"],
-  ["hours", "Stunden", "right", "hours"], ["nights", "nachts", "right hide-mobile", "nights_weekends"],
+  ["name", "Name", ""], ["incidents", "Einsätze", ""], ["rate", "Beteiligung", "right hide-mobile", "participation"],
+  ["hours", "Stunden", "right hide-mobile", "hours"], ["nights", "nachts", "right hide-mobile", "nights_weekends"],
   ["weekends", "Sa/So/FT", "right hide-mobile", "nights_weekends"], ["agt_incidents", "Atemschutz", "right hide-mobile", "member_agt"],
   ["agt_minutes", "AGT-Min.", "right hide-mobile", "member_agt"], ["last", "Zuletzt", "right hide-mobile"],
 ];
@@ -47,20 +47,21 @@ function renderMembers() {
     <div class="toolbar"><div><h3>Anwesenheit ${state.year}</h3>
       <p class="muted small">${plural(list.length, "Person", "Personen")} · ${plural(a.incident_count, "Einsatz", "Einsätze")} · Stunden = Einsatzdauer je Teilnahme</p></div></div>
     <div class="table-wrap"><table class="table">
-      <thead><tr><th class="col-number">#</th>${MEMBER_COLUMNS.map(([f, title, cls, help]) =>
-        `<th class="sortable ${cls}" data-sort="${f}">${title}${field === f ? (descending ? " ▾" : " ▴") : ""}</th>`).join("")}</tr></thead>
-      <tbody>${list.map((m, i) => `<tr class="row ${state.openMembers.has(m.id) ? "open" : ""}" data-member="${m.id}">
+      <thead><tr><th class="col-number">Nr.</th>${MEMBER_COLUMNS.map(([f, title, cls, help]) =>
+        `<th class="sortable ${cls}" aria-sort="${field === f ? (descending ? "descending" : "ascending") : "none"}"><button type="button" class="sort-button" data-sort="${f}">${title}${field === f ? (descending ? " ▾" : " ▴") : ""}</button></th>`).join("")}<th class="col-toggle"><span class="visually-hidden">Einsätze anzeigen</span></th></tr></thead>
+      <tbody>${list.map((m, i) => `<tr class="row ${state.openMembers.has(m.id) ? "open" : ""}" data-member="${m.id}" tabindex="0" aria-expanded="${state.openMembers.has(m.id)}">
         <td class="muted">${i + 1}</td>
-        <td><strong>${esc(m.name)}</strong></td>
-        <td><div class="inline-bar"><span class="track"><span style="width:${(m.incidents / max) * 100}%"></span></span><b>${m.incidents}</b></div></td>
-        <td class="right">${percent(m.rate)}</td>
-        <td class="right">${num(m.hours)}</td>
+        <td><strong>${esc(m.name)}</strong><span class="member-sub">${percent(m.rate).replace(" ", "\u00a0")} · ${num(m.hours)}\u00a0h</span></td>
+        <td><div class="inline-bar"><b>${m.incidents}</b><span class="track"><span style="width:${(m.incidents / max) * 100}%"></span></span></div></td>
+        <td class="right hide-mobile">${percent(m.rate)}</td>
+        <td class="right hide-mobile">${num(m.hours)}</td>
         <td class="right hide-mobile">${m.nights}</td>
         <td class="right hide-mobile">${m.weekends}</td>
         <td class="right hide-mobile">${m.agt_incidents || "–"}</td>
         <td class="right hide-mobile">${m.agt_minutes || "–"}</td>
         <td class="right hide-mobile">${formatDate(m.last)}</td>
-      </tr>${state.openMembers.has(m.id) ? `<tr class="detail"><td colspan="${MEMBER_COLUMNS.length + 1}">${memberFunctions(m)}${memberIncidents(m)}</td></tr>` : ""}`).join("")}</tbody>
+        <td class="col-toggle">${ICON_CHEVRON}</td>
+      </tr>${state.openMembers.has(m.id) ? `<tr class="detail"><td colspan="${MEMBER_COLUMNS.length + 2}">${memberFunctions(m)}${memberIncidents(m)}</td></tr>` : ""}`).join("")}</tbody>
     </table></div>
     ${list.length ? "" : `<p class="empty-note">Für ${state.year} ist keine Anwesenheit erfasst.</p>`}
   </div>`;

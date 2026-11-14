@@ -18,6 +18,7 @@ function load(extra = {}) {
     chartCard: ({ title, chart, table }) => `[${title}]${chart}${table}`, barChart: (items) => items.map((i) => `${i.label}=${i.text ?? i.value}`).join(";"),
     columnChart: (groups) => groups.map((g) => `${g.axis}=${g.values[0].text}`).join(";"), dataTable: (head, rows) => rows.map((r) => r.join("|")).join("\n"),
     keyFigures: (e) => e.map(([v, l]) => `${v} ${l}`).join(","), MISSING_LABELS: { arrival: "ohne Eintreffzeit", leader: "ohne Einheitsführung" },
+    legend: (entries) => entries.map(([, l]) => l).join(","),
     records: { notices: [] }, renderNotices() {}, ...extra,
   });
   vm.runInContext(fs.readFileSync("static/analysis.js", "utf8"), context);
@@ -57,6 +58,20 @@ test("Zeiten & Kräfte zeigt Median, 90 %, Kräfteaufbau und kennzeichnet kleine
   assert.match(html, /60 von 70 Fahrzeugen auswertbar/);
   assert.match(html, /10 min=3\.2/);
   assert.match(html, /wenige Fälle/);
+  assert.match(html, /Ausrücken=4 min;.*=6 min/);              // Median und 90 % als getrennte Balken
+  assert.match(html, /Median,90 % höchstens/);                 // mit Legende
+});
+
+test("Übersicht fasst volle Abdeckung in einem Satz zusammen statt sechs gleicher Balken", () => {
+  const { context, els } = load();
+  const full = evaluation();
+  full.coverage = { total: 57, rows: [{ key: "duration", valid: 57 }, { key: "arrival", valid: 57 }] };
+  context.state.evaluation = full;
+  context.renderOverview();
+  assert.match(els["#view-overview"].innerHTML, /Vollständig<\/span> Alle 2 Angaben liegen für alle 57 Einsätze vor/);
+  context.state.evaluation = evaluation();                      // 42 von 57: Balken bleiben
+  context.renderOverview();
+  assert.match(els["#view-overview"].innerHTML, /arrival=|Eintreffen=/);
 });
 
 test("Zeiten & Kräfte ohne Freigabe zeigt nur den Hinweis", () => {

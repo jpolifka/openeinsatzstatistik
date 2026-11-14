@@ -165,9 +165,9 @@ const linkAttributes = (link) => link ? ` data-list-link="${esc(link)}" role="li
 function barChart(items) {
   const max = Math.max(1, ...items.map((i) => i.value));
   return `<div class="bar-list">${items.map((i) => `
-    <div class="bar-row ${i.link && i.value ? "linked" : ""}" data-tip="${esc(i.tip || `${i.label}: ${i.value}`)}${i.link && i.value ? "\nKlicken: Einsätze anzeigen" : ""}" tabindex="0"${i.value ? linkAttributes(i.link) : ""}>
-      <span class="bar-label">${esc(i.label)}${i.hint ? `<small>${esc(i.hint)}</small>` : ""}</span>
-      <span class="bar-track">${i.value ? `<span class="bar" style="width:${(i.value / max) * 100}%"></span>` : ""}</span>
+    <div class="bar-row ${i.link && i.value ? "linked" : ""} ${i.gap ? "gap-before" : ""}" data-tip="${esc(i.tip || `${i.label}: ${i.value}`)}${i.link && i.value ? "\nKlicken: Einsätze anzeigen" : ""}" tabindex="0"${i.value ? linkAttributes(i.link) : ""}>
+      <span class="bar-label ${i.label ? "" : "hint-only"}">${esc(i.label)}${i.hint ? `<small>${esc(i.hint)}</small>` : ""}</span>
+      <span class="bar-track">${i.value ? `<span class="bar ${i.tone ? `tone-${i.tone}` : ""}" style="width:${(i.value / max) * 100}%"></span>` : ""}</span>
       <span class="bar-value">${i.text ?? i.value}</span>
     </div>`).join("")}</div>`;
 }
@@ -519,6 +519,8 @@ $("#incident-table tbody").addEventListener("click", async (e) => {
 $("#view-members").addEventListener("keydown", (e) => {
   const incident = e.target.closest("[data-open-incident]");
   if (incident && e.key === "Enter") openIncident(incident.dataset.openIncident, state.year);
+  const row = e.target.closest("tr[data-member]");
+  if (row && e.target === row && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); row.click(); }
 });
 $("#view-members").addEventListener("click", (e) => {
   const incident = e.target.closest("[data-open-incident]");
@@ -528,6 +530,7 @@ $("#view-members").addEventListener("click", (e) => {
     const id = Number(row.dataset.member);
     if (state.openMembers.has(id)) state.openMembers.delete(id); else state.openMembers.add(id);
     renderMembers();
+    $(`#view-members tr[data-member="${id}"]`)?.focus({ preventScroll: true });   // Tastatur: Fokus bleibt auf der Zeile
     return;
   }
   const th = e.target.closest("[data-sort]");
@@ -535,6 +538,7 @@ $("#view-members").addEventListener("click", (e) => {
   const field = th.dataset.sort;
   state.memberSort = { field, descending: state.memberSort.field === field ? !state.memberSort.descending : field !== "name" };
   renderMembers();
+  $(`#view-members [data-sort="${field}"]`)?.focus({ preventScroll: true });
 });
 
 // Einheitsführung von Hand geändert → Hervorhebung der Namen anpassen.
