@@ -59,7 +59,9 @@
   src: local("Segoe UI"), local("Helvetica Neue"), local("Arial"), local("Liberation Sans"), local("DejaVu Sans"); }
 
 * { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
+html { -webkit-text-size-adjust: 100%; scrollbar-color: var(--brand-accent) transparent; }
+::selection { background: var(--brand-light); color: var(--brand-dark); }   /* Textauswahl in den Tönen der Wehr */
+input, textarea { caret-color: var(--brand); }
 body {
   margin: 0; font-family: var(--font); font-size: 15px; line-height: 1.5; color: var(--text);
   background: var(--brand-pale); min-height: 100vh; display: flex; flex-direction: column;
