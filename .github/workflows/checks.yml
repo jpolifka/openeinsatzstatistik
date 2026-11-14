@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python: ['3.12', '3.14']
+        python: ['3.14']      # wie das Docker-Image; 3.15 folgt, sobald alle Pakete Wheels dafür haben (httptools, pydantic-core)
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
