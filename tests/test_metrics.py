@@ -255,6 +255,12 @@ def test_vehicle_usage_counts_deployed_and_standby():
     assert second["standby_share"] == 1.0 and second["known"] == 1      # „unbekannt“ zählt nicht mit
 
 
+def test_vehicle_usage_without_finish_time_does_not_fail():
+    v = {**vehicle("02/45", 4, "10:04:00", None), "alerted": "10:00:00", "finished": None, "deployed": 1}
+    rows = metrics.vehicle_usage(metrics.evaluate([make_incident(id=1, vehicles={"02/45": v})], CFG), CFG)["rows"]
+    assert rows[0]["drove"] == 1 and rows[0]["hours"] == 0.0
+
+
 def test_respiratory_counts_carriers_and_minutes():
     people = [{"id": 1, "name": "Muster, Max", "agt": 1, "agt_min": 20}, {"id": 2, "name": "Beispiel, Erika", "agt": 1, "agt_min": 10},
               {"id": 3, "name": "Probe, Otto", "agt": 0, "agt_min": 0}]
