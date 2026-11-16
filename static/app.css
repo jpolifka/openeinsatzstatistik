@@ -1,5 +1,5 @@
 :root {
-  /* Farben der Wehr: Standard ist das Rot der FF Rheinbrohl. Eigene Farben setzt /api/theme.css
+  /* Farben der Wehr: Standard ist ein neutrales Feuerwehrrot. Eigene Farben setzt /api/theme.css
      (app/theme.py leitet alle --brand-* Tokens aus Haupt- und dunkler Farbe ab). */
   --brand: #D90000;            /* Hauptfarbe / Überschriften */
   --brand-dark: #7A0000;       /* starke Hervorhebung / wichtige Kacheln */

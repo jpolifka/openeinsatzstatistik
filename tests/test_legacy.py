@@ -40,8 +40,9 @@ def test_single_install_becomes_tenant(old_install):
     assert "rheinbrohl" in tenancy.access_for("m.muster@example.org").tenants
     with db.connection(tenancy.tenant_path("rheinbrohl")) as con:
         assert len(store.load_incidents(con)) == 2
-        assert tenancy.load_config(con, "Feuerwehr Rheinbrohl") == legacy.rheinbrohl_config()
-        assert {r["name"] for r in con.execute("SELECT name FROM asset")} == {"logo-light", "logo-dark", "icon"}
+        assert tenancy.load_config(con, "Feuerwehr Rheinbrohl") == legacy.legacy_config()
+        assert tenancy.load_config(con, "x").fleet == ()      # Fahrzeuge und Logos werden neu angelegt
+        assert con.execute("SELECT COUNT(*) FROM asset").fetchone()[0] == 0
     assert tenancy.is_allowed("m.muster@example.org")
 
 

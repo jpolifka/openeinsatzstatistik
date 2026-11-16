@@ -462,7 +462,7 @@ Bewusste Unterschiede zu den Formeln der Excel-Datei:
 
 Der Quellcode steht unter der [Apache License 2.0](LICENSE) (Hinweise in [NOTICE](NOTICE)): Er darf frei
 genutzt, verändert und weitergegeben werden, auch von Gemeinden und Verbänden im eigenen Betrieb.
-Ausgenommen sind Logos und Namen von Feuerwehren (u. a. `app/legacy_assets/`); sie gehören den jeweiligen Wehren.
+Logos und Namen von Feuerwehren sind nicht Teil des Projekts (jede Wehr lädt ihr eigenes Logo in den Einstellungen hoch) und gehören den jeweiligen Wehren.
 Die Schrift Sansation steht unter der SIL Open Font License.
 
 Mitmachen und Sicherheitsmeldungen: [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md).
