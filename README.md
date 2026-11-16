@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="brand/logo-horizontal-white.svg">
+    <img alt="openEinsatzstatistik – freie Einsatzstatistik für Feuerwehren" src="brand/logo-horizontal.svg" width="520">
+  </picture>
+</p>
+
 # openEinsatzstatistik – Einsatzstatistik für Feuerwehren
 
 Weboberfläche zur Einsatzstatistik für Freiwillige Feuerwehren, mandantenfähig und gruppiert nach

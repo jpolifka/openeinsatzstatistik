@@ -15,7 +15,7 @@ MIN_TEXT_CONTRAST = 4.5        # weiße Schrift auf Kopfzeile, Knöpfen, Tabelle
 MIN_CHART_CONTRAST = 3.0       # Diagrammfarben gegen den weißen Hintergrund
 
 # Neutrales Farbschema: Anmeldung, Gesamtansicht einer VG, Wehren ohne Zuordnung
-NEUTRAL = {"brand": "#37506B", "brand_dark": "#1D2B3A"}
+NEUTRAL = {"brand": "#2F6D92", "brand_dark": "#1B3F55"}   # Stahlblau und Nachtblau der Marke (docs/marke.md)
 
 # Logos: Name -> Bezeichnung; erlaubte Bildformate (am Inhalt erkannt, kein SVG wegen eingebetteter Skripte)
 ASSETS = {"logo-light": "Logo hell (für die farbige Kopfzeile)", "logo-dark": "Logo dunkel (Fußzeile)",
