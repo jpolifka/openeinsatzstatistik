@@ -440,8 +440,11 @@ CLAUDE.md          Hinweise zur Architektur für die Arbeit mit Claude Code
 
 ## Lizenz
 
-Der Quellcode steht unter der [Apache License 2.0](LICENSE) (Hinweise in [NOTICE](NOTICE)): Er darf frei
-genutzt, verändert und weitergegeben werden, auch von Gemeinden und Verbänden im eigenen Betrieb.
+Der Quellcode steht unter der [GNU Affero General Public License 3.0](LICENSE) (Hinweise in [NOTICE](NOTICE)): Er darf
+frei genutzt, verändert und weitergegeben werden, auch von Gemeinden und Verbänden im eigenen Betrieb. Wer eine
+veränderte Fassung als Dienst anbietet (auch gehostet gegen Entgelt), muss den Quelltext dieser Fassung seinen Nutzern
+unter derselben Lizenz zur Verfügung stellen. Der Link „openEinsatzstatistik – freie Software“ am Seitenende führt zum
+Quellcode; wer die App verändert betreibt, muss ihn auf seine Fassung zeigen lassen.
 Logos und Namen von Feuerwehren sind nicht Teil des Projekts (jede Wehr lädt ihr eigenes Logo in den Einstellungen hoch) und gehören den jeweiligen Wehren.
 Die Schrift Sansation steht unter der SIL Open Font License.
 

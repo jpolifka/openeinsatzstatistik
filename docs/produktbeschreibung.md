@@ -38,7 +38,7 @@ entstehen daraus von selbst.
 
 ## Kosten und Betrieb
 
-Die Software ist kostenlos (Apache License 2.0). Betrieb mit Docker auf einem kleinen Server oder bei der VG-IT.
+Die Software ist kostenlos (AGPL-3.0). Betrieb mit Docker auf einem kleinen Server oder bei der VG-IT.
 Auf Wunsch Unterstützung bei Einführung und Schulung.
 
 ## Jetzt ausprobieren

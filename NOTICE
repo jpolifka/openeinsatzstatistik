@@ -1,12 +1,15 @@
 openEinsatzstatistik – Einsatzstatistik für Feuerwehren
 Copyright 2025–2026 Polifka IT-Beratung, In der Maar 31, 56598 Rheinbrohl
 
-Der Quellcode steht unter der Apache License 2.0 (Datei LICENSE).
+Der Quellcode steht unter der GNU Affero General Public License, Version 3 (Datei LICENSE).
+Wer die Software verändert und anderen über ein Netzwerk zur Nutzung bereitstellt (auch gehostet gegen
+Entgelt), muss den Nutzern den vollständigen Quelltext der geänderten Fassung unter derselben Lizenz anbieten.
 
 Nicht Teil der Lizenz:
 - Logos, Wappen und Namen von Feuerwehren gehören den jeweiligen Wehren und sind nicht im Projekt enthalten.
-- Die Apache License gibt keine Rechte an Namen und Marken (Abschnitt 6).
+- Die Lizenz gibt keine Rechte am Namen „openEinsatzstatistik“ und an Logos; abgeleitete Fassungen sollen
+  einen anderen Namen tragen.
 
 Enthaltene Fremdbestandteile:
 - Schrift „Sansation“ (static/fonts/): SIL Open Font License 1.1.
-- Python-Abhängigkeiten (requirements.txt) unter ihren eigenen Lizenzen (MIT, BSD, Apache 2.0).
+- Python-Abhängigkeiten (requirements.txt) unter ihren eigenen Lizenzen (MIT, BSD, ISC, Apache 2.0; alle mit der AGPL-3.0 vereinbar).

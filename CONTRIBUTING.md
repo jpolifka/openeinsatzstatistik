@@ -15,4 +15,4 @@ Willkommen, besonders aus anderen Wehren und Verbandsgemeinden.
   ```
 
   Neue Endpunkte mit Einsatzdaten gehören in die Rechte-Matrix (`tests/test_access.py`).
-- Mit einem Beitrag stimmst du zu, dass er unter der Apache License 2.0 steht (wie das Projekt).
+- Mit einem Beitrag stimmst du zu, dass er unter der GNU Affero General Public License 3.0 steht (wie das Projekt).
