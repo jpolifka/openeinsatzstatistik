@@ -14,7 +14,7 @@ from app.bks_common import UNIT_ID
 from app.rbac import SETTINGS
 
 from app.admin.common import _invalid, _managed_vg_id, access, log
-from app.admin.settings import (PlaceIn, VehicleIn, _bks_parts, _check_colors, _check_fleet, _check_places,
+from app.admin.settings import (PlaceIn, known_places, VehicleIn, _bks_parts, _check_colors, _check_fleet, _check_places,
                                 _check_plan, _check_substitutes, _types, _vehicle_json)
 
 router = APIRouter()
@@ -99,6 +99,7 @@ def _vg_settings_json(vg_id):
                         "overrides": {key: _setting_value(cfg, key) for key in sorted(overrides)}})
     return {"vg": {"slug": vg["slug"], "name": vg["name"]}, **defaults,
             "places": [{"name": n} for n in defaults["places"]],
+            "known_places": known_places(vg_id, tenancy.vg_tenants(vg_id)),
             "palette": theme.palette(defaults["colors"]) if defaults["colors"] else None, "tenants": tenants}
 
 
