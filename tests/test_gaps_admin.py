@@ -57,7 +57,7 @@ def test_settings_without_plan_release_keep_release_state(world):
 def test_unconfigured_tenant_shows_vg_code_and_master_vehicles(world):
     vg_id, _ = make_tenant("wehr-leer", "vg-a", cfg=TenantConfig(name=""))
     with tenancy.central() as con:
-        records.save_master(con, vg_id, {"bks_record_id": "9000001", "keyword": "B", "subcode": "2",
+        records.save_master(con, vg_id, {"bks_record_id": "9000001", "keyword": "B", "subcode": "2", "town": "Musterstadt",
                                          "vehicles": [{"name": "FL NR#.MUS 01/46-01", "crew": 2, "alerted": None,
                                                        "departed": None, "arrived": None, "finished": None}]})
         tenancy.save_vg_settings(con, vg_id, {"bks_code": "NR#.ABC"})
@@ -66,6 +66,7 @@ def test_unconfigured_tenant_shows_vg_code_and_master_vehicles(world):
     settings = world.get("/api/admin/wehr-leer/settings").json()
     assert settings["bks_code"] == "NR#.ABC"
     assert "FL NR#.MUS 01/46-01" in [v["name"] for v in settings["known_vehicles"]]
+    assert "Musterstadt" in settings["known_places"]
 
 
 def test_theme_check_reports_unparsable_colors(world):

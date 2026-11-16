@@ -107,6 +107,7 @@ def _settings_json(tenant, cfg):
                                                "second_limit", "day_hours", "numbering", "response_plan_public")},
         "bks_code": bks_code, "station": station,
         "places": [{"name": n} for n in cfg.places],
+        "known_places": known_places(tenant.vg_id, [tenant]),
         # Vorgaben der VG und die Schlüssel, in denen die Wehr davon abweicht
         "vg": {"slug": tenant.vg_slug, "name": tenant.vg_name},
         "inherited": {key: layer.value(key) for key in tenancy.INHERITED},
@@ -136,6 +137,19 @@ def _known_vehicles(tenant, cfg):
     names.update(v.name for v in cfg.fleet)
     names.update(filter(None, (_suggested_name(cs, cfg) for cs in [v.call_sign for v in cfg.fleet] + list(cfg.substitutes))))
     return sorted(n for n in names if n and n != cfg.control_center and domain.describe_call_sign(n))
+
+
+def known_places(vg_id, tenants):
+    """Orte und Ortsteile aus Berichten zur Auswahl in der Ortsliste: Stammdatensätze der VG (personenfrei) und
+    Einsätze der Wehren, alphabetisch."""
+    names = set()
+    with tenancy.central() as con:
+        for town, district in con.execute("SELECT town, district FROM master_record WHERE vg_id = ?", (vg_id,)):
+            names.update((town, district))
+    for t in tenants:
+        with t.connection() as con:
+            names.update(r[0] for r in con.execute("SELECT DISTINCT place FROM incident"))
+    return sorted(n.strip() for n in names if n and n.strip())
 
 
 @router.get("/api/admin/{slug}/settings")

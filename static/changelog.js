@@ -7,6 +7,13 @@
 const CHANGELOG = [
   {
     date: "2026-11-16",
+    version: "2026-11-16.9",
+    items: [
+      "<b>Einstellungen:</b> Bei „Orte &amp; Zeitgrenzen“ schlägt die Ortsliste jetzt Orte und Ortsteile aus den eingelesenen Berichten vor, wie bei den Fahrzeugen.",
+    ],
+  },
+  {
+    date: "2026-11-16",
     version: "2026-11-16.9a",
     items: [
       "<b>Farben:</b> Schrift und Diagramme sind jetzt warmes Grau statt kaltem Anthrazit und passen besser zu Bordeaux und Sand.",

@@ -507,16 +507,21 @@ function planFields(d) {
 
 const PLAN_KEYS = ["plan_min_level", "response_limits", "default_limit", "second_limit", "day_hours"];
 
+// Orte aus den Berichten, die noch nicht in der Liste stehen (Auswahl beim Eintragen)
+const placeOptions = (d) => `<datalist id="known-places">${d.known_places.filter((n) => !d.places.some((p) => p.name === n))
+  .map((n) => `<option value="${esc(n)}"></option>`).join("")}</datalist>`;
+const placeInput = (i, p) => textInput(`places.${i}.name`, p.name, 'list="known-places" placeholder="Musterstadt"');
+
 function placesSection() {
   const s = admin.settings;
   const rows = s.places.map((p, i) => `<tr>
-    <td>${textInput(`places.${i}.name`, p.name, 'placeholder="Musterstadt"')}</td>
+    <td>${placeInput(i, p)}</td>
     <td class="center"><input type="checkbox" data-plan-place="${i}" ${s.plan_places.includes(p.name) ? "checked" : ""} aria-label="Zählt zum Ausrückebereich"></td>
     <td><button type="button" class="icon-button" data-admin-action="remove-place" data-index="${i}" aria-label="entfernen">✕</button></td>
   </tr>`).join("");
   return `<p class="small muted">Das Einsatzgebiet ist der Ort, mit dessen Namen der Einsatzort beginnt (z. B. „Musterstadt-Nord“ → Musterstadt). Nur Orte mit Haken zählen zum Ausrückebereich der Auswertung „Eintreffen und verfügbare Kräfte“.</p>
     <h3 class="section-gap">Orte ${inheritNote("places")}</h3>
-    <div class="table-wrap"><table class="mini-table admin-table"><thead><tr><th>Ort</th><th>Ausrückebereich</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="table-wrap"><table class="mini-table admin-table"><thead><tr><th>Ort</th><th>Ausrückebereich</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>${placeOptions(s)}
     <button type="button" class="btn btn-light btn-small section-gap" data-admin-action="add-place">Ort hinzufügen</button>
     <h3 class="section-gap">Zeitgrenzen und Tageszeit ${inheritNote(...PLAN_KEYS)}</h3>
     ${planFields(s)}
@@ -531,13 +536,13 @@ function vgPlacesSection() {
   const ownPlaces = (t) => "places" in t.overrides;
   const head = d.tenants.map((t) => `<th class="center">${esc(t.name)}</th>`).join("");
   const rows = d.places.map((p, i) => `<tr>
-    <td>${textInput(`places.${i}.name`, p.name, 'placeholder="Musterstadt"')}</td>
+    <td>${placeInput(i, p)}</td>
     ${d.tenants.map((t, j) => `<td class="center">${ownPlaces(t) ? '<span class="small muted">eigene Orte</span>'
       : `<input type="checkbox" data-plan-place="${j}:${i}" ${t.plan_places.includes(p.name) ? "checked" : ""} aria-label="${esc(p.name)} im Ausrückebereich von ${esc(t.name)}">`}</td>`).join("")}
     <td><button type="button" class="icon-button" data-admin-action="remove-place" data-index="${i}" aria-label="entfernen">✕</button></td>
   </tr>`).join("");
   return `<p class="small muted">Orte der VG für die Zuordnung des Einsatzgebiets (ein Einsatz gehört zu dem Ort, mit dessen Namen der Einsatzort beginnt). Die Haken je Wehr bilden ihren Ausrückebereich für die Auswertung „Eintreffen und verfügbare Kräfte“.</p>
-    <div class="table-wrap"><table class="mini-table admin-table"><thead><tr><th>Ort</th>${head}<th></th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="table-wrap"><table class="mini-table admin-table"><thead><tr><th>Ort</th>${head}<th></th></tr></thead><tbody>${rows}</tbody></table></div>${placeOptions(d)}
     <button type="button" class="btn btn-light btn-small section-gap" data-admin-action="add-place">Ort hinzufügen</button>
     ${overridesNote("places")}
     <h3 class="section-gap">Zeitgrenzen und Tageszeit</h3>
