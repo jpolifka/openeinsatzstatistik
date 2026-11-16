@@ -96,11 +96,14 @@ button, input, select { font: inherit; color: inherit; }
   border-radius: 10px; padding: 8px 12px; font-weight: 700; font-size: 1rem; cursor: pointer;
 }
 .year-select option { color: var(--text); }
+/* Beschriftungen nur für Screenreader: das Auswahlfeld erklärt sich selbst */
+.topbar-actions .year-select > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.topbar-sub { display: none; }
 .tabs { background: var(--shade); }
 .tabs-inner { max-width: 1280px; margin: 0 auto; padding: 0 24px; display: flex; gap: 4px; }
 .tabs a { color: var(--on-brand-text); text-decoration: none; font-weight: 700; padding: 12px 16px 11px; border-bottom: 3px solid transparent; white-space: nowrap; }
 .tabs a:hover { color: var(--white); }
-.tabs a.active { color: var(--white); border-bottom-color: var(--white); }
+.tabs a.active { color: var(--brand-dark); background: var(--white); border-bottom-color: var(--white); border-radius: 8px 8px 0 0; }
 .subtabs { background: var(--shade-soft); }
 .subtabs a { font-size: .92rem; font-weight: 600; padding: 8px 14px 7px; }
 .task-list a { color: var(--brand-dark); font-weight: 600; }
@@ -806,12 +809,8 @@ input, .field :is(input, select, textarea), .admin-table :is(input, select), .in
 .preview-bulk-actions { display: inline-flex; gap: 8px; flex-wrap: wrap; }
 @media (pointer: coarse) { .status-toggle { min-height: 44px; } }
 
-/* Kopf: Titel immer einzeilig. Bis 1560 px entfallen die sichtbaren Beschriftungen von Wehr und Jahr (der Wert sagt es,
-   Screenreader lesen sie weiter), damit „Zeiten & Kräfte 2026“ nicht umbricht und der Kopf nicht von Ansicht zu Ansicht springt. */
-.topbar h1, .topbar-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-@media (max-width: 1560px) {
-  .topbar-actions .year-select > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-}
+/* Kopf: Titel immer einzeilig */
+.topbar h1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Fehlende Angabe im Formular: Bernstein mit Wort statt Rosa */
 .field input.missing { border-color: var(--warn-line); background: var(--warn-bg); }
 .field-missing { font-style: normal; font-weight: 700; font-size: .78rem; color: var(--warn-text); margin-left: 8px; }

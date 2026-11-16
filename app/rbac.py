@@ -12,8 +12,12 @@ Die Rechte stehen fest im Code (PERMISSIONS), die Rollen in der Zentral-DB:
 Vererbung: eine VG-Rolle gilt in allen Wehren der VG; eine Rolle mit parent_id erbt Rechte und Verteilung
 ihres Elternteils (gleicher Bereich, keine Zyklen). Mehrere Rollen je Person und Bereich addieren sich.
 
-Leitplanken (nicht konfigurierbar): Anwesenheit und Personal (PEOPLE*) gibt es nur für Rollen einer Wehr –
-der Wehrleiter sieht keine Namen. Eigene Zuordnungen und Rollen, die man selbst (auch über Vererbung) hat,
+Aufgabenträger: jede VG hat eine Art (KINDS: Verbandsgemeinde/verbandsfrei, kreisfreie Stadt, Landkreis,
+Leitstelle). Eine Rolle kann auf Arten beschränkt sein (kinds, leer = überall); in einer VG anderer Art gilt sie
+nicht (Roles.visible) und lässt sich dort nicht vergeben. So bilden die Systemrollen die Funktionen des
+BKS-Portals je Ebene ab (BKS_ROLES).
+
+Leitplanken (nicht konfigurierbar): Eigene Zuordnungen und Rollen, die man selbst (auch über Vererbung) hat,
 ändert nur jemand anderes. Superadmins (ADMIN_EMAILS) stehen außerhalb und dürfen alles.
 """
 import dataclasses
@@ -43,6 +47,9 @@ USERS_GRANT = "users.grant"
 ROLES_MANAGE = "roles.manage"
 
 BOTH, VG, TENANT = ("vg", "tenant"), ("vg",), ("tenant",)
+# Art einer VG (Aufgabenträger-Ebene im BKS-Portal)
+KINDS = {"vg": "Verbandsgemeinde / verbandsfrei", "city": "Kreisfreie Stadt", "district": "Landkreis",
+         "dispatch": "Leitstelle"}
 
 
 @dataclasses.dataclass(frozen=True)
@@ -63,8 +70,8 @@ PERMISSIONS = {p.key: p for p in (
     Permission(IMPORT, "Einsätze", "Berichte einlesen", BOTH, (INCIDENTS,)),
     Permission(WRITE, "Einsätze", "Einsätze bearbeiten", BOTH, (INCIDENTS,)),
     Permission(DELETE, "Einsätze", "Einsätze löschen", BOTH, (WRITE,)),
-    Permission(PEOPLE, "Personen", "Anwesenheit und Personal sehen", TENANT, (INCIDENTS,)),
-    Permission(PEOPLE_EDIT, "Personen", "Anwesenheit bearbeiten", TENANT, (PEOPLE, WRITE)),
+    Permission(PEOPLE, "Personen", "Anwesenheit und Personal sehen", BOTH, (INCIDENTS,)),
+    Permission(PEOPLE_EDIT, "Personen", "Anwesenheit bearbeiten", BOTH, (PEOPLE, WRITE)),
     Permission(SETTINGS, "Wehr", "Einstellungen, Fahrzeuge, Farben und Logos", BOTH),
     Permission(KEYWORDS, "Wehr", "Stichwortkatalog", BOTH),
     Permission(VG_OVERVIEW, "Verbandsgemeinde", "Gesamtansicht der VG", VG, (STATS,)),
@@ -92,6 +99,29 @@ SYSTEM_ROLES = (
 )
 SCOPES = {"vg": "VG", "tenant": "Wehr"}
 
+# Funktionen des BKS-Portals (Migration _add_bks_roles): (Schlüssel, Bereich, Bezeichnung, erbt von, Rechte, vergibt,
+# Arten). Wehr-Rollen = „Einheit beliebig“ (nur die eigene Wehr), VG-Rollen = alle Einsätze des Aufgabenträgers.
+_WEHR = ("lead", "deputy_lead", "editor", "viewer")
+_ALL = {PLAN_VIEW, PLAN_RELEASE, INCIDENTS, EXPORT, IMPORT, WRITE, DELETE, PEOPLE, PEOPLE_EDIT, SETTINGS, KEYWORDS,
+        VG_RECORDS, VG_FEES, USERS_VIEW, USERS_GRANT}
+BKS_ROLES = (
+    ("deputy_lead", "tenant", "Stellv. Wehrführer/in", "lead", set(), (), ()),
+    ("vg_deputy", "vg", "Stellv. Wehrleiter/in", "vg_lead", set(), (), ("vg",)),
+    ("fez", "vg", "FEZ der VG (Bearbeiter/in, Wehrführer/in)", "vg_stats", _ALL, _WEHR, ("vg", "city")),
+    ("bki", "vg", "Brand- und Katastrophenschutzinspekteur/in", "vg_stats", _ALL, _WEHR, ("vg", "city", "district")),
+    ("bki_deputy", "vg", "Stellv. Brand- und Katastrophenschutzinspekteur/in", "bki", set(), (),
+     ("vg", "city", "district")),
+    ("officer_kats", "vg", "Sachbearbeiter/in Brand- u. KatS", "vg_stats", _ALL, _WEHR, ("vg", "city", "district")),
+    ("officer_fire", "vg", "Sachbearbeiter/in Feuerwehr", "vg_stats", _ALL, _WEHR, ("vg",)),
+    ("dispatch_lead", "vg", "Leiter/in Leitstelle", "vg_stats", _ALL, ("dispatch_staff",) + _WEHR, ("dispatch",)),
+    ("dispatch_staff", "vg", "Leitstellenpersonal / Bearbeiter/in Einsatzberichte", "vg_stats", _ALL, _WEHR,
+     ("dispatch",)),
+)
+# Umbenennung der Startrollen und zusätzliche Verteilung (Schlüssel bleiben, Rechte unverändert)
+BKS_LABELS = {"editor": "Bearbeiter/in Einsatzberichte", "lead": "Wehrführer/in", "vg_lead": "Wehrleiter/in"}
+BKS_GRANTS = {"lead": ("deputy_lead",),
+              "vg_lead": ("deputy_lead", "vg_deputy", "fez", "bki", "bki_deputy", "officer_kats", "officer_fire")}
+
 
 class Invalid(ValueError):
     """Ungültige Rolle oder Vergabe (wird zu 422)."""
@@ -109,7 +139,7 @@ def close(permissions):
 
 
 def allowed(permissions, scope):
-    """Nur die Rechte, die für Rollen dieses Bereichs zulässig sind (Leitplanke PEOPLE nur für Wehr-Rollen)."""
+    """Nur die Rechte, die für Rollen dieses Bereichs zulässig sind (Leitplanke: reine VG-Rechte nicht für Wehr-Rollen)."""
     return {p for p in permissions if p in PERMISSIONS and scope in PERMISSIONS[p].scopes}
 
 
@@ -126,6 +156,10 @@ class Role:
     system: bool
     own: frozenset           # eigene Rechte
     own_grants: frozenset    # Rollen-IDs, die Inhaber vergeben dürfen (ohne Vererbung)
+    kinds: frozenset = frozenset()   # Arten der VG, in denen die Rolle gilt (leer = in allen)
+
+    def fits(self, kind):
+        return not self.kinds or kind is None or kind in self.kinds
 
 
 class Roles:
@@ -139,8 +173,10 @@ class Roles:
             grants.setdefault(r[0], set()).add(r[1])
         self.by_id = {r["id"]: Role(r["id"], r["key"], r["vg_id"], r["scope"], r["label"], r["description"],
                                     r["parent_id"], bool(r["system"]), frozenset(perms.get(r["id"], ())),
-                                    frozenset(grants.get(r["id"], ())))
+                                    frozenset(grants.get(r["id"], ())),
+                                    frozenset(filter(None, r["kinds"].split(","))))
                       for r in con.execute("SELECT * FROM role ORDER BY system DESC, scope DESC, id")}
+        self.vg_kind = {r[0]: r[1] for r in con.execute("SELECT id, kind FROM vg")}
 
     def __iter__(self):
         return iter(self.by_id.values())
@@ -171,8 +207,10 @@ class Roles:
         return frozenset().union(*(self.by_id[i].own_grants for i in self.chain(role_id)))
 
     def visible(self, vg_id):
-        """Rollen, die in einer VG gelten: System- und globale Rollen sowie die eigenen der VG."""
-        return [r for r in self if r.vg_id is None or r.vg_id == vg_id]
+        """Rollen, die in einer VG gelten: System- und globale Rollen (soweit sie zur Art der VG passen) sowie
+        die eigenen der VG."""
+        kind = self.vg_kind.get(vg_id)
+        return [r for r in self if (r.vg_id is None and r.fits(kind)) or r.vg_id == vg_id]
 
     def find(self, key, vg_id):
         return next((r for r in self.visible(vg_id) if r.key == key), None)
@@ -210,6 +248,27 @@ def seed(con):
     return ids
 
 
+def add_roles(con):
+    """Funktionen des BKS-Portals als Systemrollen (Migration); wiederholbar, vorhandene Schlüssel bleiben."""
+    for key, label in BKS_LABELS.items():
+        con.execute("UPDATE role SET label = ? WHERE key = ? AND vg_id IS NULL", (label, key))
+    con.execute("UPDATE role SET kinds = 'vg' WHERE key = 'vg_lead' AND vg_id IS NULL")
+    ids = {r["key"]: r["id"] for r in con.execute("SELECT id, key FROM role WHERE vg_id IS NULL")}
+    for key, scope, label, parent, permissions, _, kinds in BKS_ROLES:
+        if key in ids:
+            continue
+        inherited = Roles(con).permissions(ids[parent])
+        ids[key] = con.execute("INSERT INTO role (key, scope, label, parent_id, system, kinds) VALUES (?, ?, ?, ?, 1, ?)",
+                               (key, scope, label, ids[parent], ",".join(kinds))).lastrowid
+        con.executemany("INSERT INTO role_permission (role_id, permission) VALUES (?, ?)",
+                        [(ids[key], p) for p in sorted(allowed(close(permissions), scope) - inherited)])
+    grants = {key: grants for key, *_, grants, _kinds in BKS_ROLES} | {k: v for k, v in BKS_GRANTS.items()}
+    for key, granted in grants.items():
+        con.executemany("INSERT OR IGNORE INTO role_grant (role_id, grantable_role_id) VALUES (?, ?)",
+                        [(ids[key], ids[g]) for g in granted])
+    return ids
+
+
 def save_role(con, roles, role_id, *, vg_id, scope, label, description, parent_id, permissions, granted_by, grants):
     """Rolle anlegen (role_id None) oder ändern -> ID. Prüft Bereich, Elternrolle, Rechte und Verteilung:
     granted_by = Rollen, die diese Rolle vergeben dürfen; grants = Rollen, die Inhaber dieser Rolle vergeben."""
@@ -222,8 +281,7 @@ def save_role(con, roles, role_id, *, vg_id, scope, label, description, parent_i
     if unknown:
         raise Invalid(f"Unbekanntes Recht: {', '.join(sorted(unknown))}.")
     if set(permissions) - set(allowed(permissions, scope)):
-        raise Invalid("Anwesenheit und Personal gibt es nur für Rollen einer Wehr; "
-                      "Gesamtansicht, Prüfprotokoll, Gebühren und Rollenpflege nur für Rollen der VG.")
+        raise Invalid("Gesamtansicht, Prüfprotokoll, Gebühren und Rollenpflege gibt es nur für Rollen der VG.")
     if parent_id is not None:
         parent = roles.get(parent_id)
         if not parent or parent.scope != scope or (parent.vg_id is not None and parent.vg_id != vg_id):

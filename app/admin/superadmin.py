@@ -26,7 +26,7 @@ def super_overview(a: tenancy.Access = Depends(access)):
     _superadmin(a)
     with tenancy.central() as con:
         vgs = [dict(r) for r in con.execute(
-            "SELECT v.id, v.slug, v.name, COALESCE(d.status, 'pending') AS dpa FROM vg v "
+            "SELECT v.id, v.slug, v.name, v.kind, COALESCE(d.status, 'pending') AS dpa FROM vg v "
             "LEFT JOIN dpa d ON d.vg_id = v.id ORDER BY v.name")]
         tenants = [dict(r) for r in con.execute(
             "SELECT t.slug, t.name, t.active, t.created, v.slug AS vg FROM tenant t JOIN vg v ON v.id = t.vg_id "
@@ -44,6 +44,7 @@ def super_overview(a: tenancy.Access = Depends(access)):
 class VgIn(BaseModel):
     slug: str
     name: str = Field(min_length=2, max_length=80)
+    kind: Optional[str] = None   # Art des Aufgabenträgers (rbac.KINDS); leer = vg bzw. unverändert
 
 
 @router.post("/api/super/vgs")
@@ -51,7 +52,7 @@ def create_vg(v: VgIn, a: tenancy.Access = Depends(access)):
     _superadmin(a)
     try:
         with tenancy.central() as con:
-            tenancy.create_vg(con, v.slug, v.name)
+            tenancy.create_vg(con, v.slug, v.name, v.kind or "vg")
     except ValueError as e:
         _invalid(str(e))
     except Exception:
@@ -63,6 +64,14 @@ def create_vg(v: VgIn, a: tenancy.Access = Depends(access)):
 def rename_vg(slug: str, v: VgIn, a: tenancy.Access = Depends(access)):
     _superadmin(a)
     with tenancy.central() as con:
+        row = con.execute("SELECT id, kind FROM vg WHERE slug = ?", (slug,)).fetchone()
+        if not row:
+            raise HTTPException(404, "Verbandsgemeinde nicht gefunden.")
+        try:
+            if v.kind and v.kind != row["kind"]:
+                tenancy.set_vg_kind(con, row["id"], v.kind)
+        except ValueError as e:
+            _invalid(str(e))
         con.execute("UPDATE vg SET name = ? WHERE slug = ?", (v.name.strip(), slug))
     return super_overview(a)
 

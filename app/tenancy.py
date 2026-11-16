@@ -353,10 +353,28 @@ def check_slug(slug):
     return slug
 
 
-def create_vg(con, slug, name):
-    """Neue VG: ohne Wehren gibt es nichts in ihre Vorgaben zu übernehmen (defaults_lifted)."""
-    return con.execute("INSERT INTO vg (slug, name, defaults_lifted) VALUES (?, ?, 1)",
-                       (check_slug(slug), name.strip())).lastrowid
+def create_vg(con, slug, name, kind="vg"):
+    """Neue VG (Aufgabenträger der Art kind, siehe rbac.KINDS): ohne Wehren gibt es nichts in ihre Vorgaben
+    zu übernehmen (defaults_lifted)."""
+    if kind not in rbac.KINDS:
+        raise ValueError("Unbekannte Art des Aufgabenträgers.")
+    return con.execute("INSERT INTO vg (slug, name, defaults_lifted, kind) VALUES (?, ?, 1, ?)",
+                       (check_slug(slug), name.strip(), kind)).lastrowid
+
+
+def set_vg_kind(con, vg_id, kind):
+    """Art einer VG ändern – nur, wenn keine Zuordnung der VG (und ihrer Wehren) eine Rolle nutzt, die zur neuen
+    Art nicht passt."""
+    if kind not in rbac.KINDS:
+        raise ValueError("Unbekannte Art des Aufgabenträgers.")
+    roles = rbac.Roles(con)
+    used = {r[0] for r in con.execute(
+        "SELECT m.role_id FROM membership m LEFT JOIN tenant t ON m.scope = 'tenant' AND t.id = m.scope_id "
+        "WHERE (m.scope = 'vg' AND m.scope_id = ?) OR (m.scope = 'tenant' AND t.vg_id = ?)", (vg_id, vg_id))}
+    unfit = sorted({roles.get(i).label for i in used if roles.get(i) and not roles.get(i).fits(kind)})
+    if unfit:
+        raise ValueError(f"Nicht möglich: diese Rollen sind zugeordnet und gelten dort nicht: {', '.join(unfit)}.")
+    con.execute("UPDATE vg SET kind = ? WHERE id = ?", (kind, vg_id))
 
 
 def create_tenant(con, slug, name, vg_id, cfg=None):
@@ -503,6 +521,7 @@ class Access:
     tenants: dict              # slug -> Tenant, nur aktive Wehren mit mindestens einem Recht (und AVV)
     roles: list                # [{role, role_id, scope, scope_id, vg_id, label}] eigene Zuordnungen
     vgs: dict = dataclasses.field(default_factory=dict)   # slug -> Name der VGs mit Gesamtansicht
+    vg_kinds: dict = dataclasses.field(default_factory=dict)   # slug -> Art (rbac.KINDS) der VGs mit Gesamtansicht
     vg_permissions: dict = dataclasses.field(default_factory=dict)   # VG-ID -> Rechte aus Rollen der VG
     selected: Tenant = None
     vg: str = None             # Slug der ausgewählten VG
@@ -569,7 +588,8 @@ class Access:
         """Auswahlmöglichkeiten für die Kopfzeile: je VG die Verbandsgemeinde (Gesamtansicht aller Wehren), dann die Wehren."""
         result = []
         for vg_slug, vg_name in self.vgs.items():
-            result.append({"key": f"vg:{vg_slug}", "name": f"Verbandsgemeinde · {vg_name}", "vg": vg_name})
+            kind = rbac.KINDS.get(self.vg_kinds.get(vg_slug), "Verbandsgemeinde").split(" /")[0]
+            result.append({"key": f"vg:{vg_slug}", "name": f"{kind} · {vg_name}", "vg": vg_name})
         result += [{"key": f"t:{t.slug}", "name": t.name, "vg": t.vg_name}
                    for t in sorted(self.tenants.values(), key=lambda t: (t.vg_name, t.name))]
         return result
@@ -631,7 +651,8 @@ def access_for(email, scope=None):
     for r in rows:
         if r["slug"] in tenants and (superadmin or r["vg_id"] in overview):
             vgs.setdefault(r["vg_slug"], r["vg_name"])
-    access = Access(email, superadmin, tenants, own, vgs, {k: frozenset(v) for k, v in vg_permissions.items()},
+    vg_kinds = {slug: roles.vg_kind.get(vg_id) for vg_id, (slug, _) in vg_names.items() if slug in vgs}
+    access = Access(email, superadmin, tenants, own, vgs, vg_kinds, {k: frozenset(v) for k, v in vg_permissions.items()},
                     blocked=[{"slug": slug, "name": name} for slug, name in blocked.items()], blocked_ids=blocked_ids)
     kind, _, wanted = (scope or "").partition(":")
     if kind == "t" and wanted in tenants:

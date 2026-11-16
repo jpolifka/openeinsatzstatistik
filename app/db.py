@@ -233,6 +233,19 @@ def _add_roles(con):
     con.execute("CREATE INDEX membership_scope ON membership(scope, scope_id)")
 
 
+def _add_vg_kind(con):
+    """Art der VG (Aufgabenträger-Ebene im BKS-Portal) und Arten, in denen eine Rolle gilt (leer = überall)."""
+    con.execute("ALTER TABLE vg ADD COLUMN kind TEXT NOT NULL DEFAULT 'vg' "
+                "CHECK (kind IN ('vg', 'city', 'district', 'dispatch'))")
+    con.execute("ALTER TABLE role ADD COLUMN kinds TEXT NOT NULL DEFAULT ''")
+
+
+def _add_bks_roles(con):
+    """Funktionen des BKS-Portals als Systemrollen (rbac.BKS_ROLES); Bestandsrollen behalten ihre Rechte."""
+    from app import rbac
+    rbac.add_roles(con)
+
+
 def _records_per_vg(con):
     """Stammdatensätze und Prüfvermerke je VG: Schlüssel (bks_record_id, vg_id) statt nur bks_record_id,
     damit eine VG weder den Stammdatensatz noch den Prüfvermerk einer anderen belegt oder überschreibt."""
@@ -331,7 +344,8 @@ TENANT_MIGRATIONS = [_create_legacy_schema, _rename_to_english, _add_tenant_tabl
                      _add_abort_reason, _add_report_details, _add_manual_fields]
 CENTRAL_MIGRATIONS = [_create_central_schema, _add_dpa, _add_records, _add_notices, _add_fee_schedules, _add_roles,
                       _records_per_vg, _add_consumed_magic_links, _add_completed_imports, _add_tenant_archive,
-                      _add_vg_defaults, _settings_for_fee_roles, _add_sessions]
+                      _add_vg_defaults, _settings_for_fee_roles, _add_sessions,
+                      _add_vg_kind, _add_bks_roles]
 
 
 def migrate(con, steps=TENANT_MIGRATIONS):
