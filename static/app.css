@@ -299,15 +299,15 @@ tr.open .chevron { transform: rotate(180deg); color: var(--brand); }
 
 /* ------------------------------------------------------------ Detail */
 .table > tbody > tr.detail > td { background: var(--brand-pale); padding: 0; }
-.detail-grid { padding: 18px 20px 22px; display: grid; grid-template-columns: minmax(230px, 1fr) minmax(440px, 2fr) minmax(220px, 1fr); gap: 18px; }
+.detail-grid { padding: 18px 20px 22px; display: grid; grid-template-columns: minmax(230px, 1fr) minmax(440px, 2fr) minmax(260px, 1fr); gap: 18px; }
 .panel { background: var(--white); border-radius: 10px; padding: 16px; box-shadow: 0 1px 2px var(--shade-faint); min-width: 0; }
 .panel h4 { margin: 0 0 10px; font-size: .78rem; letter-spacing: .08em; text-transform: uppercase; color: var(--brand-mid); }
 .panel.full { grid-column: 1 / -1; }
 .panel.outlined { box-shadow: none; border: 1px solid var(--line); }
 .panel.bare { background: none; box-shadow: none; padding: 0; }
-.facts { display: grid; grid-template-columns: auto 1fr; gap: 5px 14px; margin: 0; font-size: .92rem; }
+.facts { display: grid; grid-template-columns: fit-content(50%) minmax(0, 1fr); gap: 5px 14px; margin: 0; font-size: .92rem; }
 .facts dt { color: var(--gray); }
-.facts dd { margin: 0; font-weight: 700; min-width: 0; overflow-wrap: anywhere; }
+.facts dd { margin: 0; font-weight: 700; min-width: 0; overflow-wrap: break-word; }
 .mini-table { width: 100%; border-collapse: collapse; font-size: .85rem; font-variant-numeric: tabular-nums; }
 .mini-table th { text-align: left; font-weight: 700; color: var(--gray); padding: 4px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 .mini-table td { padding: 6px; border-bottom: 1px solid var(--light-gray); white-space: nowrap; }
