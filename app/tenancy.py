@@ -353,6 +353,26 @@ def check_slug(slug):
     return slug
 
 
+def suggest_slug(con, name, vg_slug=""):
+    """Freier Kurzname für eine Wehr aus ihrem Namen („Feuerwehr Altenau“ → altenau). Kurznamen gelten für alle
+    VGs gemeinsam (Ordner, Cookie, Einsatz-IDs); ist er vergeben – gleicher Ortsname in einer anderen VG –, hängt
+    die VG an (altenau-musterstadt), danach eine Nummer."""
+    text = (name or "").lower()
+    for old, new in (("ä", "ae"), ("ö", "oe"), ("ü", "ue"), ("ß", "ss")):
+        text = text.replace(old, new)
+    words = [w for w in re.sub(r"[^a-z0-9]+", " ", text).split()
+             if w not in ("feuerwehr", "freiwillige", "ff", "wehr", "der", "von")]
+    base = "-".join(words)[:30].strip("-") or "wehr"
+    vg_part = re.sub(r"^vg-?", "", vg_slug or "")[:8].strip("-")
+    candidates = [base] + ([f"{base}-{vg_part}"] if vg_part else [])
+    candidates += [f"{base}-{n}" for n in range(2, 100)]
+    for candidate in candidates:
+        if (SLUG.fullmatch(candidate) and not con.execute("SELECT 1 FROM tenant WHERE slug = ?", (candidate,)).fetchone()
+                and not os.path.exists(tenant_path(candidate))):
+            return candidate
+    raise ValueError("Kein freier Kurzname gefunden – bitte einen eigenen eintragen.")
+
+
 def create_vg(con, slug, name, kind="vg"):
     """Neue VG (Aufgabenträger der Art kind, siehe rbac.KINDS): ohne Wehren gibt es nichts in ihre Vorgaben
     zu übernehmen (defaults_lifted)."""

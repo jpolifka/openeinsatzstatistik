@@ -618,9 +618,32 @@ function setMemberships(data) {
   admin.userScopes = data.scopes;
 }
 
+// Filter der Benutzerliste: alle, eine VG (mit ihren Wehren) oder eine Wehr
+function userFilterMatches(m, filter) {
+  if (!filter) return true;
+  const [scope, slug] = filter.split(":");
+  return scope === "vg" ? m.vg === slug : m.scope === "tenant" && m.slug === slug;
+}
+
+function userFilterOptions(memberships) {
+  const vgs = new Map(), tenants = new Map();
+  memberships.forEach((m) => {
+    if (m.scope === "vg") vgs.set(m.slug, m.name); else tenants.set(m.slug, { name: m.name, vg: m.vg });
+    if (m.vg && !vgs.has(m.vg)) vgs.set(m.vg, m.vg);
+  });
+  const known = Object.fromEntries((admin.overview?.vgs || []).map((v) => [v.slug, v.name]));
+  return [...vgs.entries()].map(([slug, name]) => ({ slug, name: known[slug] || name, tenants: [...tenants.entries()].filter(([, t]) => t.vg === slug) }))
+    .sort((a, b) => a.name.localeCompare(b.name, "de"));
+}
+
 function usersSection() {
   const scopes = admin.userScopes;
-  const rows = admin.memberships.map((m) => `<tr>
+  const filterOptions = userFilterOptions(admin.memberships);
+  const filter = filterOptions.length > 1 ? `<label class="field admin-tenant"><span>Anzeigen</span><select data-user-filter>
+      <option value="">Alle Bereiche</option>${filterOptions.map((g) => `<optgroup label="${esc(g.name)}">
+        <option value="vg:${esc(g.slug)}" ${admin.userFilter === `vg:${g.slug}` ? "selected" : ""}>Gesamte VG mit allen Wehren</option>
+        ${g.tenants.map(([slug, t]) => `<option value="tenant:${esc(slug)}" ${admin.userFilter === `tenant:${slug}` ? "selected" : ""}>${esc(t.name)}</option>`).join("")}</optgroup>`).join("")}</select></label>` : "";
+  const rows = admin.memberships.filter((m) => userFilterMatches(m, admin.userFilter)).map((m) => `<tr>
     <td>${esc(m.email)}</td><td>${esc(m.name)}${m.scope === "vg" ? " <span class='small muted'>(VG)</span>" : ""}</td><td>${esc(m.label)}</td>
     <td class="small muted">${m.last_login ? formatDate(m.last_login) : "noch nie"}</td>
     <td class="nowrap"><button type="button" class="btn btn-light btn-small" data-admin-action="effective" data-email="${esc(m.email)}">Rechte</button>
@@ -634,6 +657,7 @@ function usersSection() {
   return `<p class="small muted">Wer eine Zuordnung hat, kann sich mit seiner E-Mail-Adresse anmelden. Eine Person kann mehrere Rollen haben;
     ihre Rechte addieren sich. Eigene Zuordnungen ändert jemand anderes.</p>
     <div class="section-gap">${form}</div>
+    ${filter ? `<div class="section-gap">${filter}</div>` : ""}
     <div class="table-wrap section-gap"><table class="mini-table admin-table"><thead><tr><th>E-Mail</th><th>Bereich</th><th>Rolle</th><th>zuletzt angemeldet</th><th></th></tr></thead>
     <tbody>${rows || `<tr><td colspan="5" class="muted">Noch keine Zuordnungen.</td></tr>`}</tbody></table></div>
     ${admin.effective ? effectivePanel() : ""}
@@ -854,7 +878,7 @@ function superDetail(vg) {
   const mine = tenants.filter((t) => t.vg === vg.slug);
   const vgOptions = (current) => admin.superOverview.vgs.map((v) => `<option value="${esc(v.slug)}" ${v.slug === current ? "selected" : ""}>${esc(v.name)}</option>`).join("");
   const scopes = new Set([`vg:${vg.slug}`, ...mine.map((t) => `tenant:${t.slug}`)]);
-  const access = (admin.memberships?.memberships || []).filter((m) => scopes.has(`${m.scope}:${m.slug}`));
+  const access = (admin.memberships || []).filter((m) => scopes.has(`${m.scope}:${m.slug}`));
   const open = (pending || []).filter((slug) => mine.some((t) => t.slug === slug));
   return `${open.length ? `<div class="message message-info">Archivierung noch offen: ${open.map(esc).join(", ")}. Die Wehren sind gesperrt; automatische Wiederholung jede Minute.</div>` : ""}
     <h3>${esc(vg.name)}</h3>
@@ -875,8 +899,8 @@ function superDetail(vg) {
         || `<tr><td colspan="5" class="muted">Noch keine Wehr in dieser VG.</td></tr>`}
     </tbody></table></div>
     <div class="form-grid section-gap">
-      ${adminField("Kurzname", `<input type="text" id="tenant-slug" placeholder="musterstadt" maxlength="40">`)}
       ${adminField("Name", `<input type="text" id="tenant-name" placeholder="Feuerwehr Musterstadt">`, "span-2")}
+      ${adminField("Kurzname (leer = automatisch)", `<input type="text" id="tenant-slug" placeholder="musterstadt" maxlength="40">`)}
       ${adminField("Erster Wehrführer (E-Mail, optional)", `<input type="email" id="tenant-email">`, "span-2")}
       <input type="hidden" id="tenant-vg" value="${esc(vg.slug)}">
     </div>
@@ -887,7 +911,7 @@ function superDetail(vg) {
         || `<tr><td colspan="3" class="muted">Keine Zuordnungen.</td></tr>`}
     </tbody></table></div>
     <p class="small muted">Rollen vergeben und entziehen unter <button type="button" class="btn-link" data-admin-section="users">Benutzer</button>.
-    Kurznamen: Kleinbuchstaben, Ziffern und Bindestrich; sie lassen sich später nicht ändern. Archivierte Wehren werden nicht gelöscht, sondern im Datenordner unter <code>deleted/</code> abgelegt.</p>`;
+    Kurznamen gelten für alle VGs gemeinsam und lassen sich später nicht ändern. Ohne Eingabe wird er aus dem Namen gebildet; ist er vergeben (gleicher Ortsname in einer anderen VG), hängt die VG an. Archivierte Wehren werden nicht gelöscht, sondern im Datenordner unter <code>deleted/</code> abgelegt.</p>`;
 }
 
 function superSection() {

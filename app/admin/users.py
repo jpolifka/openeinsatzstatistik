@@ -59,7 +59,8 @@ def get_memberships(a: tenancy.Access = Depends(access)):
         roles = rbac.Roles(con)
         rows = con.execute(
             "SELECT m.email, m.scope, m.scope_id, m.role_id, COALESCE(t.slug, v.slug) AS slug, "
-            "COALESCE(t.name, v.name) AS name, COALESCE(t.vg_id, v.id) AS vg_id, a.last_login "
+            "COALESCE(t.name, v.name) AS name, COALESCE(t.vg_id, v.id) AS vg_id, a.last_login, "
+            "(SELECT slug FROM vg WHERE id = COALESCE(t.vg_id, v.id)) AS vg_slug "
             "FROM membership m JOIN account a ON a.email = m.email "
             "LEFT JOIN tenant t ON m.scope = 'tenant' AND t.id = m.scope_id "
             "LEFT JOIN vg v ON m.scope = 'vg' AND v.id = m.scope_id ORDER BY name, m.email").fetchall()
@@ -77,7 +78,7 @@ def get_memberships(a: tenancy.Access = Depends(access)):
         allowed = granted(r["scope"], r["scope_id"], r["vg_id"])
         if role and (allowed or _sees_users(a, r["scope"], r["scope_id"], r["vg_id"])):
             result.append({"email": r["email"], "scope": r["scope"], "slug": r["slug"], "name": r["name"],
-                           "role": role.key, "label": role.label, "last_login": r["last_login"],
+                           "role": role.key, "label": role.label, "last_login": r["last_login"], "vg": r["vg_slug"],
                            "editable": role.id in allowed and (r["email"] != a.email or a.superadmin)})
     scopes = []
     for scope, scope_id, vg_id, slug, label in areas:

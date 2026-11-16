@@ -223,3 +223,15 @@ def test_vg_fleet_error_names_the_tenant(world):
     broken = _fleet_payload(data, wehr_a2=lambda fleet: fleet + [{"call_sign": "<b>"}])
     response = world.put("/api/admin/vgs/vg-a/fleet", json=broken)
     assert response.status_code == 422 and response.json()["detail"].startswith("Wehr wehr-a2:")
+
+
+def test_tenant_slug_is_derived_when_taken(world):
+    """Gleicher Ortsname in zwei VGs: der Kurzname gilt für alle VGs, also hängt die VG an."""
+    _as(world, "admin@example.org")
+    first = world.post("/api/super/tenants", json={"name": "Feuerwehr Bergheim", "vg": "vg-a"})
+    assert first.status_code == 200 and "bergheim" in [t["slug"] for t in first.json()["tenants"]]
+    second = world.post("/api/super/tenants", json={"name": "Feuerwehr Bergheim", "vg": "vg-b"})
+    slugs = [t["slug"] for t in second.json()["tenants"]]
+    assert any(s.startswith("bergheim-") and s != "bergheim" for s in slugs)
+    clash = world.post("/api/super/tenants", json={"slug": "bergheim", "name": "Bergheim", "vg": "vg-b"})
+    assert clash.status_code == 422 and "Vorschlag" in clash.json()["detail"]

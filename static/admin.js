@@ -37,6 +37,7 @@ const admin = {
   saved: null,                // Stand des gerade bearbeiteten Datensatzes beim Laden/Speichern – Vergleich für „ungespeichert“
   fleetQuery: "",             // Suche in den Fahrzeugtabellen
   superVg: recall("super-vg"), superQuery: "",   // Superadmin: gewählte VG und Suche
+  userFilter: "",             // Benutzer: nur eine VG ("vg:<slug>", mit ihren Wehren) bzw. Wehr ("tenant:<slug>")
   keywordDeviationsOnly: false,   // Stichworte: nur Abweichungen (Wehr) bzw. Stichworte mit Abweichungen (VG)
 };
 // Fahrzeugtabelle kompakt (ohne Dienstzeitraum, Nachfolger, Gesamtstärke); gemerkt je Ansicht, VG standardmäßig kompakt
@@ -136,15 +137,25 @@ async function adminGo(changes) {
 }
 
 // ------------------------------------------------------------ Rahmen
+// Auswahl nach Verbandsgemeinde gruppiert: je VG „Gesamte Verbandsgemeinde“ (falls berechtigt) und ihre Wehren
+function adminChoiceGroups(vgs, tenants) {
+  const groups = new Map();
+  const group = (slug, name) => { if (!groups.has(slug)) groups.set(slug, { label: name, options: [] }); return groups.get(slug); };
+  vgs.forEach((v) => group(v.slug, v.name).options.push({ key: `vg:${v.slug}`, label: "Gesamte Verbandsgemeinde" }));
+  tenants.forEach((t) => group(t.vg_slug, t.vg).options.push({ key: t.slug, label: t.name }));
+  return [...groups.values()].sort((a, b) => a.label.localeCompare(b.label, "de"));
+}
+
 function renderAdmin() {
   const { tenants, vgs } = admin.overview;
   // Auswahl: Verbandsgemeinde (Vorgaben und alle Wehren) oder eine Wehr – nur hier wechselt sie
-  const choices = [...vgs.map((v) => ({ key: `vg:${v.slug}`, label: `Verbandsgemeinde · ${v.name}` })),
-    ...tenants.map((t) => ({ key: t.slug, label: `${t.name} · ${t.vg}` }))];
   const current = admin.vg ? `vg:${admin.vg}` : admin.slug;
-  const tenantSelect = choices.length > 1 && !["users", "roles", "super", "sessions"].includes(admin.section)
-    ? `<label class="field admin-tenant"><span>${admin.vg ? "Verbandsgemeinde" : "Feuerwehr"}</span><select data-admin-tenant>${choices.map((c) =>
-      `<option value="${esc(c.key)}" ${c.key === current ? "selected" : ""}>${esc(c.label)}</option>`).join("")}</select></label>` : "";
+  const groups = adminChoiceGroups(vgs, tenants);
+  const count = groups.reduce((n, g) => n + g.options.length, 0);
+  const option = (c) => `<option value="${esc(c.key)}" ${c.key === current ? "selected" : ""}>${esc(c.label)}</option>`;
+  const tenantSelect = count > 1 && !["users", "roles", "super", "sessions"].includes(admin.section)
+    ? `<label class="field admin-tenant"><span>${admin.vg ? "Verbandsgemeinde" : "Feuerwehr"}</span><select data-admin-tenant>${groups.map((g) =>
+      `<optgroup label="${esc(g.label)}">${g.options.map(option).join("")}</optgroup>`).join("")}</select></label>` : "";
   const sections = `<div class="segments" role="group" aria-label="Verwaltungsbereich">${adminSections().map(({ key, label }) =>
     `<button type="button" data-admin-section="${key}" aria-pressed="${key === admin.section}" class="${key === admin.section ? "active" : ""}">${label}</button>`).join("")}</div>`;
   const body = ({
@@ -453,10 +464,14 @@ async function runAdminAction(button) {
       return rerender();
     case "move-tenant": {
       const others = admin.superOverview.vgs.filter((v) => v.slug !== admin.superVg);
-      const target = prompt(`Wehr „${slug}“ in eine andere VG verschieben?\nKurzname der Ziel-VG eingeben (${others.map((v) => v.slug).join(", ")}):`);
+      if (!others.length) { admin.error = "Es gibt keine andere Verbandsgemeinde, in die die Wehr verschoben werden könnte."; return renderAdmin(); }
+      const name = admin.superOverview.tenants.find((t) => t.slug === slug)?.name || slug;
+      const target = await askAdminChoice({ title: `„${name}“ verschieben`, confirm: "Verschieben",
+        text: "Die Wehr wechselt mit allen Einsätzen in die andere Verbandsgemeinde. Zuordnungen auf VG-Ebene der bisherigen VG gelten dort nicht mehr; Vorgaben der neuen VG gelten ab sofort.",
+        label: "Neue Verbandsgemeinde", options: others.map((v) => ({ value: v.slug, label: v.name })) });
       if (!target) return;
-      admin.superOverview = await apiJson(`/api/super/tenants/${slug}?confirm=${encodeURIComponent(slug)}`, "PUT", { vg: target.trim() });
-      admin.superVg = target.trim(); remember("super-vg", admin.superVg);
+      admin.superOverview = await apiJson(`/api/super/tenants/${slug}?confirm=${encodeURIComponent(slug)}`, "PUT", { vg: target });
+      admin.superVg = target; remember("super-vg", target);
       return superChanged("Wehr verschoben");
     }
     case "create-tenant":
@@ -464,12 +479,43 @@ async function runAdminAction(button) {
         name: $("#tenant-name").value, vg: $("#tenant-vg").value, email: $("#tenant-email").value || null });
       return superChanged("Wehr angelegt");
     case "delete-tenant": {
-      const typed = prompt(`Wehr „${slug}“ archivieren? Alle Zuordnungen werden gelöscht, die Daten in deleted/ abgelegt (nichts wird gelöscht).\nZum Bestätigen den Kurznamen eintippen:`);
+      const typed = await askAdminChoice({ title: `Wehr „${slug}“ archivieren?`, danger: true, confirm: "Archivieren",
+        text: "Alle Zuordnungen werden entfernt, die Daten in deleted/ abgelegt (nichts wird gelöscht).", label: "Zur Bestätigung den Kurznamen eintippen", input: true });
       if (typed !== slug) return;
       admin.superOverview = await api(`/api/super/tenants/${slug}?confirm=${encodeURIComponent(typed)}`, { method: "DELETE" });
       return superChanged("Wehr archiviert");
     }
   }
+}
+
+/**
+ * Dialog mit Auswahlliste (options) oder Texteingabe (input) -> gewählter Wert, bei Abbruch null.
+ * Gegenstück zu askConfirm für Aktionen, die einen Wert brauchen.
+ */
+function askAdminChoice({ title, text = "", label, options = [], input = false, confirm = "OK", danger = false }) {
+  return new Promise((resolve) => {
+    const dialog = document.createElement("dialog");
+    dialog.className = "dialog dialog-prompt";
+    dialog.setAttribute("aria-labelledby", "choice-title");
+    const control = input ? `<input type="text" id="choice-value" autocomplete="off">`
+      : `<select id="choice-value">${options.map((o) => `<option value="${esc(o.value)}">${esc(o.label)}</option>`).join("")}</select>`;
+    dialog.innerHTML = `<div class="dialog-body"><h3 id="choice-title">${esc(title)}</h3>
+      <p class="prompt-text">${esc(text)}</p>
+      <label class="field"><span>${esc(label)}</span>${control}</label>
+      <div class="actions section-gap"><button type="button" class="btn btn-outline" data-answer="no">Abbrechen</button>
+        <button type="button" class="btn ${danger ? "btn-danger" : "btn-primary"}" data-answer="yes">${esc(confirm)}</button></div></div>`;
+    let answer = null;
+    dialog.addEventListener("click", (e) => {
+      const button = e.target.closest("[data-answer]");
+      if (!button) return;
+      if (button.dataset.answer === "yes") answer = dialog.querySelector("#choice-value").value.trim() || null;
+      dialog.close();
+    });
+    dialog.addEventListener("close", () => { dialog.remove(); resolve(answer); });
+    document.body.append(dialog);
+    dialog.showModal();
+    dialog.querySelector("#choice-value").focus();
+  });
 }
 
 async function keywordsChanged(message) {
@@ -639,6 +685,7 @@ function handleAdminInput(e) {
     adminData().response_limits = t.value.split(/[,;\s]+/).map(Number).filter((n) => n > 0);
     return;
   }
+  if (t.dataset.userFilter !== undefined) { admin.userFilter = t.value; renderAdmin(); return; }
   if (t.dataset.superSearch !== undefined) { admin.superQuery = t.value; $("#super-list").innerHTML = superListHtml(); return; }
   if (t.dataset.fleetSearch !== undefined) { admin.fleetQuery = t.value; filterFleetRows(); return; }
   if (t.dataset.keywordSearch !== undefined) {

@@ -81,7 +81,7 @@ def rename_vg(slug: str, v: VgIn, a: tenancy.Access = Depends(access)):
 
 
 class TenantIn(BaseModel):
-    slug: str
+    slug: str = ""                   # leer = aus dem Namen ableiten (bei Doppelung mit VG-Zusatz)
     name: str = Field(min_length=2, max_length=80)
     vg: str
     email: Optional[str] = None      # erster Wehrführer
@@ -94,9 +94,12 @@ def create_tenant(t: TenantIn, a: tenancy.Access = Depends(access)):
         row = con.execute("SELECT id FROM vg WHERE slug = ?", (t.vg,)).fetchone()
         if not row:
             _invalid("Bitte eine Verbandsgemeinde wählen.")
-        if con.execute("SELECT 1 FROM tenant WHERE slug = ?", (t.slug,)).fetchone():
-            _invalid(f"Den Kurznamen „{t.slug}“ gibt es schon.")
         try:
+            if not t.slug.strip():
+                t.slug = tenancy.suggest_slug(con, t.name, t.vg)
+            if con.execute("SELECT 1 FROM tenant WHERE slug = ?", (t.slug,)).fetchone():
+                _invalid(f"Den Kurznamen „{t.slug}“ gibt es schon (Kurznamen gelten für alle VGs). "
+                         f"Vorschlag: „{tenancy.suggest_slug(con, t.name, t.vg)}“ – oder das Feld leer lassen.")
             tenant_id = tenancy.create_tenant(con, t.slug, t.name, row["id"])
         except ValueError as e:
             _invalid(str(e))

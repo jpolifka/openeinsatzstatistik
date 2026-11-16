@@ -7,8 +7,9 @@
 const CHANGELOG = [
   {
     date: "2026-11-16",
-    version: "2026-11-16.5",
+    version: "2026-11-16.6",
     items: [
+      "<b>Verwaltung:</b> Die Auswahl oben ist nach Verbandsgemeinde gegliedert, die Benutzerliste lässt sich auf eine VG oder Wehr eingrenzen. Heißen Wehren in zwei VGs gleich, bildet die Verwaltung den Kurznamen selbst (mit VG-Zusatz).",
       "<b>Verwaltung (Superadmin):</b> „Wehren &amp; VGs“ zeigt links alle Verbandsgemeinden mit Suche, rechts Stammdaten, Wehren und Zugriffe der gewählten VG. Wehren verschieben und archivieren fragt jetzt nach; Änderungen stehen im Protokoll.",
     ],
   },

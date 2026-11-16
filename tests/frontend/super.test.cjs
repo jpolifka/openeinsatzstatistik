@@ -23,3 +23,11 @@ test("Suche trifft über Wehren die VG", () => {
   assert.equal(g[0].vg.slug, "vg-b");
   assert.deepEqual(g[0].matches, ["b1"]);
 });
+
+test("Benutzerliste lässt sich nach VG (mit Wehren) und Wehr filtern", () => {
+  const match = vm.runInContext("userFilterMatches", ctx);
+  const rows = [{ scope: "vg", slug: "vg-a", vg: "vg-a" }, { scope: "tenant", slug: "a1", vg: "vg-a" }, { scope: "tenant", slug: "b1", vg: "vg-b" }];
+  assert.deepEqual(rows.filter((m) => match(m, "vg:vg-a")).map((m) => m.slug), ["vg-a", "a1"]);
+  assert.deepEqual(rows.filter((m) => match(m, "tenant:b1")).map((m) => m.slug), ["b1"]);
+  assert.equal(rows.filter((m) => match(m, "")).length, 3);
+});
