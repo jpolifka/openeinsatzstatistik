@@ -24,7 +24,7 @@ from app.tenant_config import UNIT_MARKER, TenantConfig, Vehicle, prefixes_of
 ADMIN_EMAILS = {e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").replace(";", ",").split(",")
                 if e.strip()}
 
-log = logging.getLogger("pdf2einsatz")
+log = logging.getLogger("openeinsatzstatistik")
 
 SLUG = re.compile(r"[a-z0-9][a-z0-9-]{0,38}[a-z0-9]")
 

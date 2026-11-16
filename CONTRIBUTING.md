@@ -10,7 +10,7 @@ Willkommen, besonders aus anderen Wehren und Verbandsgemeinden.
   (Code englisch, Kommentare und Oberfläche deutsch). Gearbeitet wird mit Docker:
 
   ```bash
-  docker build --target test -t pdf2einsatz-test . && docker run --rm pdf2einsatz-test
+  docker build --target test -t openeinsatzstatistik-test . && docker run --rm openeinsatzstatistik-test
   docker run --rm -v "$PWD:/w:ro" -w /w node:22-alpine node --test tests/frontend/*.test.cjs
   ```
 

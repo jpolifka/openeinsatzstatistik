@@ -6,7 +6,7 @@ import logging
 import uuid
 from types import SimpleNamespace
 
-log = logging.getLogger("pdf2einsatz")
+log = logging.getLogger("openeinsatzstatistik")
 
 
 def _encode(value):

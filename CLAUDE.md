@@ -16,9 +16,9 @@ Bevorzugt mit Docker arbeiten:
 docker compose up -d --build          # bauen + starten → http://localhost:8112
 docker compose logs -f                # Logs (u. a. Migration)
 curl localhost:8112/health            # Health-Check (ohne Anmeldung erreichbar)
-docker build --target test -t pdf2einsatz-test . && docker run --rm pdf2einsatz-test   # Tests (pytest)
-docker run --rm pdf2einsatz-test python -m pytest -q tests/test_rbac.py -k <name>   # einzelner Test (nach dem Build oben; der Befehl ersetzt das CMD)
-docker run --rm pdf2einsatz-test python -m pytest -q --cov=app --cov-branch --cov-report=term-missing:skip-covered   # Abdeckung (nur Python)
+docker build --target test -t openeinsatzstatistik-test . && docker run --rm openeinsatzstatistik-test   # Tests (pytest)
+docker run --rm openeinsatzstatistik-test python -m pytest -q tests/test_rbac.py -k <name>   # einzelner Test (nach dem Build oben; der Befehl ersetzt das CMD)
+docker run --rm openeinsatzstatistik-test python -m pytest -q --cov=app --cov-branch --cov-report=term-missing:skip-covered   # Abdeckung (nur Python)
 docker run --rm -v "$PWD/static:/s:ro" node:22-alpine node --check /s/app.js          # JS-Syntax
 docker run --rm -v "$PWD:/w:ro" -w /w node:22-alpine node --test tests/frontend/*.test.cjs   # Frontend-Tests (wie CI)
 ```

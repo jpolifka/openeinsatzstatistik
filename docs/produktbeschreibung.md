@@ -1,4 +1,4 @@
-# pdf2einsatz – Einsatzstatistik für Feuerwehren
+# openEinsatzstatistik – Einsatzstatistik für Feuerwehren
 
 **Aus dem BKS-Einsatzbericht wird die Auswertung. Frei, quelloffen, ohne Excel-Handarbeit.**
 
@@ -46,6 +46,6 @@ Auf Wunsch Unterstützung bei Einführung und Schulung.
 1. **Demo** mit erfundenen Daten: `docker compose -f docker-compose.demo.yml up --build` → http://localhost:8113
 2. **Pilot:** Wir richten gemeinsam eure Wehr ein und lesen eure ersten Berichte ein.
 
-Kontakt: Polifka IT-Beratung, In der Maar 31, 56598 Rheinbrohl · Quellcode: https://github.com/jpolifka/pdf2einsatz
+Kontakt: Polifka IT-Beratung, In der Maar 31, 56598 Rheinbrohl · Quellcode: https://github.com/jpolifka/openeinsatzstatistik
 
 *Hinweis: Ersetzt keinen Feuerwehrbedarfsplan; Rechenregeln und Abweichungen zur Excel-Datei stehen im README.*

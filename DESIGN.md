@@ -1,5 +1,5 @@
 ---
-name: pdf2einsatz
+name: openEinsatzstatistik
 description: Einsatzstatistik für Feuerwehren – sachliche Auswertung in Wehr-Rot auf weißen Karten
 colors:
   brand: "#D90000"
@@ -149,7 +149,7 @@ components:
     padding: "3px 9px"
 ---
 
-# Design System: pdf2einsatz
+# Design System: openEinsatzstatistik
 
 ## Overview
 

@@ -6,7 +6,7 @@ from pathlib import Path
 
 from app import db, rbac
 
-log = logging.getLogger("pdf2einsatz")
+log = logging.getLogger("openeinsatzstatistik")
 CREATE_MARKER = ".creation-pending"
 
 

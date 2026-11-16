@@ -26,7 +26,7 @@ from pydantic import BaseModel
 
 from app import auth, db, rbac, tenancy
 
-log = logging.getLogger("pdf2einsatz")
+log = logging.getLogger("openeinsatzstatistik")
 router = APIRouter()
 access = auth.access
 

@@ -1,4 +1,4 @@
-# pdf2einsatz – Einsatzstatistik für Feuerwehren
+# openEinsatzstatistik – Einsatzstatistik für Feuerwehren
 
 Weboberfläche zur Einsatzstatistik für Freiwillige Feuerwehren, mandantenfähig und gruppiert nach
 Verbandsgemeinde: Einsatzberichte (PDF oder Excel-Export) aus dem
@@ -62,8 +62,8 @@ Backend: FastAPI und SQLite, Oberfläche: Vanilla-JS ohne Build-Schritt.
 Voraussetzung: [Docker](https://docs.docker.com/get-docker/) mit Compose.
 
 ```bash
-git clone https://github.com/jpolifka/pdf2einsatz.git
-cd pdf2einsatz
+git clone https://github.com/jpolifka/openeinsatzstatistik.git
+cd openeinsatzstatistik
 cp .env.example .env          # Passwort usw. anpassen
 docker compose up -d --build
 ```
@@ -354,9 +354,9 @@ Frontend-Dateien ist `docker compose up -d --build` nötig.
 
 ```bash
 # Python-Tests (pytest), einzelner Test mit -k, Abdeckung mit --cov
-docker build --target test -t pdf2einsatz-test . && docker run --rm pdf2einsatz-test
-docker run --rm pdf2einsatz-test python -m pytest -q tests/test_rbac.py -k <name>
-docker run --rm pdf2einsatz-test python -m pytest -q --cov=app --cov-branch --cov-report=term-missing:skip-covered
+docker build --target test -t openeinsatzstatistik-test . && docker run --rm openeinsatzstatistik-test
+docker run --rm openeinsatzstatistik-test python -m pytest -q tests/test_rbac.py -k <name>
+docker run --rm openeinsatzstatistik-test python -m pytest -q --cov=app --cov-branch --cov-report=term-missing:skip-covered
 
 # JavaScript: Syntax und Frontend-Tests (wie in der CI)
 docker run --rm -v "$PWD/static:/s:ro" node:22-alpine node --check /s/app.js
