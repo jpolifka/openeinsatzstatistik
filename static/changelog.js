@@ -7,6 +7,13 @@
 const CHANGELOG = [
   {
     date: "2026-11-16",
+    version: "2026-11-16.9a",
+    items: [
+      "<b>Farben:</b> Schrift und Diagramme sind jetzt warmes Grau statt kaltem Anthrazit und passen besser zu Bordeaux und Sand.",
+    ],
+  },
+  {
+    date: "2026-11-16",
     version: "2026-11-16.8",
     items: [
       "<b>Auswahl:</b> Die Auswahl oben ist jetzt nach Verbandsgemeinde gruppiert; darunter stehen die Gesamtansicht und die Wehren.",
