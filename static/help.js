@@ -28,7 +28,7 @@ const HELP_SECTIONS = [
       ended_at: {
         title: "Ende",
         short: "Spätestes Einsatzende der eigenen Fahrzeuge bzw. der FEZ.",
-        text: "Einsatzende = spätestes Einsatzende der eigenen Fahrzeuge bzw. der Feuerwehreinsatzzentrale (FL NR#.LIN). Aus Beginn und Ende ergeben sich Einsatzdauer, Einsatzstunden und die Stunden je Person.",
+        text: "Einsatzende = spätestes Einsatzende der eigenen Fahrzeuge bzw. der Feuerwehreinsatzzentrale (FEZ). Aus Beginn und Ende ergeben sich Einsatzdauer, Einsatzstunden und die Stunden je Person.",
       },
       station_staff: {
         title: "Gerätehaus",
@@ -482,7 +482,7 @@ const HELP_SECTIONS = [
       admin_bks: {
         title: "BKS-Kennung",
         short: "Woran die App die eigenen Fahrzeuge und Berichte erkennt.",
-        text: "<b>Kennung der VG</b> (gilt für alle Wehren der VG) und <b>Standort</b> der Wehr ergeben die Einheit aus der Kopfzeile des Berichts, z. B. „FW NR#.ABC 02“. Darüber werden Berichte der richtigen Wehr zugeordnet, und daraus ergeben sich die Funkrufnamen: „FL NR#.ABC 02/…“ sind eigene Fahrzeuge (deren früheste Alarmierung ist der Einsatzbeginn), „FL NR#.ABC …“ Fahrzeuge der übrigen Wehren der VG. Fahrzeuge der Fahrzeugliste zählen immer als eigene, auch mit anderem Funkrufnamen (z. B. „RP WW …“). <b>FEZ-Kennung</b>: die Feuerwehreinsatzzentrale, deren Einsatzende mitzählt. Ins <b>Testfeld</b> passt beliebiger Text aus einem Bericht – einzelne Funkrufnamen, Zeilen der Fahrzeugtabelle oder der ganze Bericht; die App zeigt, wie sie jedes gefundene Fahrzeug zuordnet.",
+        text: "<b>Kennung der VG</b> (gilt für alle Wehren der VG) und <b>Standort</b> der Wehr ergeben die Einheit aus der Kopfzeile des Berichts, z. B. „FW NR#.ABC 02“. Die Kennung beginnt mit dem Kreis (Kfz-Zeichen, z. B. „MYK.ABC“; „#“ nur, wenn Stadt und Landkreis dasselbe Zeichen führen, z. B. „NR#.ABC“). Darüber werden Berichte der richtigen Wehr zugeordnet, und daraus ergeben sich die Funkrufnamen: „FL NR#.ABC 02/…“ sind eigene Fahrzeuge (deren früheste Alarmierung ist der Einsatzbeginn), „FL NR#.ABC …“ Fahrzeuge der übrigen Wehren der VG. Fahrzeuge der Fahrzeugliste zählen immer als eigene, auch mit anderem Funkrufnamen (z. B. „RP WW …“). <b>FEZ-Kennung</b>: die Feuerwehreinsatzzentrale, deren Einsatzende mitzählt. Ins <b>Testfeld</b> passt beliebiger Text aus einem Bericht – einzelne Funkrufnamen, Zeilen der Fahrzeugtabelle oder der ganze Bericht; die App zeigt, wie sie jedes gefundene Fahrzeug zuordnet.",
       },
       admin_places: {
         title: "Orte und Zeitgrenzen",

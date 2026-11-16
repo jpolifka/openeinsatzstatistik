@@ -7,6 +7,13 @@
 const CHANGELOG = [
   {
     date: "2026-11-16",
+    version: "2026-11-16.7",
+    items: [
+      "<b>Import:</b> Berichte aus allen Landkreisen und kreisfreien Städten in Rheinland-Pfalz werden erkannt, nicht nur aus dem Kreis Neuwied. Die Kennung der VG beginnt mit dem Kreis, z. B. „MYK.ABC“.",
+    ],
+  },
+  {
+    date: "2026-11-16",
     version: "2026-11-16.6",
     items: [
       "<b>Verwaltung:</b> Die Auswahl oben ist nach Verbandsgemeinde gegliedert, die Benutzerliste lässt sich auf eine VG oder Wehr eingrenzen. Heißen Wehren in zwei VGs gleich, bildet die Verwaltung den Kurznamen selbst (mit VG-Zusatz).",

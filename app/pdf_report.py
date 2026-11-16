@@ -10,7 +10,7 @@ import re
 
 import pdfplumber
 
-from app.bks_common import (KINDS, PERSON_VEHICLE, SHORT_CALL_SIGN, TACTICS, _call_sign_pattern, _parse_keyword,
+from app.bks_common import (COUNTY, KINDS, PERSON_VEHICLE, SHORT_CALL_SIGN, TACTICS, _call_sign_pattern, _parse_keyword,
                             clean_alarm_system, parse_number)
 
 # Seite 1 ist zweispaltig; manche Felder sind nur im linken oder rechten Teil eindeutig
@@ -23,8 +23,8 @@ VEHICLE_VALUES = re.compile(TIMESTAMP + r"\d?|(?<!\S)(-)(?!\S)|\b(Ja|Nein)\b")
 DISPATCH_NUMBER = re.compile(r"Einsatznummer Leitstelle:\s*(\d+)")
 # Kopfzeile mit der berichtenden Einheit, z. B. "FW NR#.ABC 02 Musterstadt Alarmierung: …";
 # neuere Berichte nennen sie außerdem als "Feuerwehrhaus: FW NR#.ABC 02 Musterstadt"
-UNIT = re.compile(r"^(FW NR#\.\S+ \d\d) (.*?) Alarmierung:", re.M)
-STATION = re.compile(r"^Feuerwehrhaus:\s*(FW NR#\.\S+ \d\d)\s*(.*?)(?:\s+Meldebild:.*)?$", re.M)
+UNIT = re.compile(r"^(FW " + COUNTY + r"\.\S+ \d\d) (.*?) Alarmierung:", re.M)
+STATION = re.compile(r"^Feuerwehrhaus:\s*(FW " + COUNTY + r"\.\S+ \d\d)\s*(.*?)(?:\s+Meldebild:.*)?$", re.M)
 # Datensätze im BKS-Portal: der Stammdatensatz eines Einsatzes (VG, ohne Einheit) und je Einheit ein
 # Haupt- bzw. Nebenbericht, der mit "Datensatz: <ID>" auf den Stammdatensatz verweist
 REPORT_KIND = re.compile(r"^(Stammdatensatz|Hauptbericht|Nebenbericht) (\d+)", re.M)

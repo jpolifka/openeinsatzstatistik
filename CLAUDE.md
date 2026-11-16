@@ -25,7 +25,7 @@ docker run --rm -v "$PWD:/w:ro" -w /w node:22-alpine node --test tests/frontend/
 
 `static/` ist nicht gemountet, sondern ins Image kopiert. Nach Änderungen an Python- oder Frontend-Dateien ist deshalb `--build` nötig.
 
-Erfundene Testberichte (Excel-Export, wehrübergreifend, beliebige VG): `docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e PYTHONUSERBASE=/tmp/pu -v "$PWD:/w" -w /w python:3.14-slim sh -c "pip install -q --user openpyxl && python tools/gen_test_reports.py <VG> <KENNUNG> [--wehren N] [--orte A,B] [--jahr J]"` → `Einsatzberichte/Test-<VG>/` samt `_Einrichtung.txt` (Einheit, Präfix, Fahrzeuge je Wehr für die Einstellungen). Nur Kreiskürzel `NR#` (so erwarten es die Leser).
+Erfundene Testberichte (Excel-Export, wehrübergreifend, beliebige VG): `docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e PYTHONUSERBASE=/tmp/pu -v "$PWD:/w" -w /w python:3.14-slim sh -c "pip install -q --user openpyxl && python tools/gen_test_reports.py <VG> <KENNUNG> [--wehren N] [--orte A,B] [--jahr J]"` → `Einsatzberichte/Test-<VG>/` samt `_Einrichtung.txt` (Einheit, Präfix, Fahrzeuge je Wehr für die Einstellungen). Kreiskennung per `--kreis` (Standard `NR#`; Kfz-Zeichen, `#` nur bei gleichem Zeichen von Stadt und Landkreis, OPTA).
 
 Lokal ohne Docker: `DATA_DIR=daten uvicorn app.main:app --reload --port 8112`, Tests mit `pip install -r requirements-dev.txt && pytest`.
 

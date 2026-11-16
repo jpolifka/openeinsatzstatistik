@@ -10,6 +10,26 @@ import re
 # Feuerwehreinsatzzentrale (FEZ) im BKS-Bericht – Standard für neue Wehren
 CONTROL_CENTER = "FL NR#.LIN"
 
+# Kreiskennung (Kfz-Unterscheidungszeichen, OPTA) -> Landkreis bzw. kreisfreie Stadt in RLP (TMO-Gruppenmatrix v8.0.1).
+# Im Bericht trägt der Landkreis ein „#“, wenn Stadt und Landkreis dasselbe Zeichen führen (NR#, KL#, MZ#, TR#).
+COUNTIES = {
+    "AK": "Altenkirchen", "AW": "Ahrweiler", "AZ": "Alzey-Worms", "BIR": "Birkenfeld", "BIT": "Bitburg-Prüm",
+    "COC": "Cochem-Zell", "DAU": "Vulkaneifel", "DÜW": "Bad Dürkheim", "EMS": "Rhein-Lahn-Kreis",
+    "GER": "Germersheim", "KH": "Bad Kreuznach", "KIB": "Donnersbergkreis", "KL": "Kaiserslautern",
+    "KUS": "Kusel", "MYK": "Mayen-Koblenz", "MZ": "Mainz-Bingen", "NR": "Neuwied", "SIM": "Rhein-Hunsrück-Kreis",
+    "RPK": "Rhein-Pfalz-Kreis", "SÜW": "Südliche Weinstraße", "SWP": "Südwestpfalz", "WIL": "Bernkastel-Wittlich",
+    "WW": "Westerwaldkreis", "TR": "Trier-Saarburg",
+    "FT": "Frankenthal", "KO": "Koblenz", "LD": "Landau", "LU": "Ludwigshafen", "NW": "Neustadt a. d. Weinstraße",
+    "PS": "Pirmasens", "SP": "Speyer", "WO": "Worms", "ZW": "Zweibrücken",
+}
+
+
+def county_of(unit_id):
+    """Kreiskennung ohne „#“ aus einer VG-Kennung, z. B. „NR#.ABC“ -> „NR“; sonst None."""
+    code = (unit_id or "").split(".", 1)[0].rstrip("#")
+    return code or None
+
+
 # Bericht im BKS-Portal RLP; {} = Nummer des Haupt- bzw. Nebenberichts (bks_report_id)
 BKS_REPORT_URL = "https://bks-portal.rlp.de/bkslist/continue/einsatzbericht/{}?from_nid=9336"
 
