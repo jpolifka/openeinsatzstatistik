@@ -1,52 +1,111 @@
 # -*- coding: utf-8 -*-
 """
-Erfundene Einsatzberichte der VG Martin (Excel-Export des BKS-Portals) für Tests der Importstrecke.
-
-Vier Wehren („Florian Martin 1“ bis „4“, Einheit FW NR#.MAR 01 … 04), Fahrzeuge, Personen, Orte und Einsätze
-sind ausgedacht. Jeder Lauf liefert dieselben Dateien (fester Startwert). Wehrübergreifende Einsätze haben
-einen Stammdatensatz, je Wehr einen Haupt- bzw. Nebenbericht und dieselbe Einsatznummer der Leitstelle.
+Erfundene Einsatzberichte (Excel-Export des BKS-Portals) für Tests der Importstrecke – für beliebige VG.
 
 Aufruf (Docker, nichts wird lokal installiert):
-  docker run --rm -v "$PWD:/w" -w /w python:3.14-slim sh -c \
-    "pip install -q openpyxl && python tools/gen_vg_martin_reports.py Einsatzberichte/Test-VG-Martin"
+  docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e PYTHONUSERBASE=/tmp/pu -v "$PWD:/w" -w /w \
+    python:3.14-slim sh -c "pip install -q --user openpyxl && python tools/gen_test_reports.py Martin MAR"
+
+Argumente: Name der Verbandsgemeinde und Kennung (z. B. MAR, wie in „FW NR#.MAR 02“). Optional: --wehren (1–14,
+Standard 4), --orte „A,B,C“ (Namen der Wehren; Standard: erfundene Orte, die erste Wehr heißt wie die VG),
+--jahr, --ziel (Ordner), --seed.
+
+Wehr N ist „Florian <VG> N“, Einheit „FW <Kreis>.<Kennung> 0N <Ort>“. Fahrzeuge, Personen, Orte und Einsätze sind
+ausgedacht. Gleiche Argumente liefern dieselben Dateien. Wehrübergreifende Einsätze haben einen Stammdatensatz,
+je Wehr einen Haupt- bzw. Nebenbericht und dieselbe Einsatznummer der Leitstelle. Bei weniger als vier Wehren
+werden die Vorlagen zusammengelegt, bei mehr als vier verteilt. Neben den Berichten entsteht `_Einrichtung.txt`
+mit den Angaben, die man für Wehren und Fahrzeuge in der App braucht.
 """
+import argparse
 import datetime as dt
 import io
 import random
+import re
 import sys
 import zipfile
+import zlib
 from pathlib import Path
 
 import openpyxl
 
-SEED = 2026116
-CODE = "MAR"
 FIRST_NAMES = ("Anna", "Ben", "Clara", "David", "Emma", "Felix", "Greta", "Hans", "Ida", "Jonas", "Klara", "Leon",
                "Mia", "Nico", "Olga", "Paul", "Rita", "Sven", "Tina", "Uwe")
 LAST_NAMES = ("Fiktiv", "Beispiel", "Muster", "Probe", "Demo", "Sample", "Dummy", "Platzhalter", "Erfunden", "Test")
-
-# Wehr -> Name, Orte (Einsatzstellen), Fahrzeuge {Kennzahl: Nr.}, Bezeichnung nur zur Info
-WEHREN = {
-    1: ("Martin", ("Martin", "Martin-Süd", "Altstadt"),
-        {"46": 1, "23": 1, "34": 1, "11": 1, "19": 1, "65": 1, "91": 1}),
-    2: ("Oberbach", ("Oberbach", "Hasselhof", "Kreuzmühle"),
-        {"45": 1, "41": 1, "53": 1, "56": 1, "18": 1, "19": 1}),
-    3: ("Niederhausen", ("Niederhausen", "Flussau", "Weidenbruch"),
-        {"24": 1, "51": 1, "58": 1, "77": 1, "69": 1, "67": 1}),
-    4: ("Bergheim", ("Bergheim", "Hochwald", "Lindenhof"),
-        {"42": 1, "44": 1, "71": 1, "16": 1, "10": 1}),
+DEFAULT_PLACES = ("Oberbach", "Niederhausen", "Bergheim", "Waldstein", "Seeblick", "Auenhof", "Steinfeld", "Rosenthal",
+                  "Hohenfels", "Lindenau", "Mühlbach", "Neudorf", "Kirchwald")
+MAX_WEHREN = 14
+# Kreiskürzel in den Einheiten und Funkrufnamen; die Berichtsleser (pdf_report, xlsx_report) kennen nur NR#
+COUNTY = "NR#"
+# Fahrzeugausstattung: vier Profile, Wehr N nutzt Profil ((N - 1) % 4) + 1 (Kennzahl -> laufende Nr.)
+PROFILES = {
+    1: {"46": 1, "23": 1, "34": 1, "11": 1, "19": 1, "65": 1, "91": 1},
+    2: {"45": 1, "41": 1, "53": 1, "56": 1, "18": 1, "19": 1},
+    3: {"24": 1, "51": 1, "58": 1, "77": 1, "69": 1, "67": 1},
+    4: {"42": 1, "44": 1, "71": 1, "16": 1, "10": 1},
 }
+LABELS = {"10": "Kommandowagen", "11": "ELW 1", "16": "Krad", "18": "ATV", "19": "MTF", "23": "TLF 3000",
+          "24": "TLF 4000", "34": "DLK 23/12", "41": "TSF", "42": "TSF-W", "44": "MLF", "45": "LF 10",
+          "46": "HLF 20", "51": "RW 1", "53": "GW-Mess", "56": "GW-A", "58": "GW-WR", "65": "WLF",
+          "67": "SW 2000", "69": "GW-Tech", "71": "MZF 1", "77": "RTB 1", "91": "Wehrführer"}
 STREETS = ("Musterweg", "Beispielstraße", "Probegasse", "Demoallee", "Hauptstraße", "Am Sportplatz", "Bahnhofstraße",
            "Mühlenweg", "Kirchstraße", "Im Wiesengrund", "Lindenallee", "Römerstraße")
 ROLES = ("Maschinist", "Angriffstrupp", "Wassertrupp", "Schlauchtrupp", "Melder", "Gruppenführer")
 LEADERS = ("Einheitsführer", "Gruppenführer", "Zugführer")
 
 
-def pool(rng, wehr):
-    """14 erfundene Personen je Wehr (Namen sind je Wehr verschieden)."""
+class Setup:
+    """Eingaben eines Laufs und die daraus abgeleiteten Wehren."""
+
+    def __init__(self, vg, code, count, places, county, year):
+        self.vg, self.code, self.county, self.year = vg, code, county, year
+        names = list(places) or [vg, *DEFAULT_PLACES]
+        names += [n for n in DEFAULT_PLACES if n not in names]
+        self.wehren = {}
+        for i in range(1, count + 1):
+            name = names[i - 1]
+            self.wehren[i] = (name, (name, f"{name}-Nord", f"{name}-Süd"), dict(PROFILES[(i - 1) % 4 + 1]))
+
+    def sign(self, wehr, code, number):
+        return f"FL {self.county}.{self.code} {wehr:02d}/{code}-{number:02d}"
+
+    def unit(self, wehr):
+        return f"FW {self.county}.{self.code} {wehr:02d} {self.wehren[wehr][0]}"
+
+    def target(self, rng, template_wehr, shift):
+        """Wehr dieses Laufs für die Wehr der Vorlage (1–4)."""
+        n = len(self.wehren)
+        return template_wehr + shift if n >= 4 else (template_wehr - 1) % n + 1
+
+    def crews(self, rng, crews_by_wehr, place_wehr):
+        """Vorlage auf die vorhandenen Wehren abbilden: (Wehr der Einsatzstelle, {Wehr: [Kennzahlen]})."""
+        n = len(self.wehren)
+        shift = 4 * rng.randrange(0, (n - 4) // 4 + 1) if n >= 4 else 0
+        mapped = {}
+        for wehr, codes in crews_by_wehr.items():
+            target = self.target(rng, wehr, shift)
+            fleet = self.wehren[target][2]
+            keep = [c for c in codes if c in fleet and c not in mapped.get(target, [])] or \
+                ([] if target in mapped else [next(iter(fleet))])
+            mapped.setdefault(target, []).extend(keep)
+        return self.target(rng, place_wehr, shift), {w: c for w, c in mapped.items() if c}
+
+    def instructions(self):
+        lines = [f"Verbandsgemeinde {self.vg} (Kennung {self.code}, Kreis {self.county})", ""]
+        for number, (name, _places, fleet) in self.wehren.items():
+            lines += [f"Wehr {number}: Florian {self.vg} {number} – {name}",
+                      f"  Einheit (unit_marker): FW {self.county}.{self.code} {number:02d}",
+                      f"  Präfix der Fahrzeugnamen (unit_prefix): FL {self.county}.{self.code} ",
+                      f"  Eigener Block (own_prefix): {number:02d}/", "  Fahrzeuge:"]
+            lines += [f"    {self.sign(number, c, nr)}  ({LABELS.get(c, c)})" for c, nr in fleet.items()]
+            lines.append("")
+        return "\n".join(lines)
+
+
+def pool(rng, count):
+    """Je Wehr 14 erfundene Personen; Namen sind über alle Wehren verschieden."""
     names = [(last, first) for last in LAST_NAMES for first in FIRST_NAMES]
     rng.shuffle(names)
-    return names[(wehr - 1) * 40:(wehr - 1) * 40 + 14]
+    return {w: names[(w - 1) * 14:w * 14] for w in range(1, count + 1)}
 
 
 # Einsätze: (Beginn, Stichwort, Meldebild, Wehr der Einsatzstelle, Objekt, Dauer min, {Wehr: [Kennzahlen]}, Extras)
@@ -83,7 +142,7 @@ INCIDENTS = [
     (D(2026, 2, 28, 1, 30), "B3.01", "Scheunenbrand", 3, "Landwirtschaft Weidenbruch", 410,
      {3: ["24", "51", "67"], 2: ["45", "41", "56"], 1: ["34", "11", "46"], 4: ["44", "71"]},
      {"tactic": "Innenangriff", "agt": True, "out": 300, "controlled": 170, "watch_hours": 14, "injured_ff": 1,
-      "master": True, "fez": True, "foreign": "FL NR#.LIN 01/34-01"}),
+      "master": True, "fez": True, "foreign": "34"}),
     (D(2026, 4, 24, 17, 25), "H2.03", "Verkehrsunfall, Person eingeklemmt", 2, "B 999 Höhe Kreuzmühle", 96,
      {2: ["45", "41", "53"], 3: ["51", "24"]}, {"rescued": ("Schere/Spreizer/Heber", 1), "injured": 2}),
     (D(2026, 6, 20, 14, 40), "B2.08", "Wohnungsbrand, Person am Fenster", 1, "Mehrfamilienhaus Martin-Süd", 118,
@@ -125,11 +184,7 @@ def stamp(t, seconds=True):
     return t.strftime("%d.%m.%y %H:%M:%S" if seconds else "%d.%m.%y %H:%M")
 
 
-def call_sign(wehr, code, number):
-    return f"FL NR#.{CODE} {wehr:02d}/{code}-{number:02d}"
-
-
-def vehicle_rows(rng, wehr, codes, alarm, end, arrival_base, agt, deployed=1):
+def vehicle_rows(rng, setup, wehr, codes, alarm, end, arrival_base, agt, deployed=1):
     """Fahrzeugzeilen einer Wehr; Rückgabe (Zeilen, früheste Alarmierung)."""
     rows, crews = [], []
     for i, code in enumerate(codes):
@@ -145,19 +200,19 @@ def vehicle_rows(rng, wehr, codes, alarm, end, arrival_base, agt, deployed=1):
             crew = min(crew, 3)
         total = chief + sub + crew
         resp = rng.randrange(0, min(total, 4) + 1) if agt and code in ("46", "45", "24", "42", "44", "41") else 0
-        rows.append((call_sign(wehr, code, WEHREN[wehr][2][code]), chief, sub, crew, total, resp, stamp(alerted),
+        rows.append((setup.sign(wehr, code, setup.wehren[wehr][2][code]), chief, sub, crew, total, resp, stamp(alerted),
                      stamp(departed), stamp(arrived), deployed, stamp(back), stamp(finished), None))
         crews.append((code, total, alerted, departed, finished, resp))
     return rows, crews
 
 
-def people_rows(rng, members, crews, wehr):
+def people_rows(rng, setup, members, crews, wehr):
     """Anwesenheitsliste passend zur Stärke der Fahrzeuge; Werte wie im Export eine Spalte nach rechts versetzt."""
     free = list(members)
     rng.shuffle(free)
     rows, leader = [], None
     for code, total, alerted, _departed, finished, resp in crews:
-        sign = call_sign(wehr, code, WEHREN[wehr][2][code])
+        sign = setup.sign(wehr, code, setup.wehren[wehr][2][code])
         for k in range(total):
             if not free:
                 break
@@ -191,21 +246,26 @@ def main_row(values):
     return tuple(values.get(h) for h in HEADER)
 
 
-def build(target):
-    rng = random.Random(SEED)
-    members = {w: pool(rng, w) for w in WEHREN}
-    counter = {w: 0 for w in WEHREN}
-    bks_id, record_id, dispatch = 2010000, 2009000, 1260040100
+def build(setup, target, seed):
+    rng = random.Random(f"{seed}-{setup.vg}-{setup.code}")
+    members = pool(rng, len(setup.wehren))
+    counter = {w: 0 for w in setup.wehren}
+    yy = setup.year % 100
+    offset = zlib.crc32(setup.code.encode()) % 900 * 10000        # getrennte ID-Bereiche je VG
+    bks_id, record_id, dispatch = 2010000 + offset, 2009000 + offset, int(f"1{yy}0040100") + offset
+    county = setup.county.rstrip("#")
     files = []
-    for start, kw, reported_as, place_wehr, obj, minutes, crews_by_wehr, extra in sorted(INCIDENTS, key=lambda i: i[0]):
+    incidents = sorted(((i[0].replace(year=setup.year),) + i[1:] for i in INCIDENTS), key=lambda i: i[0])
+    for start, kw, reported_as, place_wehr, obj, minutes, crews_by_wehr, extra in incidents:
+        place_wehr, crews_by_wehr = setup.crews(rng, crews_by_wehr, place_wehr)
         record_id += 7
         dispatch += rng.randrange(3, 40)
-        town, district = WEHREN[place_wehr][1][0], rng.choice(WEHREN[place_wehr][1])
+        town, district = setup.wehren[place_wehr][1][0], rng.choice(setup.wehren[place_wehr][1])
         street = f"{rng.choice(STREETS)} {rng.randrange(1, 60)}" if not extra.get("bma") else f"{rng.choice(STREETS)} 1"
         end = start + dt.timedelta(minutes=minutes)
         slug = f"{start:%Y-%m-%d}_{kw.replace('.', '')}_{reported_as.split(',')[0].split()[0]}"
         common = {"Datensatz": str(record_id), "Einsatznummer Leitstelle": str(dispatch), "Einsatzstichwort": kw,
-                  "Meldebild": reported_as, "Einsatzstelle - Ort": town, "Einsatzstelle - Ortsteil": f"{district} (NR)",
+                  "Meldebild": reported_as, "Einsatzstelle - Ort": town, "Einsatzstelle - Ortsteil": f"{district} ({county})",
                   "Einsatzstelle - Straße": street, "Einsatzstelle - Objekt": obj or None,
                   "Zeitpunkt der Alarmierung der ersten Einheit": start.strftime("%d.%m.%Y %H:%M"),
                   "Einsatzabbruch": extra.get("abort"), "Nummer der Gefahrenmeldeanlage": extra.get("bma"),
@@ -228,9 +288,7 @@ def build(target):
         if extra.get("master"):
             bks_id += 1
             master = {**common, "ID": str(record_id), "Datensatz": None, "Einsatzbericht-Nr.": None}
-            for key in ("Datensatz",):
-                master[key] = None
-            files.append((f"{slug}_Stammdatensatz.xlsx", workbook(main_row({**master, "ID": str(record_id)}), [], [])))
+            files.append((f"{slug}_Stammdatensatz.xlsx", workbook(main_row(master), [], [])))
         first_alarm = start
         for index, (wehr, codes) in enumerate(crews_by_wehr.items()):
             bks_id += 1
@@ -238,32 +296,32 @@ def build(target):
             alarm = first_alarm + dt.timedelta(minutes=0 if index == 0 else rng.randrange(8, 35))
             # Fahrzeuge der anderen Wehr kommen später an, der Einsatz endet für alle etwa gleichzeitig
             arrival_base = 4 + (0 if wehr == place_wehr else 5)
-            vehicles, crews = vehicle_rows(rng, wehr, codes, alarm, end, arrival_base, extra.get("agt"),
+            vehicles, crews = vehicle_rows(rng, setup, wehr, codes, alarm, end, arrival_base, extra.get("agt"),
                                            extra.get("deployed", 1))
-            people, leader = people_rows(rng, members[wehr], crews, wehr)
+            people, leader = people_rows(rng, setup, members[wehr], crews, wehr)
             if index == 0:                                   # Hauptbericht listet auch die Fahrzeuge der anderen
                 for other, other_codes in list(crews_by_wehr.items())[1:]:
-                    rows, _ = vehicle_rows(rng, other, other_codes, alarm + dt.timedelta(minutes=12), end,
+                    rows, _ = vehicle_rows(rng, setup, other, other_codes, alarm + dt.timedelta(minutes=12), end,
                                            arrival_base + 4, extra.get("agt"), 1)
                     vehicles += rows
                 if extra.get("foreign"):                    # Überlandhilfe aus der Nachbar-VG
-                    vehicles.append((extra["foreign"], 1, 0, 2, 3, 0, stamp(alarm + dt.timedelta(minutes=30)),
+                    vehicles.append((f"FL {county}.NBV 01/{extra['foreign']}-01", 1, 0, 2, 3, 0, stamp(alarm + dt.timedelta(minutes=30)),
                                      stamp(alarm + dt.timedelta(minutes=37)), stamp(alarm + dt.timedelta(minutes=62)),
                                      1, stamp(end - dt.timedelta(minutes=20)), stamp(end - dt.timedelta(minutes=25)), None))
-            row = {**common, "ID": str(bks_id), "Feuerwehrhaus": f"FW NR#.{CODE} {wehr:02d} {WEHREN[wehr][0]}",
-                   "Name": f"FW NR#.{CODE} {wehr:02d} {WEHREN[wehr][0]}",
-                   "Einsatzbericht-Nr.": f"{counter[wehr]}/26",
+            row = {**common, "ID": str(bks_id), "Feuerwehrhaus": setup.unit(wehr), "Name": setup.unit(wehr),
+                   "Einsatzbericht-Nr.": f"{counter[wehr]}/{yy}",
                    "Haupt-/Nebenbericht": "Hauptbericht (HB)" if index == 0 else "Nebenbericht (NB)",
                    "Einsatzleiter": leader}
-            files.append((f"{slug}_Florian-Martin-{wehr}_{counter[wehr]:02d}-26.xlsx",
+            files.append((f"{slug}_Florian-{wehr}_{counter[wehr]:02d}-{yy}.xlsx",
                           workbook(main_row(row), vehicles, people)))
         if extra.get("fez"):                                 # Bericht der Leitstelle/FEZ: wird beim Import übersprungen
             bks_id += 1
-            row = {**common, "ID": str(bks_id), "Feuerwehrhaus": f"FW NR#.{CODE} 00 FEZ VG",
-                   "Name": f"FW NR#.{CODE} 00 FEZ VG", "Einsatzbericht-Nr.": "FEZ 4/2026",
+            row = {**common, "ID": str(bks_id), "Feuerwehrhaus": f"FW {setup.county}.{setup.code} 00 FEZ VG",
+                   "Name": f"FW {setup.county}.{setup.code} 00 FEZ VG", "Einsatzbericht-Nr.": f"FEZ 4/{setup.year}",
                    "Haupt-/Nebenbericht": "Nebenbericht (NB)", "Einsatzleiter": None}
             files.append((f"{slug}_FEZ.xlsx", workbook(main_row(row), [], [])))
     target.mkdir(parents=True, exist_ok=True)
+    (target / "_Einrichtung.txt").write_text(setup.instructions(), encoding="utf-8")
     for name, data in files:
         (target / name).write_bytes(data)
     with zipfile.ZipFile(target / "alle-Berichte.zip", "w", zipfile.ZIP_DEFLATED) as archive:
@@ -272,6 +330,31 @@ def build(target):
     return files
 
 
+def main():
+    ap = argparse.ArgumentParser(description="Erfundene BKS-Einsatzberichte (xlsx) für eine Verbandsgemeinde erzeugen.")
+    ap.add_argument("vg", help="Name der Verbandsgemeinde, z. B. Martin")
+    ap.add_argument("kennung", help="Kennung wie in „FW NR#.MAR 02“, z. B. MAR")
+    ap.add_argument("--wehren", type=int, default=4, help=f"Anzahl der Wehren (1–{MAX_WEHREN}, Standard 4)")
+    ap.add_argument("--orte", default="", help="Namen der Wehren, kommagetrennt (Standard: erfundene Orte)")
+    ap.add_argument("--jahr", type=int, default=2026)
+    ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--ziel", help="Ausgabeordner (Standard: Einsatzberichte/Test-<VG>)")
+    args = ap.parse_args()
+    code = args.kennung.upper()
+    if not re.fullmatch(r"[A-Z0-9ÄÖÜ]{2,6}", code):
+        ap.error("Die Kennung besteht aus 2 bis 6 Großbuchstaben oder Ziffern (z. B. MAR).")
+    if not 1 <= args.wehren <= MAX_WEHREN:
+        ap.error(f"Die Zahl der Wehren liegt zwischen 1 und {MAX_WEHREN}.")
+    if not 2000 <= args.jahr <= 2100:
+        ap.error("Das Jahr liegt zwischen 2000 und 2100.")
+    places = [p.strip() for p in args.orte.split(",") if p.strip()]
+    if len(places) > args.wehren:
+        ap.error("Es sind mehr Orte als Wehren angegeben.")
+    setup = Setup(args.vg.strip(), code, args.wehren, places, COUNTY, args.jahr)
+    target = Path(args.ziel or "Einsatzberichte/Test-" + re.sub(r"[^\w-]+", "-", args.vg.strip()))
+    files = build(setup, target, args.seed)
+    print(f"{len(files)} Dateien in {target} (Einrichtungsangaben: {target / '_Einrichtung.txt'})")
+
+
 if __name__ == "__main__":
-    out = Path(sys.argv[1] if len(sys.argv) > 1 else "Einsatzberichte/Test-VG-Martin")
-    print(f"{len(build(out))} Dateien in {out}")
+    main()
