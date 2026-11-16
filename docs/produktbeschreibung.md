@@ -48,4 +48,4 @@ Auf Wunsch Unterstützung bei Einführung und Schulung.
 
 Kontakt: Polifka IT-Beratung, In der Maar 31, 56598 Rheinbrohl · Quellcode: https://github.com/jpolifka/openeinsatzstatistik
 
-*Hinweis: Ersetzt keinen Feuerwehrbedarfsplan; Rechenregeln und Abweichungen zur Excel-Datei stehen im README.*
+*Hinweis: Ersetzt keinen Feuerwehrbedarfsplan.*

@@ -437,26 +437,6 @@ Dockerfile, docker-compose.yml, requirements.txt, requirements.lock, requirement
 CLAUDE.md          Hinweise zur Architektur für die Arbeit mit Claude Code
 ```
 
-## Abweichungen zur Excel-Einsatzübersicht
-
-Bewusste Unterschiede zu den Formeln der Excel-Datei:
-
-- Das Blatt „Auswertung“ rechnet in Excel nicht (`#WERT!`, Formelbereiche `AO4:AO7`
-  vs. `H4:H59`). Hier wird es korrekt gerechnet.
-- Einsätze ohne Eintreffzeit zählt Excel mit 0 Minuten als „erreicht“ – hier werden sie
-  in „Eintreffen und verfügbare Kräfte“ nicht berücksichtigt (die Anzahl wird angezeigt).
-  Ausnahme: Ist im BKS-Bericht ein Einsatzabbruch hinterlegt (`abort_reason`), gilt der Einsatz
-  als rechtzeitig eingetroffen; die Zeit bis zum Eintreffen bleibt leer und geht in keinen Mittelwert ein.
-- Der Gesamtwert dort ist über alle Einsätze gemittelt (Excel: Mittel der
-  vier Zeitfenster).
-- Tag/Nacht folgt überall der Excel-Regel (Spalte D): Ein Einsatzbeginn um genau 06:00:00
-  oder 18:00:00 zählt zur Nacht, auch beim Anteil „tagsüber“.
-- „Eintreffen und verfügbare Kräfte“ (früher „Feuerwehrbedarfsplan Pos. 8.4“) ist eine Eintreffquote des ersten
-  eigenen Fahrzeugs mit Personenzahlen; Funktionen, Ausrüstung und Qualifikation (FwDV 3) sind nicht erfasst. Sie
-  ersetzt keinen Feuerwehrbedarfsplan. Spalten- und Kartenbezeichnungen: Azeit → Ausrückdauer, Ezeit → Zeit bis
-  Eintreffen, EHF → Einheitsführung (auch im Excel-Export).
-- Die Zeitgrenze ist 10 Minuten (Einsatzgrundzeit nach der Feuerwehrverordnung RLP seit 26.09.2025); die frühere Auswahl 8 Minuten entfällt
-  (Spalten „10 Min. erreicht“ und „Stärke nach 10 Min.“ im Export).
 
 ## Lizenz
 
