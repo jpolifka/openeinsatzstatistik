@@ -6,6 +6,12 @@
 // noch ein Eintrag hinzu, bekommt er `version` ("JJJJ-MM-TT.2", dann .3 …); ohne `version` gilt das Datum.
 const CHANGELOG = [
   {
+    date: "2026-11-16",
+    items: [
+      "<b>openEinsatzstatistik:</b> Die Anwendung heißt jetzt so und ist freie Software (Apache-Lizenz). Unten auf jeder Seite steht ein Link zum Quellcode.",
+    ],
+  },
+  {
     date: "2026-11-14",
     version: "2026-11-14.6",
     items: [

@@ -84,6 +84,28 @@ Checkliste, bevor das Repository öffentlich wird:
 - **Haftung:** In der Lizenz steht „ohne Gewährleistung“. Wer hostet, braucht trotzdem eine Vereinbarung (AVV), die App
   bringt dafür die Vorlage mit (`templates/avv_v*.html`).
 
+## Vorbild und mögliche Partner: OpenGH
+
+[OpenGH](https://opengh.de) („Open Gerätehaus“, Einzelentwickler, AGPL-3.0) ist ein ähnlich gelagertes freies Projekt
+für Wehren einer Samtgemeinde: Termine, Mängelmeldungen, Fristen, Reservierungen. Stand der Seite im November 2026:
+
+- Software kostenlos, **selbst betreiben** oder **gehostet in drei Paketen**, benannt nach Fahrzeugen (TSF = eigene
+  Domain, LF 10 = Subdomain mit Mailserver, HLF 20 = zusätzlich Einrichtung und persönlicher Ansprechpartner).
+  Das gehostete Angebot ist „bald verfügbar“, Preise stehen nicht dort.
+- Kein Träger als juristische Person genannt, keine Aussagen zu Auftragsverarbeitung oder Verträgen.
+
+Was daraus folgt:
+
+- **Das Modell „gleiche Software, Betrieb als Paket“ ist erprobt** und passt zu uns. Eine Staffelung nach Leistungsumfang
+  (nur Betrieb, mit eigener Domain und Mail, mit Einrichtung und Ansprechpartner) ist für Wehren leicht verständlich.
+- **Wir haben einen Vorsprung bei den Pflichten:** AVV je VG, Rollen und Protokoll sind schon eingebaut; das ist für
+  gehostete Angebote an Kommunen das Entscheidende.
+- **Beide Projekte ergänzen sich** (Organisation im Gerätehaus, Auswertung der Einsätze), haben dieselben Kunden und
+  dieselbe Wehrleitung als Entscheider. Kontakt aufnehmen (info@opengh.de), Erfahrungen zu Hosting und Verträgen
+  austauschen, ggf. gemeinsam auftreten oder ein gemeinsames Hosting-Paket anbieten.
+- **Lizenz:** Code unter Apache 2.0 darf in ein AGPL-Projekt übernommen werden, umgekehrt nicht ohne Weiteres.
+  Vor einer engeren technischen Verbindung die Lizenzen klären.
+
 ## Lizenzwahl: Apache 2.0 und die Alternative
 
 | | Apache 2.0 | AGPL-3.0 |

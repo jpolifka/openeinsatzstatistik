@@ -454,6 +454,8 @@ body.drop-target::after { content: "Berichte zum Einlesen hier loslassen"; posit
 kbd { display: inline-block; min-width: 1.4em; padding: 0 5px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px;
   background: var(--light-gray); font: inherit; font-size: .85em; text-align: center; }
 .footer-logo { height: 30px; opacity: .8; }
+.footer-link { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.footer-link:hover { color: var(--brand-dark); }
 
 /* ------------------------------------------------------------ Schmal */
 @media (max-width: 1000px) {
