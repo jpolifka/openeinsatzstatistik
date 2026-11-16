@@ -1,9 +1,11 @@
-# pdf2einsatz – Einsatzstatistik FF Rheinbrohl
+# pdf2einsatz – Einsatzstatistik für Feuerwehren
 
-Weboberfläche zur Einsatzstatistik der Freiwilligen Feuerwehr Rheinbrohl:
-Einsatzbericht-PDFs aus dem BKS-Portal RLP einlesen, prüfen und in eine eigene Datenbank
-übernehmen. Die Auswertungen der bisherigen Excel-„Einsatzübersicht“ (Statistik,
-Feuerwehrbedarfsplan, Anwesenheit) rechnet die App direkt im Browser nach.
+Weboberfläche zur Einsatzstatistik für Freiwillige Feuerwehren, mandantenfähig und gruppiert nach
+Verbandsgemeinde (erste Wehr: FF Rheinbrohl): Einsatzberichte (PDF oder Excel-Export) aus dem
+BKS-Portal RLP einlesen, prüfen und in eine eigene Datenbank je Wehr übernehmen. Die Auswertungen
+der bisherigen Excel-„Einsatzübersicht“ (Statistik, „Eintreffen und verfügbare Kräfte“, Anwesenheit)
+rechnet die App aus den gespeicherten Einsätzen nach; Kennzahlen werden nie gespeichert.
+Backend: FastAPI und SQLite, Oberfläche: Vanilla-JS ohne Build-Schritt.
 
 > [!IMPORTANT]
 > Die Datenbanken enthalten Namen und Anwesenheiten der Einsatzkräfte. Vor dem Betrieb im
@@ -19,6 +21,7 @@ Feuerwehrbedarfsplan, Anwesenheit) rechnet die App direkt im Browser nach.
 - [Daten](#daten)
 - [Datenschutz](#datenschutz)
 - [Bedienung](#bedienung)
+- [Betrieb](#betrieb)
 - [Entwicklung](#entwicklung)
 - [Projektstruktur](#projektstruktur)
 - [Abweichungen zur Excel-Einsatzübersicht](#abweichungen-zur-excel-einsatzübersicht)
@@ -39,15 +42,18 @@ Feuerwehrbedarfsplan, Anwesenheit) rechnet die App direkt im Browser nach.
   Einsatzgebiet, Monate im Vorjahresvergleich, Uhrzeiten, Wochentage. *Zeiten & Kräfte*: Ausrückdauer, Anfahrtdauer
   je Fahrzeug und Zeit bis zum Eintreffen mit Median und 90. Perzentil, Kräfteaufbau nach 5/10/15 Minuten, Zeiten
   nach Tageszeit und Ort. *Belastung*: lange, nächtliche und Wochenend-Einsätze, Dauerverteilung, zeitliche
-  Überschneidung. Jede Kennzahl nennt ihre Fallzahl („42 von 57 Einsätzen auswertbar“). Jedes Diagramm ist auch
-  als Tabelle abrufbar.
+  Überschneidung. *Abbrüche & Anlagen*: Abbruchgründe und Brandmeldeanlagen (je Nummer bzw. Objekt).
+  *Fahrzeuge & Atemschutz*: alarmiert, ausgerückt, eingesetzt oder nur bereit je Fahrzeug sowie Atemschutz-
+  einsätze. *Brand & Rettung*: Zeit ab Eintreffen bis „Brand unter Kontrolle“ bzw. „Feuer aus“ und
+  betroffene Personen. Jede Kennzahl nennt ihre Fallzahl („42 von 57 Einsätzen auswertbar“); Angaben, die
+  im Bericht fehlen, zählen nie als 0 (Altdaten bekommen sie erst durch erneutes Einlesen). Jedes Diagramm
+  ist auch als Tabelle abrufbar.
 - **Einsätze** – Liste mit Suche und Filter, Details, Bearbeiten, Löschen sowie
   Excel-Export im Spaltenformat der Einsatzübersicht (A:AV + Anwesenheit). Für die VG als Unterreiter
   „Berichte abgleichen“ (früher Prüfprotokoll).
 - **Personal** – Einsatzteilnahmen: Einsätze, Beteiligung, Stunden, Nacht- und Wochenendeinsätze je Person.
-- **Online-Hilfe** – `?` im Kopf öffnet die Hilfe beim Thema der aktuellen Ansicht bzw. des offenen
-  Fensters; das `?` neben Feldern und Kennzahlen erklärt den jeweiligen Wert und springt zur passenden Stelle.
-  Im Hilfefenster stehen außerdem die **Neuigkeiten** (Änderungen für Anwender, ein Punkt am `?` zeigt
+- **Online-Hilfe** – `?` im Kopf öffnet die gesammelte Hilfe beim Thema der aktuellen Ansicht bzw. des
+  offenen Fensters (Felder und Kennzahlen haben kein eigenes Hilfesymbol). Im Hilfefenster stehen außerdem die **Neuigkeiten** (Änderungen für Anwender, ein Punkt am `?` zeigt
   ungelesene) und ein **Feedback**-Formular, das per Mail an die Superadmins (`ADMIN_EMAILS`) geht
   (nur mit Anmeldung und eingerichtetem Mailversand).
 
@@ -81,13 +87,16 @@ Code und `docker-compose.yml` enthalten keine Standardwerte. Ohne `.env` startet
 | `DKIM_SELECTOR`, `DKIM_KEY_FILE` | empfohlen | DKIM-Signatur durch die App, siehe [Mailversand](#mailversand) |
 | `DPA_*`        | für den AVV | Angaben zum Auftragnehmer, Hosting, Datensicherung, Mail-Anbieter (siehe [Datenschutz](#datenschutz)) |
 | `SECRET_KEY`   | nein        | Schlüssel für die Anmeldelinks. Leer = wird als `daten/session.key` erzeugt |
+| `APP_BIND`     | nein        | Host-Adresse der Portbindung, Standard `127.0.0.1`; `0.0.0.0` nur bei bewusst benötigtem direktem Netzwerkzugriff |
+| `APP_UID`, `APP_GID` | nein  | Container-Benutzer übersteuern (Standard: Besitzer von `daten/`, root ist nicht erlaubt) |
+| `KEEP_UPLOADS` | nein        | Fehlersuche: `1` legt jeden hochgeladenen Bericht zusätzlich in `daten/debug-reports` ab (enthält Namen, wird nach 3 Tagen gelöscht, Warnung im Log) |
 
 **Reverse Proxy:** Die App muss an der Wurzel der Domain laufen (nicht unter einem Unterpfad).
 Weiterleitungen sind relative Pfade, `X-Forwarded-*`-Header werden nicht benötigt. Bei nginx
 `client_max_body_size` für den Upload-Weg `/api/reports` auf etwa 105 MB setzen (Berichte und ZIP-Dateien, höchstens 100 MB je Upload), sonst genügen 2 MB – die App lehnt größere Anfragen an allen anderen Wegen ab (`app/request_limits.py`). Die Beispielkonfiguration in `deploy/nginx/` macht das je `location`.
 
 **Anmeldung:** Ist `ADMIN_EMAILS` gesetzt, fragt die App nach der E-Mail-Adresse und schickt
-einen Anmeldelink (15 Minuten gültig, nur einmal benutzbar). Die Sitzung hält 30 Tage und liegt serverseitig: „Abmelden“ beendet sie sofort, Superadmins können Sitzungen unter Einstellungen → Sitzungen beenden.
+einen Anmeldelink (15 Minuten gültig, nur einmal benutzbar). Die Sitzung hält höchstens 30 Tage (nach 7 Tagen ohne Nutzung endet sie früher) und liegt serverseitig: „Abmelden“ beendet sie sofort, Superadmins können Sitzungen unter Einstellungen → Sitzungen beenden.
 Wer keine Zuordnung zu einer aktiven Wehr mehr hat, ist beim nächsten Aufruf abgemeldet.
 Wird `daten/session.key` gelöscht, sind alle abgemeldet. Die früheren Variablen `APP_PASSWORD`
 und `AUTH_EMAILS` werden nicht mehr unterstützt; ist eine davon ohne `ADMIN_EMAILS` gesetzt,
@@ -314,14 +323,44 @@ gespeichert; „Drucken / PDF“ für die Ablage.
 
 Was die einzelnen Felder und Kennzahlen bedeuten, erklärt die Online-Hilfe in der App.
 
+## Betrieb
+
+- **Container:** läuft nie als root, sondern als Besitzer von `daten/` (`docker-entrypoint.sh`), mit
+  Healthcheck (`/health`, ohne Anmeldung erreichbar) und Ressourcenlimits. Der Port ist standardmäßig an
+  `127.0.0.1` gebunden (`APP_BIND`). Eine öffentliche `BASE_URL` verlangt `ADMIN_EMAILS`.
+- **Ein Worker:** Vorschauen eingelesener Berichte liegen nur im Speicher eines Prozesses (1 Stunde gültig,
+  an Benutzer und Wehr gebunden). Die App läuft deshalb mit genau einem uvicorn-Worker; horizontale
+  Skalierung braucht erst einen gemeinsamen Speicher.
+- **Einlesen:** Dateien werden in kurzlebigen Prozessen gelesen (höchstens zwei gleichzeitig, 45 Sekunden,
+  CPU- und Speicherlimit); je Upload höchstens 100 MB, je Benutzer ein Upload gleichzeitig. Die
+  Oberfläche liest im Hintergrund und fragt den Fortschritt ab, damit Proxys mit kurzem Zeitlimit
+  (Cloudflare, ca. 100 s) nicht mit 524 abbrechen.
+- **Updates:** Migrationen laufen beim Start und sind nur anhängbar; eine neuere Datenbank verhindert den
+  Start einer älteren Version (kein Downgrade). Vor jedem Update `daten/` sichern.
+- **Abhängigkeiten:** `requirements.txt` → `requirements.lock` mit SHA256-Prüfsummen (das Image installiert
+  mit `--require-hashes`); beim Ändern das Lock neu erzeugen.
+- **CI** (GitHub Actions): `checks.yml` prüft Python 3.14 (wie das Image), Lock, Sicherheitsaudit,
+  JavaScript-Syntax und Frontend-Tests; `audit.yml` wiederholt das Sicherheitsaudit wöchentlich, damit neue
+  Schwachstellen auch ohne Codeänderung auffallen.
+
+Der Stand der Härtung steht in [REVIEW_IMPLEMENTATION.md](REVIEW_IMPLEMENTATION.md) (Rückblick auf den
+Review, kein Betriebshandbuch).
+
 ## Entwicklung
 
-Code ist englisch, Kommentare und Oberfläche sind deutsch.
-
-Tests (pytest) laufen im Docker-Container:
+Code ist englisch (Bezeichner, Datenbank, API, CSS), Kommentare und Oberfläche sind deutsch. Gearbeitet wird
+mit Docker; `static/` ist nicht gemountet, sondern ins Image kopiert – nach Änderungen an Python- oder
+Frontend-Dateien ist `docker compose up -d --build` nötig.
 
 ```bash
+# Python-Tests (pytest), einzelner Test mit -k, Abdeckung mit --cov
 docker build --target test -t pdf2einsatz-test . && docker run --rm pdf2einsatz-test
+docker run --rm pdf2einsatz-test python -m pytest -q tests/test_rbac.py -k <name>
+docker run --rm pdf2einsatz-test python -m pytest -q --cov=app --cov-branch --cov-report=term-missing:skip-covered
+
+# JavaScript: Syntax und Frontend-Tests (wie in der CI)
+docker run --rm -v "$PWD/static:/s:ro" node:22-alpine node --check /s/app.js
+docker run --rm -v "$PWD:/w:ro" -w /w node:22-alpine node --test tests/frontend/*.test.cjs
 ```
 
 Lokal ohne Docker (Python 3.14):
@@ -332,6 +371,12 @@ pip install -r requirements-dev.txt
 pytest
 DATA_DIR=daten uvicorn app.main:app --reload --port 8112
 ```
+
+Konventionen: Neue Rechte stehen in `rbac.PERMISSIONS` (Zuordnung zu Systemrollen per Migration) mit
+Hilfetext `perm_…` in `help.js`; neue Endpunkte mit Einsatzdaten gehören in die Rechtematrix
+(`tests/test_access.py`). Sichtbare Änderungen bekommen einen Eintrag in `static/changelog.js`. Neue
+Einsatzfelder laufen über Migration, `incident_schema.py`, beide Leser (PDF und Excel) und `report.derive`.
+Tests und Beispiele enthalten nur erfundene Namen.
 
 ## Projektstruktur
 
@@ -360,22 +405,36 @@ app/
   admin/           Verwaltung (ein Modul je Thema): Einstellungen, Logos, Stichworte, Rollen, VGs und Wehren
   api/             Endpunkte mit Einsatzdaten: Auswertung, Einsätze, Berichte, Prüfprotokoll, Export
   importing.py     Berichte einlesen (PDF, Excel, ZIP), Zuordnung zur Wehr, Weitergabe, Nachbearbeitung
+  preview_sessions.py  Vorschauen im Speicher, Lese-Aufträge, Upload-Plätze
+  parser_worker.py Dateileser in kurzlebigen Prozessen mit Zeit- und Speicherlimit
+  bks_common.py    formatunabhängige BKS-Regeln für PDF und Excel
+  incident_schema.py gemeinsamer Feldkatalog (Formular, API, Speicherung)
+  import_queue.py  Outbox für die Nacharbeit nach dem Speichern (idempotent, mit Wiederholung)
+  tenant_lifecycle.py Wehren anlegen und archivieren (wiederaufnehmbar, nichts wird gelöscht)
+  request_limits.py Größenlimit je Weg schon beim Lesen der Anfrage
+  feedback.py      Feedback aus der Oberfläche per Mail an die Superadmins
   dpa.py           Auftragsverarbeitungsvertrag je VG (Vorlage in templates/)
   names.py, timeutil.py, holidays.py   Namensvergleich, Zeiten, Feiertage RLP
 static/
   index.html       Oberfläche
   app.js           Kern: Zustand, Hilfsfunktionen, Diagramme, Reiter, Ereignisse, Tastenkürzel
   evaluation.js    Ansicht Einsatzgeschehen
+  analysis.js      Übersicht, Zeiten & Kräfte, Belastung
+  operations.js    Abbrüche & Anlagen, Fahrzeuge & Atemschutz, Brand & Rettung
   incident_list.js, incident_detail.js   Einsatzliste, Detail, Bearbeiten, Löschen
   members.js, keyword_search.js          Personal, Stichwortsuche im Formular
+  imports.js       Berichte einlesen: Darstellung und Zustand
   records.js       Hinweise an die Wehr, Ansicht Prüfprotokoll
-  admin.js         Ansicht Verwaltung
+  admin.js, admin_views.js   Verwaltung: Aktionen und Zustand, Darstellung
   dpa.js           Ansicht Auftragsverarbeitung
   help.js          Texte und Logik der Online-Hilfe
+  changelog.js     Neuigkeiten für Anwender
   app.css          Gestaltung
   fonts/, img/     Schrift Sansation (SIL OFL), neutrales Signet
-tests/             pytest (nur erfundene Daten)
-Dockerfile, docker-compose.yml, requirements.txt, requirements-dev.txt
+tests/             pytest (nur erfundene Daten), tests/frontend/ Zustandstests der Oberfläche (node --test)
+deploy/nginx/      Beispielkonfiguration für den Reverse Proxy
+Dockerfile, docker-compose.yml, requirements.txt, requirements.lock, requirements-dev.txt
+CLAUDE.md          Hinweise zur Architektur für die Arbeit mit Claude Code
 ```
 
 ## Abweichungen zur Excel-Einsatzübersicht
@@ -404,9 +463,3 @@ Bewusste Unterschiede zu den Formeln der Excel-Datei:
 Internes Werkzeug der Freiwilligen Feuerwehr Rheinbrohl – keine Lizenz zur Weitergabe.
 Die Schrift Sansation steht unter der SIL Open Font License; die Logos sind Eigentum der
 FF Rheinbrohl.
-# Review-Härtung und Rollout
-
-Der Branch `fix/comprehensive-review` enthält Sicherheits-, Daten- und UI-Korrekturen.
-Umsetzungsstand, verbleibende Arbeiten und wichtige Hinweise zu Datenbanksicherung,
-Schema-Versionen, Container-Benutzer und Portbindung stehen in
-[REVIEW_IMPLEMENTATION.md](REVIEW_IMPLEMENTATION.md).
