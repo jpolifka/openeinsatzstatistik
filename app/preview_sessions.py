@@ -1,11 +1,14 @@
 """Begrenzte, benutzergebundene Importvorschauen mit explizitem Abbruch."""
 import contextlib
 import json
+import logging
 import threading
 import time
 import uuid
 
 from fastapi import HTTPException
+
+log = logging.getLogger("pdf2einsatz")
 
 
 # ---------------------------------------------------------------- PDF-Vorschau im Speicher
@@ -130,7 +133,8 @@ class ReadJobs:
                     job["error"] = (e.status_code, e.detail)
             except Exception as e:  # unerwartet: melden statt still hängen
                 with self._lock:
-                    job["error"] = (500, str(e) or type(e).__name__)
+                    log.exception("Lesevorgang fehlgeschlagen")
+                    job["error"] = (500, "Beim Einlesen ist ein Fehler aufgetreten. Bitte erneut versuchen.")
 
         threading.Thread(target=run, daemon=True, name=f"read-{job_id[:8]}").start()
         return job_id

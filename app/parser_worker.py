@@ -6,6 +6,7 @@ import multiprocessing
 import sys
 import threading
 
+GENERIC_ERROR = "Die Datei konnte nicht gelesen werden. Ist es ein Einsatzbericht aus dem BKS-Portal?"
 MAX_SECONDS = 45
 MAX_RESULT_BYTES = 32 * 1024 * 1024
 WORKERS = 2                                      # Dateien, die gleichzeitig gelesen werden
@@ -70,7 +71,9 @@ def _child(connection, kind, path):
         result = read_local(kind, path)
         connection.send_bytes(json.dumps({"ok": True, "result": encode(result)}).encode())
     except Exception as error:
-        connection.send_bytes(json.dumps({"ok": False, "result": str(error) or type(error).__name__}).encode())
+        # Nur eigene Fachmeldungen (ValueError) gehen an den Benutzer; alles andere ist intern
+        message = str(error) if isinstance(error, ValueError) and str(error) else GENERIC_ERROR
+        connection.send_bytes(json.dumps({"ok": False, "result": message}).encode())
     finally:
         connection.close()
 

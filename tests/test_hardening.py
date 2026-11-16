@@ -210,3 +210,61 @@ def test_pending_reports_are_capped_per_tenant(client, monkeypatch):
     importing.forward(tenant, head, "a.pdf", b"%PDF-1", "m.muster@example.org")
     with pytest.raises(ValueError, match="schon viele"):
         importing.forward(tenant, {**head, "bks_report_id": "2"}, "b.pdf", b"%PDF-2", "m.muster@example.org")
+
+
+def test_idle_session_expires(data_dir):
+    import time
+    from types import SimpleNamespace
+    make_tenant("wehr-a1")
+    grant("m.muster@example.org", "viewer", 1)
+    token = auth.create_session("m.muster@example.org")
+    request = SimpleNamespace(cookies={auth.COOKIE: token}, state=SimpleNamespace())
+    assert auth._lookup_session(request)
+    with tenancy.central() as con:
+        con.execute("UPDATE session SET last_seen = ?", (time.time() - auth.SESSION_IDLE - 10,))
+    assert auth._lookup_session(request) is None
+
+
+def test_total_mail_volume_does_not_block_other_addresses(monkeypatch, data_dir):
+    monkeypatch.setattr(tenancy, "ADMIN_EMAILS", {"a@example.org", "b@example.org"})
+    monkeypatch.setattr(auth, "_key", None)
+    monkeypatch.setattr(auth, "_last_mail", {})
+    monkeypatch.setattr(auth, "_sent", [(time.time(), f"x{i}@example.org") for i in range(300)])
+    monkeypatch.setattr(mail, "SMTP_HOST", "smtp.example.org")
+    sent = []
+    monkeypatch.setattr(mail, "send", lambda *args, **kwargs: sent.append(args[0]))
+    monkeypatch.setattr(auth, "BASE_URL", "https://einsatz.example.org")
+    auth.send_link("b@example.org")
+    assert sent == ["b@example.org"]
+
+
+def test_internal_parser_errors_are_not_shown(monkeypatch):
+    from app import parser_worker
+
+    class Conn:
+        sent = None
+        def send_bytes(self, data): Conn.sent = data
+        def close(self): pass
+
+    def boom(kind, path): raise RuntimeError("/srv/app/intern.py kaputt")
+    monkeypatch.setattr(parser_worker, "read_local", boom)
+    parser_worker._child(Conn(), "pdf", "x")
+    assert b"intern" not in Conn.sent and parser_worker.GENERIC_ERROR.encode()[:10] in Conn.sent
+
+
+def test_kept_uploads_need_flag_and_expire(monkeypatch, tmp_path):
+    import os
+    from app import importing
+    monkeypatch.setattr(db, "DATA_DIR", str(tmp_path))
+    source = tmp_path / "b.pdf"
+    source.write_bytes(b"x")
+    importing.keep_for_debug([("b.pdf", str(source))])
+    assert not (tmp_path / "debug-reports").exists()
+    monkeypatch.setenv("KEEP_UPLOADS", "1")
+    folder = tmp_path / "debug-reports"
+    folder.mkdir()
+    old = folder / "alt.pdf"
+    old.write_bytes(b"x")
+    os.utime(old, (1, 1))
+    importing.keep_for_debug([("b.pdf", str(source))])
+    assert not old.exists() and len(list(folder.iterdir())) == 1

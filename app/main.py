@@ -74,6 +74,9 @@ async def lifespan(_app):
     stop = asyncio.Event()
     worker = asyncio.create_task(import_queue.run_worker(stop, active_tenants, importing.after_import))
     mail.log_check()
+    if importing.keeping_uploads():
+        log.warning("KEEP_UPLOADS ist gesetzt: Berichte mit Namen werden %s Tage in debug-reports abgelegt. "
+                    "Nur zur Fehlersuche verwenden.", importing.KEEP_UPLOADS_DAYS)
     try:
         yield
     finally:
@@ -97,14 +100,14 @@ for _module in (evaluation, incidents, reports, records, export):
     app.include_router(_module.router)
 
 # Ohne Anmeldung erreichbar: Health-Check, Anmeldeseiten und Logos/CSS/JS (keine Einsatzdaten)
-PUBLIC_PATHS = ("/health", "/login", "/logout", "/auth/", "/static/")
+PUBLIC_PATHS = ("/health", "/login", "/logout")
 
 
 @app.middleware("http")
 async def require_login(request: Request, call_next):
     """Anmeldung per Magic Link, wenn ADMIN_EMAILS gesetzt ist (siehe auth.py)."""
     path = request.scope["path"]
-    public = path in ("/health", "/login", "/logout") or path.startswith(("/auth/", "/static/"))
+    public = path in PUBLIC_PATHS or path.startswith(("/auth/", "/static/"))
     if auth.enabled() and not public and not auth.current_user(request):
         # Direkt im Browser geöffnete API-Adressen (z. B. Export) auch zur Anmeldeseite
         if path.startswith("/api/") and "text/html" not in request.headers.get("accept", ""):
