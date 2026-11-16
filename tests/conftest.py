@@ -48,12 +48,12 @@ def data_dir(tmp_path, monkeypatch):
     return tmp_path
 
 
-def make_tenant(slug, vg="vg-a", cfg=CFG, name=None, dpa="signed"):
+def make_tenant(slug, vg="vg-a", cfg=CFG, name=None, dpa="signed", kind="vg"):
     """Wehr (und bei Bedarf ihre VG) anlegen -> (vg_id, tenant_id). Eine neue VG bekommt den AVV-Status
     dpa (Standard: liegt vor, damit die Wehr nutzbar ist; None = ausstehend wie in Betrieb)."""
     with tenancy.central() as con:
         row = con.execute("SELECT id FROM vg WHERE slug = ?", (vg,)).fetchone()
-        vg_id = row["id"] if row else tenancy.create_vg(con, vg, f"VG {vg}")
+        vg_id = row["id"] if row else tenancy.create_vg(con, vg, f"VG {vg}", kind)
         if not row and dpa:
             con.execute("INSERT INTO dpa (vg_id, status) VALUES (?, ?)", (vg_id, dpa))
         name = name or f"Wehr {slug}"

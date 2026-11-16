@@ -52,7 +52,7 @@ def test_old_memberships_are_migrated(tmp_path):
     roles = rbac.Roles(con)
     lead = roles.find("lead", 1)
     assert {rbac.STATS, rbac.PEOPLE, rbac.SETTINGS} <= roles.permissions(lead.id)        # geerbt über Erfasser
-    assert {r.key for r in roles if r.id in roles.grants(lead.id)} == {"editor", "viewer"}
+    assert {r.key for r in roles if r.id in roles.grants(lead.id)} == {"editor", "viewer", "deputy_lead"}
     assert rbac.PEOPLE not in roles.permissions(roles.find("vg_lead", 1).id)
     con.close()
 
@@ -113,9 +113,6 @@ def test_role_changes_apply_immediately(world):
 def test_guardrails(world):
     _as(world, "vglead@example.org")
     roles = _roles(world)
-    # Anwesenheit nie für VG-Rollen
-    response = _role(world, label="Namen", scope="vg", permissions=[rbac.PEOPLE])
-    assert response.status_code == 422 and "nur für Rollen einer Wehr" in response.json()["detail"]
     # Gesamtansicht nur für VG-Rollen
     assert _role(world, label="Übersicht", permissions=[rbac.VG_OVERVIEW]).status_code == 422
     # Erben nur im selben Bereich
@@ -195,7 +192,7 @@ def test_effective_permissions_show_origin(world):
     areas = world.get("/api/admin/users/effective", params={"email": "lead@example.org"}).json()["areas"]
     a1 = next(a for a in areas if a["name"] == "Wehr wehr-a1")
     stats = next(p for p in a1["permissions"] if p["key"] == rbac.STATS)
-    assert stats["from"] == ["Wehrführer (Wehr wehr-a1)", "Statistik VG (VG vg-a)"]
+    assert stats["from"] == ["Wehrführer/in (Wehr wehr-a1)", "Statistik VG (VG vg-a)"]
     # Der Wehrführer sieht nur seine Wehr, nicht die anderen
     _as(world, "lead@example.org")
     names = [a["name"] for a in world.get("/api/admin/users/effective",

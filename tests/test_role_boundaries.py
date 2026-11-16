@@ -33,17 +33,17 @@ def _roles(client):
     return {r["key"]: r for r in client.get("/api/admin/roles").json()["roles"]}
 
 
-def test_people_permissions_cannot_be_added_to_vg_role_afterwards(world):
-    """Die Leitplanke gilt beim Ändern einer bestehenden VG-Rolle, nicht nur beim Anlegen."""
+def test_vg_only_permissions_cannot_be_added_to_tenant_role_afterwards(world):
+    """Reine VG-Rechte (Gesamtansicht …) gibt es nur für VG-Rollen – auch beim Ändern einer Wehr-Rolle."""
     _as(world, "vglead@example.org")
-    created = world.post("/api/admin/roles", json={"label": "Auswertung", "scope": "vg", "vg": "vg-a",
+    created = world.post("/api/admin/roles", json={"label": "Auswertung", "scope": "tenant", "vg": "vg-a",
                                                    "permissions": [rbac.STATS]})
     assert created.status_code == 200
     role = _roles(world)["auswertung"]
-    response = world.put(f"/api/admin/roles/{role['id']}", json={"label": "Auswertung", "scope": "vg",
-                                                                "permissions": [rbac.STATS, rbac.PEOPLE]})
+    response = world.put(f"/api/admin/roles/{role['id']}", json={"label": "Auswertung", "scope": "tenant",
+                                                                "permissions": [rbac.STATS, rbac.VG_OVERVIEW]})
     assert response.status_code == 422
-    assert rbac.PEOPLE not in _roles(world)["auswertung"]["permissions"]
+    assert rbac.VG_OVERVIEW not in _roles(world)["auswertung"]["permissions"]
 
 
 def test_nobody_but_superadmin_grants_themselves_a_role(world):

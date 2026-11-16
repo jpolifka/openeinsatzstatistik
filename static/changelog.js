@@ -7,6 +7,15 @@
 const CHANGELOG = [
   {
     date: "2026-11-16",
+    version: "2026-11-16.2",
+    items: [
+      "<b>Rollen wie im BKS-Portal:</b> Neue Funktionen als Rollen: Stellv. Wehrführer/in, Stellv. Wehrleiter/in, Brand- und Katastrophenschutzinspekteur/in (und Stellvertretung), Sachbearbeiter/in Brand- u. KatS bzw. Feuerwehr, FEZ der VG sowie Leitstellenleitung und -personal. „Erfasser“ heißt jetzt „Bearbeiter/in Einsatzberichte“. Die Rechte bestehender Zuordnungen ändern sich nicht.",
+      "<b>Aufgabenträger:</b> Eine VG ist jetzt Verbandsgemeinde, kreisfreie Stadt, Landkreis oder Leitstelle (Einstellungen → Verbandsgemeinden). Die Art bestimmt, welche Rollen dort vergeben werden können.",
+      "<b>Personen in Rollen der VG:</b> Anwesenheit und Personal lassen sich jetzt auch einer Rolle der VG geben. Die neuen Funktionsrollen haben dieses Recht; Wehrleiter/in und Statistik VG unverändert nicht.",
+    ],
+  },
+  {
+    date: "2026-11-16",
     items: [
       "<b>openEinsatzstatistik:</b> Die Anwendung heißt jetzt so und ist freie Software (AGPL-Lizenz). Unten auf jeder Seite steht ein Link zum Quellcode.",
       "<b>Neue Standardfarben:</b> Ohne eigene Wehrfarbe erscheint die Oberfläche jetzt in Bordeaux mit Sand für Tabellen, wie in den Schulungsunterlagen des Landes. Hinweise und Fehler sind signalorange. Wehren mit eigener Farbe sehen nur die neuen Hinweisfarben.",

@@ -578,13 +578,13 @@ const HELP_SECTIONS = [
       },
       perm_people_view: {
         title: "Anwesenheit und Personal sehen",
-        short: "Namen der Personen, Anwesenheit je Einsatz und Reiter Personal. Nur für Rollen einer Wehr.",
-        text: "Namen der Personen, Anwesenheit je Einsatz und Reiter Personal. Nur für Rollen einer Wehr.",
+        short: "Namen der Personen, Anwesenheit je Einsatz und Reiter Personal.",
+        text: "Namen der Personen, Anwesenheit je Einsatz und Reiter Personal. In einer Rolle der VG gilt das für alle Wehren der VG – nur bei Funktionen vergeben, die diese Namen wirklich brauchen.",
       },
       perm_people_edit: {
         title: "Anwesenheit bearbeiten",
-        short: "Anwesenheit eines Einsatzes ändern und Personen ergänzen. Nur für Rollen einer Wehr.",
-        text: "Anwesenheit eines Einsatzes ändern und Personen ergänzen. Nur für Rollen einer Wehr.",
+        short: "Anwesenheit eines Einsatzes ändern und Personen ergänzen.",
+        text: "Anwesenheit eines Einsatzes ändern und Personen ergänzen. In einer Rolle der VG gilt das für alle Wehren der VG.",
       },
       perm_tenant_settings: {
         title: "Einstellungen, Fahrzeuge, Farben, Logos und Schrift",

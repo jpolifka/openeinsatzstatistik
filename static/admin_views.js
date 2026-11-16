@@ -818,18 +818,23 @@ function rolePayload() {
 }
 
 // ------------------------------------------------------------ Superadmin: Wehren und VGs
+const VG_KINDS = { vg: "Verbandsgemeinde / verbandsfrei", city: "Kreisfreie Stadt", district: "Landkreis", dispatch: "Leitstelle" };
+const kindOptions = (current) => Object.entries(VG_KINDS).map(([k, label]) => `<option value="${k}" ${k === current ? "selected" : ""}>${label}</option>`).join("");
+
 function superSection() {
   const { vgs, tenants } = admin.superOverview;
   const vgOptions = (current) => vgs.map((v) => `<option value="${esc(v.slug)}" ${v.slug === current ? "selected" : ""}>${esc(v.name)}</option>`).join("");
   return `${admin.superOverview.pending_archives?.length ? `<div class="message message-info">Archivierung noch offen: ${admin.superOverview.pending_archives.map(esc).join(", ")}. Die Wehren sind gesperrt; automatische Wiederholung jede Minute. Daten und Zuordnungen bleiben bis zur erfolgreichen Sicherung erhalten.</div>` : ""}<h3>Verbandsgemeinden</h3>
-    <div class="table-wrap"><table class="mini-table admin-table"><thead><tr><th>Kurzname</th><th>Name</th><th>AVV</th><th></th></tr></thead><tbody>
+    <div class="table-wrap"><table class="mini-table admin-table"><thead><tr><th>Kurzname</th><th>Name</th><th>Art</th><th>AVV</th><th></th></tr></thead><tbody>
       ${vgs.map((v) => `<tr><td>${esc(v.slug)}</td><td><input type="text" data-vg-name="${esc(v.slug)}" value="${esc(v.name)}"></td>
+        <td><select data-vg-kind="${esc(v.slug)}">${kindOptions(v.kind)}</select></td>
         <td><a href="#dpa" class="tenant-badge dpa-${v.dpa}">${{ pending: "ausstehend", draft: "ausgefüllt", signed: "liegt vor", revoked: "zurückgenommen", not_required: "nicht erforderlich" }[v.dpa]}</a></td>
         <td><button type="button" class="btn btn-outline btn-small" data-admin-action="rename-vg" data-slug="${esc(v.slug)}">Umbenennen</button></td></tr>`).join("")}
     </tbody></table></div>
     <div class="form-grid section-gap">
       ${adminField("Kurzname", `<input type="text" id="vg-slug" placeholder="vg-musterstadt" maxlength="40">`)}
-      ${adminField("Name", `<input type="text" id="vg-name" placeholder="VG Musterstadt">`, "span-3")}
+      ${adminField("Name", `<input type="text" id="vg-name" placeholder="VG Musterstadt">`, "span-2")}
+      ${adminField("Art", `<select id="vg-kind">${kindOptions("vg")}</select>`)}
       <div class="field"><span>&nbsp;</span><button type="button" class="btn btn-light" data-admin-action="create-vg">VG anlegen</button></div>
     </div>
     <h3 class="section-gap">Wehren</h3>
