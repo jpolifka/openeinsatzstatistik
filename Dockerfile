@@ -12,7 +12,7 @@ RUN pip install --no-cache-dir --require-hashes -r requirements.lock
 COPY app ./app
 COPY static ./static
 
-# Tests: docker build --target test -t pdf2einsatz-test . && docker run --rm pdf2einsatz-test
+# Tests: docker build --target test -t openeinsatzstatistik-test . && docker run --rm openeinsatzstatistik-test
 FROM base AS test
 COPY requirements-dev.txt pytest.ini ./
 RUN pip install --no-cache-dir -r requirements-dev.txt

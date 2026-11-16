@@ -1,11 +1,12 @@
-name: pdf2einsatz
+# Projektname und Netzwerk heißen aus Kompatibilität mit bestehenden Installationen weiter „openEinsatzstatistik“
+name: openEinsatzstatistik
 
 services:
   einsatzberichte:
     build:
       context: .
       target: app
-    image: pdf2einsatz-web
+    image: openeinsatzstatistik-web
     container_name: einsatzberichte
     ports:
       - "${APP_BIND:-127.0.0.1}:${APP_PORT:?APP_PORT fehlt in .env (Vorlage: .env.example)}:8112"
@@ -35,8 +36,8 @@ services:
     security_opt:
       - no-new-privileges:true
     networks:
-      - pdf2einsatz
+      - openEinsatzstatistik
 
 networks:
-  pdf2einsatz:
-      name: pdf2einsatz
+  openEinsatzstatistik:
+      name: openEinsatzstatistik

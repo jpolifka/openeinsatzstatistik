@@ -30,7 +30,7 @@ import dns.resolver
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-log = logging.getLogger("pdf2einsatz")
+log = logging.getLogger("openeinsatzstatistik")
 
 SMTP_HOST = os.environ.get("SMTP_HOST", "")
 SMTP_PORT = int(os.environ.get("SMTP_PORT") or 0)

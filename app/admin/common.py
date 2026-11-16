@@ -7,7 +7,7 @@ from fastapi import HTTPException
 from app import auth, tenancy
 from app.rbac import VG_FEES
 
-log = logging.getLogger("pdf2einsatz")
+log = logging.getLogger("openeinsatzstatistik")
 
 access = auth.access
 

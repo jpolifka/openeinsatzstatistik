@@ -31,7 +31,7 @@ from app.api import evaluation, export, incidents, records, reports
 from app.api.common import selection_config
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-log = logging.getLogger("pdf2einsatz")
+log = logging.getLogger("openeinsatzstatistik")
 
 
 class _MaskLoginToken(logging.Filter):

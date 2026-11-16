@@ -54,7 +54,7 @@ def test_check_reports_unreachable_dns(smtp, monkeypatch):
 
 def test_log_check_logs_each_result(smtp, monkeypatch, caplog):
     monkeypatch.setattr(mail, "txt", _dns({"example.org": ["v=spf1 a"]}))
-    with caplog.at_level("INFO", logger="pdf2einsatz"):
+    with caplog.at_level("INFO", logger="openeinsatzstatistik"):
         mail.log_check()
     assert any("Mailversand: SPF" in r.message for r in caplog.records)
     monkeypatch.setattr(mail, "SMTP_HOST", "")
@@ -144,7 +144,7 @@ def test_second_link_request_within_cooldown_sends_nothing(data_dir, monkeypatch
     monkeypatch.setattr(auth, "_key", b"k")
     auth._last_mail.clear()
     auth._sent.clear()
-    with caplog.at_level("WARNING", logger="pdf2einsatz"):
+    with caplog.at_level("WARNING", logger="openeinsatzstatistik"):
         auth.send_link("admin@example.org")
         auth.send_link("admin@example.org")
     assert sum("Anmeldelink für admin@example.org" in r.message for r in caplog.records) == 1
@@ -192,7 +192,7 @@ def test_start_warns_about_ignored_legacy_emails(data_dir, monkeypatch, caplog):
     monkeypatch.setenv("AUTH_EMAILS", "m.muster@example.org")
     monkeypatch.setattr(tenancy, "ADMIN_EMAILS", {"admin@example.org"})
     monkeypatch.setattr(auth, "BASE_URL", "http://localhost")
-    with caplog.at_level("WARNING", logger="pdf2einsatz"):
+    with caplog.at_level("WARNING", logger="openeinsatzstatistik"):
         with TestClient(main.app):
             pass
     assert any("AUTH_EMAILS wird ignoriert" in r.message for r in caplog.records)

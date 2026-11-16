@@ -16,7 +16,7 @@ import sqlite3
 from app import db, tenancy
 from app.tenant_config import TenantConfig
 
-log = logging.getLogger("pdf2einsatz")
+log = logging.getLogger("openeinsatzstatistik")
 
 LEGACY_FILE = "einsaetze.db"
 BACKUP_FILE = "einsaetze-vor-mandanten.db"

@@ -2,14 +2,14 @@
 #   docker compose -f docker-compose.demo.yml up --build     → http://localhost:8113
 # Die Anmeldung ist aus (jeder gilt als Superadmin), die Daten liegen nur im Container und sind beim
 # Beenden weg. Zurücksetzen = Container neu starten.
-name: pdf2einsatz-demo
+name: openeinsatzstatistik-demo
 
 services:
   demo:
     build:
       context: .
       target: app
-    image: pdf2einsatz-web
+    image: openeinsatzstatistik-web
     ports:
       - "127.0.0.1:8113:8112"
     environment:

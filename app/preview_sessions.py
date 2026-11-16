@@ -8,7 +8,7 @@ import uuid
 
 from fastapi import HTTPException
 
-log = logging.getLogger("pdf2einsatz")
+log = logging.getLogger("openeinsatzstatistik")
 
 
 # ---------------------------------------------------------------- PDF-Vorschau im Speicher

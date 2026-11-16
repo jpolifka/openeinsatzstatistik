@@ -29,7 +29,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app import db, mail, tenancy, theme
 
-log = logging.getLogger("pdf2einsatz")
+log = logging.getLogger("openeinsatzstatistik")
 
 BASE_URL = os.environ.get("BASE_URL", "").rstrip("/")
 SECRET_KEY = os.environ.get("SECRET_KEY", "")

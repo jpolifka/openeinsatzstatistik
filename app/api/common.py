@@ -13,7 +13,7 @@ from fastapi import HTTPException
 from app import auth, domain, metrics, report, store
 from app.rbac import DELETE, PEOPLE, PEOPLE_EDIT, PLAN_VIEW, WRITE
 
-log = logging.getLogger("pdf2einsatz")
+log = logging.getLogger("openeinsatzstatistik")
 access = auth.access
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 previews = PreviewSessions()

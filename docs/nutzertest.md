@@ -129,7 +129,7 @@ Bericht (Namen ersetzt, Adressen geschwärzt), der als Testfall in `tests/` land
 
 ## Einwilligung (Vorlage)
 
-> Ich nehme freiwillig an einem Test der Software „pdf2einsatz“ teil. Notizen und, falls vereinbart, Bildschirm- und
+> Ich nehme freiwillig an einem Test der Software „openEinsatzstatistik“ teil. Notizen und, falls vereinbart, Bildschirm- und
 > Tonaufnahmen dienen nur der Verbesserung der Software, werden nicht weitergegeben und nach der Auswertung, spätestens
 > nach drei Monaten, gelöscht. In Berichten vorkommende Namen werden nicht aufgezeichnet. Ich kann jederzeit abbrechen.
 >
