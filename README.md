@@ -460,6 +460,11 @@ Bewusste Unterschiede zu den Formeln der Excel-Datei:
 
 ## Lizenz
 
-Internes Werkzeug der Freiwilligen Feuerwehr Rheinbrohl – keine Lizenz zur Weitergabe.
-Die Schrift Sansation steht unter der SIL Open Font License; die Logos sind Eigentum der
-FF Rheinbrohl.
+Der Quellcode steht unter der [Apache License 2.0](LICENSE) (Hinweise in [NOTICE](NOTICE)): Er darf frei
+genutzt, verändert und weitergegeben werden, auch von Gemeinden und Verbänden im eigenen Betrieb.
+Ausgenommen sind Logos und Namen von Feuerwehren (u. a. `app/legacy_assets/`); sie gehören den jeweiligen Wehren.
+Die Schrift Sansation steht unter der SIL Open Font License.
+
+Mitmachen und Sicherheitsmeldungen: [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md).
+Demo mit erfundenen Daten: `docker compose -f docker-compose.demo.yml up --build` → http://localhost:8113.
+Nutzertests und Verbreitung: [docs/](docs/).
