@@ -11,7 +11,7 @@ colors:
   brand-light: "#E9D6CE"
   brand-pale: "#F5ECE8"
   signal: "#D46E3B"
-  text: "#333333"
+  text: "#2B1A1D"
   gray: "#6B6B6B"
   light-gray: "#F2F2F2"
   white: "#FFFFFF"
@@ -19,9 +19,9 @@ colors:
   field-line: "#858585"
   gridline: "#ECECEC"
   track: "#F0E3DD"
-  series: "#4A4A4A"
-  series-night: "#2E2E2E"
-  series-previous: "#8F8F8F"
+  series: "#6E6460"
+  series-night: "#4A403C"
+  series-previous: "#8A817C"
   ok-bg: "#E3F1E6"
   ok-text: "#1E5A2C"
   warn-bg: "#FBEBE2"
@@ -186,7 +186,7 @@ Eine Kennfarbe in Abstufungen (Standard: Bordeaux), dazu Sand für Flächen, Sig
 - **Sandpapier** (#F5ECE8, `--brand-pale`): Seitenhintergrund.
 - **Sand** (#E9D6CE, `--brand-light`): Tabellenzeilen, Schlüsselwort-Chips, dezente Kacheln.
 - **Kartenweiß** (#FFFFFF): Karten, Eingaben, Dialoge.
-- **Tintengrau** (#333333, `--text`): Fließtext.
+- **Tinte** (#2B1A1D, `--text`): Fließtext.
 - **Beschriftungsgrau** (#6B6B6B, `--gray`): Sekundärtext; 4,8:1 auf hellem Grau.
 - **Haarlinie** (#E4E4E4, `--line`): Trennlinien in Karten und Tabellen; Raster in #ECECEC. Nicht für Bedienelemente.
 - **Feldlinie** (#858585, `--field-line`): Rahmen von Eingaben, Auswahlfeldern, Suchfeld, Farbwahl und Outline-Knöpfen; 3,7:1 auf Weiß, etwa 3:1 auf Sandpapier.
@@ -292,7 +292,7 @@ Abgerundete, freundliche Formen mit gestaffelten Radien: 6 px (Chips), 8 px (Ein
 - **Rückfrage** (`askConfirm`): schmaler Dialog (460 px) statt `window.confirm`/`alert`. Die Knöpfe nennen die Folge („Vorschauen verwerfen“), bei zerstörerischen Aktionen ist der Fokus auf „Abbrechen“ und der Bestätigen-Knopf fehlerrot. Fehler nach einer Aktion nennen, was nicht geschehen ist, die Ursache und den nächsten Schritt (`reportError`).
 
 ### Diagramme (Signatur)
-- Balkenlisten mit Beschriftung links, Wert rechts, dünner Bezugslinie; Säulen bis 24 px Breite. Reihen sind neutral und gehören nicht zum Wehr-Theme: `--series` (Graphit #4A4A4A), Tag `--day` (#8F8F8F), Nacht `--night` (#2E2E2E), Vorjahr `--previous` (#8F8F8F), alle mindestens 3:1 auf Weiß. Rot der Wehr gehört dem, worauf es ankommt (Erreichungsgrad, Fokus, Zeitstrahl). Beschriftungen immer in `--gray`.
+- Balkenlisten mit Beschriftung links, Wert rechts, dünner Bezugslinie; Säulen bis 24 px Breite. Reihen sind neutral und gehören nicht zum Wehr-Theme: `--series` (Warmgrau #6E6460), Tag `--day` (#8A817C), Nacht `--night` (#4A403C), Vorjahr `--previous` (#8A817C), alle mindestens 3:1 auf Weiß. Rot der Wehr gehört dem, worauf es ankommt (Erreichungsgrad, Fokus, Zeitstrahl). Beschriftungen immer in `--gray`.
 
 ## Do's and Don'ts
 

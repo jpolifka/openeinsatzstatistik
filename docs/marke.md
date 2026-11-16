@@ -48,7 +48,7 @@ Die Farben folgen den Schulungsunterlagen des Landesamts für Brand- und Katastr
 | Signal | Signalorange | `#D46E3B` | Hinweise und Fehler (Linie, Symbol, getönte Fläche), die Flamme im Zeichen |
 | Text | Tinte | `#2B1A1D` | Text, nie reines Schwarz |
 | Status | Waldgrün | `#1E5A2C` auf `#E3F1E6` | „erledigt“ |
-| Daten | Graphit | Grautöne | Diagramme, unabhängig von der Markenfarbe |
+| Daten | Warmgrau | gedämpfte Grautöne (#6E6460, #4A403C, #8A817C) | Diagramme, unabhängig von der Markenfarbe |
 
 Abgeleitet (App und Material): Bordeaux gedämpft `#8C414C` (Tabellenköpfe, weiße Schrift 7,1:1), Bordeaux hell `#A36871` (Fokusring), Sandpapier `#F5ECE8` (Seitenhintergrund), Signalorange dunkel `#8F3E14` (Schrift auf hellem Grund, 7,3:1).
 

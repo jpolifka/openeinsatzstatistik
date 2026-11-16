@@ -12,17 +12,17 @@
   --brand-light-hover: #DFC8BE;
   --brand-mid-hover: #7E3A44;
   --brand-shadow: rgba(124, 39, 52, .25);
-  --text: #333333;         /* Fließtext */
+  --text: #2B1A1D;         /* Fließtext */
   --gray: #6B6B6B;         /* sekundäre Beschriftungen */
   --light-gray: #F2F2F2;   /* neutrale Flächen */
   --white: #FFFFFF;
 
   /* Diagramme: neutrale Reihen in Graphit, unabhängig von den Farben der Wehr. Das Rot der Wehr bleibt für das,
      worauf es ankommt (Erreichungsgrad, Fokus, Zeitstrahl). Alle Töne mindestens 3:1 auf Weiß. */
-  --series: #4A4A4A;
-  --day: #8F8F8F;
-  --night: #2E2E2E;
-  --previous: #8F8F8F;
+  --series: #6E6460;
+  --day: #8A817C;
+  --night: #4A403C;
+  --previous: #8A817C;
   --gridline: #ECECEC;
   --track: #F0E3DD;
 
