@@ -12,5 +12,5 @@ Nicht Teil der Lizenz:
 
 Enthaltene Fremdbestandteile:
 - Schrift „Sansation“ (static/fonts/): SIL Open Font License 1.1.
-- Schriften „VT323“ und „Courier Prime“ (tools/fonts/, als Pfade in den Logos): SIL Open Font License 1.1.
+- Schrift „Roboto“ (tools/fonts/, als Pfade in den Logos): SIL Open Font License 1.1.
 - Python-Abhängigkeiten (requirements.txt) unter ihren eigenen Lizenzen (MIT, BSD, ISC, Apache 2.0; alle mit der AGPL-3.0 vereinbar).

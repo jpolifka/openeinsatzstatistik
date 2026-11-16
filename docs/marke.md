@@ -1,7 +1,7 @@
 # Marke: openEinsatzstatistik
 
 Dieses Dokument legt fest, wie das Projekt auftritt. Es folgt dem Erscheinungsbild von **Polifka IT Beratung**
-(Stahlblau, Bernstein-Akzent, weich gerundete Formen, VT323 und Courier Prime), damit Projekt und Anbieter erkennbar zusammengehören. Alle Dateien liegen in [`brand/`](../brand/).
+(Stahlblau, Bernstein-Akzent, weich gerundete Formen), damit Projekt und Anbieter erkennbar zusammengehören. Alle Dateien liegen in [`brand/`](../brand/).
 
 ![Logo](../brand/logo-horizontal.svg)
 
@@ -62,14 +62,17 @@ Die Marke erscheint dort nur zurückhaltend:
 - **Ohne Wehr-Logo:** die Bildmarke als Ersatz in Kopfzeile, Footer und Browser-Tab.
 - **Anmeldung und VG-Gesamtansicht:** neutrales Farbschema in Stahlblau (`theme.NEUTRAL`).
 
-Für Website, Folien, Handzettel, GitHub und Mailings gilt das Erscheinungsbild dieses Dokuments mit VT323 und Courier Prime.
+Für Website, Folien, Handzettel, GitHub und Mailings gilt das Erscheinungsbild dieses Dokuments mit der Schrift unten.
 
-## Schrift (Marke außerhalb der App)
+## Schrift
 
-- **VT323:** Überschriften und große Zahlen, nur Regular, nicht unter 20 px, nie für Fließtext. Die Wortmarke ist darin gesetzt.
-- **Courier Prime:** Fließtext, Labels, Kontaktdaten; Overlines in Versalien mit weiter Laufweite (Courier Prime Bold).
-- Beide stehen unter der SIL Open Font License und sind frei nutzbar. Auf Webseiten selbst hosten, nicht von Google laden (DSGVO).
-  Ohne Installation (Word, E-Mail): Courier New.
+Eine normale, gut lesbare Groteskschrift, wie sie das BKS-Portal des Landes ausliefert: der Systemschriften-Stapel (Bootstrap 5).
+Die Wortmarke ist in **Roboto** gesetzt, einer Schrift dieses Stapels (SIL Open Font License, als Pfade in den Logos).
+
+- **Wortmarke:** „open“ in Roboto Regular, „Einsatzstatistik“ in Roboto Bold, Unterzeile in Roboto Medium, Versalien, weit gesperrt.
+- **Websites, Folien, Dokumente:** `-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif`. Es muss nichts geladen werden, der DSGVO-Aufwand für Webfonts entfällt.
+- **Schnitte:** Regular für Text, Bold für Überschriften und Hervorhebungen, Overlines in Versalien mit weiter Laufweite. Fließtext 16 px mit 1,6 Zeilenabstand.
+- **In der App** bleibt die Schrift der Oberfläche (Sansation, siehe `DESIGN.md`).
 
 ## Bildwelt und Icons
 
