@@ -130,7 +130,12 @@ def test_superadmin_edge_cases(world, data_dir):
 
     assert world.put("/api/super/tenants/gibt-es-nicht", json={"name": "x"}).status_code == 404
     assert world.put("/api/super/tenants/wehr-z", json={"vg": "gibt-es-nicht"}).status_code == 422
-    moved = world.put("/api/super/tenants/wehr-z", json={"name": "Wehr Zett", "vg": "vg-b"})
+    # Verschieben nur mit Bestätigung des Kurznamens (Schutz vor Fehlklick), und es steht im Protokoll
+    assert world.put("/api/super/tenants/wehr-z", json={"vg": "vg-b"}).status_code == 422
+    moved = world.put("/api/super/tenants/wehr-z", json={"name": "Wehr Zett", "vg": "vg-b"}, params={"confirm": "wehr-z"})
+    assert all("blocked" in v for v in moved.json()["vgs"])
+    with tenancy.central() as con:
+        assert con.execute("SELECT 1 FROM role_event WHERE action = 'Wehr verschoben'").fetchone()
     entry = next(t for t in moved.json()["tenants"] if t["slug"] == "wehr-z")
     assert (entry["name"], entry["vg"]) == ("Wehr Zett", "vg-b")
     assert world.delete("/api/super/tenants/gibt-es-nicht", params={"confirm": "gibt-es-nicht"}).status_code == 404

@@ -7,6 +7,13 @@
 const CHANGELOG = [
   {
     date: "2026-11-16",
+    version: "2026-11-16.5",
+    items: [
+      "<b>Verwaltung (Superadmin):</b> „Wehren &amp; VGs“ zeigt links alle Verbandsgemeinden mit Suche, rechts Stammdaten, Wehren und Zugriffe der gewählten VG. Wehren verschieben und archivieren fragt jetzt nach; Änderungen stehen im Protokoll.",
+    ],
+  },
+  {
+    date: "2026-11-16",
     version: "2026-11-16.4",
     items: [
       "<b>Einsätze:</b> In der Gesamtansicht der Verbandsgemeinde lässt sich die Einsatzliste jetzt wie die Auswertungen auf einzelne Wehren eingrenzen.",

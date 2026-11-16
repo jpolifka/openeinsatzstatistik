@@ -36,6 +36,7 @@ const admin = {
   vgFleet: null,              // Fahrzeuglisten aller Wehren der VG
   saved: null,                // Stand des gerade bearbeiteten Datensatzes beim Laden/Speichern – Vergleich für „ungespeichert“
   fleetQuery: "",             // Suche in den Fahrzeugtabellen
+  superVg: recall("super-vg"), superQuery: "",   // Superadmin: gewählte VG und Suche
   keywordDeviationsOnly: false,   // Stichworte: nur Abweichungen (Wehr) bzw. Stichworte mit Abweichungen (VG)
 };
 // Fahrzeugtabelle kompakt (ohne Dienstzeitraum, Nachfolger, Gesamtstärke); gemerkt je Ansicht, VG standardmäßig kompakt
@@ -97,6 +98,7 @@ async function loadAdmin() {
   if (s === "roles" && !admin.roles) admin.roles = await api("/api/admin/roles");
   if (s === "sessions") admin.sessions = await api("/api/super/sessions");     // immer frisch: ändert sich laufend
   if (s === "super" && !admin.superOverview) admin.superOverview = await api("/api/super/overview");
+  if (s === "super" && !admin.memberships) setMemberships(await api("/api/admin/memberships"));
   if (s === "fees" && admin.fees?.vg !== admin.vg) {
     admin.fees = { vg: admin.vg, ...(await api(vgUrl("/fees"))) };
     admin.feeDraft = null;
@@ -449,15 +451,23 @@ async function runAdminAction(button) {
       admin.superOverview = await apiJson(`/api/super/vgs/${slug}`, "PUT", { slug, name: $(`[data-vg-name="${slug}"]`).value, kind: $(`[data-vg-kind="${slug}"]`).value });
       toast("Gespeichert");
       return rerender();
+    case "move-tenant": {
+      const others = admin.superOverview.vgs.filter((v) => v.slug !== admin.superVg);
+      const target = prompt(`Wehr „${slug}“ in eine andere VG verschieben?\nKurzname der Ziel-VG eingeben (${others.map((v) => v.slug).join(", ")}):`);
+      if (!target) return;
+      admin.superOverview = await apiJson(`/api/super/tenants/${slug}?confirm=${encodeURIComponent(slug)}`, "PUT", { vg: target.trim() });
+      admin.superVg = target.trim(); remember("super-vg", admin.superVg);
+      return superChanged("Wehr verschoben");
+    }
     case "create-tenant":
       admin.superOverview = await apiJson("/api/super/tenants", "POST", { slug: $("#tenant-slug").value.trim(),
         name: $("#tenant-name").value, vg: $("#tenant-vg").value, email: $("#tenant-email").value || null });
       return superChanged("Wehr angelegt");
     case "delete-tenant": {
-      const typed = prompt(`Wehr „${slug}“ entfernen? Alle Zuordnungen werden gelöscht, die Daten in deleted/ abgelegt.\nZum Bestätigen den Kurznamen eintippen:`);
+      const typed = prompt(`Wehr „${slug}“ archivieren? Alle Zuordnungen werden gelöscht, die Daten in deleted/ abgelegt (nichts wird gelöscht).\nZum Bestätigen den Kurznamen eintippen:`);
       if (typed !== slug) return;
       admin.superOverview = await api(`/api/super/tenants/${slug}?confirm=${encodeURIComponent(typed)}`, { method: "DELETE" });
-      return superChanged("Wehr entfernt");
+      return superChanged("Wehr archiviert");
     }
   }
 }
@@ -567,6 +577,8 @@ function setFeePath(path, value) {
 
 // ------------------------------------------------------------ Ereignisse
 $("#view-admin").addEventListener("click", async (e) => {
+  const vgButton = e.target.closest("[data-super-vg]");
+  if (vgButton) { admin.superVg = vgButton.dataset.superVg; remember("super-vg", admin.superVg); renderAdmin(); return; }
   const section = e.target.closest("[data-admin-section]");
   if (section) {
     // Ein Bereich wechselt nie die Auswahl (Wehr bzw. Verbandsgemeinde). Bearbeitet er andere Daten (VG: Fahrzeuge
@@ -627,6 +639,7 @@ function handleAdminInput(e) {
     adminData().response_limits = t.value.split(/[,;\s]+/).map(Number).filter((n) => n > 0);
     return;
   }
+  if (t.dataset.superSearch !== undefined) { admin.superQuery = t.value; $("#super-list").innerHTML = superListHtml(); return; }
   if (t.dataset.fleetSearch !== undefined) { admin.fleetQuery = t.value; filterFleetRows(); return; }
   if (t.dataset.keywordSearch !== undefined) {
     admin.keywordQuery = t.value;
@@ -719,10 +732,6 @@ $("#view-admin").addEventListener("change", async (e) => {
       admin.superOverview = await apiJson(`/api/super/tenants/${t.dataset.tenantActive}`, "PUT", { active: t.checked });
       await superChanged(t.checked ? "Wehr aktiviert" : "Wehr deaktiviert");
       return;
-    }
-    if (t.dataset.tenantVg) {
-      admin.superOverview = await apiJson(`/api/super/tenants/${t.dataset.tenantVg}`, "PUT", { vg: t.value });
-      await superChanged("VG geändert");
     }
   } catch (err) {
     admin.error = err.message;
