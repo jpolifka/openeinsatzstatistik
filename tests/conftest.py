@@ -7,10 +7,22 @@ from fastapi.testclient import TestClient
 from app import auth, db, main, tenancy
 from app.api import common as api_common
 from app.preview_sessions import PreviewSessions
-from app.legacy import rheinbrohl_config
+from app.tenant_config import TenantConfig, Vehicle
 
 # Fachkonfiguration für die Tests: die Werte der ersten Wehr (keine personenbezogenen Daten)
-CFG = rheinbrohl_config()
+CFG = TenantConfig(
+    name="Feuerwehr Rheinbrohl",
+    # Reihenfolge der Einsatzübersicht; 01/10 fehlt in der Gesamtstärke des Bedarfsplans (Excel-Spalte AU)
+    fleet=(Vehicle("02/45"), Vehicle("02/24"), Vehicle("02/71"), Vehicle("02/19"),
+           Vehicle("01/10", in_plan_crew=False)),
+    substitutes={"01/23": "02/45"},
+    unit_prefix="FL NR#.BHÖ ",
+    own_prefix="02/",
+    unit_marker="FW NR#.BHÖ 02",
+    control_center="FL NR#.LIN",
+    places=("Rheinbrohl", "Arienheller", "Hammerstein", "Ariendorf", "Bad Hönningen", "Leutesdorf"),
+    plan_places=("Rheinbrohl", "Hammerstein", "Arienheller"),
+)
 
 
 @pytest.fixture

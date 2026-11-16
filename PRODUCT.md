@@ -24,7 +24,7 @@ Berichte kommen aus dem BKS-Portal RLP. Personenbezogene Daten (Namen, Anwesenhe
 ## Capabilities and Constraints
 - Vanilla JS und CSS ohne Build-Schritt (`static/`), FastAPI-Backend.
 - Alle Texte der Oberfläche sind deutsch; Code ist englisch.
-- Farben und Logos sind je Wehr einstellbar (Tokens in `app.css`, `/api/theme.css`). Standard ist das Rot der FF Rheinbrohl.
+- Farben und Logos sind je Wehr einstellbar (Tokens in `app.css`, `/api/theme.css`). Standard ist ein neutrales Feuerwehrrot.
 - Jede Kennzahl nennt Fallzahl und Abdeckung („n von N“); fehlende Werte erscheinen nie als null.
 - Online-Hilfe in `help.js` ist die einzige Quelle; neue Felder und Kennzahlen bekommen dort einen Eintrag; sichtbare Änderungen kommen in `changelog.js`.
 

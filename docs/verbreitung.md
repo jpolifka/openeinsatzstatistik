@@ -39,9 +39,8 @@ Checkliste, bevor das Repository öffentlich wird:
 
 - [ ] Git-Historie auf Personendaten prüfen (Namen, echte Mailadressen, Berichte). Die Dateimuster sind ausgeschlossen,
       aber die Commit-Autoren-Mails (privat, `@icloud.com`) sind dann öffentlich; ggf. mit `.mailmap` oder Umschreiben.
-- [ ] Logos der FF Rheinbrohl (`app/legacy_assets/`) nur mit schriftlicher Zustimmung der Wehr veröffentlichen, sonst
-      entfernen und das neutrale Signet verwenden. `legacy.py` enthält echte Fahrzeugdaten und Orte der Wehr: Zustimmung
-      der Wehr einholen.
+- [x] Logos und Fahrzeugdaten der FF Rheinbrohl sind aus dem Code entfernt. **Auch aus der Git-Historie**: vor dem
+      Öffentlichmachen die Historie bereinigen oder mit neuer Historie veröffentlichen (siehe unten).
 - [ ] Impressum/Kontakt im README, `SECURITY.md` und Meldeweg testen (Private Vulnerability Reporting aktivieren).
 - [ ] Beschreibung, Themen (`feuerwehr`, `einsatzstatistik`, `bks`, `fastapi`) und Social-Preview-Bild setzen.
 - [ ] Release `v1.0.0` mit Changelog und Docker-Image (GitHub Container Registry), damit der Einstieg

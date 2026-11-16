@@ -1,11 +1,10 @@
 pdf2einsatz – Einsatzstatistik für Feuerwehren
-Copyright 2025–2026 Jens Polifka
+Copyright 2025–2026 Polifka IT-Beratung, In der Maar 31, 56598 Rheinbrohl
 
 Der Quellcode steht unter der Apache License 2.0 (Datei LICENSE).
 
 Nicht Teil der Lizenz:
-- Logos, Wappen und Namen von Feuerwehren (u. a. die Dateien in app/legacy_assets/) gehören den jeweiligen
-  Wehren und dürfen nur mit deren Zustimmung verwendet werden.
+- Logos, Wappen und Namen von Feuerwehren gehören den jeweiligen Wehren und sind nicht im Projekt enthalten.
 - Die Apache License gibt keine Rechte an Namen und Marken (Abschnitt 6).
 
 Enthaltene Fremdbestandteile:

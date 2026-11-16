@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-Übernahme der Einzel-Installation der FF Rheinbrohl in die mandantenfähige Ablage.
+Übernahme einer früheren Einzel-Installation in die mandantenfähige Ablage.
 
 Bis zur Mandantenfähigkeit lag der ganze Bestand in DATA_DIR/einsaetze.db, die Fachkonstanten
-standen im Code (rheinbrohl_config) und berechtigt waren die Adressen aus AUTH_EMAILS.
+standen im Code und berechtigt waren die Adressen aus AUTH_EMAILS.
 migrate_single_install() macht daraus beim ersten Start einmalig die VG Bad Hönningen mit der
 Wehr Rheinbrohl. Danach liegen die Werte nur noch in deren Datenbank.
 """
@@ -14,7 +14,7 @@ import shutil
 import sqlite3
 
 from app import db, tenancy
-from app.tenant_config import TenantConfig, Vehicle
+from app.tenant_config import TenantConfig
 
 log = logging.getLogger("pdf2einsatz")
 
@@ -22,27 +22,12 @@ LEGACY_FILE = "einsaetze.db"
 BACKUP_FILE = "einsaetze-vor-mandanten.db"
 VG_SLUG, VG_NAME = "bad-hoenningen", "VG Bad Hönningen"
 TENANT_SLUG = "rheinbrohl"
-ASSET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "legacy_assets")
-# Logos der bisherigen Oberfläche -> Assets der Wehr (Name: Datei, Typ)
-LOGOS = {"logo-light": ("logo-weiss.png", "image/png"), "logo-dark": ("logo-schwarz.png", "image/png"),
-         "icon": ("logo.svg", "image/svg+xml")}
 
 
-def rheinbrohl_config():
-    return TenantConfig(
-        name="Feuerwehr Rheinbrohl",
-        # Reihenfolge der Einsatzübersicht; 01/10 fehlt in der Gesamtstärke des Bedarfsplans (Excel-Spalte AU)
-        fleet=(Vehicle("02/45"), Vehicle("02/24"), Vehicle("02/71"), Vehicle("02/19"),
-               Vehicle("01/10", in_plan_crew=False)),
-        substitutes={"01/23": "02/45"},
-        unit_prefix="FL NR#.BHÖ ",            # Fahrzeuge der Verbandsgemeinde Bad Hönningen
-        own_prefix="02/",                     # Fahrzeuge des Löschzugs Rheinbrohl
-        unit_marker="FW NR#.BHÖ 02",
-        control_center="FL NR#.LIN",
-        places=("Rheinbrohl", "Arienheller", "Hammerstein", "Ariendorf", "Bad Hönningen", "Leutesdorf"),
-        # Ausrückebereich laut Feuerwehrbedarfsplan Pos. 8.4
-        plan_places=("Rheinbrohl", "Hammerstein", "Arienheller"),
-    )
+def legacy_config():
+    """Fachkonfiguration der übernommenen Wehr: nur der Name. Fahrzeuge, Kennungen und Orte sowie Logos
+    gehören nicht in den Code und werden nach der Übernahme in den Einstellungen neu angelegt."""
+    return TenantConfig(name="Feuerwehr Rheinbrohl")
 
 
 # Satzung über den Kostenersatz und die Gebührenerhebung für Hilfe- und Dienstleistungen der Feuerwehr
@@ -124,13 +109,9 @@ def migrate_single_install(data_dir):
     con.close()
     _copy_database(legacy, target)
     db.setup(target)
-    cfg = rheinbrohl_config()
+    cfg = legacy_config()
     with db.connection(target) as con:
         tenancy.save_config(con, cfg)
-        for name, (filename, content_type) in LOGOS.items():
-            with open(os.path.join(ASSET_DIR, filename), "rb") as f:
-                con.execute("INSERT OR REPLACE INTO asset (name, content_type, data) VALUES (?, ?, ?)",
-                            (name, content_type, f.read()))
         incidents = con.execute("SELECT COUNT(*) FROM incident").fetchone()[0]
 
     db.setup(staging, db.CENTRAL_MIGRATIONS)
