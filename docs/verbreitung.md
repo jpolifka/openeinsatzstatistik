@@ -84,31 +84,6 @@ Checkliste, bevor das Repository öffentlich wird:
 - **Haftung:** In der Lizenz steht „ohne Gewährleistung“. Wer hostet, braucht trotzdem eine Vereinbarung (AVV), die App
   bringt dafür die Vorlage mit (`templates/avv_v*.html`).
 
-## Lizenz: AGPL-3.0
-
-Die Lizenz ist die AGPL-3.0 (wie bei OpenGH und Nextcloud). Was sie leistet und was nicht:
-
-| | AGPL-3.0 |
-|---|---|
-| Nutzung, Änderung, eigener Betrieb durch Wehr/VG | frei |
-| Gehostetes Angebot gegen Entgelt durch Dritte | **erlaubt**, aber der Quelltext der angebotenen (auch geänderten) Fassung muss den Nutzern unter AGPL zugänglich sein |
-| Geschlossene Fork als Bezahldienst | nicht möglich |
-| Einbau in proprietäre Produkte | nicht möglich |
-
-Die AGPL verbietet keinen Bezahldienst, sie verbietet nur einen **geschlossenen**. Wer Hosting anbietet, darf Geld
-verlangen, muss aber offenlegen, was er ändert. Das ist die beabsichtigte Wirkung. Ein Verbot jeder gewerblichen Nutzung
-wäre keine freie Software mehr (z. B. Creative Commons NC) und würde auch Wehren und Kommunen verunsichern.
-
-Weitere Schutzmaßnahmen:
-
-- **Name:** „openEinsatzstatistik“ ist nicht Teil der Lizenz; Forks sollen anders heißen. Eine Wortmarke (DPMA) macht das
-  durchsetzbar.
-- **Alleinurheberschaft:** Solange alle Beiträge bei dir liegen oder du dir die Rechte einräumen lässt (Beitragsvereinbarung),
-  kannst du zusätzlich eine **kommerzielle Lizenz** anbieten (Doppellizenz), etwa für Anbieter, die nichts offenlegen wollen.
-  Mit fremden Beiträgen ohne Vereinbarung geht das nicht. Vor dem ersten externen Beitrag entscheiden.
-- **Frühere Fassungen:** Die Apache-Fassung stand nur kurz in `main`. Wer sie bekommen hat, darf sie unter Apache
-  weiternutzen; für alles Neue gilt die AGPL.
-- **Hosting-Vertrag:** Qualität, Support, AVV und Haftung kommen aus deinem Vertrag, nicht aus der Lizenz.
 
 ## Zeitplan
 
