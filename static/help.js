@@ -459,6 +459,11 @@ const HELP_SECTIONS = [
         short: "Logo für Kopfzeile, Fußzeile und Browser-Tab.",
         text: "<b>Logo hell</b> steht auf der farbigen Kopfzeile (am besten weiß auf transparent), <b>Logo dunkel</b> in der Fußzeile, das <b>Symbol</b> im Browser-Tab. Erlaubt sind PNG, JPEG und WebP bis 512 KB; SVG geht aus Sicherheitsgründen nicht. Ohne eigenes Bild erscheint das neutrale Signet.",
       },
+      admin_font: {
+        title: "Schrift",
+        short: "Eigene Schriftdatei für die Oberfläche der Wehr.",
+        text: "Ohne eigene Datei zeigt die App Systemschriften (Segoe UI, Roboto, Helvetica, Arial), wie das BKS-Portal. Für ein eigenes Erscheinungsbild lässt sich eine <b>Schriftdatei</b> für normalen und optional für fetten Text hochladen: WOFF2, WOFF, TTF oder OTF bis 1 MB. WOFF2 ist am kleinsten und schnellsten. Die Lizenz der Schrift muss die Einbettung im Web erlauben; die Verantwortung dafür trägt die Wehr. Fehlt die fette Datei, berechnet der Browser fetten Text aus der normalen. Die Schrift gilt nur für diese Wehr, die Anmeldung und die Gesamtansicht der VG bleiben bei den Systemschriften.",
+      },
       admin_fleet: {
         title: "Fahrzeuge",
         short: "Fahrzeugblöcke der Einsatzübersicht mit Dienstzeitraum.",
@@ -582,9 +587,9 @@ const HELP_SECTIONS = [
         text: "Anwesenheit eines Einsatzes ändern und Personen ergänzen. Nur für Rollen einer Wehr.",
       },
       perm_tenant_settings: {
-        title: "Einstellungen, Fahrzeuge, Farben und Logos",
+        title: "Einstellungen, Fahrzeuge, Farben, Logos und Schrift",
         short: "Fahrzeuge, BKS-Kennung, Orte, Zeitgrenzen, Farben und Logos. In einer Rolle der VG: Vorgaben für alle Wehren der VG.",
-        text: "Name, Farben, Logos, Fahrzeuge, BKS-Kennung, Orte und Zeitgrenzen. In einer Rolle der Wehr: Werte und Abweichungen dieser Wehr von den Vorgaben der VG. In einer Rolle der VG: die Vorgaben für alle Wehren der VG und die Fahrzeuge aller Wehren.",
+        text: "Name, Farben, Logos, Schrift, Fahrzeuge, BKS-Kennung, Orte und Zeitgrenzen. In einer Rolle der Wehr: Werte und Abweichungen dieser Wehr von den Vorgaben der VG. In einer Rolle der VG: die Vorgaben für alle Wehren der VG und die Fahrzeuge aller Wehren.",
       },
       perm_tenant_keywords: {
         title: "Stichwortkatalog",

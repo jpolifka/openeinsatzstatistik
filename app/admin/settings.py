@@ -96,7 +96,7 @@ def _settings_json(tenant, cfg):
     if not bks_code and "bks_code" not in overrides:   # noch ohne Standort: die Kennung der VG
         bks_code = layer.value("bks_code")
     return {
-        "assets": {name: assets.get(name) for name in theme.ASSETS},
+        "assets": {name: assets.get(name) for name in (*theme.ASSETS, *theme.FONTS)},
         "slug": tenant.slug, "name": cfg.name, "colors": cfg.colors, "fleet_version": version,
         "palette": theme.palette(cfg.colors) if cfg.colors else None,
         "fleet": [_vehicle_json(v, cfg, used) for v in cfg.fleet],
@@ -351,14 +351,22 @@ def parse_test(t: ParseTest, a: tenancy.Access = Depends(access)):
 @router.put("/api/admin/{slug}/assets/{name}")
 def put_asset(slug: str, name: str, file: UploadFile = File(...), a: tenancy.Access = Depends(access)):
     tenant = a.tenant(slug, SETTINGS)
-    if name not in theme.ASSETS:
+    if name not in theme.ASSETS and name not in theme.FONTS:
         raise HTTPException(404, "Unbekanntes Logo.")
-    data = file.file.read(theme.MAX_ASSET_BYTES + 1)
-    if len(data) > theme.MAX_ASSET_BYTES:
-        _invalid("Das Bild ist größer als 512 KB.")
-    content_type = theme.image_type(data)
-    if not content_type:
-        _invalid("Bitte ein Bild im Format PNG, JPEG oder WebP hochladen.")
+    if name in theme.FONTS:
+        data = file.file.read(theme.MAX_FONT_BYTES + 1)
+        if len(data) > theme.MAX_FONT_BYTES:
+            _invalid("Die Schriftdatei ist größer als 1 MB.")
+        content_type = theme.font_type(data)
+        if not content_type:
+            _invalid("Bitte eine Schriftdatei im Format WOFF2, WOFF, TTF oder OTF hochladen.")
+    else:
+        data = file.file.read(theme.MAX_ASSET_BYTES + 1)
+        if len(data) > theme.MAX_ASSET_BYTES:
+            _invalid("Das Bild ist größer als 512 KB.")
+        content_type = theme.image_type(data)
+        if not content_type:
+            _invalid("Bitte ein Bild im Format PNG, JPEG oder WebP hochladen.")
     with tenant.connection() as con:
         con.execute("INSERT INTO asset (name, content_type, data, modified) VALUES (?, ?, ?, datetime('now', 'localtime')) "
                     "ON CONFLICT(name) DO UPDATE SET content_type = excluded.content_type, data = excluded.data, "

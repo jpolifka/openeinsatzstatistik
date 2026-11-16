@@ -117,6 +117,38 @@ def test_unit_marker_sets_prefixes(world):
         ("FW NR#.XYZ 05", "FL NR#.XYZ ", "05/")
 
 
+def _woff2(size=64):
+    return b"wOF2" + b"\x00\x01\x00\x00" + size.to_bytes(4, "big") + b"\x00" * (size - 12)
+
+
+def test_font_upload_is_served_and_used_in_theme(world):
+    _as(world, "lead@example.org")
+    put = lambda data, name="font", fname="wehr.woff2": world.put(  # noqa: E731
+        f"/api/admin/wehr-a1/assets/{name}", files={"file": (fname, data, "application/octet-stream")})
+    assert put(_woff2()).status_code == 200
+    assert put(_woff2(80), "font-bold").status_code == 200
+    css = world.get("/api/theme.css").text
+    assert '@font-face{font-family:"Wehrschrift"' in css and 'format("woff2")' in css
+    assert "font-weight:400" in css and "font-weight:700" in css and "--font:" in css
+    served = world.get("/api/branding/wehr-a1/font")
+    assert served.status_code == 200 and served.content == _woff2() and served.headers["content-type"] == "font/woff2"
+    assert served.headers["x-content-type-options"] == "nosniff"
+    settings = world.get("/api/admin/wehr-a1/settings").json()
+    assert settings["assets"]["font"] and settings["assets"]["font-bold"]
+    # Müll, Bilder, falsche Länge und zu große Dateien werden abgelehnt
+    assert put(PNG).status_code == 422
+    assert put(b"MZ" + b"\x00" * 80).status_code == 422
+    assert put(_woff2()[:50]).status_code == 422                   # Länge im Kopf passt nicht zur Datei
+    assert put(b"\x00\x01\x00\x00" + b"\x00" * 8 + b"0" * 1_100_000).status_code == 422
+    assert put(b"\x00\x01\x00\x00" + b"\x00" * 60, fname="wehr.ttf").status_code == 200   # TrueType
+    assert world.get("/api/branding/wehr-a1/font").headers["content-type"] == "font/ttf"
+    assert world.delete("/api/admin/wehr-a1/assets/font").json() == {"ok": True}
+    assert world.delete("/api/admin/wehr-a1/assets/font-bold").json() == {"ok": True}
+    assert "@font-face" not in world.get("/api/theme.css").text
+    assert _as(world, "editor@example.org").put("/api/admin/wehr-a1/assets/font",
+                                                  files={"file": ("a.woff2", _woff2())}).status_code == 403
+
+
 def test_logo_upload(world):
     _as(world, "lead@example.org")
     upload = lambda data, name="logo.png": world.put(  # noqa: E731

@@ -193,11 +193,22 @@ def _branding(tenant):
     return urls
 
 
+def _font_files(tenant):
+    """Schriftdateien der Wehr für das Stylesheet: [(Name, Adresse mit Stand als Cache-Schlüssel, MIME-Typ)]."""
+    if not tenant:
+        return []
+    with tenant.connection() as con:
+        rows = con.execute("SELECT name, content_type, modified FROM asset WHERE name IN (?, ?) ORDER BY name",
+                           tuple(theme.FONTS)).fetchall()
+    return [(r["name"], f"/api/branding/{tenant.slug}/{r['name']}?v={r['modified'].replace(' ', 'T')}", r["content_type"])
+            for r in rows]
+
+
 @app.get("/api/theme.css")
 def api_theme(a: tenancy.Access = Depends(access)):
     """Farben der ausgewählten Wehr; in der Gesamtansicht einer VG das neutrale Farbschema."""
     colors = a.selected.config.colors if a.selected else theme.NEUTRAL
-    return Response(theme.css(colors), media_type="text/css", headers={"Cache-Control": "no-cache"})
+    return Response(theme.css(colors, _font_files(a.selected)), media_type="text/css", headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/api/branding/{slug}/{name}")
@@ -207,7 +218,7 @@ def api_branding(slug: str, name: str, a: tenancy.Access = Depends(access)):
     with tenant.connection() as con:
         row = con.execute("SELECT content_type, data FROM asset WHERE name = ?", (name,)).fetchone()
     if not row:
-        raise HTTPException(404, "Kein Logo hinterlegt.")
+        raise HTTPException(404, "Nichts hinterlegt.")
     # Eigener Ursprung, aber nie als Dokument mit Skripten ausführen (auch nicht das SVG-Symbol der Übernahme)
     return Response(row["data"], media_type=row["content_type"], headers={
         "X-Content-Type-Options": "nosniff", "Cache-Control": "private, max-age=86400",

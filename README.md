@@ -437,7 +437,7 @@ static/
   help.js          Texte und Logik der Online-Hilfe
   changelog.js     Neuigkeiten für Anwender
   app.css          Gestaltung
-  fonts/, img/     Schrift Sansation (SIL OFL), neutrales Signet
+  img/             neutrales Signet (Bildmarke)
 tests/             pytest (nur erfundene Daten), tests/frontend/ Zustandstests der Oberfläche (node --test)
 deploy/nginx/      Beispielkonfiguration für den Reverse Proxy
 Dockerfile, docker-compose.yml, requirements.txt, requirements.lock, requirements-dev.txt
@@ -453,7 +453,7 @@ veränderte Fassung als Dienst anbietet (auch gehostet gegen Entgelt), muss den 
 unter derselben Lizenz zur Verfügung stellen. Der Link „openEinsatzstatistik – freie Software“ am Seitenende führt zum
 Quellcode; wer die App verändert betreibt, muss ihn auf seine Fassung zeigen lassen.
 Logos und Namen von Feuerwehren sind nicht Teil des Projekts (jede Wehr lädt ihr eigenes Logo in den Einstellungen hoch) und gehören den jeweiligen Wehren.
-Die Schrift Sansation steht unter der SIL Open Font License.
+Die Oberfläche nutzt Systemschriften; jede Wehr kann in den Einstellungen eine eigene Schriftdatei hochladen.
 
 Mitmachen und Sicherheitsmeldungen: [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md).
 Demo mit erfundenen Daten: `docker compose -f docker-compose.demo.yml up --build` → http://localhost:8113.

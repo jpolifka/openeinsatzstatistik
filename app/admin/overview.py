@@ -41,6 +41,6 @@ def admin_overview(a: tenancy.Access = Depends(access)):
             "vgs": list(vgs.values()),
             "users": a.superadmin or any(t.can(USERS_VIEW) for t in a.tenants.values()) or
             any(USERS_VIEW in granted for granted in a.vg_permissions.values()),
-            "assets": theme.ASSETS}
+            "assets": theme.ASSETS, "fonts": theme.FONTS}
 
 

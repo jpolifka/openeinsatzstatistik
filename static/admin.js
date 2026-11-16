@@ -705,7 +705,7 @@ $("#view-admin").addEventListener("change", async (e) => {
       const form = new FormData();
       form.append("file", t.files[0]);
       await api(`/api/admin/${admin.slug}/assets/${t.dataset.asset}`, { method: "PUT", body: form });
-      toast("Logo gespeichert");
+      toast(t.dataset.asset.startsWith("font") ? "Schrift gespeichert" : "Logo gespeichert");
       await afterAssetChange();
       return;
     }

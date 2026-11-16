@@ -263,7 +263,7 @@ def _page(content, status_code=200):
     return HTMLResponse(f"""<!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Anmeldung · Einsatzstatistik</title><link rel="icon" href="/static/favicon.svg"><link rel="icon" href="/static/favicon.ico" sizes="48x48"><link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
-<link rel="stylesheet" href="/static/fonts/sansation.css"><link rel="stylesheet" href="/static/app.css">
+<link rel="stylesheet" href="/static/app.css">
 <style>{theme.css(theme.NEUTRAL)}</style></head>
 <body><header class="topbar"><div class="topbar-inner">
 <img class="topbar-logo" src="/static/img/app-icon-light.svg" alt="">

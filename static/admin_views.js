@@ -102,10 +102,18 @@ function unitSection() {
         ${url ? `<button type="button" class="btn btn-outline btn-small" data-admin-action="delete-asset" data-name="${name}">Entfernen</button>` : ""}</div>
     </div>`;
   }).join("");
+  const fonts = Object.entries(admin.overview.fonts || {}).map(([name, label]) => {
+    const url = s.assets[name];
+    return `<div class="logo-slot">
+      <div><strong>${esc(label)}</strong><p class="small muted">${url ? "eigene Schriftdatei" : "Systemschrift"}</p>
+        <label class="btn btn-light btn-small file-button">Datei wählen<input type="file" accept=".woff2,.woff,.ttf,.otf,font/woff2,font/woff,font/ttf,font/otf" data-asset="${name}" hidden></label>
+        ${url ? `<button type="button" class="btn btn-outline btn-small" data-admin-action="delete-asset" data-name="${name}">Entfernen</button>` : ""}</div>
+    </div>`;
+  }).join("");
   // Farben und Logos zeigt die Seite nur, wenn oben genau diese Wehr gewählt ist (Gesamtansicht: neutral)
   const elsewhere = config.tenant?.slug !== admin.slug ? `<div class="message message-info">
       Oben ist ${config.vg ? "die Gesamtansicht der VG gewählt – sie ist immer neutral gestaltet" : "eine andere Wehr gewählt"}.
-      Farben und Logos von ${esc(s.name)} erscheinen, wenn diese Wehr ausgewählt ist.
+      Farben, Logos und Schrift von ${esc(s.name)} erscheinen, wenn diese Wehr ausgewählt ist.
       <button type="button" class="btn btn-light btn-small" data-admin-action="select-tenant">${esc(s.name)} auswählen</button></div>` : "";
   return `${elsewhere}<div class="form-grid">${adminField("Name der Wehr", textInput("name", s.name, 'maxlength="80"'), "span-4")}</div>
     <h3 class="section-gap">Farben ${inheritNote("colors")}</h3>
@@ -113,6 +121,9 @@ function unitSection() {
     <h3 class="section-gap">Logos</h3>
     <p class="small muted">PNG, JPEG oder WebP, höchstens 512 KB. Wird sofort gespeichert.</p>
     <div class="logo-slots">${logos}</div>
+    <h3 class="section-gap">Schrift</h3>
+    <p class="small muted">Ohne eigene Datei gelten die Systemschriften (Segoe UI, Roboto, Helvetica, Arial). WOFF2, WOFF, TTF oder OTF, höchstens 1 MB; die Lizenz der Schrift muss die Nutzung im Web erlauben. Ist keine fette Schrift hinterlegt, berechnet der Browser sie aus der normalen. Wird sofort gespeichert.</p>
+    <div class="logo-slots">${fonts}</div>
     ${saveButton()}`;
 }
 
