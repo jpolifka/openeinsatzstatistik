@@ -539,7 +539,6 @@ kbd { display: inline-block; min-width: 1.4em; padding: 0 5px; border: 1px solid
 .inherit-badge { display: inline-block; margin: 0 6px 0 4px; padding: 0 7px; border-radius: 999px; background: var(--light-gray);
   color: var(--gray); font-size: .78rem; font-weight: 600; vertical-align: middle; white-space: nowrap; }
 .inherit-badge.own { background: var(--brand-light); color: var(--brand-dark); }
-.admin-switch { align-self: center; }
 .admin-table select.fleet-tenant { min-width: 160px; }
 /* Fahrzeugtabellen: kompakt ohne Detailspalten, fester Kopf und feste Namensspalte beim Scrollen */
 .fleet-table.compact .detail-col { display: none; }

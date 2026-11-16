@@ -145,16 +145,13 @@ function renderAdmin() {
       `<option value="${esc(c.key)}" ${c.key === current ? "selected" : ""}>${esc(c.label)}</option>`).join("")}</select></label>` : "";
   const sections = `<div class="segments" role="group" aria-label="Verwaltungsbereich">${adminSections().map(({ key, label }) =>
     `<button type="button" data-admin-section="${key}" aria-pressed="${key === admin.section}" class="${key === admin.section ? "active" : ""}">${label}</button>`).join("")}</div>`;
-  // Wer auch die VG verwaltet, wechselt bei gewählter Wehr ausdrücklich in deren Verbandsgemeinde
-  const vg = !admin.vg && !["users", "roles", "super", "sessions"].includes(admin.section) && adminTenantVg();
-  const toVg = vg ? `<button type="button" class="btn btn-light btn-small admin-switch" data-admin-action="go-vg">Alle Wehren der ${esc(vg.name)} bearbeiten</button>` : "";
   const body = ({
     unit: () => admin.vg ? vgUnitSection() : unitSection(), fleet: () => admin.vg ? vgFleetSection() : fleetSection(),
     bks: () => admin.vg ? vgBksSection() : bksSection(), places: () => admin.vg ? vgPlacesSection() : placesSection(),
     keywords: keywordsSection, users: usersSection, roles: rolesSection, super: superSection, sessions: sessionsSection, fees: feesSection,
   }[admin.section] || (() => `<p class="muted">Hier gibt es für dich nichts zu verwalten.</p>`))();
   $("#view-admin").innerHTML = `<div class="card admin-card">
-    <div class="admin-head">${sections}${toVg}${tenantSelect}</div>
+    <div class="admin-head">${sections}${tenantSelect}</div>
     ${admin.error ? errorBox(admin.error) : ""}
     <div class="admin-body">${body}</div>
   </div>`;
@@ -274,16 +271,6 @@ async function runAdminAction(button) {
       await loadAdmin();
       return rerender();
     }
-    case "go-vg":
-      if (!await confirmDiscard()) return;
-      return adminGo({ vg: adminTenantVg().slug, saved: null, parseResult: null, keywordEdit: null });
-    case "select-tenant":
-      if (settingsDirty() && !await askConfirm({ title: "Trotzdem die Wehr wechseln?", text: "Die Änderungen an den Einstellungen sind noch nicht gespeichert.",
-        confirm: "Verwerfen und wechseln", cancel: "Hier bleiben", danger: true })) return;
-      await apiJson("/api/scope", "POST", { key: `t:${admin.slug}` });
-      forgetAdminData();                              // kein Rückfrage-Dialog beim Neuladen
-      location.reload();
-      return;
     case "clear-color":
       d.colors[key] = "";
       if (key === "brand") d.colors.brand_dark = "";

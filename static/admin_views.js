@@ -110,13 +110,12 @@ function unitSection() {
         ${url ? `<button type="button" class="btn btn-outline btn-small" data-admin-action="delete-asset" data-name="${name}">Entfernen</button>` : ""}</div>
     </div>`;
   }).join("");
-  // Farben und Logos zeigt die Seite nur, wenn oben genau diese Wehr gewählt ist (Gesamtansicht: neutral)
-  const elsewhere = config.tenant?.slug !== admin.slug ? `<div class="message message-info">
-      Oben ist ${config.vg ? "die Gesamtansicht der VG gewählt – sie ist immer neutral gestaltet" : "eine andere Wehr gewählt"}.
-      Farben, Logos und Schrift von ${esc(s.name)} erscheinen, wenn diese Wehr ausgewählt ist.
-      <button type="button" class="btn btn-light btn-small" data-admin-action="select-tenant">${esc(s.name)} auswählen</button></div>` : "";
-  return `${elsewhere}<div class="form-grid">${adminField("Name der Wehr", textInput("name", s.name, 'maxlength="80"'), "span-4")}</div>
+  // Farben, Logos und Schrift sieht man erst, wenn oben genau diese Wehr gewählt ist (die Gesamtansicht ist neutral)
+  const elsewhere = config.tenant?.slug !== admin.slug
+    ? `<p class="small muted">Farben, Logos und Schrift erscheinen in der Oberfläche, sobald oben ${esc(s.name)} gewählt ist.</p>` : "";
+  return `<div class="form-grid">${adminField("Name der Wehr", textInput("name", s.name, 'maxlength="80"'), "span-4")}</div>
     <h3 class="section-gap">Farben ${inheritNote("colors")}</h3>
+    ${elsewhere}
     ${colorFields()}
     <h3 class="section-gap">Logos</h3>
     <p class="small muted">PNG, JPEG oder WebP, höchstens 512 KB. Wird sofort gespeichert.</p>
