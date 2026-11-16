@@ -7,6 +7,13 @@
 const CHANGELOG = [
   {
     date: "2026-11-16",
+    version: "2026-11-16.4",
+    items: [
+      "<b>Einsätze:</b> In der Gesamtansicht der Verbandsgemeinde lässt sich die Einsatzliste jetzt wie die Auswertungen auf einzelne Wehren eingrenzen.",
+    ],
+  },
+  {
+    date: "2026-11-16",
     version: "2026-11-16.3",
     items: [
       "<b>Aufgeräumter Kopf:</b> Der aktive Reiter ist jetzt deutlich hervorgehoben, Beschriftungen und Untertitel im Kopf entfallen, der Titel wird nicht mehr abgeschnitten.",

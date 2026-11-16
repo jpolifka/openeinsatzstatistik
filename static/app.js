@@ -457,7 +457,7 @@ onEvaluationViews("click", (e) => {
     else if (state.tenantFilter.has(slug)) state.tenantFilter.delete(slug);
     else state.tenantFilter.add(slug);
     if (state.tenantFilter.size === config.tenants.length) state.tenantFilter.clear();
-    showView();
+    if (state.view === "incidents") { state.listLimit = LIST_PAGE; renderIncidents(); } else showView();
     return;
   }
   const link = e.target.closest("[data-list-link]");

@@ -74,7 +74,8 @@ function applyListParams(params) {
   state.warnOnly = params.get("warn") === "1";
   state.todoOnly = params.get("todo") === "1";
   if (params.has("sort")) state.incidentSort = sortFrom(params.get("sort"));
-  state.filters = Object.fromEntries(Object.keys(LIST_FILTERS).filter((k) => params.has(k)).map((k) => [k, params.get(k)]));
+  if (params.has("tenants")) state.tenantFilter = new Set(params.get("tenants").split(",").filter((slug) => config.tenants.some((t) => t.slug === slug)));
+  state.filters = Object.fromEntries(Object.keys(LIST_FILTERS).filter((k) => k !== "tenants" && params.has(k)).map((k) => [k, params.get(k)]));
   $("#search").value = state.query;
 }
 
@@ -86,6 +87,7 @@ function listParams() {
   if (state.todoOnly) params.set("todo", "1");
   const { field, descending } = state.incidentSort;
   if (field !== "started_at" || !descending) params.set("sort", `${field}-${descending ? "desc" : "asc"}`);
+  if (state.tenantFilter.size) params.set("tenants", [...state.tenantFilter].sort().join(","));
   for (const [k, v] of Object.entries(state.filters)) params.set(k, v);
   return params;
 }
@@ -103,6 +105,7 @@ function clearListFilters() {
   state.warnOnly = false;
   state.todoOnly = false;
   state.filters = {};
+  state.tenantFilter.clear();
   $("#search").value = "";
 }
 
@@ -125,7 +128,7 @@ function matchesFilter(e) {
   if (state.warnOnly && !e.current_warnings?.length) return false;
   if (state.todoOnly && !todoReasons(e).length) return false;
   const f = state.filters, start = startOf(e);
-  if (f.tenants && !f.tenants.split(",").includes(e.tenant)) return false;
+  if (state.tenantFilter.size && !state.tenantFilter.has(e.tenant)) return false;
   if (f.month && start?.getMonth() + 1 !== Number(f.month)) return false;
   if (f.weekday && (start ? (start.getDay() + 6) % 7 : null) !== Number(f.weekday)) return false;
   if (f.hour && start?.getHours() !== Number(f.hour)) return false;
@@ -162,6 +165,11 @@ function visibleIncidents() {
 
 // Kopf der Liste: Sortierung, Filter aus der Auswertung, Prüfhinweise
 function renderListControls(list) {
+  const tenants = config.vg ? config.tenants : [];
+  $("#tenant-filter").innerHTML = tenants.length > 1 ? `<div class="segments tenant-filter" role="group" aria-label="Wehren">
+    <button type="button" data-tenant-filter="" class="${state.tenantFilter.size ? "" : "active"}">Alle Wehren</button>
+    ${tenants.map((t) => `<button type="button" data-tenant-filter="${esc(t.slug)}" class="${state.tenantFilter.has(t.slug) ? "active" : ""}">${esc(t.name)}</button>`).join("")}
+  </div>` : "";
   const { field, descending } = state.incidentSort;
   for (const th of $$("#incident-table [data-sort-incidents]")) {
     const active = th.dataset.sortIncidents === field;
@@ -237,7 +245,7 @@ function renderIncidents() {
   more.innerHTML = more.hidden ? "" : `<span class="small muted">${shown.length} von ${visible.length} Einsätzen</span>
     <button type="button" class="btn btn-light" data-list-more>Weitere ${Math.min(LIST_PAGE, visible.length - shown.length)} anzeigen</button>`;
   $("#incidents-empty").hidden = visible.length > 0;
-  $("#incidents-empty").innerHTML = list.length && (state.query || state.category !== "all" || state.warnOnly || state.todoOnly || Object.keys(state.filters).length)
+  $("#incidents-empty").innerHTML = list.length && (state.query || state.category !== "all" || state.warnOnly || state.todoOnly || Object.keys(state.filters).length || state.tenantFilter.size)
     ? `Keine Einsätze zu diesen Filtern. <button type="button" class="btn btn-link btn-small" data-clear-filters>Alle Filter aufheben</button>`
     : "Keine Einsätze gefunden.";
   syncHash();
