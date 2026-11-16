@@ -284,7 +284,7 @@ function applyBranding() {
   $("#logo-light").src = b.logo_light || "/static/img/app-icon-light.svg";
   $("#logo-light").alt = b.logo_light ? config.name : "";
   $("#logo-dark").src = b.logo_dark || "/static/img/app-icon.svg";
-  $("#favicon").href = b.icon || "/static/img/app-icon.svg";
+  $("#favicon").href = b.icon || "/static/favicon.svg";
 }
 
 // Auswahl der Wehr in der Kopfzeile, nur wenn mehrere sichtbar sind

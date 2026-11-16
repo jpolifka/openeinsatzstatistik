@@ -29,7 +29,7 @@ Berichte kommen aus dem BKS-Portal RLP. Personenbezogene Daten (Namen, Anwesenhe
 - Online-Hilfe in `help.js` ist die einzige Quelle; neue Felder und Kennzahlen bekommen dort einen Eintrag; sichtbare Änderungen kommen in `changelog.js`.
 
 ## Brand Commitments
-Rot der Wehr als Standardfarbe; je Wehr abweichende Farben und Logos möglich.
+Die Oberfläche gehört der Wehr: Rot als Standardfarbe, je Wehr abweichende Farben und Logos. Die Produktmarke openEinsatzstatistik (Stahlblau, Bernstein-Flamme, Erscheinungsbild von Polifka IT Beratung, siehe `docs/marke.md`) tritt dort nur zurückhaltend auf: Footer-Link zum Quellcode (AGPL), Ersatz-Logo ohne Wehr-Logo, neutrales Blau in Anmeldung und VG-Gesamtansicht.
 
 ## Evidence on Hand
 Keine echten Berichte im Repository (Datenschutz). Beispiele nur mit erfundenen Namen („M. Muster“, „Beispiel, Erika“).

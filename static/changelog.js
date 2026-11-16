@@ -9,6 +9,7 @@ const CHANGELOG = [
     date: "2026-11-16",
     items: [
       "<b>openEinsatzstatistik:</b> Die Anwendung heißt jetzt so und ist freie Software (AGPL-Lizenz). Unten auf jeder Seite steht ein Link zum Quellcode.",
+      "<b>Neues Zeichen:</b> Ohne eigenes Wehr-Logo zeigt die Anwendung jetzt das Zeichen von openEinsatzstatistik (drei Balken mit Flamme) in Kopfzeile, Fußzeile und Browser-Tab. Die Anmeldeseite und die Gesamtansicht der Verbandsgemeinde sind in Stahlblau gehalten.",
     ],
   },
   {
