@@ -7,6 +7,14 @@
 const CHANGELOG = [
   {
     date: "2026-11-16",
+    version: "2026-11-16.3",
+    items: [
+      "<b>Aufgeräumter Kopf:</b> Der aktive Reiter ist jetzt deutlich hervorgehoben, Beschriftungen und Untertitel im Kopf entfallen, der Titel wird nicht mehr abgeschnitten.",
+      "<b>Einfachere Einstellungen:</b> Die Wehr wählst du nur noch im Kopf und im Auswahlfeld der Einstellungen; die zusätzlichen Knöpfe zum Wechseln entfallen.",
+    ],
+  },
+  {
+    date: "2026-11-16",
     version: "2026-11-16.2",
     items: [
       "<b>Rollen wie im BKS-Portal:</b> Neue Funktionen als Rollen: Stellv. Wehrführer/in, Stellv. Wehrleiter/in, Brand- und Katastrophenschutzinspekteur/in (und Stellvertretung), Sachbearbeiter/in Brand- u. KatS bzw. Feuerwehr, FEZ der VG sowie Leitstellenleitung und -personal. „Erfasser“ heißt jetzt „Bearbeiter/in Einsatzberichte“. Die Rechte bestehender Zuordnungen ändern sich nicht.",
