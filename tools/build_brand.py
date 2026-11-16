@@ -4,7 +4,7 @@
 Schreibt nach brand/ und static/ des Projekts (Ausgabeordner /out = Projektwurzel). Aufruf aus der Projektwurzel:
   docker build -q -t brand-tools -f tools/Dockerfile.brand tools
   docker run --rm -v "$PWD/tools:/t:ro" -v "$PWD/tools/fonts:/fonts:ro" -v "$PWD:/out" brand-tools python /t/build_brand.py
-Die Schriften VT323 und Courier Prime (SIL Open Font License, Lizenztexte in tools/fonts) liegen unter tools/fonts.
+Die Schrift Roboto (SIL Open Font License, Lizenztext in tools/fonts) liegt in drei Schnitten unter tools/fonts.
 """
 import os
 
@@ -87,20 +87,26 @@ def mark_mono(color="currentColor"):
 
 
 # ---------------------------------------------------------------- Wortmarke
-NAME = "openEinsatzstatistik"
+NAME_LIGHT, NAME_BOLD = "open", "Einsatzstatistik"
 SUB = "FREIE EINSATZSTATISTIK FÜR FEUERWEHREN"
-DISPLAY, LABEL = "VT323-Regular.ttf", "CourierPrime-Bold.ttf"
+REGULAR, MEDIUM, BOLD = "Roboto-Regular.ttf", "Roboto-Medium.ttf", "Roboto-Bold.ttf"
+CAP = 0.711   # Versalhöhe von Roboto in em
 
 
-def wordmark_parts(color, size=56, x=0, y=0):
-    """Name in VT323 und Unterzeile in Courier Prime Bold, auf die Breite des Namens gespreizt."""
-    d1, w1 = text_path(DISPLAY, NAME, size, x, y)
-    sub_size = size * 0.215
-    n = len(SUB)
-    base = text_width(LABEL, SUB, sub_size)
-    tracking = (w1 - base) / (n - 1)
-    d2, w2 = text_path(LABEL, SUB, sub_size, x, y + size * 0.36, tracking)
-    return (f'<path d="{d1}" fill="{color}"/><path d="{d2}" fill="{color}"/>', w1, size * 0.36 + sub_size * 0.2)
+def wordmark_parts(color, size=46, x=0, y=0):
+    """„open“ in Regular, „Einsatzstatistik“ in Bold; Unterzeile in Medium, auf die Breite des Namens gespreizt.
+    y = Grundlinie des Namens. Gibt (SVG, Breite, Höhe unter der Grundlinie) zurück."""
+    t = -size * 0.012
+    d1, w1 = text_path(REGULAR, NAME_LIGHT, size, x, y, t)
+    d2, w2 = text_path(BOLD, NAME_BOLD, size, x + w1 + t, y, t)
+    width = w1 + t + w2
+    sub_size = size * 0.205
+    base = text_width(MEDIUM, SUB, sub_size)
+    tracking = (width - base) / (len(SUB) - 1)
+    sub_y = y + size * 0.215 + sub_size * CAP + size * 0.12
+    d3, _ = text_path(MEDIUM, SUB, sub_size, x, sub_y, tracking)
+    body = f'<path d="{d1} {d2}" fill="{color}"/><path d="{d3}" fill="{color}"/>'
+    return body, width, sub_y - y + 2
 
 
 def svg(w, h, body, bg=None, label="openEinsatzstatistik"):
@@ -109,34 +115,31 @@ def svg(w, h, body, bg=None, label="openEinsatzstatistik"):
             f'role="img" aria-label="{label}">{rect}{body}</svg>')
 
 
+def _white_mark():
+    return (f'<path d="{CASE}" fill="none" stroke="#fff" stroke-width="3" transform="translate(32 32) scale(.94) translate(-32 -32)"/>'
+            f'<path d="{BAR1}" fill="#fff"/><path d="{BAR2}" fill="#fff"/><path fill-rule="evenodd" d="{FLAME}" fill="#fff"/>')
+
+
 def horizontal(color, white=False):
-    size = 56
-    parts, w1, h2 = wordmark_parts(color, size, x=88, y=40)
-    m = mark_inner() if not white else ""
-    if white:
-        m = (f'<path d="{CASE}" fill="none" stroke="#fff" stroke-width="3" transform="translate(32 32) scale(.94) translate(-32 -32)"/>'
-             f'<path d="{BAR1}" fill="#fff"/><path d="{BAR2}" fill="#fff"/><path fill-rule="evenodd" d="{FLAME}" fill="#fff"/>')
-    mk = f'<g transform="translate(0 0)">{m}</g>'
-    return svg(88 + w1, 64, mk + parts)
+    size = 46
+    y = 38
+    parts, w1, _ = wordmark_parts(color, size, x=84, y=y)
+    return svg(84 + w1, 64, (_white_mark() if white else mark_inner()) + parts)
 
 
 def stacked(color, white=False):
-    size = 56
-    parts, w1, h2 = wordmark_parts(color, size)
-    W = w1 + 0
-    mk = mark_inner() if not white else (
-        f'<path d="{CASE}" fill="none" stroke="#fff" stroke-width="3" transform="translate(32 32) scale(.94) translate(-32 -32)"/>'
-        f'<path d="{BAR1}" fill="#fff"/><path d="{BAR2}" fill="#fff"/><path fill-rule="evenodd" d="{FLAME}" fill="#fff"/>')
+    size = 46
     scale = 1.5
     mw = 64 * scale
-    parts, w1, h2 = wordmark_parts(color, size, x=0, y=mw + 20 + 40)
-    body = f'<g transform="translate({(w1 - mw) / 2:g} 0) scale({scale})">{mk}</g>' + parts
-    return svg(w1, mw + 20 + 40 + size * 0.36 + 6, body)
+    parts, w1, below = wordmark_parts(color, size, x=0, y=mw + 24 + size * CAP)
+    body = f'<g transform="translate({(w1 - mw) / 2:g} 0) scale({scale})">{_white_mark() if white else mark_inner()}</g>' + parts
+    return svg(w1, mw + 24 + size * CAP + below, body)
 
 
 def wordmark(color):
-    parts, w1, h2 = wordmark_parts(color, 56, 0, 44)
-    return svg(w1, 44 + h2 + 4, parts)
+    size = 46
+    parts, w1, below = wordmark_parts(color, size, 0, size * CAP)
+    return svg(w1, size * CAP + below, parts)
 
 
 # ---------------------------------------------------------------- Icons
@@ -161,16 +164,14 @@ def social(w=1280, h=640):
     body = f'<rect width="{w}" height="{h}" fill="{TIEF}"/>'
     body += dots(w - 420, 48, 14, 11, 24, "#7AB3D6", 2, .3)
     body += f'<g transform="translate(790 150) scale(5.6)">{mark_inner(case=BLAU)}</g>'
-    parts, w1, _ = wordmark_parts("#fff", 76, x=72, y=262)
+    parts, w1, _ = wordmark_parts("#fff", 74, x=72, y=250)
     body += parts
-    f = "CourierPrime-Regular.ttf"
     for i, line in enumerate(("Aus dem BKS-Einsatzbericht", "wird die Auswertung.")):
-        d, _ = text_path(f, line, 32, 72, 372 + i * 46)
+        d, _ = text_path(REGULAR, line, 38, 72, 380 + i * 52)
         body += f'<path d="{d}" fill="#fff"/>'
-    for i, line in enumerate(("Frei, quelloffen, mandantenfähig.",)):
-        d, _ = text_path(f, line, 26, 72, 486 + i * 40)
-        body += f'<path d="{d}" fill="{HELL}"/>'
-    cr, _ = text_path(LABEL, "AGPL-3.0  ·  POLIFKA IT BERATUNG", 18, 72, h - 52, 2)
+    d, _ = text_path(REGULAR, "Frei, quelloffen, mandantenfähig.", 28, 72, 506)
+    body += f'<path d="{d}" fill="{HELL}"/>'
+    cr, _ = text_path(MEDIUM, "AGPL-3.0  ·  POLIFKA IT BERATUNG", 18, 72, h - 52, 2)
     body += f'<path d="{cr}" fill="#7AB3D6"/>'
     return svg(w, h, body)
 
@@ -189,23 +190,6 @@ def png(svg_text, path, width, height=None, bg=None):
     cairosvg.svg2png(bytestring=svg_text.encode(), write_to=full, output_width=width,
                      output_height=height or width, background_color=bg)
     return full
-
-
-def proof():
-    x = 20
-    parts = ['<rect width="1500" height="900" fill="#fff"/>']
-    for size in (16, 32):
-        parts.append(f'<g transform="translate({x} 20) scale({size * 4 / 64})">{mark(small=True).split(">", 1)[1].rsplit("</svg", 1)[0]}</g>')
-        x += size * 4 + 20
-    parts.append(f'<g transform="translate(20 220)">{horizontal(BLAU).split(">", 1)[1].rsplit("</svg", 1)[0]}</g>')
-    parts.append('<rect x="0" y="330" width="760" height="130" fill="#2F6D92"/>')
-    parts.append(f'<g transform="translate(20 360)">{horizontal("#fff", white=True).split(">", 1)[1].rsplit("</svg", 1)[0]}</g>')
-    parts.append(f'<g transform="translate(900 20) scale(2)">{app_tile().split(">", 1)[1].rsplit("</svg", 1)[0]}</g>')
-    parts.append(f'<g transform="translate(20 500) scale(1.2)">{stacked(BLAU).split(">", 1)[1].rsplit("</svg", 1)[0]}</g>')
-    parts.append(f'<g transform="translate(640 500) scale(3)">{mark_mono(INK).split(">", 1)[1].rsplit("</svg", 1)[0]}</g>')
-    parts.append('<rect x="900" y="500" width="260" height="260" fill="#B3261E"/>')
-    parts.append(f'<g transform="translate(940 540) scale(2.6)">{mark_white().split(">", 1)[1].rsplit("</svg", 1)[0]}</g>')
-    return svg(1500, 900, "".join(parts))
 
 
 def main():
