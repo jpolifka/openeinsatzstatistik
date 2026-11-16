@@ -255,6 +255,13 @@ def _vg_lead_people(con):
                         [(role["id"], p) for p in (rbac.PEOPLE, rbac.PEOPLE_EDIT)])
 
 
+def _bks_role_tiers(con):
+    """Stufen Sachbearbeitung/Leitung für die BKS-Rollen (kein AVV, keine Gebühren, keine Vererbung von vg_stats);
+    setzt die Rollen aus rbac.BKS_ROLES neu – nur die Systemrollen, eigene Rollen der VGs bleiben."""
+    from app import rbac
+    rbac.add_roles(con)
+
+
 def _records_per_vg(con):
     """Stammdatensätze und Prüfvermerke je VG: Schlüssel (bks_record_id, vg_id) statt nur bks_record_id,
     damit eine VG weder den Stammdatensatz noch den Prüfvermerk einer anderen belegt oder überschreibt."""
@@ -354,7 +361,8 @@ TENANT_MIGRATIONS = [_create_legacy_schema, _rename_to_english, _add_tenant_tabl
 CENTRAL_MIGRATIONS = [_create_central_schema, _add_dpa, _add_records, _add_notices, _add_fee_schedules, _add_roles,
                       _records_per_vg, _add_consumed_magic_links, _add_completed_imports, _add_tenant_archive,
                       _add_vg_defaults, _settings_for_fee_roles, _add_sessions,
-                      _add_vg_kind, _add_bks_roles, _vg_lead_people]
+                      _add_vg_kind, _add_bks_roles, _vg_lead_people,
+                      _bks_role_tiers]
 
 
 def migrate(con, steps=TENANT_MIGRATIONS):
