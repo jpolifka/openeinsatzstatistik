@@ -21,10 +21,10 @@ def test_daytime_until_midnight():
 
 
 def test_area_by_name_prefix():
-    assert CFG.area_of("Rheinbrohl-Nord") == "Rheinbrohl"
-    assert CFG.area_of("Bad Hönningen") == "Bad Hönningen"
-    assert CFG.area_of("rheinbrohl") == "Rheinbrohl"
-    assert CFG.area_of("Rheinbreitbach") == domain.OTHER_AREA       # früher über „rhein“ fälschlich Rheinbrohl
+    assert CFG.area_of("Altenau-Nord") == "Altenau"
+    assert CFG.area_of("Bad Neustadt") == "Bad Neustadt"
+    assert CFG.area_of("altenau") == "Altenau"
+    assert CFG.area_of("Rheinbreitbach") == domain.OTHER_AREA       # früher über „rhein“ fälschlich Altenau
     assert CFG.area_of("Linz") == domain.OTHER_AREA
     assert CFG.area_of(None) == domain.OTHER_AREA
 
@@ -36,14 +36,14 @@ def test_places_with_old_name_prefix_load_as_names(con):
 
 
 def test_plan_relevance():
-    assert CFG.is_plan_relevant({"keyword": "B2", "place": "Hammerstein"})
-    assert not CFG.is_plan_relevant({"keyword": "B1", "place": "Hammerstein"})
-    assert not CFG.is_plan_relevant({"keyword": "B2", "place": "Leutesdorf"})
+    assert CFG.is_plan_relevant({"keyword": "B2", "place": "Probenhausen"})
+    assert not CFG.is_plan_relevant({"keyword": "B1", "place": "Probenhausen"})
+    assert not CFG.is_plan_relevant({"keyword": "B2", "place": "Testheim"})
 
 
 def test_substitute_label():
-    assert CFG.substitute_label("FL NR#.BHÖ 01/23-01", "02/45") == "01/23-01"
-    assert CFG.substitute_label("FL NR#.BHÖ 02/45-01", "02/45") is None
+    assert CFG.substitute_label("FL NR#.MUS 01/23-01", "02/45") == "01/23-01"
+    assert CFG.substitute_label("FL NR#.MUS 02/45-01", "02/45") is None
     assert CFG.substitute_label(None, "02/45") is None
 
 
@@ -53,7 +53,7 @@ def test_rules_follow_the_tenant():
                          plan_places=("Musterstadt",), plan_min_level=3, day_hours=(7, 19))
     assert other.vehicles == ("03/11", "03/44") and other.excluded_from_plan_crew == {"03/44"}
     assert other.own_vehicle_prefix == "FL NR#.ABC 03/"
-    assert other.area_of("Rheinbrohl") == domain.OTHER_AREA
+    assert other.area_of("Altenau") == domain.OTHER_AREA
     assert not other.is_plan_relevant({"keyword": "B2", "place": "Musterstadt"})
     assert other.is_plan_relevant({"keyword": "B3", "place": "Musterstadt"})
     assert other.is_daytime(dt.time(18, 30)) and not other.is_daytime(dt.time(6, 30))

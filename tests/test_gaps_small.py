@@ -95,7 +95,7 @@ def test_size_limit_ignores_non_request_messages_and_rejects_oversized_bodies():
 
 def test_call_sign_text_without_number_or_unknown():
     assert domain.call_sign_text("kein Funkrufname") == ""
-    text = domain.call_sign_text("FL NR#.BHÖ 02/45")
+    text = domain.call_sign_text("FL NR#.MUS 02/45")
     assert text and "Nr." not in text
 
 

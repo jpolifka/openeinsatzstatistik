@@ -43,7 +43,7 @@ def test_lift_keeps_configured_values_and_fills_unconfigured(data_dir):
     assert _tenant("wehr-a2").config == dataclasses.replace(before["wehr-a2"], keywords=before["wehr-a1"].keywords)
     layer = _tenant("wehr-a1").layer
     assert layer.value("control_center") == CFG.control_center          # Gleichstand: die erste Wehr
-    assert layer.settings["places"] == list(CFG.places) and layer.settings["bks_code"] == "NR#.BHÖ"
+    assert layer.settings["places"] == list(CFG.places) and layer.settings["bks_code"] == "NR#.MUS"
     assert {k["code"]: k["name"] for k in layer.keyword_list}["B1"] == "Kleinbrand"
     assert _own_settings("wehr-a1") >= {"station", "plan_places"} and "places" not in _own_settings("wehr-a1")
     assert {"control_center", "day_hours"} <= _own_settings("wehr-a2")

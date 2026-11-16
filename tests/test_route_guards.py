@@ -58,7 +58,7 @@ def world(make_client):
     for slug in ("wehr-a1", "wehr-b1"):
         with db.connection(tenancy.tenant_path(slug)) as con:
             ids[slug] = store.create_incident(con, {"number": 1, "started_at": "2025-03-12T10:00:00", "keyword": "B2",
-                                                    "place": "Rheinbrohl"}, source="pdf")
+                                                    "place": "Altenau"}, source="pdf")
     return make_client(login=True), ids
 
 

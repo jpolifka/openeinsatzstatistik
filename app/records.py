@@ -299,7 +299,7 @@ def close_notices(con, tenant_id, bks_record_id, kinds):
 def notify_others(central_con, source, vehicles, origin, tenants, exclude=None, deviations=True, email=None):
     """Hinweise an die Wehren der VG zu einem eingelesenen Bericht bzw. Stammdatensatz (source):
     Abweichungen bei ihren Fahrzeugen (deviations) und fehlende eigene Berichte.
-    origin: z. B. „Bericht von Leutesdorf“. Die Zeiten der Leitstelle im Stammdatensatz korrigieren die
+    origin: z. B. „Bericht von Testheim“. Die Zeiten der Leitstelle im Stammdatensatz korrigieren die
     Wehren in ihren Berichten oft bewusst – dort nur fehlende Berichte melden (deviations=False)."""
     record_id = source.get("bks_record_id")
     when = format_date(source.get("started_at") or source.get("first_alarm"))

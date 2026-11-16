@@ -4,8 +4,8 @@
 
 Bis zur Mandantenfähigkeit lag der ganze Bestand in DATA_DIR/einsaetze.db, die Fachkonstanten
 standen im Code und berechtigt waren die Adressen aus AUTH_EMAILS.
-migrate_single_install() macht daraus beim ersten Start einmalig die VG Bad Hönningen mit der
-Wehr Rheinbrohl. Danach liegen die Werte nur noch in deren Datenbank.
+migrate_single_install() macht daraus beim ersten Start einmalig die VG Nordkreis mit der
+Wehr Altenau. Danach liegen die Werte nur noch in deren Datenbank.
 """
 import json
 import logging
@@ -20,18 +20,18 @@ log = logging.getLogger("pdf2einsatz")
 
 LEGACY_FILE = "einsaetze.db"
 BACKUP_FILE = "einsaetze-vor-mandanten.db"
-VG_SLUG, VG_NAME = "bad-hoenningen", "VG Bad Hönningen"
-TENANT_SLUG = "rheinbrohl"
+VG_SLUG, VG_NAME = "vg-nordkreis", "VG Nordkreis"
+TENANT_SLUG = "altenau"
 
 
 def legacy_config():
     """Fachkonfiguration der übernommenen Wehr: nur der Name. Fahrzeuge, Kennungen und Orte sowie Logos
     gehören nicht in den Code und werden nach der Übernahme in den Einstellungen neu angelegt."""
-    return TenantConfig(name="Feuerwehr Rheinbrohl")
+    return TenantConfig(name="Feuerwehr Altenau")
 
 
 # Satzung über den Kostenersatz und die Gebührenerhebung für Hilfe- und Dienstleistungen der Feuerwehr
-# der VG Bad Hönningen vom 16.05.2024, Anlage „Verzeichnis der Kostensätze“ (Euro je Stunde)
+# der VG Nordkreis vom 16.05.2024, Anlage „Verzeichnis der Kostensätze“ (Euro je Stunde)
 FEE_SCHEDULE_2024 = {
     "name": "Satzung vom 16.05.2024", "valid_from": "2024-08-10",
     "rates": {
@@ -64,7 +64,7 @@ FEE_SCHEDULE_2024 = {
 
 
 def seed_fee_schedule(con, vg_id):
-    """Gebührenordnung der VG Bad Hönningen anlegen (nur wenn die VG noch keine hat)."""
+    """Gebührenordnung der VG Nordkreis anlegen (nur wenn die VG noch keine hat)."""
     if not con.execute("SELECT 1 FROM fee_schedule WHERE vg_id = ?", (vg_id,)).fetchone():
         s = FEE_SCHEDULE_2024
         con.execute("INSERT INTO fee_schedule (vg_id, name, valid_from, rates, modified_by) VALUES (?, ?, ?, ?, 'System')",
@@ -92,7 +92,7 @@ def _copy_database(source, target):
 
 
 def migrate_single_install(data_dir):
-    """Einmalig: DATA_DIR/einsaetze.db wird zur Wehr Rheinbrohl. Die alte Datei bleibt als
+    """Einmalig: DATA_DIR/einsaetze.db wird zur Wehr Altenau. Die alte Datei bleibt als
     einsaetze-vor-mandanten.db liegen. Bricht der Ablauf ab, beginnt er beim nächsten Start neu."""
     legacy, central = os.path.join(data_dir, LEGACY_FILE), os.path.join(data_dir, "app.db")
     staging = central + ".neu"

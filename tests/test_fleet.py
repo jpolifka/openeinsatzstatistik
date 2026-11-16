@@ -11,7 +11,7 @@ from conftest import CFG, make_tenant
 from test_report import FULL, LEFT
 
 # Zusätzliche Fahrzeugzeile einer eigenen, noch nicht gelisteten Einheit (02/99)
-NEW_VEHICLE = "FL NR#.BHÖ 02/99-01 0 / 0 / 2 / 2 / 0 12.03.25 10:10:00 12.03.25 10:14:00 12.03.25 10:19:00 Ja " \
+NEW_VEHICLE = "FL NR#.MUS 02/99-01 0 / 0 / 2 / 2 / 0 12.03.25 10:10:00 12.03.25 10:14:00 12.03.25 10:19:00 Ja " \
               "12.03.25 10:44:04 12.03.25 10:50:00\n"
 
 
@@ -76,7 +76,7 @@ def test_incident_shows_vehicles_in_service_or_with_data():
 # Fahrzeug des Landes im Standort der Wehr: anderes Präfix, gleiche Kennzahl wie 01/23 der Einheit
 STATE_VEHICLE = "RP WW 01/23-06 0 / 1 / 1 / 2 / 0 12.03.25 10:10:00 12.03.25 10:14:00 12.03.25 10:19:00 Ja " \
                 "12.03.25 10:44:04 12.03.25 10:50:00\n"
-UNIT_0123 = "FL NR#.BHÖ 01/23-01 0 / 0 / 3 / 3 / 0 12.03.25 10:10:00 12.03.25 10:15:00 12.03.25 10:20:00 Ja " \
+UNIT_0123 = "FL NR#.MUS 01/23-01 0 / 0 / 3 / 3 / 0 12.03.25 10:10:00 12.03.25 10:15:00 12.03.25 10:20:00 Ja " \
             "12.03.25 10:44:04 12.03.25 10:50:00\n"
 
 
@@ -88,12 +88,12 @@ def test_vehicle_with_other_prefix_is_parsed():
 
 def test_vehicles_are_assigned_by_full_call_sign():
     cfg = dataclasses.replace(CFG, substitutes={}, fleet=(
-        Vehicle("02/45", name="FL NR#.BHÖ 02/45-01"), Vehicle("01/23", name="FL NR#.BHÖ 01/23-01"),
+        Vehicle("02/45", name="FL NR#.MUS 02/45-01"), Vehicle("01/23", name="FL NR#.MUS 01/23-01"),
         Vehicle("01/23-06", name="RP WW 01/23-06"), Vehicle("02/24")))
     r = _read(cfg, FULL.replace("FL NR#.LIN", STATE_VEHICLE + UNIT_0123 + "FL NR#.LIN"))
     assert r["slots"]["01/23-06"]["name"] == "RP WW 01/23-06"
-    assert r["slots"]["01/23"]["name"] == "FL NR#.BHÖ 01/23-01"
-    assert r["slots"]["02/24"]["name"] == "FL NR#.BHÖ 02/24-01"      # ohne Namen weiter über das Präfix
+    assert r["slots"]["01/23"]["name"] == "FL NR#.MUS 01/23-01"
+    assert r["slots"]["02/24"]["name"] == "FL NR#.MUS 02/24-01"      # ohne Namen weiter über das Präfix
     assert r["new_vehicles"] == []
     assert cfg.substitute_label("RP WW 01/23-06", "01/23-06") is None
     assert cfg.is_own("RP WW 01/23-06") and not cfg.is_own("RP WW 01/23-07")
@@ -101,19 +101,19 @@ def test_vehicles_are_assigned_by_full_call_sign():
 
 def test_substitute_by_full_call_sign():
     cfg = dataclasses.replace(CFG, substitutes={"RP WW 01/23-06": "02/45"},
-                              fleet=(Vehicle("02/45", name="FL NR#.BHÖ 02/45-01"),))
-    full = FULL.replace("FL NR#.BHÖ 02/45-01", "RP WW 01/23-06")            # mit Besatzung
+                              fleet=(Vehicle("02/45", name="FL NR#.MUS 02/45-01"),))
+    full = FULL.replace("FL NR#.MUS 02/45-01", "RP WW 01/23-06")            # mit Besatzung
     r = _read(cfg, full)
     assert r["slots"]["02/45"]["name"] == "RP WW 01/23-06"
     assert cfg.substitute_label("RP WW 01/23-06", "02/45") == "RP WW 01/23-06"
 
 
 def test_new_vehicle_gets_name_and_short_call_sign():
-    cfg = dataclasses.replace(CFG, fleet=(Vehicle("02/99", name="FL NR#.BHÖ 02/99-01"),))
+    cfg = dataclasses.replace(CFG, fleet=(Vehicle("02/99", name="FL NR#.MUS 02/99-01"),))
     second = NEW_VEHICLE.replace("02/99-01", "02/99-02")
     r = _read(cfg, FULL.replace("FL NR#.LIN", second + "FL NR#.LIN"))
     assert "02/99-02" in r["new_vehicles"]
-    assert ("02/99-02", "FL NR#.BHÖ 02/99-02") in report.new_fleet_vehicles(r)
+    assert ("02/99-02", "FL NR#.MUS 02/99-02") in report.new_fleet_vehicles(r)
 
 
 def test_migration_fills_fleet_names(tmp_path):
@@ -121,7 +121,7 @@ def test_migration_fills_fleet_names(tmp_path):
     db.migrate(con, db.TENANT_MIGRATIONS[:5])
     con.execute("INSERT INTO fleet (call_sign, sort_order) VALUES ('02/45', 1), ('02/24', 2)")
     incident_id = con.execute("INSERT INTO incident (year, number, source) VALUES (2025, 1, 'pdf')").lastrowid
-    con.execute("INSERT INTO vehicle (incident_id, call_sign, name) VALUES (?, '02/45', 'FL NR#.BHÖ 02/45-01')",
+    con.execute("INSERT INTO vehicle (incident_id, call_sign, name) VALUES (?, '02/45', 'FL NR#.MUS 02/45-01')",
                 (incident_id,))
     for number in (2, 3):                     # Ersatzfahrzeug öfter in der Spalte 02/24 als das eigene (nie)
         other = con.execute("INSERT INTO incident (year, number, source) VALUES (2025, ?, 'pdf')", (number,)).lastrowid
@@ -129,4 +129,4 @@ def test_migration_fills_fleet_names(tmp_path):
     con.commit()
     db.migrate(con)
     assert dict(con.execute("SELECT call_sign, name FROM fleet").fetchall()) == {
-        "02/45": "FL NR#.BHÖ 02/45-01", "02/24": ""}
+        "02/45": "FL NR#.MUS 02/45-01", "02/24": ""}

@@ -13,7 +13,7 @@ web
 - Genutzt wird überwiegend am Desktop; Tablet und Handy kommen gelegentlich vor.
 
 ## Product Purpose
-Einsatzstatistik für Feuerwehren, mandantenfähig (erste Wehr: FF Rheinbrohl). Einsatzberichte (PDF oder Excel-Export aus dem BKS-Portal RLP) werden eingelesen, in SQLite gespeichert und die Auswertungen der früheren Excel-„Einsatzübersicht“ nachgerechnet. Erfolg heißt: ein Bericht ist in wenigen Minuten geprüft und übernommen, Kennzahlen sind nachvollziehbar und stimmen mit der bisherigen Excel-Auswertung überein.
+Einsatzstatistik für Feuerwehren, mandantenfähig. Einsatzberichte (PDF oder Excel-Export aus dem BKS-Portal RLP) werden eingelesen, in SQLite gespeichert und die Auswertungen der früheren Excel-„Einsatzübersicht“ nachgerechnet. Erfolg heißt: ein Bericht ist in wenigen Minuten geprüft und übernommen, Kennzahlen sind nachvollziehbar und stimmen mit der bisherigen Excel-Auswertung überein.
 
 ## Positioning
 Rechnet die gewohnte Excel-Auswertung der Wehr nach, versteht das BKS-Format Rheinland-Pfalz und trennt Rechte nach Wehr und Verbandsgemeinde. Eine allgemeine Statistiksoftware kann das nicht ohne Anpassung.

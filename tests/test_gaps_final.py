@@ -117,16 +117,16 @@ def test_after_import_without_job_id_notifies_without_bookkeeping(client):
 
 
 def test_notify_others_stays_silent_when_vehicles_match(data_dir):
-    OTHER = dataclasses.replace(CFG, fleet=(Vehicle("01/46"),), own_prefix="01/", unit_marker="FW NR#.BHÖ 01")
+    OTHER = dataclasses.replace(CFG, fleet=(Vehicle("01/46"),), own_prefix="01/", unit_marker="FW NR#.MUS 01")
     make_tenant("wehr-a1")
     make_tenant("wehr-a2", cfg=OTHER)
     with db.connection(tenancy.tenant_path("wehr-a2")) as con:
         incident_id = store.create_incident(con, {"number": 1, "started_at": "2025-03-12T10:00:00", "keyword": "B",
                                                   "subcode": "2", "bks_record_id": "9000001"}, source="pdf")
-        store.add_vehicle(con, incident_id, "01/46", "FL NR#.BHÖ 01/46-01", 6, "10:07:00", "10:12:00")
+        store.add_vehicle(con, incident_id, "01/46", "FL NR#.MUS 01/46-01", 6, "10:07:00", "10:12:00")
     tenants = list(tenancy.vg_tenants(tenancy.access_for(None, "t:wehr-a1").selected.vg_id))
     source = {"bks_record_id": "9000001", "keyword": "B", "subcode": "2", "first_alarm": dt.datetime(2025, 3, 12, 10)}
-    vehicles = [{"name": "FL NR#.BHÖ 01/46-01", "crew": 6, "alerted": None, "departed": dt.datetime(2025, 3, 12, 10, 7),
+    vehicles = [{"name": "FL NR#.MUS 01/46-01", "crew": 6, "alerted": None, "departed": dt.datetime(2025, 3, 12, 10, 7),
                  "arrived": dt.datetime(2025, 3, 12, 10, 12), "finished": None}]
     with tenancy.central() as con:
         records.notify_others(con, source, vehicles, "Bericht", tenants)
@@ -138,8 +138,8 @@ def test_same_block_twice_is_registered_once():
     cfg = dataclasses.replace(CFG, fleet=(Vehicle("02/45"),))
     r = read()
     template = dict(r["vehicles"][0])
-    r["vehicles"] = [{**template, "name": "FL NR#.BHÖ 02/99-01", "call_sign": None},
-                     {**template, "name": "FL NR#.BHÖ 02/99-02", "call_sign": None}]
+    r["vehicles"] = [{**template, "name": "FL NR#.MUS 02/99-01", "call_sign": None},
+                     {**template, "name": "FL NR#.MUS 02/99-02", "call_sign": None}]
     r["people"] = []
     slots = report.assign_vehicles(r, cfg)
     assert r["new_vehicles"].count("02/99") == 1 and len(slots) == 1

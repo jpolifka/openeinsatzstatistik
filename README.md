@@ -1,7 +1,7 @@
 # pdf2einsatz – Einsatzstatistik für Feuerwehren
 
 Weboberfläche zur Einsatzstatistik für Freiwillige Feuerwehren, mandantenfähig und gruppiert nach
-Verbandsgemeinde (erste Wehr: FF Rheinbrohl): Einsatzberichte (PDF oder Excel-Export) aus dem
+Verbandsgemeinde: Einsatzberichte (PDF oder Excel-Export) aus dem
 BKS-Portal RLP einlesen, prüfen und in eine eigene Datenbank je Wehr übernehmen. Die Auswertungen
 der bisherigen Excel-„Einsatzübersicht“ (Statistik, „Eintreffen und verfügbare Kräfte“, Anwesenheit)
 rechnet die App aus den gespeicherten Einsätzen nach; Kennzahlen werden nie gespeichert.
@@ -205,8 +205,8 @@ Schrift werden abgelehnt. Ohne eigene Farben gilt das bisherige Rot. Anmeldung u
 einer VG sind neutral gestaltet.
 
 **Umstellung einer bestehenden Installation:** Liegt beim Start noch `daten/einsaetze.db` (ohne
-`daten/app.db`), übernimmt die App sie einmalig als Wehr „Rheinbrohl“ in der „VG Bad Hönningen“
-(`daten/tenants/rheinbrohl/einsaetze.db`), samt den bisherigen Fahrzeugen, Orten und Logos. Die
+`daten/app.db`), übernimmt die App sie einmalig als Wehr „Altenau“ in der „VG Nordkreis“
+(`daten/tenants/altenau/einsaetze.db`). Fahrzeuge, Orte und Logos sind danach neu in den Einstellungen anzulegen. Die
 Adressen aus `AUTH_EMAILS` werden dort Wehrführer. Die alte Datei bleibt als
 `daten/einsaetze-vor-mandanten.db` liegen. Vorher `ADMIN_EMAILS` in `.env` setzen.
 
@@ -246,7 +246,7 @@ Verantwortlich ist die Verbandsgemeinde als Träger der Feuerwehr, deshalb gilt 
   die Gemeindeordnung aber eine handschriftliche Unterschrift (ggf. mit Dienstsiegel) verlangen – im
   Zweifel unterschriebenes Papier scannen oder eine qualifizierte elektronische Signatur nutzen und mit
   dem Datenschutzbeauftragten der VG abstimmen.
-- **Eigenbetrieb:** Die bei der Umstellung übernommene VG Bad Hönningen steht auf „nicht erforderlich
+- **Eigenbetrieb:** Die bei der Umstellung übernommene VG Nordkreis steht auf „nicht erforderlich
   (Eigenbetrieb)“. Diesen Status setzt nur der Superadmin.
 - **Angaben zum Auftragnehmer** (Anschrift, Vertretung, Hosting, Datensicherung) kommen aus `.env`
   (`DPA_*`, siehe [`.env.example`](.env.example)).
@@ -310,7 +310,7 @@ Freigabe fehlt sie für diese auch in der Gesamtansicht, in *Zeiten & Kräfte* u
 Schlüssel der Rechte, z. B. `plan.release`, blieben unverändert.)
 
 **Kostenersatz** (Recht „Prüfprotokoll und Kostenersatz“, Gebührenordnung mit „Gebührenordnung der VG“; im Startbestand der Wehrleiter): Verwaltung → Gebührenordnung pflegt die Satzung der VG in Fassungen
-mit „gültig ab“ (für die VG Bad Hönningen vorbelegt mit der Satzung vom 16.05.2024 – Beginn der
+mit „gültig ab“ (für die VG Nordkreis vorbelegt mit der Satzung vom 16.05.2024 – Beginn der
 Gültigkeit bitte prüfen). Im Prüfprotokoll rechnet „Kostenersatz berechnen“ einen Einsatz über alle
 beteiligten Wehren: Fahrzeuge vom Ausrücken bis zum Einsatzende des Fahrzeugs, Einsatzkräfte von der
 Alarmierung bis zum Einsatzende, halbstündlich aufgerundet; BSW mit eigenem Satz, Fehlalarm einer
@@ -389,7 +389,7 @@ app/
   mail.py          Mailversand per SMTP mit DKIM, Prüfung von SPF/DKIM/DMARC
   domain.py        Fachkonstanten für alle Wehren (Stichworte, Einsatzarten, Standardwerte)
   tenant_config.py Fachkonfiguration einer Wehr (Fahrzeuge, Orte, Zeitgrenzen) – auch für die Oberfläche
-  legacy.py        Übernahme der bisherigen Einzel-Installation (FF Rheinbrohl)
+  legacy.py        Übernahme der bisherigen Einzel-Installation (Wehr Altenau)
   pdf_report.py    Einsatzbericht-PDF lesen
   xlsx_report.py   Einsatzbericht als Excel-Export des BKS-Portals lesen
   report.py        Felder ableiten, Prüfhinweise, Bericht -> Einsatz

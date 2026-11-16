@@ -33,14 +33,14 @@ def test_single_install_becomes_tenant(old_install):
         tenant = con.execute("SELECT t.slug, t.name, v.name AS vg FROM tenant t JOIN vg v ON v.id = t.vg_id").fetchone()
         roles = con.execute("SELECT m.email, r.key FROM membership m JOIN role r ON r.id = m.role_id "
                             "ORDER BY m.email").fetchall()
-    assert tuple(tenant) == ("rheinbrohl", "Feuerwehr Rheinbrohl", "VG Bad Hönningen")
+    assert tuple(tenant) == ("altenau", "Feuerwehr Altenau", "VG Nordkreis")
     assert [tuple(r) for r in roles] == [("e.beispiel@example.org", "lead"), ("m.muster@example.org", "lead")]
     with tenancy.central() as con:                     # Eigenbetrieb: kein AVV nötig, Wehr bleibt nutzbar
         assert con.execute("SELECT status FROM dpa").fetchone()[0] == "not_required"
-    assert "rheinbrohl" in tenancy.access_for("m.muster@example.org").tenants
-    with db.connection(tenancy.tenant_path("rheinbrohl")) as con:
+    assert "altenau" in tenancy.access_for("m.muster@example.org").tenants
+    with db.connection(tenancy.tenant_path("altenau")) as con:
         assert len(store.load_incidents(con)) == 2
-        assert tenancy.load_config(con, "Feuerwehr Rheinbrohl") == legacy.legacy_config()
+        assert tenancy.load_config(con, "Feuerwehr Altenau") == legacy.legacy_config()
         assert tenancy.load_config(con, "x").fleet == ()      # Fahrzeuge und Logos werden neu angelegt
         assert con.execute("SELECT COUNT(*) FROM asset").fetchone()[0] == 0
     assert tenancy.is_allowed("m.muster@example.org")
@@ -61,7 +61,7 @@ def test_interrupted_migration_starts_over(old_install, monkeypatch):
         legacy.migrate_single_install(str(old_install))
     assert legacy.needs_migration(str(old_install))     # alte Datei unangetastet, keine Zentrale
     legacy.migrate_single_install(str(old_install))
-    with db.connection(tenancy.tenant_path("rheinbrohl")) as con:
+    with db.connection(tenancy.tenant_path("altenau")) as con:
         assert len(store.load_incidents(con)) == 2
 
 

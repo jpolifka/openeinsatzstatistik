@@ -106,11 +106,11 @@ def test_other_vg_cannot_see_contract(pending):
 def test_existing_central_db_marks_legacy_vg_not_required(tmp_path):
     con = db.connect(str(tmp_path / "app.db"))
     db.migrate(con, db.CENTRAL_MIGRATIONS[:1])
-    con.execute("INSERT INTO vg (slug, name) VALUES ('bad-hoenningen', 'VG Bad Hönningen'), ('vg-b', 'VG B')")
+    con.execute("INSERT INTO vg (slug, name) VALUES ('vg-nordkreis', 'VG Nordkreis'), ('vg-b', 'VG B')")
     con.commit()
     db.migrate(con, db.CENTRAL_MIGRATIONS)
     assert dict(con.execute("SELECT v.slug, d.status FROM vg v LEFT JOIN dpa d ON d.vg_id = v.id").fetchall()) == \
-        {"bad-hoenningen": "not_required", "vg-b": None}
+        {"vg-nordkreis": "not_required", "vg-b": None}
     con.close()
 
 

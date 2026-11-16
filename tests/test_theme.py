@@ -85,7 +85,7 @@ def test_vg_view_and_login_page_are_neutral(branded):
     assert branded.get("/api/config").json()["branding"] == {"logo_light": None, "logo_dark": None, "icon": None}
     branded.cookies.clear()
     page = branded.get("/login").text
-    assert theme.NEUTRAL["brand"] in page and "Rheinbrohl" not in page
+    assert theme.NEUTRAL["brand"] in page and "Altenau" not in page
 
 
 def test_tenant_without_colors_keeps_default_theme(make_client):

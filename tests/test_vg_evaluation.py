@@ -13,8 +13,8 @@ from conftest import CFG, grant, login, make_incident, make_tenant
 from test_report import FULL, LEFT
 
 # Zweite Wehr derselben VG mit eigenen Fahrzeugen, Orten und Bedarfsplan
-OTHER = dataclasses.replace(CFG, fleet=(Vehicle("01/46"),), own_prefix="01/", unit_marker="FW NR#.BHÖ 01",
-                            places=(("Bad Hönningen", "bad hönn"),), plan_places=("Bad Hönningen",))
+OTHER = dataclasses.replace(CFG, fleet=(Vehicle("01/46"),), own_prefix="01/", unit_marker="FW NR#.MUS 01",
+                            places=(("Bad Neustadt", "bad hönn"),), plan_places=("Bad Neustadt",))
 
 
 def _incident(slug, number, place, dispatch_number=None, arrived="10:07:00"):
@@ -32,10 +32,10 @@ def vg(make_client):
     vg_id, _ = make_tenant("wehr-a1", "vg-a")
     make_tenant("wehr-a2", "vg-a", cfg=OTHER)
     make_tenant("wehr-b1", "vg-b")
-    _incident("wehr-a1", 1, "Rheinbrohl", "1250000001")
-    _incident("wehr-a1", 2, "Hammerstein", None, arrived="10:12:00")
-    _incident("wehr-a2", 1, "Bad Hönningen", "1250000001")          # gemeinsamer Einsatz mit A1
-    _incident("wehr-b1", 1, "Rheinbrohl", "1250000001")             # andere VG: zählt nicht mit
+    _incident("wehr-a1", 1, "Altenau", "1250000001")
+    _incident("wehr-a1", 2, "Probenhausen", None, arrived="10:12:00")
+    _incident("wehr-a2", 1, "Bad Neustadt", "1250000001")          # gemeinsamer Einsatz mit A1
+    _incident("wehr-b1", 1, "Altenau", "1250000001")             # andere VG: zählt nicht mit
     grant("vglead@example.org", "vg_lead", vg_id)
     grant("vgstats@example.org", "vg_stats", vg_id)
     return login(make_client(login=True), "vglead@example.org")
@@ -49,7 +49,7 @@ def test_vg_evaluation_sums_tenants_and_counts_joint_incidents_once(vg):
     assert [(r["slug"], r["count"]) for r in e["tenants"]["rows"]] == [("wehr-a1", 2), ("wehr-a2", 1)]
     # Bedarfsplan: jede Wehr mit ihren eigenen Orten – alle drei Einsätze zählen, einer zu spät
     assert e["response_plan"]["total"]["count"] == 3 and e["response_plan"]["total"]["on_time"] == 2
-    assert set(e["response_plan"]["places"]) == {"Rheinbrohl", "Hammerstein", "Arienheller", "Bad Hönningen"}
+    assert set(e["response_plan"]["places"]) == {"Altenau", "Probenhausen", "Beispieldorf", "Bad Neustadt"}
     assert e["attendance"] is None                             # Kameraden nur je Wehr
     assert "Muster" not in str(e)
     # Zeiten, Belastung und Datenabdeckung über alle Wehren; Überschneidungen je Wehr gerechnet
@@ -69,7 +69,7 @@ def test_vg_incidents_list_all_tenants(vg):
     assert sorted(i["tenant"] for i in incidents) == ["wehr-a1", "wehr-a1", "wehr-a2"]
     config = vg.get("/api/config").json()
     assert config["vg"]["name"] == "VG vg-a" and len(config["tenants"]) == 2
-    assert "Bad Hönningen" in config["places"] and "Rheinbrohl" in config["places"]
+    assert "Bad Neustadt" in config["places"] and "Altenau" in config["places"]
 
 
 def test_vg_export_has_sheets_per_tenant(vg):
@@ -123,12 +123,12 @@ def test_reports_are_matched_to_the_reporting_tenant():
     texts = (FULL, LEFT, "")
     # Ohne Kopfzeile der Einheit: die meisten eigenen Fahrzeuge (zwei 02/.. gegen ein 01/..)
     assert report.match_tenant(report.pdf_parser(texts, "17-25.pdf"), candidates) == ("wehr-a1", "vehicles")
-    header = "FW NR#.BHÖ 01 Bad Hönningen Alarmierung: 12.03.2025 10:05:00 Einsatznummer: 1\n"
+    header = "FW NR#.MUS 01 Bad Neustadt Alarmierung: 12.03.2025 10:05:00 Einsatznummer: 1\n"
     assert report.match_tenant(report.pdf_parser((header + FULL, LEFT, ""), "17-25.pdf"), candidates) == ("wehr-a2", "unit")
     foreign = dataclasses.replace(CFG, unit_prefix="FL NR#.XYZ ", own_prefix="05/", unit_marker="FW NR#.XYZ 05")
     assert report.match_tenant(report.pdf_parser(texts, "17-25.pdf"), [("fremd", foreign)]) == (None, None)
     # Bericht der FEZ mit mitalarmierten Fahrzeugen: keine Zuordnung über die Fahrzeuge
-    fez = "Feuerwehrhaus: FW NR#.BHÖ 00 FEZ VG\n"
+    fez = "Feuerwehrhaus: FW NR#.MUS 00 FEZ VG\n"
     assert report.match_tenant(report.pdf_parser((fez + FULL, LEFT, ""), "17-25.pdf"), candidates) == (None, None)
     # Wehr ohne BKS-Kennung: weiterhin über ihre Fahrzeuge
     unmarked = dataclasses.replace(CFG, unit_marker="")
@@ -137,7 +137,7 @@ def test_reports_are_matched_to_the_reporting_tenant():
 
 def test_upload_in_vg_view_distributes_reports(vg, monkeypatch):
     from app import main
-    header = "FW NR#.BHÖ 01 Bad Hönningen Alarmierung: 12.03.2025 10:05:00 Einsatznummer: 1\n" \
+    header = "FW NR#.MUS 01 Bad Neustadt Alarmierung: 12.03.2025 10:05:00 Einsatznummer: 1\n" \
              "Einsatznummer Leitstelle: 1250000001\n"
     texts = {"a1.pdf": (FULL, LEFT, ""), "a2.pdf": (header + FULL, LEFT, ""), "fremd.pdf": ("", "", "")}
     monkeypatch.setattr(pdf_report, "extract_text", lambda path: texts[path.rsplit("/", 1)[-1]])
@@ -163,9 +163,9 @@ def _bks(kind, report_id, unit):
 def test_multi_report_is_distributed_and_updates_on_reimport(vg, monkeypatch):
     from app import main, records
     texts = {"stamm.pdf": (MASTER + FULL.split("Anwesenheitsliste")[0], LEFT, ""),
-             "a2.pdf": (_bks("Hauptbericht", "9000002", "FW NR#.BHÖ 01 Musterstadt") + FULL, LEFT, ""),
-             "a1.pdf": (_bks("Nebenbericht", "9000003", "FW NR#.BHÖ 02 Musterdorf") + FULL, LEFT, ""),
-             "fez.pdf": (_bks("Nebenbericht", "9000004", "FW NR#.BHÖ 00 FEZ VG") + FULL, LEFT, "")}
+             "a2.pdf": (_bks("Hauptbericht", "9000002", "FW NR#.MUS 01 Musterstadt") + FULL, LEFT, ""),
+             "a1.pdf": (_bks("Nebenbericht", "9000003", "FW NR#.MUS 02 Musterdorf") + FULL, LEFT, ""),
+             "fez.pdf": (_bks("Nebenbericht", "9000004", "FW NR#.MUS 00 FEZ VG") + FULL, LEFT, "")}
     monkeypatch.setattr(pdf_report, "extract_text", lambda path: texts[path.rsplit("/", 1)[-1]])
     files = [("pdfs", (name, b"x", "application/pdf")) for name in texts]
     data = vg.post("/api/reports", files=files).json()
@@ -201,7 +201,7 @@ def test_single_tenant_skips_report_of_other_unit(make_client, monkeypatch):
     from app import main
     make_tenant("wehr-a1")
     client = make_client()
-    texts = {"fez.pdf": (_bks("Nebenbericht", "9000004", "FW NR#.BHÖ 00 FEZ VG") + FULL, LEFT, "")}
+    texts = {"fez.pdf": (_bks("Nebenbericht", "9000004", "FW NR#.MUS 00 FEZ VG") + FULL, LEFT, "")}
     monkeypatch.setattr(pdf_report, "extract_text", lambda path: texts[path.rsplit("/", 1)[-1]])
     data = client.post("/api/reports", files=[("pdfs", ("fez.pdf", b"x", "application/pdf"))]).json()
     assert data["reports"] == [] and data["errors"] == []

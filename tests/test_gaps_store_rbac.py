@@ -103,7 +103,7 @@ def test_pending_report_replaces_older_version(con):
 
 def test_add_fleet_vehicles_and_usage(con):
     import datetime as dt
-    store.add_fleet_vehicles(con, [("02/45", "FL NR#.BHÖ 02/45-01")], dt.date(2025, 1, 1))
+    store.add_fleet_vehicles(con, [("02/45", "FL NR#.MUS 02/45-01")], dt.date(2025, 1, 1))
     store.add_fleet_vehicles(con, [("02/45", "andere"), ("02/24", None)], None)          # vorhandenes bleibt
     rows = {r["call_sign"]: r for r in con.execute("SELECT * FROM fleet")}
     assert set(rows) == {"02/45", "02/24"} and rows["02/45"]["in_service_from"] == "2025-01-01"

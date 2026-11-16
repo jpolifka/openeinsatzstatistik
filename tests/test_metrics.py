@@ -42,7 +42,7 @@ def test_minutes_wrap_past_midnight():
 
 def test_response_plan_counts_relevant_incidents():
     on_time = make_incident(id=1, vehicles={"02/45": vehicle("02/45", 6, None, "10:07:00")})
-    late = make_incident(id=2, place="Hammerstein", weekend_or_holiday=1,
+    late = make_incident(id=2, place="Probenhausen", weekend_or_holiday=1,
                          vehicles={"02/45": vehicle("02/45", 6, None, "10:12:00")})
     without_arrival = make_incident(id=3, vehicles={"02/45": vehicle("02/45", 6)})
     level_one = make_incident(id=4, keyword="B1", vehicles={"02/45": vehicle("02/45", 6, None, "10:07:00")})

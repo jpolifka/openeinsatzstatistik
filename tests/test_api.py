@@ -20,7 +20,7 @@ def client(make_client):
 def _create(client, number, started_at="2025-03-12T10:00:00"):
     with db.connection(tenancy.tenant_path("wehr-a1")) as con:
         incident_id = store.create_incident(con, {"number": number, "started_at": started_at, "keyword": "B2",
-                                                  "place": "Rheinbrohl"}, source="pdf")
+                                                  "place": "Altenau"}, source="pdf")
     return f"wehr-a1:{incident_id}"
 
 

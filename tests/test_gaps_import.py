@@ -115,9 +115,9 @@ def test_forward_of_already_recorded_report_and_full_queue(vg, monkeypatch):
     with target.connection() as con:
         store.create_incident(con, {"number": 1, "started_at": "2025-03-12T10:00:00", "bks_report_id": "9000002"},
                               source="pdf")
-    head = {"bks_report_id": "9000002", "unit": "FW NR#.BHÖ 01", "unit_name": "Musterstadt"}
+    head = {"bks_report_id": "9000002", "unit": "FW NR#.MUS 01", "unit_name": "Musterstadt"}
     assert "bereits erfasst" in importing.forward(target, head, "x.pdf", b"x", "a@example.org")
-    fresh = {"bks_report_id": "9000077", "bks_record_id": "9000001", "unit": "FW NR#.BHÖ 01"}
+    fresh = {"bks_report_id": "9000077", "bks_record_id": "9000001", "unit": "FW NR#.MUS 01"}
     monkeypatch.setattr(importing, "PENDING_MAX_REPORTS", 0)
     with pytest.raises(ValueError, match="liegen schon viele Berichte"):
         importing.forward(target, fresh, "x.pdf", b"x", "a@example.org")
@@ -142,7 +142,7 @@ def test_unknown_unit_is_skipped_and_unmatched_report_is_an_error(vg, tmp_path, 
         importing._read_report(str(path), "fez.pdf", two)
     text, left, right = TEXTS["a1.pdf"]
     monkeypatch.setattr(pdf_report, "extract_text", lambda p: (
-        text.replace("Feuerwehrhaus: FW NR#.BHÖ 02 Musterdorf\n", "").replace("FL NR#.BHÖ", "XX"), left, right))
+        text.replace("Feuerwehrhaus: FW NR#.MUS 02 Musterdorf\n", "").replace("FL NR#.MUS", "XX"), left, right))
     with pytest.raises(ValueError, match="passt zu keiner"):
         importing._read_report(str(path), "ohne-einheit.pdf", two)
 

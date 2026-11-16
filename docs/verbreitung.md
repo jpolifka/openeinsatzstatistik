@@ -39,7 +39,7 @@ Checkliste, bevor das Repository öffentlich wird:
 
 - [ ] Git-Historie auf Personendaten prüfen (Namen, echte Mailadressen, Berichte). Die Dateimuster sind ausgeschlossen,
       aber die Commit-Autoren-Mails (privat, `@icloud.com`) sind dann öffentlich; ggf. mit `.mailmap` oder Umschreiben.
-- [x] Logos und Fahrzeugdaten der FF Rheinbrohl sind aus dem Code entfernt. **Auch aus der Git-Historie**: vor dem
+- [x] Logos und Fahrzeugdaten einer realen Wehr sind aus dem Code entfernt. **Auch aus der Git-Historie**: vor dem
       Öffentlichmachen die Historie bereinigen oder mit neuer Historie veröffentlichen (siehe unten).
 - [ ] Impressum/Kontakt im README, `SECURITY.md` und Meldeweg testen (Private Vulnerability Reporting aktivieren).
 - [ ] Beschreibung, Themen (`feuerwehr`, `einsatzstatistik`, `bks`, `fastapi`) und Social-Preview-Bild setzen.

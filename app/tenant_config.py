@@ -181,7 +181,7 @@ class TenantConfig:
         return self.places
 
     def area_of(self, place):
-        """Einsatzgebiet: der Ort, mit dessen Namen der Einsatzort beginnt (z. B. „Rheinbrohl-Nord“)."""
+        """Einsatzgebiet: der Ort, mit dessen Namen der Einsatzort beginnt (z. B. „Musterstadt-Nord“)."""
         text = (place or "").lower()
         return next((name for name in self.places if text.startswith(name.lower())), domain.OTHER_AREA)
 

@@ -11,21 +11,21 @@ LEFT = """EINSATZBERICHT
 Einsatzbericht-Nr.: 17/25
 Einsatzstichwort: B2.08
 Meldebild: Zimmerbrand
-Einsatzstelle - Ort: Rheinbrohl
-Einsatzstelle - Ortsteil: Rheinbrohl (NR)
+Einsatzstelle - Ort: Altenau
+Einsatzstelle - Ortsteil: Altenau (NR)
 Einsatzstelle - Straße: Musterweg 4
 Einsatzstelle - Objekt: WH Musterhaus
 """
 VEHICLES = """Fahrzeuge Stärke Alarmiert Ausrücken
-FL NR#.BHÖ 02/45-01 0 / 1 / 1 / 2 / 0 12.03.25 10:09:41 12.03.25 10:12:04 12.03.25 10:16:25 Ja 12.03.25 10:44:04 12.03.25 10:48:21
-FL NR#.BHÖ 02/24-01 0 / 0 / 0 / 0 / 0 12.03.25 10:08:30 12.03.25 10:13:00 12.03.25 10:18:00 Ja 12.03.25 10:44:04 12.03.25 10:50:00
-FL NR#.BHÖ 01/46-01 0 / 1 / 5 / 6 / 2 12.03.25 10:05:00 12.03.25 10:07:00 12.03.25 10:12:00 Ja 12.03.25 10:50:00 12.03.25 10:56:59
+FL NR#.MUS 02/45-01 0 / 1 / 1 / 2 / 0 12.03.25 10:09:41 12.03.25 10:12:04 12.03.25 10:16:25 Ja 12.03.25 10:44:04 12.03.25 10:48:21
+FL NR#.MUS 02/24-01 0 / 0 / 0 / 0 / 0 12.03.25 10:08:30 12.03.25 10:13:00 12.03.25 10:18:00 Ja 12.03.25 10:44:04 12.03.25 10:50:00
+FL NR#.MUS 01/46-01 0 / 1 / 5 / 6 / 2 12.03.25 10:05:00 12.03.25 10:07:00 12.03.25 10:12:00 Ja 12.03.25 10:50:00 12.03.25 10:56:59
 FL NR#.LIN 0 / 0 / 2 / 2 / 0 12.03.25 10:09:00 - - Nein - 12.03.25 11:05:00
 """
 PEOPLE = """Anwesenheitsliste:
 Name Vorname Fahrzeug Von Bis Funktion AGT Min (AGT) Bemerkung
-Muster Max FL NR#.BHÖ 02/45-01 12.03.25 10:09 12.03.25 10:48 Einheitsführer nein 0
-Beispiel Erika FL NR#.BHÖ 02/45-01 12.03.25 10:09 12.03.25 10:48 Maschinist nein 0
+Muster Max FL NR#.MUS 02/45-01 12.03.25 10:09 12.03.25 10:48 Einheitsführer nein 0
+Beispiel Erika FL NR#.MUS 02/45-01 12.03.25 10:09 12.03.25 10:48 Maschinist nein 0
 Probe Otto 12.03.25 10:09 12.03.25 10:48 nein 0
 Unterschriften zu Einsatzbericht 1
 """
@@ -43,20 +43,20 @@ def read(full=FULL, left=LEFT, right="", filename="17-25_B2_Test.pdf"):
 def test_parse_fields_vehicles_and_people():
     r = parse_report(FULL, LEFT, "", "17-25_B2_Test.pdf", CFG.unit_prefix)
     assert (r["number"], r["keyword"], r["subcode"]) == (17, "B2", "08")
-    assert r["district"] == "Rheinbrohl"
+    assert r["district"] == "Altenau"
     assert [v["call_sign"] for v in r["vehicles"]] == ["02/45", "02/24", "01/46", None]
     assert r["vehicles"][0]["crew"] == 2 and r["vehicles"][0]["respiratory"] == 0
     assert r["vehicles"][3]["departed"] is None
     assert [(p["last_name"], p["vehicle"], p["role"]) for p in r["people"]] == [
         ("Muster", "02/45", "Einheitsführer"), ("Beispiel", "02/45", "Maschinist"), ("Probe", None, "")]
-    assert r["people"][0]["vehicle_name"] == "FL NR#.BHÖ 02/45-01"
+    assert r["people"][0]["vehicle_name"] == "FL NR#.MUS 02/45-01"
 
 
 def test_derived_fields():
     r = read()
     assert r["started_at"] == dt.datetime(2025, 3, 12, 10, 8, 30)    # früheste Alarmierung 02/..
     assert r["ended_at"] == dt.datetime(2025, 3, 12, 11, 5)          # FEZ endet zuletzt
-    assert r["place"] == "Rheinbrohl"
+    assert r["place"] == "Altenau"
     assert r["description"] == "Zimmerbrand / Musterhaus"
     assert r["unit_leader"] == "M. Muster"
     assert r["station_staff"] == 1                                   # 3 Anwesende, 2 auf Fahrzeugen
@@ -89,7 +89,7 @@ def test_number_from_other_spelling_or_filename():
 def test_substitute_vehicle_takes_block():
     full = FULL.replace("02/45-01", "01/23-01")
     r = read(full)
-    assert r["slots"]["02/45"]["name"] == "FL NR#.BHÖ 01/23-01"
+    assert r["slots"]["02/45"]["name"] == "FL NR#.MUS 01/23-01"
     assert any("als Ersatz für 02/45" in w for w in r["warnings"])
 
 
@@ -115,7 +115,7 @@ def test_older_layout_with_incident_site_in_right_column():
     left = LEFT.split("Meldebild")[0]
     r = read(left=left, right="Meldebild" + site)
     assert r["reported_as"] == "Zimmerbrand"
-    assert r["place"] == "Rheinbrohl"
+    assert r["place"] == "Altenau"
     assert r["description"] == "Zimmerbrand / Musterhaus"
 
 

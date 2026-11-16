@@ -14,7 +14,7 @@ def world(make_client):
     grant("vglead@example.org", "vg_lead", vg_a)
     with db.connection(tenancy.tenant_path("wehr-a1")) as con:
         incident_id = store.create_incident(con, {"number": 1, "started_at": "2025-03-12T10:00:00", "keyword": "B2",
-                                                  "place": "Rheinbrohl", "unit_leader": "M. Muster"}, source="pdf")
+                                                  "place": "Altenau", "unit_leader": "M. Muster"}, source="pdf")
         store.add_attendance(con, incident_id, store.MemberDirectory(con).find_or_create("Muster", "Max"))
     client = make_client(login=True)
     client.incident = f"wehr-a1:{incident_id}"

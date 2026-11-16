@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Kostenersatz nach der Gebührenordnung der VG (Satzung Bad Hönningen 2024 als Beispiel)."""
+"""Kostenersatz nach der Gebührenordnung der VG (Satzung Bad Neustadt 2024 als Beispiel)."""
 from app import pdf_report
 import dataclasses
 
@@ -12,7 +12,7 @@ from test_report import FULL, LEFT
 
 # Bezeichnungen der Fahrzeuge = Fahrzeugtypen der Gebührenordnung
 FLEET = dataclasses.replace(CFG, fleet=(Vehicle("02/45", "HLF 20"), Vehicle("02/24", "MTF"), Vehicle("02/71")))
-REPORT = "EINSATZBERICHT\nNebenbericht 9000003\nDatensatz: 9000001\nFeuerwehrhaus: FW NR#.BHÖ 02 Musterdorf\n"
+REPORT = "EINSATZBERICHT\nNebenbericht 9000003\nDatensatz: 9000001\nFeuerwehrhaus: FW NR#.MUS 02 Musterdorf\n"
 
 
 @pytest.mark.parametrize("minutes, hours", [(0, 0), (20, .5), (30, .5), (31, 1), (60, 1), (70, 1.5), (100, 2),
@@ -140,12 +140,12 @@ def test_substitute_and_schedule_hints(vg, monkeypatch):
         vg_id = con.execute("SELECT id FROM vg WHERE slug = 'vg-a'").fetchone()[0]
     with db.connection(tenancy.tenant_path("wehr-a1")) as con:
         con.execute("INSERT INTO setting (key, value) VALUES ('substitutes', ?) "
-                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value", ('{"FL NR#.BHÖ 02/24-01": "02/45"}',))
-        con.execute("UPDATE fleet SET name = 'FL NR#.BHÖ 02/24-01' WHERE call_sign = '02/24'")   # Typ MTF
+                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value", ('{"FL NR#.MUS 02/24-01": "02/45"}',))
+        con.execute("UPDATE fleet SET name = 'FL NR#.MUS 02/24-01' WHERE call_sign = '02/24'")   # Typ MTF
     tenancy.forget_config("wehr-a1")
-    _incident(vg, monkeypatch, FULL.replace("FL NR#.BHÖ 02/45-01", "FL NR#.BHÖ 02/19-01"))
+    _incident(vg, monkeypatch, FULL.replace("FL NR#.MUS 02/45-01", "FL NR#.MUS 02/19-01"))
     with db.connection(tenancy.tenant_path("wehr-a1")) as con:
-        con.execute("UPDATE vehicle SET call_sign = '02/45', name = 'FL NR#.BHÖ 02/24-01' WHERE call_sign = '02/24'")
+        con.execute("UPDATE vehicle SET call_sign = '02/45', name = 'FL NR#.MUS 02/24-01' WHERE call_sign = '02/24'")
     result = _fees(vg).json()
     vehicle = next(p for p in result["positions"] if p["kind"] == "vehicle" and "Ersatz" in p["label"])
     assert vehicle["label"].endswith("MTF") and vehicle["rate"] == 37.0

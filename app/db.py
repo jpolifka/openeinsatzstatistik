@@ -143,7 +143,7 @@ def _add_dpa(con):
     for change in ("UPDATE", "DELETE"):
         con.execute(f"CREATE TRIGGER dpa_event_no_{change.lower()} BEFORE {change} ON dpa_event "
                     "BEGIN SELECT RAISE(ABORT, 'Das AVV-Protokoll wird nur ergänzt.'); END")
-    for (vg_id,) in con.execute("SELECT id FROM vg WHERE slug = 'bad-hoenningen'").fetchall():
+    for (vg_id,) in con.execute("SELECT id FROM vg WHERE slug = 'vg-nordkreis'").fetchall():
         con.execute("INSERT INTO dpa (vg_id, status) VALUES (?, 'not_required')", (vg_id,))
         con.execute("INSERT INTO dpa_event (vg_id, email, action, detail) VALUES (?, 'System', ?, ?)",
                     (vg_id, "Status: nicht erforderlich (Eigenbetrieb)", "Bestand der früheren Einzel-Installation"))

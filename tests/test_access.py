@@ -34,7 +34,7 @@ MATRIX = {
 def _incident(slug):
     with db.connection(tenancy.tenant_path(slug)) as con:
         incident_id = store.create_incident(con, {"number": 1, "started_at": "2025-03-12T10:00:00", "keyword": "B2",
-                                                  "place": "Rheinbrohl", "unit_leader": "M. Muster"}, source="pdf")
+                                                  "place": "Altenau", "unit_leader": "M. Muster"}, source="pdf")
         store.add_attendance(con, incident_id, store.MemberDirectory(con).find_or_create("Muster", "Max"))
     return f"{slug}:{incident_id}"
 
@@ -95,7 +95,7 @@ def test_foreign_scope_cookie_falls_back_to_own_tenant(world):
     incidents = client.get("/api/incidents?year=2025").json()["incidents"]
     assert [i["id"] for i in incidents] == [ids["wehr-a1"]]
     # Einsatzgebiet und Bedarfsplan je Einsatz: Filter der Einsatzliste aus der Auswertung heraus
-    assert incidents[0]["area"] == "Rheinbrohl" and incidents[0]["plan_relevant"] is True
+    assert incidents[0]["area"] == "Altenau" and incidents[0]["plan_relevant"] is True
     assert client.post("/api/scope", json={"key": "t:wehr-b1"}).status_code == 403
     assert client.post("/api/scope", json={"key": "t:wehr-a1"}).status_code == 200
 

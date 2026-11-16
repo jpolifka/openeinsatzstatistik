@@ -57,13 +57,13 @@ def test_current_warnings_of_stored_incident():
 def test_unknown_own_vehicle_gets_new_block_once():
     r = read()
     extra = copy.deepcopy(r["vehicles"][0])
-    extra["name"] = "FL NR#.BHÖ 02/99-01"
+    extra["name"] = "FL NR#.MUS 02/99-01"
     extra["call_sign"] = None
     r["vehicles"].append(extra)
     slots = report.assign_vehicles(r, CFG)
     r["slots"] = slots
     assert "02/99" in r["new_vehicles"] and "02/99" in slots
-    assert report.new_fleet_vehicles(r) == [("02/99", "FL NR#.BHÖ 02/99-01")]
+    assert report.new_fleet_vehicles(r) == [("02/99", "FL NR#.MUS 02/99-01")]
     # Zweites, gleichnamiges Fahrzeug: Block ist belegt, wird nicht doppelt aufgenommen
     twin = copy.deepcopy(extra)
     r["vehicles"].append(twin)

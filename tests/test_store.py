@@ -28,7 +28,7 @@ def test_migrates_legacy_german_schema_with_data():
 
 
 FIELDS = {"number": 5, "started_at": "2026-06-04T10:00", "ended_at": "2026-06-04T11:00", "keyword": " B2 ",
-          "subcode": "07", "description": "BMA", "place": "Rheinbrohl", "unit_leader": "", "station_staff": "3"}
+          "subcode": "07", "description": "BMA", "place": "Altenau", "unit_leader": "", "station_staff": "3"}
 
 
 def test_create_normalizes_and_derives(con):

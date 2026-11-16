@@ -10,7 +10,7 @@ from app import db, records, store, tenancy, tenant_lifecycle
 from app.tenant_config import TenantConfig, Vehicle
 from conftest import CFG, make_tenant
 
-OTHER = dataclasses.replace(CFG, fleet=(Vehicle("01/46"),), own_prefix="01/", unit_marker="FW NR#.BHÖ 01")
+OTHER = dataclasses.replace(CFG, fleet=(Vehicle("01/46"),), own_prefix="01/", unit_marker="FW NR#.MUS 01")
 
 
 def _tenants(vg_slug="vg-a"):
@@ -21,7 +21,7 @@ def _tenants(vg_slug="vg-a"):
 
 def _incident(slug, **fields):
     values = {"number": 1, "started_at": "2025-03-12T10:00:00", "keyword": "B", "subcode": "2",
-              "bks_record_id": "9000001", "place": "Rheinbrohl", **fields}
+              "bks_record_id": "9000001", "place": "Altenau", **fields}
     with db.connection(tenancy.tenant_path(slug)) as con:
         return store.create_incident(con, values, source="pdf")
 
@@ -45,7 +45,7 @@ def test_check_against_master_reports_keyword_missing_people_and_number(data_dir
     _incident("wehr-a1", keyword="B", subcode="2", number=None)
     vg_id, tenants = _tenants()
     master = {"bks_record_id": "9000001", "keyword": "H", "subcode": "1", "first_alarm": dt.datetime(2025, 3, 12, 10),
-              "vehicles": [{"name": "FL NR#.BHÖ 02/45-01", "crew": 2, "alerted": None, "departed": None,
+              "vehicles": [{"name": "FL NR#.MUS 02/45-01", "crew": 2, "alerted": None, "departed": None,
                             "arrived": None, "finished": None}]}
     with tenancy.central() as con:
         records.save_master(con, vg_id, master, "a@example.org")
@@ -70,7 +70,7 @@ def test_notify_others_marks_pending_report_as_not_missing(data_dir):
     with target.connection() as con:
         store.add_pending(con, {"bks_report_id": "9000009", "bks_record_id": "9000001", "keyword": "B"}, "x.pdf", b"x")
     source = {"bks_record_id": "9000001", "keyword": "B", "subcode": "2", "first_alarm": dt.datetime(2025, 3, 12, 10)}
-    vehicles = [{"name": "FL NR#.BHÖ 01/46-01", "crew": 3, "alerted": None, "departed": None, "arrived": None,
+    vehicles = [{"name": "FL NR#.MUS 01/46-01", "crew": 3, "alerted": None, "departed": None, "arrived": None,
                  "finished": None}]
     with tenancy.central() as con:
         records.notify_others(con, source, vehicles, "Bericht von Wehr wehr-a1", tenants, exclude=a1)
@@ -81,7 +81,7 @@ def test_notify_others_marks_pending_report_as_not_missing(data_dir):
 def test_block_and_new_call_sign_edge_cases():
     assert CFG.block_of("") is None and CFG.block_of(None) is None
     assert CFG.new_call_sign("Sonderfahrzeug ohne Nummer") == "Sonderfahrzeug ohne Nummer"
-    assert CFG.new_call_sign("FL NR#.BHÖ 02/45-01", taken={"02/45", "02/45-01"}) == "FL NR#.BHÖ 02/45-01"
+    assert CFG.new_call_sign("FL NR#.MUS 02/45-01", taken={"02/45", "02/45-01"}) == "FL NR#.MUS 02/45-01"
 
 
 # ---------------------------------------------------------------- tenancy
@@ -94,7 +94,7 @@ def test_setting_keys_are_validated_and_removable(data_dir):
     with tenant.connection() as con:
         with pytest.raises(KeyError):
             tenancy.save_tenant_values(con, {"gibt_es_nicht": 1})
-        tenancy.save_tenant_values(con, {"plan_places": ["Rheinbrohl"]})
+        tenancy.save_tenant_values(con, {"plan_places": ["Altenau"]})
         assert con.execute("SELECT COUNT(*) FROM setting WHERE key = 'plan_places'").fetchone()[0] == 1
         tenancy.save_tenant_values(con, {"plan_places": None})
         assert con.execute("SELECT COUNT(*) FROM setting WHERE key = 'plan_places'").fetchone()[0] == 0

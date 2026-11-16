@@ -56,13 +56,13 @@ const run = (ctx, code) => vm.runInContext(code, ctx.context);
 // ------------------------------------------------------------ Adresse und Filter
 test("Adresse mit Filtern wird übernommen und ergibt dieselbe Adresse zurück", () => {
   const ctx = setup();
-  ctx.location.hash = "#incidents?cat=B&month=3&q=brand&sort=number-asc&warn=1&area=Rheinbrohl";
+  ctx.location.hash = "#incidents?cat=B&month=3&q=brand&sort=number-asc&warn=1&area=Altenau";
   run(ctx, "applyListParams(parseHash().params)");
   assert.equal(run(ctx, "state.category"), "B");
-  assert.deepEqual(JSON.parse(run(ctx, "JSON.stringify(state.filters)")), { month: "3", area: "Rheinbrohl" });
+  assert.deepEqual(JSON.parse(run(ctx, "JSON.stringify(state.filters)")), { month: "3", area: "Altenau" });
   assert.equal(run(ctx, "state.warnOnly"), true);
   const entries = JSON.parse(run(ctx, "JSON.stringify([...listParams().entries()])")).sort();
-  assert.deepEqual(entries, [["area", "Rheinbrohl"], ["cat", "B"], ["month", "3"], ["q", "brand"], ["sort", "number-asc"],
+  assert.deepEqual(entries, [["area", "Altenau"], ["cat", "B"], ["month", "3"], ["q", "brand"], ["sort", "number-asc"],
     ["warn", "1"]]);
 });
 
@@ -181,16 +181,16 @@ test("Fehlgeschlagenes Löschen meldet den Fehler und lädt die Liste neu", asyn
 // ------------------------------------------------------------ Ungespeicherte Änderungen
 test("confirmLeaveEdit fragt nur bei geändertem Formular und bricht bei „Nein“ ab", async () => {
   let asked = 0, answer = false;
-  let current = "Rheinbrohl";
+  let current = "Altenau";
   const ctx = setup({ askConfirm: async () => { asked++; return answer; } });
   ctx.context.formValue = () => ({ place: current });
   run(ctx, "readIncidentForm = () => formValue()");
   assert.equal(await run(ctx, "confirmLeaveEdit()"), true);                 // nichts in Bearbeitung
-  run(ctx, 'state.editing = "a:1"; state.editSnapshot = JSON.stringify({ place: "Rheinbrohl" })');
+  run(ctx, 'state.editing = "a:1"; state.editSnapshot = JSON.stringify({ place: "Altenau" })');
   assert.equal(await run(ctx, "confirmLeaveEdit()"), true);                 // unverändert: keine Rückfrage
   assert.equal(asked, 0);
   current = "Neuwied";
-  run(ctx, 'state.editing = "a:1"; state.editSnapshot = JSON.stringify({ place: "Rheinbrohl" })');
+  run(ctx, 'state.editing = "a:1"; state.editSnapshot = JSON.stringify({ place: "Altenau" })');
   assert.equal(await run(ctx, "confirmLeaveEdit()"), false);
   assert.equal(run(ctx, "state.editing"), "a:1");                     // Bearbeitung bleibt offen
   answer = true;

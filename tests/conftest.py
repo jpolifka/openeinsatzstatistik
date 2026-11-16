@@ -11,17 +11,17 @@ from app.tenant_config import TenantConfig, Vehicle
 
 # Fachkonfiguration für die Tests: die Werte der ersten Wehr (keine personenbezogenen Daten)
 CFG = TenantConfig(
-    name="Feuerwehr Rheinbrohl",
+    name="Feuerwehr Altenau",
     # Reihenfolge der Einsatzübersicht; 01/10 fehlt in der Gesamtstärke des Bedarfsplans (Excel-Spalte AU)
     fleet=(Vehicle("02/45"), Vehicle("02/24"), Vehicle("02/71"), Vehicle("02/19"),
            Vehicle("01/10", in_plan_crew=False)),
     substitutes={"01/23": "02/45"},
-    unit_prefix="FL NR#.BHÖ ",
+    unit_prefix="FL NR#.MUS ",
     own_prefix="02/",
-    unit_marker="FW NR#.BHÖ 02",
+    unit_marker="FW NR#.MUS 02",
     control_center="FL NR#.LIN",
-    places=("Rheinbrohl", "Arienheller", "Hammerstein", "Ariendorf", "Bad Hönningen", "Leutesdorf"),
-    plan_places=("Rheinbrohl", "Hammerstein", "Arienheller"),
+    places=("Altenau", "Beispieldorf", "Probenhausen", "Demobach", "Bad Neustadt", "Testheim"),
+    plan_places=("Altenau", "Probenhausen", "Beispieldorf"),
 )
 
 
@@ -98,7 +98,7 @@ def make_incident(**overrides):
     """Einsatz in der Form von store.load_incidents – mit erfundenen Werten."""
     incident = {
         "id": 1, "year": 2025, "number": 1, "started_at": "2025-03-12T10:00:00", "ended_at": "2025-03-12T11:00:00",
-        "keyword": "B2", "subcode": "08", "description": "Zimmerbrand / Musterweg 1", "place": "Rheinbrohl",
+        "keyword": "B2", "subcode": "08", "description": "Zimmerbrand / Musterweg 1", "place": "Altenau",
         "unit_leader": "M. Muster", "station_staff": 0, "weekend_or_holiday": 0, "source": "pdf",
         "filename": "01-25_B2_Test.pdf", "warnings": [], "vehicles": {}, "people": [],
     }

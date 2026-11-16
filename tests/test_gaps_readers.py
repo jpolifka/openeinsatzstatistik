@@ -79,20 +79,20 @@ def test_numeric_helpers_and_timestamps():
 
 
 def test_report_without_sheets_has_no_people_or_vehicles():
-    sheets = {"Einsatzbericht": [("ID", "Feuerwehrhaus"), ("9000001", "FW NR#.BHÖ 02 Musterstadt")]}
+    sheets = {"Einsatzbericht": [("ID", "Feuerwehrhaus"), ("9000001", "FW NR#.MUS 02 Musterstadt")]}
     parsed = xlsx_report.parse_report(sheets, "17-25.xlsx", CFG.unit_prefix)
     assert parsed["vehicles"] == [] and parsed["people"] == []
 
 
 def test_vehicle_rows_without_name_are_skipped_and_people_without_name_too():
     sheets = {
-        "Einsatzbericht": [("ID", "Feuerwehrhaus"), ("9000001", "FW NR#.BHÖ 02 Musterstadt")],
-        "Ausger. Fahrzeuge und Personen": [("Fahrzeuge", "Gesamt"), (None, 3), ("FL NR#.BHÖ 02/45-01", 2)],
+        "Einsatzbericht": [("ID", "Feuerwehrhaus"), ("9000001", "FW NR#.MUS 02 Musterstadt")],
+        "Ausger. Fahrzeuge und Personen": [("Fahrzeuge", "Gesamt"), (None, 3), ("FL NR#.MUS 02/45-01", 2)],
         "Anwesenheitsliste": [("Name", "Vorname", "Fahrzeug", "AGT"), (None, "Erika", None, "ja"),
                               ("Muster", "Max", None, "ja"), ("Probe", "Otto")],
     }
     parsed = xlsx_report.parse_report(sheets, "17-25.xlsx", CFG.unit_prefix)
-    assert [v["name"] for v in parsed["vehicles"]] == ["FL NR#.BHÖ 02/45-01"]
+    assert [v["name"] for v in parsed["vehicles"]] == ["FL NR#.MUS 02/45-01"]
     assert [(p["last_name"], p["agt"]) for p in parsed["people"]] == [("Muster", True), ("Probe", False)]
 
 
@@ -142,7 +142,7 @@ def test_extract_text_rejects_empty_and_huge_pdfs(monkeypatch, pages):
 
 
 def test_incomplete_vehicle_row_is_padded_and_warned(monkeypatch):
-    text = FULL.replace("FL NR#.BHÖ 02/24-01 0 / 0 / 0 / 0 / 0 12.03.25 10:08:30 12.03.25 10:13:00 12.03.25 10:18:00 Ja "
-                        "12.03.25 10:44:04 12.03.25 10:50:00", "FL NR#.BHÖ 02/24-01 0 / 0 / 0 / 0 / 0 12.03.25 10:08:30")
+    text = FULL.replace("FL NR#.MUS 02/24-01 0 / 0 / 0 / 0 / 0 12.03.25 10:08:30 12.03.25 10:13:00 12.03.25 10:18:00 Ja "
+                        "12.03.25 10:44:04 12.03.25 10:50:00", "FL NR#.MUS 02/24-01 0 / 0 / 0 / 0 / 0 12.03.25 10:08:30")
     parsed = pdf_report.parse_report(text, LEFT, "", "17-25_B2_Test.pdf", CFG.unit_prefix)
     assert any(w.startswith("Fahrzeugzeile unvollständig") for w in parsed["warnings"])

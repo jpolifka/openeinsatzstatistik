@@ -10,10 +10,10 @@ from app.tenant_config import Vehicle
 from conftest import CFG, grant, login, make_tenant
 from test_report import FULL, LEFT
 
-# Drei Wehren einer VG: A1 = 02/.., A2 = 01/.., A3 = 03/.. (alle Fahrzeuge der VG heißen FL NR#.BHÖ …)
-OTHER = dataclasses.replace(CFG, fleet=(Vehicle("01/46"),), own_prefix="01/", unit_marker="FW NR#.BHÖ 01")
-THIRD = dataclasses.replace(CFG, fleet=(Vehicle("03/41"),), own_prefix="03/", unit_marker="FW NR#.BHÖ 03")
-LINE_0341 = "FL NR#.BHÖ 03/41-01 0 / 0 / 2 / 2 / 0 12.03.25 10:20:00 12.03.25 10:25:00 12.03.25 10:35:00 Ja " \
+# Drei Wehren einer VG: A1 = 02/.., A2 = 01/.., A3 = 03/.. (alle Fahrzeuge der VG heißen FL NR#.MUS …)
+OTHER = dataclasses.replace(CFG, fleet=(Vehicle("01/46"),), own_prefix="01/", unit_marker="FW NR#.MUS 01")
+THIRD = dataclasses.replace(CFG, fleet=(Vehicle("03/41"),), own_prefix="03/", unit_marker="FW NR#.MUS 03")
+LINE_0341 = "FL NR#.MUS 03/41-01 0 / 0 / 2 / 2 / 0 12.03.25 10:20:00 12.03.25 10:25:00 12.03.25 10:35:00 Ja " \
             "12.03.25 10:50:00 12.03.25 10:55:00\n"
 MASTER = "EINSATZBERICHT\nStammdatensatz 9000001\nEinsatznummer Leitstelle: 1250000009\n" + \
     FULL.split("Anwesenheitsliste")[0].replace("FL NR#.LIN", LINE_0341 + "FL NR#.LIN")
@@ -26,10 +26,10 @@ def _bks(kind, report_id, unit, text=FULL):
 TEXTS = {
     "stamm.pdf": (MASTER, LEFT, ""),
     # A2 schreibt für 02/45 eine andere Stärke (3 statt 2) als A1 in ihrem eigenen Bericht
-    "a2.pdf": (_bks("Hauptbericht", "9000002", "FW NR#.BHÖ 01 Musterstadt",
+    "a2.pdf": (_bks("Hauptbericht", "9000002", "FW NR#.MUS 01 Musterstadt",
                     FULL.replace("02/45-01 0 / 1 / 1 / 2 / 0", "02/45-01 0 / 1 / 2 / 3 / 0")), LEFT, ""),
-    "a1.pdf": (_bks("Nebenbericht", "9000003", "FW NR#.BHÖ 02 Musterdorf"), LEFT, ""),
-    "fez.pdf": (_bks("Nebenbericht", "9000004", "FW NR#.BHÖ 00 FEZ VG"), LEFT, ""),
+    "a1.pdf": (_bks("Nebenbericht", "9000003", "FW NR#.MUS 02 Musterdorf"), LEFT, ""),
+    "fez.pdf": (_bks("Nebenbericht", "9000004", "FW NR#.MUS 00 FEZ VG"), LEFT, ""),
 }
 
 
@@ -163,13 +163,13 @@ def test_protocol_for_vg_lead(vg):
 
 
 def test_vehicle_differences_compare_minutes_and_skip_unknown_old_times():
-    incident = {"vehicles": {"02/45": {"name": "FL NR#.BHÖ 02/45-01", "crew": 5, "alerted": None,
+    incident = {"vehicles": {"02/45": {"name": "FL NR#.MUS 02/45-01", "crew": 5, "alerted": None,
                                        "departed": "10:12:59", "arrived": "10:16:00", "finished": None}}}
-    source = [{"name": "FL NR#.BHÖ 02/45-01", "crew": 4, "alerted": "2025-03-12T10:09:41",
+    source = [{"name": "FL NR#.MUS 02/45-01", "crew": 4, "alerted": "2025-03-12T10:09:41",
                "departed": "2025-03-12T10:12:04", "arrived": None, "finished": "2025-03-12T10:48:00"},
-              {"name": "FL NR#.BHÖ 02/24-01", "crew": 0, "departed": "2025-03-12T10:13:00", "arrived": None},
-              {"name": "FL NR#.BHÖ 02/19-01", "crew": 1, "departed": None, "arrived": None},   # nicht ausgerückt
-              {"name": "FL NR#.BHÖ 01/46-01", "crew": 6, "departed": "2025-03-12T10:07:00"}]   # andere Wehr
+              {"name": "FL NR#.MUS 02/24-01", "crew": 0, "departed": "2025-03-12T10:13:00", "arrived": None},
+              {"name": "FL NR#.MUS 02/19-01", "crew": 1, "departed": None, "arrived": None},   # nicht ausgerückt
+              {"name": "FL NR#.MUS 01/46-01", "crew": 6, "departed": "2025-03-12T10:07:00"}]   # andere Wehr
     assert records.vehicle_differences(source, incident, CFG) == [
         {"vehicle": "02/45", "field": "Stärke", "source": 4, "stored": 5},
         {"vehicle": "02/45", "field": "Eintreffen", "source": None, "stored": "10:16"},
