@@ -42,6 +42,31 @@ def test_new_roles_exist_with_expected_rights(world):
     assert roles.find("vg_lead", 1).label == "Wehrleiter/in" and roles.find("editor", 1).label.startswith("Bearbeiter")
 
 
+def test_tiers_staff_lead_and_vg_admin(world):
+    """Sachbearbeitung bearbeitet, Leitung konfiguriert und vergibt, nur die VG-Verwaltung hat AVV, Gebühren, Rollenpflege."""
+    with tenancy.central() as con:
+        roles = rbac.Roles(con)
+    vg = world.ids["vg-a"]
+    perms = lambda key: roles.permissions(roles.find(key, vg).id)    # noqa: E731
+    admin_only = {rbac.VG_FEES, rbac.DPA_EDIT, rbac.ROLES_MANAGE}
+    for key in ("fez", "bki", "bki_deputy", "officer_kats", "officer_fire"):
+        assert not perms(key) & admin_only, key
+    assert not perms("fez") & {rbac.VG_FEES}
+    assert admin_only <= perms("vg_lead")
+    staff = perms("officer_kats")
+    assert {rbac.INCIDENTS, rbac.WRITE, rbac.DELETE, rbac.PEOPLE, rbac.VG_RECORDS} <= staff
+    assert not staff & {rbac.SETTINGS, rbac.KEYWORDS, rbac.USERS_GRANT, rbac.PLAN_RELEASE}
+    lead = perms("bki")
+    assert {rbac.SETTINGS, rbac.KEYWORDS, rbac.USERS_GRANT, rbac.PLAN_RELEASE, rbac.VG_RECORDS} <= lead
+    with tenancy.central() as con:
+        roles = rbac.Roles(con)
+        leit = roles.find("dispatch_lead", world.ids["leit-l"])
+        staff_d = roles.find("dispatch_staff", world.ids["leit-l"])
+        assert rbac.VG_RECORDS not in roles.permissions(leit.id) | roles.permissions(staff_d.id)
+        assert roles.grants(roles.find("officer_fire", vg).id) == frozenset()
+        assert roles.find("officer_fire", vg).parent_id is None
+
+
 def test_role_fits_only_matching_kinds(world):
     with tenancy.central() as con:
         keys = lambda vg: {r.key for r in rbac.Roles(con).visible(world.ids[vg])}    # noqa: E731
@@ -101,12 +126,13 @@ def test_create_vg_with_kind_via_api(world):
 def test_migration_of_old_database_adds_bks_roles(tmp_path):
     con = sqlite3.connect(tmp_path / "c.db")
     con.row_factory = sqlite3.Row
-    db.migrate(con, db.CENTRAL_MIGRATIONS[:-2])
+    db.migrate(con, db.CENTRAL_MIGRATIONS[:-3])
     with_roles = {r["key"] for r in con.execute("SELECT key FROM role")}
     assert "bki" not in with_roles
     db.migrate(con, db.CENTRAL_MIGRATIONS)
     assert {"bki", "deputy_lead", "dispatch_lead"} <= {r["key"] for r in con.execute("SELECT key FROM role")}
     roles = rbac.Roles(con)
     assert rbac.PEOPLE in roles.permissions(roles.find("vg_lead", None).id)
+    assert rbac.VG_FEES not in roles.permissions(roles.find("bki", None).id)
     rbac.add_roles(con)                                    # wiederholbar
     assert len([r for r in roles]) == len(list(rbac.Roles(con)))

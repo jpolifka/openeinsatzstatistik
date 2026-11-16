@@ -102,20 +102,24 @@ SCOPES = {"vg": "VG", "tenant": "Wehr"}
 # Funktionen des BKS-Portals (Migration _add_bks_roles): (Schlüssel, Bereich, Bezeichnung, erbt von, Rechte, vergibt,
 # Arten). Wehr-Rollen = „Einheit beliebig“ (nur die eigene Wehr), VG-Rollen = alle Einsätze des Aufgabenträgers.
 _WEHR = ("lead", "deputy_lead", "editor", "viewer")
-_ALL = {PLAN_VIEW, PLAN_RELEASE, INCIDENTS, EXPORT, IMPORT, WRITE, DELETE, PEOPLE, PEOPLE_EDIT, SETTINGS, KEYWORDS,
-        VG_RECORDS, VG_FEES, USERS_VIEW, USERS_GRANT}
+# Drei Stufen: Sachbearbeitung (Einsätze und Personen bearbeiten), Leitung (zusätzlich Freigabe, Einstellungen, Benutzer),
+# VG-Verwaltung (vg_lead: alles, auch Gebühren, AVV und Rollenpflege). Die Rollen erben nicht von vg_stats, damit
+# z. B. „AVV ausfüllen“ nicht bei jeder Funktion landet.
+_STAFF = {STATS, VG_OVERVIEW, DPA_VIEW, PLAN_VIEW, INCIDENTS, EXPORT, IMPORT, WRITE, DELETE, PEOPLE, PEOPLE_EDIT}
+_OFFICER = _STAFF | {VG_RECORDS}
+_LEAD = _STAFF | {PLAN_RELEASE, SETTINGS, KEYWORDS, USERS_VIEW, USERS_GRANT}
 BKS_ROLES = (
     ("deputy_lead", "tenant", "Stellv. Wehrführer/in", "lead", set(), (), ()),
     ("vg_deputy", "vg", "Stellv. Wehrleiter/in", "vg_lead", set(), (), ("vg",)),
-    ("fez", "vg", "FEZ der VG (Bearbeiter/in, Wehrführer/in)", "vg_stats", _ALL, _WEHR, ("vg", "city")),
-    ("bki", "vg", "Brand- und Katastrophenschutzinspekteur/in", "vg_stats", _ALL, _WEHR, ("vg", "city", "district")),
+    ("fez", "vg", "FEZ der VG (Bearbeiter/in, Wehrführer/in)", None, _LEAD | {VG_RECORDS}, _WEHR, ("vg", "city")),
+    ("bki", "vg", "Brand- und Katastrophenschutzinspekteur/in", None, _LEAD | {VG_RECORDS}, _WEHR,
+     ("vg", "city", "district")),
     ("bki_deputy", "vg", "Stellv. Brand- und Katastrophenschutzinspekteur/in", "bki", set(), (),
      ("vg", "city", "district")),
-    ("officer_kats", "vg", "Sachbearbeiter/in Brand- u. KatS", "vg_stats", _ALL, _WEHR, ("vg", "city", "district")),
-    ("officer_fire", "vg", "Sachbearbeiter/in Feuerwehr", "vg_stats", _ALL, _WEHR, ("vg",)),
-    ("dispatch_lead", "vg", "Leiter/in Leitstelle", "vg_stats", _ALL, ("dispatch_staff",) + _WEHR, ("dispatch",)),
-    ("dispatch_staff", "vg", "Leitstellenpersonal / Bearbeiter/in Einsatzberichte", "vg_stats", _ALL, _WEHR,
-     ("dispatch",)),
+    ("officer_kats", "vg", "Sachbearbeiter/in Brand- u. KatS", None, _OFFICER, (), ("vg", "city", "district")),
+    ("officer_fire", "vg", "Sachbearbeiter/in Feuerwehr", None, _OFFICER, (), ("vg",)),
+    ("dispatch_lead", "vg", "Leiter/in Leitstelle", None, _LEAD, ("dispatch_staff",) + _WEHR, ("dispatch",)),
+    ("dispatch_staff", "vg", "Leitstellenpersonal / Bearbeiter/in Einsatzberichte", None, _STAFF, (), ("dispatch",)),
 )
 # Umbenennung der Startrollen und zusätzliche Verteilung (Schlüssel bleiben, Rechte unverändert)
 BKS_LABELS = {"editor": "Bearbeiter/in Einsatzberichte", "lead": "Wehrführer/in", "vg_lead": "Wehrleiter/in"}
@@ -249,21 +253,27 @@ def seed(con):
 
 
 def add_roles(con):
-    """Funktionen des BKS-Portals als Systemrollen (Migration); wiederholbar, vorhandene Schlüssel bleiben."""
+    """Funktionen des BKS-Portals als Systemrollen (Migration): fehlende Rollen anlegen, Eltern, Rechte, Arten und
+    Verteilung der Rollen aus BKS_ROLES (neu) setzen. Wiederholbar."""
     for key, label in BKS_LABELS.items():
         con.execute("UPDATE role SET label = ? WHERE key = ? AND vg_id IS NULL", (label, key))
     con.execute("UPDATE role SET kinds = 'vg' WHERE key = 'vg_lead' AND vg_id IS NULL")
     ids = {r["key"]: r["id"] for r in con.execute("SELECT id, key FROM role WHERE vg_id IS NULL")}
     for key, scope, label, parent, permissions, _, kinds in BKS_ROLES:
-        if key in ids:
-            continue
-        inherited = Roles(con).permissions(ids[parent])
-        ids[key] = con.execute("INSERT INTO role (key, scope, label, parent_id, system, kinds) VALUES (?, ?, ?, ?, 1, ?)",
-                               (key, scope, label, ids[parent], ",".join(kinds))).lastrowid
+        if key not in ids:
+            ids[key] = con.execute("INSERT INTO role (key, scope, label, system) VALUES (?, ?, ?, 1)",
+                                   (key, scope, label)).lastrowid
+        con.execute("UPDATE role SET parent_id = ?, kinds = ? WHERE id = ?",
+                    (ids[parent] if parent else None, ",".join(kinds), ids[key]))
+        con.execute("DELETE FROM role_permission WHERE role_id = ?", (ids[key],))
+        inherited = Roles(con).permissions(ids[parent]) if parent else frozenset()
         con.executemany("INSERT INTO role_permission (role_id, permission) VALUES (?, ?)",
                         [(ids[key], p) for p in sorted(allowed(close(permissions), scope) - inherited)])
-    grants = {key: grants for key, *_, grants, _kinds in BKS_ROLES} | {k: v for k, v in BKS_GRANTS.items()}
-    for key, granted in grants.items():
+        con.execute("DELETE FROM role_grant WHERE role_id = ?", (ids[key],))
+    for key, *_, granted, _kinds in BKS_ROLES:
+        con.executemany("INSERT OR IGNORE INTO role_grant (role_id, grantable_role_id) VALUES (?, ?)",
+                        [(ids[key], ids[g]) for g in granted])
+    for key, granted in BKS_GRANTS.items():
         con.executemany("INSERT OR IGNORE INTO role_grant (role_id, grantable_role_id) VALUES (?, ?)",
                         [(ids[key], ids[g]) for g in granted])
     return ids
