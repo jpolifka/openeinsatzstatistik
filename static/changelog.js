@@ -7,6 +7,13 @@
 const CHANGELOG = [
   {
     date: "2026-11-16",
+    version: "2026-11-16.8",
+    items: [
+      "<b>Auswahl:</b> Die Auswahl oben ist jetzt nach Verbandsgemeinde gruppiert; darunter stehen die Gesamtansicht und die Wehren.",
+    ],
+  },
+  {
+    date: "2026-11-16",
     version: "2026-11-16.7",
     items: [
       "<b>Import:</b> Berichte aus allen Landkreisen und kreisfreien Städten in Rheinland-Pfalz werden erkannt, nicht nur aus dem Kreis Neuwied. Die Kennung der VG beginnt mit dem Kreis, z. B. „MYK.ABC“.",
