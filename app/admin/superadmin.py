@@ -32,9 +32,11 @@ def super_overview(a: tenancy.Access = Depends(access)):
             "SELECT t.slug, t.name, t.active, t.created, v.slug AS vg FROM tenant t JOIN vg v ON v.id = t.vg_id "
             "ORDER BY v.name, t.name")]
         archives = [r[0] for r in con.execute("SELECT slug FROM tenant_archive")]
+    for v in vgs:
+        v["blocked"] = v["dpa"] not in ("signed", "not_required")   # AVV fehlt: Wehren gesperrt
     for t in tenants:
-        if t["slug"] in archives:
-            t["incidents"] = None
+        if t["slug"] in archives or not t["active"]:
+            t["incidents"] = None      # inaktive Wehren nicht öffnen (schneller bei vielen Wehren)
             continue
         with db.connection(tenancy.tenant_path(t["slug"])) as con:
             t["incidents"] = con.execute("SELECT COUNT(*) FROM incident").fetchone()[0]
@@ -53,6 +55,7 @@ def create_vg(v: VgIn, a: tenancy.Access = Depends(access)):
     try:
         with tenancy.central() as con:
             tenancy.create_vg(con, v.slug, v.name, v.kind or "vg")
+            rbac.log(con, a.email, "VG angelegt", v.name)
     except ValueError as e:
         _invalid(str(e))
     except Exception:
@@ -73,6 +76,7 @@ def rename_vg(slug: str, v: VgIn, a: tenancy.Access = Depends(access)):
         except ValueError as e:
             _invalid(str(e))
         con.execute("UPDATE vg SET name = ? WHERE slug = ?", (v.name.strip(), slug))
+        rbac.log(con, a.email, "VG geändert", f"{v.name.strip()} ({v.kind or row['kind']})", row["id"])
     return super_overview(a)
 
 
@@ -112,22 +116,29 @@ class TenantChange(BaseModel):
 
 
 @router.put("/api/super/tenants/{slug}")
-def change_tenant(slug: str, t: TenantChange, a: tenancy.Access = Depends(access)):
+def change_tenant(slug: str, t: TenantChange, confirm: str = "", a: tenancy.Access = Depends(access)):
     _superadmin(a)
     with tenancy.central() as con:
         if con.execute("SELECT 1 FROM tenant_archive WHERE slug = ?", (slug,)).fetchone():
             raise HTTPException(409, "Die Wehr wird archiviert und kann nicht mehr geändert werden.")
-        if not con.execute("SELECT 1 FROM tenant WHERE slug = ?", (slug,)).fetchone():
+        cur = con.execute("SELECT id, name, vg_id FROM tenant WHERE slug = ?", (slug,)).fetchone()
+        if not cur:
             raise HTTPException(404, "Wehr nicht gefunden.")
         if t.name:
             con.execute("UPDATE tenant SET name = ? WHERE slug = ?", (t.name.strip(), slug))
+            rbac.log(con, a.email, "Wehr umbenannt", f"{cur['name']} → {t.name.strip()}", cur["vg_id"], cur["id"])
         if t.vg:
-            row = con.execute("SELECT id FROM vg WHERE slug = ?", (t.vg,)).fetchone()
+            row = con.execute("SELECT id, name FROM vg WHERE slug = ?", (t.vg,)).fetchone()
             if not row:
                 _invalid("Unbekannte Verbandsgemeinde.")
-            con.execute("UPDATE tenant SET vg_id = ? WHERE slug = ?", (row["id"], slug))
+            if row["id"] != cur["vg_id"]:
+                if confirm != slug:
+                    _invalid("Zum Verschieben den Kurznamen der Wehr bestätigen.")
+                con.execute("UPDATE tenant SET vg_id = ? WHERE slug = ?", (row["id"], slug))
+                rbac.log(con, a.email, "Wehr verschoben", f"{cur['name']} → {row['name']}", row["id"], cur["id"])
         if t.active is not None:
             con.execute("UPDATE tenant SET active = ? WHERE slug = ?", (int(t.active), slug))
+            rbac.log(con, a.email, "Wehr aktiviert" if t.active else "Wehr deaktiviert", cur["name"], cur["vg_id"], cur["id"])
     tenancy.forget_config(slug)
     log.info("Wehr %s geändert durch %s: %s", slug, a.email or "lokal", t.model_dump(exclude_none=True))
     return super_overview(a)
@@ -144,6 +155,7 @@ def delete_tenant(slug: str, confirm: str = "", a: tenancy.Access = Depends(acce
         if not row:
             raise HTTPException(404, "Wehr nicht gefunden.")
         tenant_lifecycle.begin_archive(con, slug, a.email)
+        rbac.log(con, a.email, "Wehr archiviert", row["name"], row["vg_id"], row["id"])
     tenant_lifecycle.finish_archive(slug)
     tenancy.forget_config(slug)
     log.warning("Archivierung für Wehr %s beauftragt durch %s", slug, a.email or "lokal")

@@ -820,38 +820,93 @@ function rolePayload() {
 const VG_KINDS = { vg: "Verbandsgemeinde / verbandsfrei", city: "Kreisfreie Stadt", district: "Landkreis", dispatch: "Leitstelle" };
 const kindOptions = (current) => Object.entries(VG_KINDS).map(([k, label]) => `<option value="${k}" ${k === current ? "selected" : ""}>${label}</option>`).join("");
 
-function superSection() {
-  const { vgs, tenants } = admin.superOverview;
-  const vgOptions = (current) => vgs.map((v) => `<option value="${esc(v.slug)}" ${v.slug === current ? "selected" : ""}>${esc(v.name)}</option>`).join("");
-  return `${admin.superOverview.pending_archives?.length ? `<div class="message message-info">Archivierung noch offen: ${admin.superOverview.pending_archives.map(esc).join(", ")}. Die Wehren sind gesperrt; automatische Wiederholung jede Minute. Daten und Zuordnungen bleiben bis zur erfolgreichen Sicherung erhalten.</div>` : ""}<h3>Verbandsgemeinden</h3>
-    <div class="table-wrap"><table class="mini-table admin-table"><thead><tr><th>Kurzname</th><th>Name</th><th>Art</th><th>AVV</th><th></th></tr></thead><tbody>
-      ${vgs.map((v) => `<tr><td>${esc(v.slug)}</td><td><input type="text" data-vg-name="${esc(v.slug)}" value="${esc(v.name)}"></td>
-        <td><select data-vg-kind="${esc(v.slug)}">${kindOptions(v.kind)}</select></td>
-        <td><a href="#dpa" class="tenant-badge dpa-${v.dpa}">${{ pending: "ausstehend", draft: "ausgefüllt", signed: "liegt vor", revoked: "zurückgenommen", not_required: "nicht erforderlich" }[v.dpa]}</a></td>
-        <td><button type="button" class="btn btn-outline btn-small" data-admin-action="rename-vg" data-slug="${esc(v.slug)}">Umbenennen</button></td></tr>`).join("")}
-    </tbody></table></div>
-    <div class="form-grid section-gap">
-      ${adminField("Kurzname", `<input type="text" id="vg-slug" placeholder="vg-musterstadt" maxlength="40">`)}
-      ${adminField("Name", `<input type="text" id="vg-name" placeholder="VG Musterstadt">`, "span-2")}
-      ${adminField("Art", `<select id="vg-kind">${kindOptions("vg")}</select>`)}
-      <div class="field"><span>&nbsp;</span><button type="button" class="btn btn-light" data-admin-action="create-vg">VG anlegen</button></div>
+const DPA_LABELS = { pending: "ausstehend", draft: "ausgefüllt", signed: "liegt vor", revoked: "zurückgenommen", not_required: "nicht erforderlich" };
+
+// VGs mit ihren Wehren; die Suche trifft Name oder Kurzname von VG und Wehr (eine VG bleibt, wenn eine ihrer Wehren trifft)
+function superGroups(overview, query = "") {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const hit = (...texts) => words.every((w) => texts.some((t) => String(t).toLowerCase().includes(w)));
+  return overview.vgs.map((v) => {
+    const all = overview.tenants.filter((t) => t.vg === v.slug);
+    const vgHit = hit(v.name, v.slug);
+    return { vg: v, tenants: all, shown: !words.length || vgHit || all.some((t) => hit(t.name, t.slug)),
+      matches: words.length && !vgHit ? all.filter((t) => hit(t.name, t.slug)).map((t) => t.slug) : [] };
+  }).filter((g) => g.shown);
+}
+
+function superSelected(overview) {
+  return overview.vgs.find((v) => v.slug === admin.superVg) || overview.vgs[0] || null;
+}
+
+function superListHtml() {
+  const groups = superGroups(admin.superOverview, admin.superQuery);
+  const current = superSelected(admin.superOverview)?.slug;
+  return groups.map(({ vg, tenants, matches }) => `<button type="button" class="super-vg ${vg.slug === current ? "active" : ""}" data-super-vg="${esc(vg.slug)}">
+      <strong>${esc(vg.name)}</strong>
+      <span class="small muted">${esc(VG_KINDS[vg.kind] || "")} · ${plural(tenants.length, "Wehr", "Wehren")}${tenants.some((t) => !t.active) ? ` · ${tenants.filter((t) => !t.active).length} inaktiv` : ""}</span>
+      ${vg.blocked ? `<span class="tenant-badge dpa-${vg.dpa}">AVV ${DPA_LABELS[vg.dpa]}: gesperrt</span>` : ""}
+      ${matches.length ? `<span class="small">Treffer: ${matches.map(esc).join(", ")}</span>` : ""}</button>`).join("")
+    || `<p class="muted small">Nichts gefunden.</p>`;
+}
+
+function superDetail(vg) {
+  const { tenants, pending_archives: pending } = admin.superOverview;
+  const mine = tenants.filter((t) => t.vg === vg.slug);
+  const vgOptions = (current) => admin.superOverview.vgs.map((v) => `<option value="${esc(v.slug)}" ${v.slug === current ? "selected" : ""}>${esc(v.name)}</option>`).join("");
+  const scopes = new Set([`vg:${vg.slug}`, ...mine.map((t) => `tenant:${t.slug}`)]);
+  const access = (admin.memberships?.memberships || []).filter((m) => scopes.has(`${m.scope}:${m.slug}`));
+  const open = (pending || []).filter((slug) => mine.some((t) => t.slug === slug));
+  return `${open.length ? `<div class="message message-info">Archivierung noch offen: ${open.map(esc).join(", ")}. Die Wehren sind gesperrt; automatische Wiederholung jede Minute.</div>` : ""}
+    <h3>${esc(vg.name)}</h3>
+    ${vg.blocked ? `<div class="message message-info">Auftragsverarbeitung (AVV) ${DPA_LABELS[vg.dpa]}: Die Wehren dieser VG sind für alle außer Superadmins gesperrt. <a href="#dpa">Zum Vertrag</a></div>` : ""}
+    <div class="form-grid">
+      ${adminField("Kurzname", `<input type="text" value="${esc(vg.slug)}" disabled>`)}
+      ${adminField("Name", `<input type="text" data-vg-name="${esc(vg.slug)}" value="${esc(vg.name)}">`, "span-2")}
+      ${adminField("Art", `<select data-vg-kind="${esc(vg.slug)}">${kindOptions(vg.kind)}</select>`)}
+      <div class="field"><span>AVV</span><a href="#dpa" class="tenant-badge dpa-${vg.dpa}">${DPA_LABELS[vg.dpa]}</a></div>
+      <div class="field"><span>&nbsp;</span><button type="button" class="btn btn-outline" data-admin-action="rename-vg" data-slug="${esc(vg.slug)}">Speichern</button></div>
     </div>
-    <h3 class="section-gap">Wehren</h3>
-    <div class="table-wrap"><table class="mini-table admin-table"><thead><tr><th>Kurzname</th><th>Name</th><th>VG</th><th class="right">Einsätze</th><th>aktiv</th><th></th></tr></thead><tbody>
-      ${tenants.map((t) => `<tr class="${t.active ? "" : "inactive"}"><td>${esc(t.slug)}</td><td>${esc(t.name)}</td>
-        <td><select data-tenant-vg="${esc(t.slug)}">${vgOptions(t.vg)}</select></td><td class="right">${t.incidents ?? "–"}</td>
+    <h3 class="section-gap">Wehren (${mine.length})</h3>
+    <div class="table-wrap"><table class="mini-table admin-table"><thead><tr><th>Kurzname</th><th>Name</th><th class="right">Einsätze</th><th>aktiv</th><th></th></tr></thead><tbody>
+      ${mine.map((t) => `<tr class="${t.active ? "" : "inactive"}"><td>${esc(t.slug)}</td><td>${esc(t.name)}</td><td class="right">${t.incidents ?? "–"}</td>
         <td class="center"><input type="checkbox" data-tenant-active="${esc(t.slug)}" ${t.active ? "checked" : ""} aria-label="aktiv"></td>
-        <td><button type="button" class="btn btn-outline btn-small" data-admin-action="delete-tenant" data-slug="${esc(t.slug)}">Entfernen</button></td></tr>`).join("")}
+        <td class="admin-actions"><button type="button" class="btn btn-outline btn-small" data-admin-action="move-tenant" data-slug="${esc(t.slug)}">Verschieben …</button>
+          <button type="button" class="btn btn-outline btn-small" data-admin-action="delete-tenant" data-slug="${esc(t.slug)}">Archivieren</button></td></tr>`).join("")
+        || `<tr><td colspan="5" class="muted">Noch keine Wehr in dieser VG.</td></tr>`}
     </tbody></table></div>
     <div class="form-grid section-gap">
       ${adminField("Kurzname", `<input type="text" id="tenant-slug" placeholder="musterstadt" maxlength="40">`)}
       ${adminField("Name", `<input type="text" id="tenant-name" placeholder="Feuerwehr Musterstadt">`, "span-2")}
-      ${adminField("VG", `<select id="tenant-vg">${vgOptions()}</select>`)}
       ${adminField("Erster Wehrführer (E-Mail, optional)", `<input type="email" id="tenant-email">`, "span-2")}
+      <input type="hidden" id="tenant-vg" value="${esc(vg.slug)}">
     </div>
-    <div class="admin-actions left"><button type="button" class="btn btn-primary" data-admin-action="create-tenant" ${vgs.length ? "" : "disabled"}>Wehr anlegen</button></div>
-    <p class="small muted">Neue VGs starten mit „AVV ausstehend“: Ihre Wehren sind gesperrt, bis der Vertrag unter „Auftragsverarbeitung“ bestätigt ist.
-    Kurznamen: Kleinbuchstaben, Ziffern und Bindestrich; sie lassen sich später nicht ändern. Entfernte Wehren werden nicht gelöscht, sondern im Datenordner unter <code>deleted/</code> abgelegt.</p>`;
+    <div class="admin-actions left"><button type="button" class="btn btn-primary" data-admin-action="create-tenant">Wehr in dieser VG anlegen</button></div>
+    <h3 class="section-gap">Zugriff</h3>
+    <div class="table-wrap"><table class="mini-table admin-table"><thead><tr><th>Person</th><th>Bereich</th><th>Rolle</th></tr></thead><tbody>
+      ${access.map((m) => `<tr><td>${esc(m.email)}</td><td>${esc(m.name)}</td><td>${esc(m.label)}</td></tr>`).join("")
+        || `<tr><td colspan="3" class="muted">Keine Zuordnungen.</td></tr>`}
+    </tbody></table></div>
+    <p class="small muted">Rollen vergeben und entziehen unter <button type="button" class="btn-link" data-admin-section="users">Benutzer</button>.
+    Kurznamen: Kleinbuchstaben, Ziffern und Bindestrich; sie lassen sich später nicht ändern. Archivierte Wehren werden nicht gelöscht, sondern im Datenordner unter <code>deleted/</code> abgelegt.</p>`;
+}
+
+function superSection() {
+  const vg = superSelected(admin.superOverview);
+  return `<div class="super-layout">
+    <aside class="super-side">
+      <input type="search" class="search" data-super-search value="${esc(admin.superQuery)}" placeholder="VG oder Wehr suchen …" aria-label="VG oder Wehr suchen">
+      <div id="super-list" class="super-list">${superListHtml()}</div>
+      <details class="section-gap" ${admin.superOverview.vgs.length ? "" : "open"}><summary class="btn btn-light btn-small">+ VG anlegen</summary>
+        <div class="form-grid">
+          ${adminField("Kurzname", `<input type="text" id="vg-slug" placeholder="vg-musterstadt" maxlength="40">`)}
+          ${adminField("Name", `<input type="text" id="vg-name" placeholder="VG Musterstadt">`)}
+          ${adminField("Art", `<select id="vg-kind">${kindOptions("vg")}</select>`)}
+          <div class="field"><button type="button" class="btn btn-light" data-admin-action="create-vg">VG anlegen</button></div>
+        </div>
+        <p class="small muted">Neue VGs starten mit „AVV ausstehend“: Ihre Wehren sind gesperrt, bis der Vertrag unter „Auftragsverarbeitung“ bestätigt ist.</p></details>
+    </aside>
+    <section class="super-detail">${vg ? superDetail(vg) : `<p class="muted">Lege links die erste Verbandsgemeinde an.</p>`}</section>
+  </div>`;
 }
 
 // ------------------------------------------------------------ Superadmin: Sitzungen
