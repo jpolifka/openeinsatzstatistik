@@ -8,7 +8,7 @@ Aufruf (Docker, nichts wird lokal installiert):
 
 Argumente: Name der Verbandsgemeinde und Kennung (z. B. MAR, wie in „FW NR#.MAR 02“). Optional: --wehren (1–14,
 Standard 4), --orte „A,B,C“ (Namen der Wehren; Standard: erfundene Orte, die erste Wehr heißt wie die VG),
---jahr, --ziel (Ordner), --seed.
+--jahr, --kreis (Kreiskennung, Standard NR#, z. B. MYK oder KL#), --ziel (Ordner), --seed.
 
 Wehr N ist „Florian <VG> N“, Einheit „FW <Kreis>.<Kennung> 0N <Ort>“. Fahrzeuge, Personen, Orte und Einsätze sind
 ausgedacht. Gleiche Argumente liefern dieselben Dateien. Wehrübergreifende Einsätze haben einen Stammdatensatz,
@@ -34,7 +34,8 @@ LAST_NAMES = ("Fiktiv", "Beispiel", "Muster", "Probe", "Demo", "Sample", "Dummy"
 DEFAULT_PLACES = ("Oberbach", "Niederhausen", "Bergheim", "Waldstein", "Seeblick", "Auenhof", "Steinfeld", "Rosenthal",
                   "Hohenfels", "Lindenau", "Mühlbach", "Neudorf", "Kirchwald")
 MAX_WEHREN = 14
-# Kreiskürzel in den Einheiten und Funkrufnamen; die Berichtsleser (pdf_report, xlsx_report) kennen nur NR#
+# Standard-Kreiskennung in den Einheiten und Funkrufnamen (Kfz-Zeichen, bei gleichem Zeichen von Stadt und
+# Landkreis mit „#“, OPTA); anderes per --kreis
 COUNTY = "NR#"
 # Fahrzeugausstattung: vier Profile, Wehr N nutzt Profil ((N - 1) % 4) + 1 (Kennzahl -> laufende Nr.)
 PROFILES = {
@@ -336,6 +337,7 @@ def main():
     ap.add_argument("kennung", help="Kennung wie in „FW NR#.MAR 02“, z. B. MAR")
     ap.add_argument("--wehren", type=int, default=4, help=f"Anzahl der Wehren (1–{MAX_WEHREN}, Standard 4)")
     ap.add_argument("--orte", default="", help="Namen der Wehren, kommagetrennt (Standard: erfundene Orte)")
+    ap.add_argument("--kreis", default=COUNTY, help="Kreiskennung (Kfz-Zeichen, ggf. mit #), Standard NR#")
     ap.add_argument("--jahr", type=int, default=2026)
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--ziel", help="Ausgabeordner (Standard: Einsatzberichte/Test-<VG>)")
@@ -343,6 +345,9 @@ def main():
     code = args.kennung.upper()
     if not re.fullmatch(r"[A-Z0-9ÄÖÜ]{2,6}", code):
         ap.error("Die Kennung besteht aus 2 bis 6 Großbuchstaben oder Ziffern (z. B. MAR).")
+    county = args.kreis.upper()
+    if not re.fullmatch(r"[A-ZÄÖÜ]{1,3}#?", county):
+        ap.error("Die Kreiskennung ist das Kfz-Zeichen (1–3 Buchstaben), bei gleichem Zeichen von Stadt und Landkreis mit #.")
     if not 1 <= args.wehren <= MAX_WEHREN:
         ap.error(f"Die Zahl der Wehren liegt zwischen 1 und {MAX_WEHREN}.")
     if not 2000 <= args.jahr <= 2100:
@@ -350,7 +355,7 @@ def main():
     places = [p.strip() for p in args.orte.split(",") if p.strip()]
     if len(places) > args.wehren:
         ap.error("Es sind mehr Orte als Wehren angegeben.")
-    setup = Setup(args.vg.strip(), code, args.wehren, places, COUNTY, args.jahr)
+    setup = Setup(args.vg.strip(), code, args.wehren, places, county, args.jahr)
     target = Path(args.ziel or "Einsatzberichte/Test-" + re.sub(r"[^\w-]+", "-", args.vg.strip()))
     files = build(setup, target, args.seed)
     print(f"{len(files)} Dateien in {target} (Einrichtungsangaben: {target / '_Einrichtung.txt'})")

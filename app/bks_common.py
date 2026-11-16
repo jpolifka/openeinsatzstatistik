@@ -5,6 +5,10 @@ import re
 KINDS = {"Stammdatensatz": "master", "Hauptbericht": "main", "Nebenbericht": "secondary"}
 # Ortsteil/Kennung höchstens 30 Zeichen: ohne Grenze wächst der Aufwand auf langen Zeilen quadratisch
 PERSON_VEHICLE = re.compile(r"(?:[A-Z]{2} )?[A-Z][A-Z0-9#.ÄÖÜ]{0,29} \d\d/\d\d-\d\d")
+# Kreiskennung der Einheit nach OPTA: amtliches Kfz-Unterscheidungszeichen (NR, MYK, DÜW …); führen Stadt- und
+# Landkreis dasselbe Zeichen, trägt der Landkreis ein nachgestelltes „#“ (NR#, KL#)
+COUNTY = r"[A-ZÄÖÜ]{1,3}#?"
+UNIT_ID = re.compile(r"^(" + COUNTY + r")\.[A-ZÄÖÜ0-9]{1,10}$")
 SHORT_CALL_SIGN = re.compile(r"(\d\d/\d\d)-\d\d$")
 
 @functools.lru_cache(maxsize=32)

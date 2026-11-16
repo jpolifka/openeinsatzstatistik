@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app import domain, fees, store, tenancy, theme
+from app.bks_common import UNIT_ID
 from app.rbac import SETTINGS
 
 from app.admin.common import _invalid, _managed_vg_id, access, log
@@ -110,14 +111,21 @@ def get_vg_settings(vg_slug: str, a: tenancy.Access = Depends(access)):
     return _vg_settings_json(_managed_vg_id(a, vg_slug, SETTINGS))
 
 
+def _current_bks_code(vg_id):
+    """Bisher gespeicherte Kennung der VG (ältere Einträge ohne Kreiskürzel bleiben gültig)."""
+    with tenancy.central() as con:
+        return tenancy.load_vg_layer(con, vg_id).value("bks_code") or ""
+
+
 @router.put("/api/admin/vgs/{vg_slug}/settings")
 def put_vg_settings(vg_slug: str, s: VgSettingsIn, a: tenancy.Access = Depends(access)):
     """Vorgaben der VG speichern; Abweichungen der Wehren, die jetzt der Vorgabe entsprechen, entfallen.
     Standort und Ausrückebereich je Wehr gleich mit."""
     vg_id = _managed_vg_id(a, vg_slug, SETTINGS)
     bks_code = s.bks_code.strip()
-    if bks_code and not re.fullmatch(r"[^\s<>\"&]{1,30}", bks_code):
-        _invalid("Kennung der VG: wie in der Kopfzeile des Berichts, z. B. NR#.ABC aus „FW NR#.ABC 02“.")
+    if bks_code and not UNIT_ID.fullmatch(bks_code) and bks_code != _current_bks_code(vg_id):
+        _invalid("Kennung der VG: Kreis und Gemeinde wie in der Kopfzeile des Berichts, z. B. MYK.ABC aus "
+                 "„FW MYK.ABC 02“ (bei gleichem Zeichen von Stadt und Landkreis mit „#“, z. B. NR#.ABC).")
     places = _check_places(s.places)
     values = {"bks_code": bks_code or None, "control_center": s.control_center.strip() or None,
               "places": list(places), "colors": _check_colors(s.colors), **_check_plan(s)}

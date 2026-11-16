@@ -18,14 +18,14 @@ import zipfile
 import openpyxl
 from openpyxl.utils.exceptions import InvalidFileException
 
-from app.bks_common import (KINDS, PERSON_VEHICLE, SHORT_CALL_SIGN, _call_sign_pattern, _parse_keyword,
+from app.bks_common import (COUNTY, KINDS, PERSON_VEHICLE, SHORT_CALL_SIGN, _call_sign_pattern, _parse_keyword,
                             clean_alarm_system, clean_tactic, parse_number)
 
 MAIN_SHEET = "Einsatzbericht"
 VEHICLE_SHEET = "Ausger. Fahrzeuge"
 PEOPLE_SHEET = "Anwesenheitsliste"
 # „FW NR#.ABC 02 Musterstadt“ -> Einheit und Name
-STATION = re.compile(r"^(FW NR#\.\S+ \d\d)\s*(.*)$")
+STATION = re.compile(r"^(FW " + COUNTY + r"\.\S+ \d\d)\s*(.*)$")
 TIME_FORMATS = ("%d.%m.%y %H:%M:%S", "%d.%m.%Y %H:%M:%S", "%d.%m.%y %H:%M", "%d.%m.%Y %H:%M")
 YES_NO = ("ja", "nein", "agt")
 

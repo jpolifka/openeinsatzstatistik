@@ -419,7 +419,7 @@ function bksPrefixes(s) {
 function bksDerived(s) {
   const p = bksPrefixes(s);
   if (s.station && !/^\d\d$/.test(s.station)) return `<span class="message-error">Standort zweistellig, z. B. 02.</span>`;
-  if (!p.valid) return `<span class="message-error">Kennung wie in der Kopfzeile des Berichts, z. B. NR#.ABC aus „FW NR#.ABC 02“.</span>`;
+  if (!p.valid) return `<span class="message-error">Kennung wie in der Kopfzeile des Berichts: Kreis (Kfz-Zeichen) und Gemeinde, z. B. MYK.ABC aus „FW MYK.ABC 02“ oder NR#.ABC.</span>`;
   if (!p.unit) return "Ohne Kennung und Standort zählen nur die Fahrzeuge der Fahrzeugliste als eigene.";
   return `Einheit im Bericht <b>${esc(s.unit_marker || "–")}</b>. Eigene Fahrzeuge beginnen mit <b>${esc(p.unit + p.own)}</b>, Fahrzeuge der übrigen Wehren der VG mit <b>${esc(p.unit)}</b>. Fahrzeuge der Fahrzeugliste zählen immer als eigene.`;
 }
