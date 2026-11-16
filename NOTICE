@@ -1,0 +1,13 @@
+pdf2einsatz – Einsatzstatistik für Feuerwehren
+Copyright 2025–2026 Jens Polifka
+
+Der Quellcode steht unter der Apache License 2.0 (Datei LICENSE).
+
+Nicht Teil der Lizenz:
+- Logos, Wappen und Namen von Feuerwehren (u. a. die Dateien in app/legacy_assets/) gehören den jeweiligen
+  Wehren und dürfen nur mit deren Zustimmung verwendet werden.
+- Die Apache License gibt keine Rechte an Namen und Marken (Abschnitt 6).
+
+Enthaltene Fremdbestandteile:
+- Schrift „Sansation“ (static/fonts/): SIL Open Font License 1.1.
+- Python-Abhängigkeiten (requirements.txt) unter ihren eigenen Lizenzen (MIT, BSD, Apache 2.0).

@@ -1,0 +1,26 @@
+# Demo mit erfundenen Daten für Vorführungen und Nutzertests – nie mit echten Berichten verwenden.
+#   docker compose -f docker-compose.demo.yml up --build     → http://localhost:8113
+# Die Anmeldung ist aus (jeder gilt als Superadmin), die Daten liegen nur im Container und sind beim
+# Beenden weg. Zurücksetzen = Container neu starten.
+name: pdf2einsatz-demo
+
+services:
+  demo:
+    build:
+      context: .
+      target: app
+    image: pdf2einsatz-web
+    ports:
+      - "127.0.0.1:8113:8112"
+    environment:
+      DATA_DIR: /daten
+      AUTH_DISABLED: "1"
+    tmpfs:
+      - /daten:size=256m,mode=1777
+      - /tmp:size=256m,mode=1777
+    entrypoint: []
+    user: "10001:10001"
+    command: ["sh", "-c", "python -m app.demo && exec uvicorn app.main:app --host 0.0.0.0 --port 8112"]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
