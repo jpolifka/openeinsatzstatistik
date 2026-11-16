@@ -219,14 +219,27 @@ def collect_uploads(uploads):
     return spool, errors
 
 
+KEEP_UPLOADS_DAYS = 3
+
+
+def keeping_uploads():
+    return os.environ.get("KEEP_UPLOADS", "").strip().lower() in ("1", "true", "yes", "ja")
+
+
 def keep_for_debug(files):
-    """Nur mit gesetzter Umgebungsvariable DEBUG: hochgeladene Berichte zusätzlich in DATA_DIR/debug-reports ablegen
-    (enthalten Namen, nur zur Fehlersuche). Fehler dabei stören das Einlesen nie."""
-    if not os.environ.get("DEBUG"):
+    """Nur mit KEEP_UPLOADS=1: hochgeladene Berichte zusätzlich in DATA_DIR/debug-reports ablegen (enthalten
+    Namen, nur zur Fehlersuche); Dateien älter als KEEP_UPLOADS_DAYS Tage werden dabei entfernt.
+    Fehler dabei stören das Einlesen nie."""
+    if not keeping_uploads():
         return
     try:
         folder = os.path.join(db.DATA_DIR, "debug-reports")
         os.makedirs(folder, exist_ok=True)
+        cutoff = time.time() - KEEP_UPLOADS_DAYS * 86400
+        for old in os.listdir(folder):
+            old_path = os.path.join(folder, old)
+            if os.path.isfile(old_path) and os.path.getmtime(old_path) < cutoff:
+                os.remove(old_path)
         stamp = time.strftime("%Y%m%d-%H%M%S")
         for filename, path in files:
             shutil.copyfile(path, os.path.join(folder, f"{stamp}-{safe_filename(os.path.basename(filename))}"))
@@ -268,7 +281,8 @@ def read_files(files, tenants, email=None, progress=None):
             continue
         except Exception as e:  # defekte oder fremde Datei: melden, Rest weiter lesen
             log.exception("Bericht %s", filename)
-            errors.append({"file": filename, "message": str(e) or type(e).__name__})
+            message = str(e) if isinstance(e, ValueError) and str(e) else parser_worker.GENERIC_ERROR
+            errors.append({"file": filename, "message": message})
             continue
         if tenant:
             reports.append((r, tenant))

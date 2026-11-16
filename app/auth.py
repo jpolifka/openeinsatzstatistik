@@ -40,11 +40,14 @@ COOKIE = "session"
 SCOPE_COOKIE = "scope"     # ausgewählte Wehr, wird bei jeder Anfrage gegen die Zuordnungen geprüft
 LINK_TTL = 15 * 60
 SESSION_TTL = 30 * 24 * 60 * 60
+# Wer sich so lange nicht gemeldet hat, muss sich neu anmelden (ein gestohlenes Cookie veraltet damit früher)
+SESSION_IDLE = 7 * 24 * 60 * 60
 # Mindestabstand zwischen zwei Mails an dieselbe Adresse
 MAIL_COOLDOWN = 60
-# Obergrenzen gegen Mail-Flut (an eine Adresse, und insgesamt für den Ruf des Absenders)
-MAIL_PER_ADDRESS_PER_DAY = 20
-MAIL_TOTAL_PER_HOUR = 200
+# Obergrenze je Adresse. Die Gesamtzahl pro Stunde sperrt nichts (sonst könnte jemand mit ein paar bekannten Adressen
+# allen den Zugang blockieren), sie warnt nur im Log.
+MAIL_PER_ADDRESS_PER_DAY = 10
+MAIL_TOTAL_ALERT_PER_HOUR = 200
 MAX_SESSIONS_PER_USER = 10
 
 router = APIRouter()
@@ -135,7 +138,7 @@ def create_session(email, user_agent=""):
     token = secrets.token_urlsafe(32)
     now = time.time()
     with tenancy.central() as con:
-        con.execute("DELETE FROM session WHERE expires < ?", (now,))
+        con.execute("DELETE FROM session WHERE expires < ? OR last_seen < ?", (now, now - SESSION_IDLE))
         # Älteste Sitzungen dieser Adresse beenden, damit es nie mehr als MAX_SESSIONS_PER_USER gibt
         con.execute("DELETE FROM session WHERE email = ? AND id NOT IN (SELECT id FROM session WHERE email = ? "
                     "ORDER BY last_seen DESC, id DESC LIMIT ?)",
@@ -162,7 +165,7 @@ def _lookup_session(request):
     with tenancy.central() as con:
         row = con.execute("SELECT id, email, expires, last_seen FROM session WHERE token_hash = ?",
                           (_hash(token),)).fetchone()
-        if not row or row["expires"] <= now:
+        if not row or row["expires"] <= now or now - row["last_seen"] > SESSION_IDLE:
             return None
         if now - row["last_seen"] > SEEN_INTERVAL:
             con.execute("UPDATE session SET last_seen = ? WHERE id = ?", (now, row["id"]))
@@ -225,10 +228,11 @@ def send_link(email):
         if now - _last_mail.get(email, 0) < MAIL_COOLDOWN:
             return
         _sent[:] = [(t, a) for t, a in _sent if now - t < 24 * 3600]
-        if sum(a == email for _, a in _sent) >= MAIL_PER_ADDRESS_PER_DAY or \
-                sum(now - t < 3600 for t, _ in _sent) >= MAIL_TOTAL_PER_HOUR:
+        if sum(a == email for _, a in _sent) >= MAIL_PER_ADDRESS_PER_DAY:
             log.warning("Anmeldelink für %s nicht versendet: Obergrenze für Mails erreicht", email)
             return
+        if sum(now - t < 3600 for t, _ in _sent) == MAIL_TOTAL_ALERT_PER_HOUR:
+            log.warning("Auffällig viele Anmeldelinks in der letzten Stunde (%s) – mögliche Mail-Flut", MAIL_TOTAL_ALERT_PER_HOUR)
         _last_mail[email] = now
         _sent.append((now, email))
     link = f"{BASE_URL}/auth/verify?token={_sign('link', email, LINK_TTL)}"

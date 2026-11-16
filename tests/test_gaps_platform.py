@@ -120,7 +120,7 @@ def test_session_touch_and_expiry(make_client, data_dir, monkeypatch):
     token = auth.create_session("admin@example.org")
     client.cookies.set(auth.COOKIE, token)
     with tenancy.central() as con:
-        con.execute("UPDATE session SET last_seen = ?", (time.time() - 10 * 24 * 3600,))
+        con.execute("UPDATE session SET last_seen = ?", (time.time() - 5 * 24 * 3600,))
     assert client.get("/api/super/overview").status_code == 200
     with tenancy.central() as con:
         assert con.execute("SELECT last_seen FROM session").fetchone()[0] > time.time() - 60

@@ -198,7 +198,7 @@ def test_job_errors_are_reported_and_old_jobs_are_dropped(monkeypatch):
         raise KeyError("x")
 
     assert _wait(jobs, jobs.start("o", 1, http_error), "o")["error"] == (409, "Konflikt")
-    assert _wait(jobs, jobs.start("o", 1, crash), "o")["error"] == (500, "'x'")
+    assert _wait(jobs, jobs.start("o", 1, crash), "o")["error"] == (500, "Beim Einlesen ist ein Fehler aufgetreten. Bitte erneut versuchen.")
     old = jobs.start("o", 1, lambda progress: 1)
     for _ in range(200):                                             # fertig, aber (noch) nicht abgeholt
         if jobs._jobs[old]["result"] is not None:
