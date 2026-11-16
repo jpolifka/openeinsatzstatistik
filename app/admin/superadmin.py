@@ -44,7 +44,7 @@ def super_overview(a: tenancy.Access = Depends(access)):
 
 
 class VgIn(BaseModel):
-    slug: str
+    slug: str = ""   # leer = aus dem Namen bilden; Benutzer sehen den Kurznamen nicht
     name: str = Field(min_length=2, max_length=80)
     kind: Optional[str] = None   # Art des Aufgabenträgers (rbac.KINDS); leer = vg bzw. unverändert
 
@@ -54,7 +54,7 @@ def create_vg(v: VgIn, a: tenancy.Access = Depends(access)):
     _superadmin(a)
     try:
         with tenancy.central() as con:
-            tenancy.create_vg(con, v.slug, v.name, v.kind or "vg")
+            tenancy.create_vg(con, v.slug.strip() or tenancy.suggest_vg_slug(con, v.name), v.name, v.kind or "vg")
             rbac.log(con, a.email, "VG angelegt", v.name)
     except ValueError as e:
         _invalid(str(e))
@@ -81,7 +81,7 @@ def rename_vg(slug: str, v: VgIn, a: tenancy.Access = Depends(access)):
 
 
 class TenantIn(BaseModel):
-    slug: str = ""                   # leer = aus dem Namen ableiten (bei Doppelung mit VG-Zusatz)
+    slug: str = ""                   # leer = <vg>-<wehr>-<lfd>; die Oberfläche schickt nie einen
     name: str = Field(min_length=2, max_length=80)
     vg: str
     email: Optional[str] = None      # erster Wehrführer
@@ -99,7 +99,7 @@ def create_tenant(t: TenantIn, a: tenancy.Access = Depends(access)):
                 t.slug = tenancy.suggest_slug(con, t.name, t.vg)
             if con.execute("SELECT 1 FROM tenant WHERE slug = ?", (t.slug,)).fetchone():
                 _invalid(f"Den Kurznamen „{t.slug}“ gibt es schon (Kurznamen gelten für alle VGs). "
-                         f"Vorschlag: „{tenancy.suggest_slug(con, t.name, t.vg)}“ – oder das Feld leer lassen.")
+                         f"Vorschlag: „{tenancy.suggest_slug(con, t.name, t.vg)}“ – oder den Kurznamen weglassen.")
             tenant_id = tenancy.create_tenant(con, t.slug, t.name, row["id"])
         except ValueError as e:
             _invalid(str(e))

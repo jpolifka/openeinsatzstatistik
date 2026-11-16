@@ -225,13 +225,15 @@ def test_vg_fleet_error_names_the_tenant(world):
     assert response.status_code == 422 and response.json()["detail"].startswith("Wehr wehr-a2:")
 
 
-def test_tenant_slug_is_derived_when_taken(world):
-    """Gleicher Ortsname in zwei VGs: der Kurzname gilt für alle VGs, also hängt die VG an."""
+def test_slugs_are_generated(world):
+    """Kurznamen bildet die App selbst: <vg>-<wehr>-<lfd>; gleicher Ortsname in zwei VGs bleibt eindeutig."""
     _as(world, "admin@example.org")
-    first = world.post("/api/super/tenants", json={"name": "Feuerwehr Bergheim", "vg": "vg-a"})
-    assert first.status_code == 200 and "bergheim" in [t["slug"] for t in first.json()["tenants"]]
-    second = world.post("/api/super/tenants", json={"name": "Feuerwehr Bergheim", "vg": "vg-b"})
-    slugs = [t["slug"] for t in second.json()["tenants"]]
-    assert any(s.startswith("bergheim-") and s != "bergheim" for s in slugs)
-    clash = world.post("/api/super/tenants", json={"slug": "bergheim", "name": "Bergheim", "vg": "vg-b"})
+    created = world.post("/api/super/vgs", json={"name": "VG Musterstadt"}).json()
+    assert "musterstadt" in [v["slug"] for v in created["vgs"]]
+    first = world.post("/api/super/tenants", json={"name": "Feuerwehr Bergheim", "vg": "musterstadt"}).json()
+    again = world.post("/api/super/tenants", json={"name": "Feuerwehr Bergheim", "vg": "musterstadt"}).json()
+    other = world.post("/api/super/tenants", json={"name": "Feuerwehr Bergheim", "vg": "vg-b"}).json()
+    slugs = [t["slug"] for t in other["tenants"]]
+    assert {"musterstadt-bergheim-01", "musterstadt-bergheim-02", "b-bergheim-01"} <= set(slugs)
+    clash = world.post("/api/super/tenants", json={"slug": "musterstadt-bergheim-01", "name": "Bergheim", "vg": "vg-b"})
     assert clash.status_code == 422 and "Vorschlag" in clash.json()["detail"]

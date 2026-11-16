@@ -884,23 +884,21 @@ function superDetail(vg) {
     <h3>${esc(vg.name)}</h3>
     ${vg.blocked ? `<div class="message message-info">Auftragsverarbeitung (AVV) ${DPA_LABELS[vg.dpa]}: Die Wehren dieser VG sind für alle außer Superadmins gesperrt. <a href="#dpa">Zum Vertrag</a></div>` : ""}
     <div class="form-grid">
-      ${adminField("Kurzname", `<input type="text" value="${esc(vg.slug)}" disabled>`)}
       ${adminField("Name", `<input type="text" data-vg-name="${esc(vg.slug)}" value="${esc(vg.name)}">`, "span-2")}
       ${adminField("Art", `<select data-vg-kind="${esc(vg.slug)}">${kindOptions(vg.kind)}</select>`)}
       <div class="field"><span>AVV</span><a href="#dpa" class="tenant-badge dpa-${vg.dpa}">${DPA_LABELS[vg.dpa]}</a></div>
       <div class="field"><span>&nbsp;</span><button type="button" class="btn btn-outline" data-admin-action="rename-vg" data-slug="${esc(vg.slug)}">Speichern</button></div>
     </div>
     <h3 class="section-gap">Wehren (${mine.length})</h3>
-    <div class="table-wrap"><table class="mini-table admin-table"><thead><tr><th>Kurzname</th><th>Name</th><th class="right">Einsätze</th><th>aktiv</th><th></th></tr></thead><tbody>
-      ${mine.map((t) => `<tr class="${t.active ? "" : "inactive"}"><td>${esc(t.slug)}</td><td>${esc(t.name)}</td><td class="right">${t.incidents ?? "–"}</td>
+    <div class="table-wrap"><table class="mini-table admin-table"><thead><tr><th>Name</th><th class="right">Einsätze</th><th>aktiv</th><th></th></tr></thead><tbody>
+      ${mine.map((t) => `<tr class="${t.active ? "" : "inactive"}"><td>${esc(t.name)}</td><td class="right">${t.incidents ?? "–"}</td>
         <td class="center"><input type="checkbox" data-tenant-active="${esc(t.slug)}" ${t.active ? "checked" : ""} aria-label="aktiv"></td>
         <td class="admin-actions"><button type="button" class="btn btn-outline btn-small" data-admin-action="move-tenant" data-slug="${esc(t.slug)}">Verschieben …</button>
           <button type="button" class="btn btn-outline btn-small" data-admin-action="delete-tenant" data-slug="${esc(t.slug)}">Archivieren</button></td></tr>`).join("")
-        || `<tr><td colspan="5" class="muted">Noch keine Wehr in dieser VG.</td></tr>`}
+        || `<tr><td colspan="4" class="muted">Noch keine Wehr in dieser VG.</td></tr>`}
     </tbody></table></div>
     <div class="form-grid section-gap">
       ${adminField("Name", `<input type="text" id="tenant-name" placeholder="Feuerwehr Musterstadt">`, "span-2")}
-      ${adminField("Kurzname (leer = automatisch)", `<input type="text" id="tenant-slug" placeholder="musterstadt" maxlength="40">`)}
       ${adminField("Erster Wehrführer (E-Mail, optional)", `<input type="email" id="tenant-email">`, "span-2")}
       <input type="hidden" id="tenant-vg" value="${esc(vg.slug)}">
     </div>
@@ -911,7 +909,7 @@ function superDetail(vg) {
         || `<tr><td colspan="3" class="muted">Keine Zuordnungen.</td></tr>`}
     </tbody></table></div>
     <p class="small muted">Rollen vergeben und entziehen unter <button type="button" class="btn-link" data-admin-section="users">Benutzer</button>.
-    Kurznamen gelten für alle VGs gemeinsam und lassen sich später nicht ändern. Ohne Eingabe wird er aus dem Namen gebildet; ist er vergeben (gleicher Ortsname in einer anderen VG), hängt die VG an. Archivierte Wehren werden nicht gelöscht, sondern im Datenordner unter <code>deleted/</code> abgelegt.</p>`;
+    Archivierte Wehren werden nicht gelöscht, sondern im Datenordner unter <code>deleted/</code> abgelegt.</p>`;
 }
 
 function superSection() {
@@ -922,7 +920,6 @@ function superSection() {
       <div id="super-list" class="super-list">${superListHtml()}</div>
       <details class="section-gap" ${admin.superOverview.vgs.length ? "" : "open"}><summary class="btn btn-light btn-small">+ VG anlegen</summary>
         <div class="form-grid">
-          ${adminField("Kurzname", `<input type="text" id="vg-slug" placeholder="vg-musterstadt" maxlength="40">`)}
           ${adminField("Name", `<input type="text" id="vg-name" placeholder="VG Musterstadt">`)}
           ${adminField("Art", `<select id="vg-kind">${kindOptions("vg")}</select>`)}
           <div class="field"><button type="button" class="btn btn-light" data-admin-action="create-vg">VG anlegen</button></div>

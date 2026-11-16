@@ -455,7 +455,7 @@ async function runAdminAction(button) {
       toast("Alle anderen abgemeldet");
       return rerender();
     case "create-vg":
-      admin.superOverview = await apiJson("/api/super/vgs", "POST", { slug: $("#vg-slug").value.trim(), name: $("#vg-name").value, kind: $("#vg-kind").value });
+      admin.superOverview = await apiJson("/api/super/vgs", "POST", { name: $("#vg-name").value, kind: $("#vg-kind").value });
       toast("VG angelegt");
       return rerender();
     case "rename-vg":
@@ -475,13 +475,14 @@ async function runAdminAction(button) {
       return superChanged("Wehr verschoben");
     }
     case "create-tenant":
-      admin.superOverview = await apiJson("/api/super/tenants", "POST", { slug: $("#tenant-slug").value.trim(),
+      admin.superOverview = await apiJson("/api/super/tenants", "POST", {
         name: $("#tenant-name").value, vg: $("#tenant-vg").value, email: $("#tenant-email").value || null });
       return superChanged("Wehr angelegt");
     case "delete-tenant": {
-      const typed = await askAdminChoice({ title: `Wehr „${slug}“ archivieren?`, danger: true, confirm: "Archivieren",
-        text: "Alle Zuordnungen werden entfernt, die Daten in deleted/ abgelegt (nichts wird gelöscht).", label: "Zur Bestätigung den Kurznamen eintippen", input: true });
-      if (typed !== slug) return;
+      const name = admin.superOverview.tenants.find((t) => t.slug === slug)?.name || slug;
+      if (!await askConfirm({ title: `Wehr „${name}“ archivieren?`, danger: true, confirm: "Archivieren",
+        text: "Alle Zuordnungen werden entfernt, die Daten in deleted/ abgelegt (nichts wird gelöscht)." })) return;
+      const typed = slug;
       admin.superOverview = await api(`/api/super/tenants/${slug}?confirm=${encodeURIComponent(typed)}`, { method: "DELETE" });
       return superChanged("Wehr archiviert");
     }
