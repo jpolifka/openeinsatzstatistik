@@ -13,7 +13,6 @@ VIEWS.fire = { label: "Brand & Rettung", sub: "Brand & Rettung", load: loadEvalu
   help: "sec_fire" };
 
 const ABORT_LONG = { false_alarm: "Täuschung, technischer oder böswilliger Alarm, kein Ereignis" };
-const emptyNote = (text) => `<div class="card"><p class="empty-note">${esc(text)}</p></div>`;
 const shareOfKnown = (part, total) => total ? percent(part / total) : "–";
 const NOT_STATED = "ältere Berichte erneut einlesen, damit die Angabe übernommen wird";
 

@@ -55,7 +55,7 @@ def test_invalid_workbook_and_path_source(tmp_path):
         xlsx_report.read_workbook(bad.getvalue())
     path = tmp_path / "17-25.xlsx"
     path.write_bytes(make_workbook())
-    parsed = xlsx_report.read_report(str(path), "17-25.xlsx", CFG.unit_prefix)
+    parsed = xlsx_report.parse_report(xlsx_report.read_workbook(str(path)), "17-25.xlsx", CFG.unit_prefix)
     assert parsed["number"] == 17
 
 
@@ -146,5 +146,3 @@ def test_incomplete_vehicle_row_is_padded_and_warned(monkeypatch):
                         "12.03.25 10:44:04 12.03.25 10:50:00", "FL NR#.BHÖ 02/24-01 0 / 0 / 0 / 0 / 0 12.03.25 10:08:30")
     parsed = pdf_report.parse_report(text, LEFT, "", "17-25_B2_Test.pdf", CFG.unit_prefix)
     assert any(w.startswith("Fahrzeugzeile unvollständig") for w in parsed["warnings"])
-    monkeypatch.setattr(pdf_report, "extract_text", lambda path: (text, LEFT, ""))
-    assert pdf_report.read_report("x.pdf", "17-25_B2_Test.pdf", CFG.unit_prefix)["number"] == 17

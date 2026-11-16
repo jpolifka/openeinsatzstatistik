@@ -31,10 +31,8 @@ def test_renumber_ignores_missing_year(con):
     assert store.renumber(con, None) is None
 
 
-def test_is_empty_and_leader_names(con):
-    assert store.is_empty(con)
+def test_leader_names(con):
     incident_id = store.create_incident(con, {**FIELDS, "unit_leader": "M. Muster"}, source="pdf")
-    assert not store.is_empty(con)
     leaders = store.LeaderNames(con)
     person = {"name": "Muster, Max"}
     assert leaders.spelling(person) == leaders.spelling(person)            # zweiter Aufruf aus dem Zwischenspeicher
@@ -70,7 +68,7 @@ def test_update_and_delete_with_stale_revision(con):
     with pytest.raises(KeyError):
         store.update_incident(con, 9999, {"description": "x"})
     store.delete_incident(con, incident_id, revision=0)
-    assert store.is_empty(con)
+    assert con.execute("SELECT COUNT(*) FROM incident").fetchone()[0] == 0
 
 
 def test_update_that_loses_the_race_reports_stale(con, monkeypatch):
@@ -161,11 +159,9 @@ def test_make_key_counts_up_on_collision(roles):
     assert rbac.make_key(con, "Größe ß", None) == "groesse_ss"
 
 
-def test_unknown_role_has_no_permissions_and_descendants(roles):
+def test_unknown_role_has_no_permissions(roles):
     _, loaded = roles
     assert loaded.permissions(99999) == frozenset()
-    editor = loaded.find("editor", None)
-    assert {r.key for r in loaded.descendants(editor.id)} >= {"lead"}
 
 
 def test_delete_role_guards(roles):

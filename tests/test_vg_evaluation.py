@@ -184,7 +184,9 @@ def test_multi_report_is_distributed_and_updates_on_reimport(vg, monkeypatch):
 
     saved = vg.post("/api/reports/accept", json={"token": data["token"], "filename": "a1.pdf", "fields": {}}).json()
     with tenancy.central() as con:
-        assert [(r["slug"], r["kind"]) for r in records.reports_of(con, "9000001")] == [("wehr-a1", "secondary")]
+        rows = con.execute("SELECT t.slug, r.kind FROM record_report r JOIN tenant t ON t.id = r.tenant_id "
+                           "WHERE r.bks_record_id = '9000001'").fetchall()
+        assert [tuple(r) for r in rows] == [("wehr-a1", "secondary")]
 
     # Erneut eingelesen, mit geänderter Nummer: über den BKS-Bericht gefunden und aktualisiert
     texts["a1.pdf"] = (texts["a1.pdf"][0].replace("17/25", "18/25"), LEFT.replace("17/25", "18/25"), "")

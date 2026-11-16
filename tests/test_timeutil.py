@@ -55,16 +55,6 @@ def test_midnight_crossing_wraps_modulo_a_day():
     assert (later - start) % 86400 == 20 * 60
 
 
-def test_as_duration_covers_excel_representations():
-    assert timeutil.as_duration(dt.timedelta(minutes=5)) == dt.timedelta(minutes=5)
-    assert timeutil.as_duration(dt.time(1, 30)) == dt.timedelta(hours=1, minutes=30)
-    assert timeutil.as_duration(0.5) == dt.timedelta(hours=12)
-    assert timeutil.as_duration(0) == dt.timedelta(0)
-    assert timeutil.as_duration(-0.25) == dt.timedelta(hours=-6)
-    assert timeutil.as_duration("1:30") is None
-    assert timeutil.as_duration(None) is None
-
-
 def test_year_of_uses_start_or_current_year():
     assert timeutil.year_of("2024-12-31T23:59:59") == 2024
     assert timeutil.year_of(dt.datetime(2026, 1, 1)) == 2026

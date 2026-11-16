@@ -53,17 +53,6 @@ def seconds_of_day(value):
     return t.hour * 3600 + t.minute * 60 + t.second
 
 
-def as_duration(value):
-    """Excel-Dauer (Zeit, Tagesbruchteil oder timedelta) -> timedelta."""
-    if isinstance(value, dt.timedelta):
-        return value
-    if isinstance(value, dt.time):
-        return dt.timedelta(hours=value.hour, minutes=value.minute, seconds=value.second)
-    if isinstance(value, (int, float)):
-        return dt.timedelta(days=float(value))
-    return None
-
-
 def year_of(start):
     """Einsatzjahr aus dem Beginn (datetime oder ISO-Text); ohne Beginn das laufende Jahr."""
     if isinstance(start, str):

@@ -221,7 +221,3 @@ def parse_report(sheets, filename, unit_prefix):
     report["vehicles"] = _parse_vehicles(_sheet(sheets, VEHICLE_SHEET), unit_prefix)
     report["people"] = _parse_people(_sheet(sheets, PEOPLE_SHEET))
     return report
-
-
-def read_report(source, filename, unit_prefix):
-    return parse_report(read_workbook(source), filename, unit_prefix)

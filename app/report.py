@@ -16,7 +16,7 @@ import datetime as dt
 import copy
 import re
 
-from app import domain, pdf_report, store, xlsx_report, parser_worker
+from app import domain, pdf_report, store, parser_worker
 from app.incident_schema import OPTIONAL_TIMES
 from app.holidays import is_weekend_or_holiday
 from app.names import normalize, short_name
@@ -52,10 +52,6 @@ def read(parse, cfg):
     derive(report, cfg)
     check_plausibility(report, cfg)
     return report
-
-
-def read_text(texts, filename, cfg):
-    return read(pdf_parser(texts, filename), cfg)
 
 
 def match_tenant(parse, candidates):

@@ -657,7 +657,6 @@ function filterRoleOptions() {
 }
 
 // ------------------------------------------------------------ Rollen
-const permissionHelpKey = (key) => `perm_${key.replace(".", "_")}`;
 const roleById = (id) => admin.roles.roles.find((r) => r.id === id);
 
 function roleOrigin(r) {
