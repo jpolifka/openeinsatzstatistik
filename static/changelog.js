@@ -8,7 +8,7 @@ const CHANGELOG = [
   {
     date: "2026-11-16",
     items: [
-      "<b>openEinsatzstatistik:</b> Die Anwendung heißt jetzt so und ist freie Software (Apache-Lizenz). Unten auf jeder Seite steht ein Link zum Quellcode.",
+      "<b>openEinsatzstatistik:</b> Die Anwendung heißt jetzt so und ist freie Software (AGPL-Lizenz). Unten auf jeder Seite steht ein Link zum Quellcode.",
     ],
   },
   {

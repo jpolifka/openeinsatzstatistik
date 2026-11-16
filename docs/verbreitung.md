@@ -1,6 +1,6 @@
 # Verbreitung als Open-Source-Projekt
 
-Das Projekt steht kostenlos unter der Apache License 2.0. Verbreitung heißt also nicht „verkaufen“, sondern
+Das Projekt steht kostenlos unter der AGPL-3.0. Verbreitung heißt also nicht „verkaufen“, sondern
 **Vertrauen aufbauen, Einstieg leicht machen und Nutzer zu Mitwirkenden machen**.
 
 ## Positionierung
@@ -84,41 +84,31 @@ Checkliste, bevor das Repository öffentlich wird:
 - **Haftung:** In der Lizenz steht „ohne Gewährleistung“. Wer hostet, braucht trotzdem eine Vereinbarung (AVV), die App
   bringt dafür die Vorlage mit (`templates/avv_v*.html`).
 
-## Vorbild und mögliche Partner: OpenGH
+## Lizenz: AGPL-3.0
 
-[OpenGH](https://opengh.de) („Open Gerätehaus“, Einzelentwickler, AGPL-3.0) ist ein ähnlich gelagertes freies Projekt
-für Wehren einer Samtgemeinde: Termine, Mängelmeldungen, Fristen, Reservierungen. Stand der Seite im November 2026:
+Die Lizenz ist die AGPL-3.0 (wie bei OpenGH und Nextcloud). Was sie leistet und was nicht:
 
-- Software kostenlos, **selbst betreiben** oder **gehostet in drei Paketen**, benannt nach Fahrzeugen (TSF = eigene
-  Domain, LF 10 = Subdomain mit Mailserver, HLF 20 = zusätzlich Einrichtung und persönlicher Ansprechpartner).
-  Das gehostete Angebot ist „bald verfügbar“, Preise stehen nicht dort.
-- Kein Träger als juristische Person genannt, keine Aussagen zu Auftragsverarbeitung oder Verträgen.
+| | AGPL-3.0 |
+|---|---|
+| Nutzung, Änderung, eigener Betrieb durch Wehr/VG | frei |
+| Gehostetes Angebot gegen Entgelt durch Dritte | **erlaubt**, aber der Quelltext der angebotenen (auch geänderten) Fassung muss den Nutzern unter AGPL zugänglich sein |
+| Geschlossene Fork als Bezahldienst | nicht möglich |
+| Einbau in proprietäre Produkte | nicht möglich |
 
-Was daraus folgt:
+Die AGPL verbietet keinen Bezahldienst, sie verbietet nur einen **geschlossenen**. Wer Hosting anbietet, darf Geld
+verlangen, muss aber offenlegen, was er ändert. Das ist die beabsichtigte Wirkung. Ein Verbot jeder gewerblichen Nutzung
+wäre keine freie Software mehr (z. B. Creative Commons NC) und würde auch Wehren und Kommunen verunsichern.
 
-- **Das Modell „gleiche Software, Betrieb als Paket“ ist erprobt** und passt zu uns. Eine Staffelung nach Leistungsumfang
-  (nur Betrieb, mit eigener Domain und Mail, mit Einrichtung und Ansprechpartner) ist für Wehren leicht verständlich.
-- **Wir haben einen Vorsprung bei den Pflichten:** AVV je VG, Rollen und Protokoll sind schon eingebaut; das ist für
-  gehostete Angebote an Kommunen das Entscheidende.
-- **Beide Projekte ergänzen sich** (Organisation im Gerätehaus, Auswertung der Einsätze), haben dieselben Kunden und
-  dieselbe Wehrleitung als Entscheider. Kontakt aufnehmen (info@opengh.de), Erfahrungen zu Hosting und Verträgen
-  austauschen, ggf. gemeinsam auftreten oder ein gemeinsames Hosting-Paket anbieten.
-- **Lizenz:** Code unter Apache 2.0 darf in ein AGPL-Projekt übernommen werden, umgekehrt nicht ohne Weiteres.
-  Vor einer engeren technischen Verbindung die Lizenzen klären.
+Weitere Schutzmaßnahmen:
 
-## Lizenzwahl: Apache 2.0 und die Alternative
-
-| | Apache 2.0 | AGPL-3.0 |
-|---|---|---|
-| Nutzung, Änderung | frei | frei |
-| Geschlossene Fork als Bezahldienst | erlaubt | verboten, Änderungen müssen offengelegt werden |
-| Hürde für Kommunen/IT-Dienstleister | niedrig | etwas höher (Rechtsprüfung) |
-| Patentgewähr | ja | ja |
-
-Apache 2.0 passt, wenn möglichst viele Wehren und Dienstleister ohne Hürden mitmachen sollen. Wer verhindern will, dass
-ein Anbieter die App unverändert als geschlossenen Bezahldienst anbietet, nimmt AGPL-3.0. Wechsel von Apache zu AGPL
-ist für künftige Versionen möglich, solange du Alleinurheber bist; bereits veröffentlichte Versionen bleiben Apache.
-Vor Annahme fremder Beiträge entscheiden (siehe `CONTRIBUTING.md`).
+- **Name:** „openEinsatzstatistik“ ist nicht Teil der Lizenz; Forks sollen anders heißen. Eine Wortmarke (DPMA) macht das
+  durchsetzbar.
+- **Alleinurheberschaft:** Solange alle Beiträge bei dir liegen oder du dir die Rechte einräumen lässt (Beitragsvereinbarung),
+  kannst du zusätzlich eine **kommerzielle Lizenz** anbieten (Doppellizenz), etwa für Anbieter, die nichts offenlegen wollen.
+  Mit fremden Beiträgen ohne Vereinbarung geht das nicht. Vor dem ersten externen Beitrag entscheiden.
+- **Frühere Fassungen:** Die Apache-Fassung stand nur kurz in `main`. Wer sie bekommen hat, darf sie unter Apache
+  weiternutzen; für alles Neue gilt die AGPL.
+- **Hosting-Vertrag:** Qualität, Support, AVV und Haftung kommen aus deinem Vertrag, nicht aus der Lizenz.
 
 ## Zeitplan
 
