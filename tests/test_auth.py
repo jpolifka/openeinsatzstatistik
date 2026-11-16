@@ -177,3 +177,22 @@ def test_disabling_login_and_admins_together_is_refused(monkeypatch):
     monkeypatch.setattr(auth, "AUTH_DISABLED", True)
     with pytest.raises(RuntimeError, match="widersprechen"):
         auth.check_config()
+
+
+def test_link_base_uses_request_host_only_for_allowed_domains(monkeypatch):
+    monkeypatch.setattr(auth, "BASE_URL", "https://login.example.org")
+    monkeypatch.setattr(auth, "ALLOWED_DOMAINS", ["example.org", "example.de"])
+    assert auth.link_base("wehr1.example.org") == "https://wehr1.example.org"
+    assert auth.link_base("Wehr1.Example.DE") == "https://wehr1.example.de"
+    assert auth.link_base("example.org") == "https://example.org"
+    for fremd in ("evil.com", "example.org.evil.com", "xexample.org", "", None, "a.example.org/x", "a@example.org"):
+        assert auth.link_base(fremd) == "https://login.example.org"
+    monkeypatch.setattr(auth, "ALLOWED_DOMAINS", [])
+    assert auth.link_base("wehr1.example.org") == "https://login.example.org"
+
+
+def test_login_link_points_to_request_host(client, monkeypatch, caplog):
+    monkeypatch.setattr(auth, "BASE_URL", "http://localhost")
+    monkeypatch.setattr(auth, "ALLOWED_DOMAINS", ["localhost"])
+    client.post("/login", data={"email": "m.muster@example.org"}, headers={"host": "wehr1.localhost"})
+    assert "http://wehr1.localhost/auth/verify?token=" in caplog.text

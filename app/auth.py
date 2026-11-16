@@ -18,6 +18,7 @@ import hmac
 import html
 import logging
 import os
+import re
 import secrets
 import smtplib
 import threading
@@ -32,6 +33,8 @@ from app import db, mail, tenancy, theme
 log = logging.getLogger("openeinsatzstatistik")
 
 BASE_URL = os.environ.get("BASE_URL", "").rstrip("/")
+# Domains, deren Subdomains im Anmeldelink verwendet werden dürfen (sonst immer BASE_URL)
+ALLOWED_DOMAINS = [d.strip().lower().lstrip(".") for d in os.environ.get("ALLOWED_DOMAINS", "").split(",") if d.strip()]
 SECRET_KEY = os.environ.get("SECRET_KEY", "")
 # Ohne Anmeldung ist jeder Zugriff Superadmin: nur auf ausdrückliche Anweisung (lokale Entwicklung)
 AUTH_DISABLED = os.environ.get("AUTH_DISABLED", "").strip().lower() in ("1", "true", "yes", "ja")
@@ -217,7 +220,18 @@ def _use_link(token):
 
 
 # ---------------------------------------------------------------- Mailversand
-def send_link(email):
+def link_base(host):
+    """Basisadresse für den Anmeldelink: der Host der Anfrage, wenn er zu einer erlaubten Domain
+    gehört (Schema wie BASE_URL), sonst BASE_URL. Verhindert Host-Header-Fälschung."""
+    host = (host or "").strip().lower()
+    name = host.rsplit(":", 1)[0] if ":" in host and not host.endswith("]") else host
+    if BASE_URL and any(name == d or name.endswith("." + d) for d in ALLOWED_DOMAINS) \
+            and re.fullmatch(r"[a-z0-9.-]+(:\d{1,5})?", host):
+        return f"{urlsplit(BASE_URL).scheme}://{host}"
+    return BASE_URL
+
+
+def send_link(email, host=None):
     """Schickt den Anmeldelink – still nichts, wenn die Adresse nicht berechtigt ist."""
     email = tenancy.normalize_email(email)
     if not tenancy.is_allowed(email):
@@ -235,7 +249,7 @@ def send_link(email):
             log.warning("Auffällig viele Anmeldelinks in der letzten Stunde (%s) – mögliche Mail-Flut", MAIL_TOTAL_ALERT_PER_HOUR)
         _last_mail[email] = now
         _sent.append((now, email))
-    link = f"{BASE_URL}/auth/verify?token={_sign('link', email, LINK_TTL)}"
+    link = f"{link_base(host)}/auth/verify?token={_sign('link', email, LINK_TTL)}"
     if not mail.enabled():
         if _is_local():          # lokale Entwicklung ohne Mailversand: Link im Log
             log.warning("SMTP_HOST fehlt – Anmeldelink für %s: %s", email, link)
@@ -286,9 +300,9 @@ def login_page(request: Request):
 
 
 @router.post("/login")
-def login_request(background: BackgroundTasks, email: str = Form(...)):
+def login_request(request: Request, background: BackgroundTasks, email: str = Form(...)):
     # Erst nach der Antwort senden: sonst verriete die Antwortzeit, ob die Adresse berechtigt ist
-    background.add_task(send_link, email)
+    background.add_task(send_link, email, request.headers.get("host"))
     return _page("<p>Wenn die Adresse berechtigt ist, ist jetzt ein Anmeldelink unterwegs. "
                  "Er gilt 15 Minuten.</p><p><a href=\"/login\">Zurück</a></p>")
 
