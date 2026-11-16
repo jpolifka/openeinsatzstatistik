@@ -177,9 +177,6 @@ class Roles:
     def find(self, key, vg_id):
         return next((r for r in self.visible(vg_id) if r.key == key), None)
 
-    def descendants(self, role_id):
-        return [r for r in self if r.id != role_id and role_id in self.chain(r.id)]
-
 
 def make_key(con, label, vg_id):
     """Schlüssel aus der Bezeichnung, eindeutig unter den Rollen, die in derselben VG gelten können."""

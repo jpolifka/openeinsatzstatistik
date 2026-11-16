@@ -174,7 +174,3 @@ def parse_report(full, left, right, filename, unit_prefix):
     report["vehicles"] = _parse_vehicles(full, report, unit_prefix)
     report["people"] = _parse_people(full)
     return report
-
-
-def read_report(path, filename, unit_prefix):
-    return parse_report(*extract_text(path), filename, unit_prefix)

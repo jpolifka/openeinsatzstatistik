@@ -66,11 +66,6 @@ def register_report(con, tenant_id, report, email=None):
          report.get("report_kind"), report.get("number_text"), email))
 
 
-def reports_of(con, bks_record_id):
-    """Eingelesene Berichte zu einem Stammdatensatz mit ihrer Wehr."""
-    return [dict(r) for r in con.execute(
-        "SELECT r.*, t.slug, t.name FROM record_report r JOIN tenant t ON t.id = r.tenant_id "
-        "WHERE r.bks_record_id = ? ORDER BY r.kind, t.name", (bks_record_id,))]
 
 
 

@@ -61,7 +61,6 @@ def api_evaluation(year: Optional[int] = None, limit: Optional[int] = None, tena
     parts, months = evaluate(selection, year, limit)
     current = [e for _, evaluated, _ in parts for e in evaluated]
     previous = [i for _, _, prev in parts for i in prev]
-    previous_evaluated = [e for t, _, prev in parts for e in metrics.evaluate(prev, t.config, limit)]
     single = len(selection) == 1 and not a.vg
     # Bedarfsplan nur aus Wehren, für die er sichtbar ist (Freigabe oder Recht PLAN_VIEW)
     plan_parts = [(t, evaluated, prev) for t, evaluated, prev in parts if plan_visible(t)]

@@ -121,11 +121,11 @@ def test_invalid_incident_changes_are_rejected(client, changes):
 def test_stale_incident_revision_is_rejected(client):
     key = _create(client, 1)
     original = client.get("/api/incidents?year=2025").json()["incidents"][0]
-    changed = client.put(f"/api/incidents/{key}", json={"revision": 0, "revision": original["revision"],
+    changed = client.put(f"/api/incidents/{key}", json={"revision": original["revision"],
                                                      "description": "Erste Änderung"})
     assert changed.status_code == 200
     assert changed.json()["revision"] == original["revision"] + 1
-    stale = client.put(f"/api/incidents/{key}", json={"revision": 0, "revision": original["revision"],
+    stale = client.put(f"/api/incidents/{key}", json={"revision": original["revision"],
                                                    "description": "Veraltete Änderung"})
     assert stale.status_code == 409
     assert client.get("/api/incidents?year=2025").json()["incidents"][0]["description"] == "Erste Änderung"

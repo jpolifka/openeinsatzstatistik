@@ -635,8 +635,6 @@ const HELP_SECTIONS = [
   },
 ];
 
-const HELP = Object.fromEntries(HELP_SECTIONS.flatMap((s) => Object.entries(s.entries)));
-
 function helpContent() {
   return HELP_SECTIONS.map((s) => `<section class="help-section" id="help-${s.id}">
     <h3>${s.title}</h3>${s.intro ? `<p class="muted">${s.intro}</p>` : ""}

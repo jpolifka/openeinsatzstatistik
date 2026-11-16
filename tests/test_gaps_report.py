@@ -6,12 +6,7 @@ import datetime as dt
 
 from app import report
 from conftest import CFG
-from test_report import FULL, LEFT, read
-
-
-def test_read_text_runs_whole_pipeline():
-    r = report.read_text((FULL, LEFT, ""), "17-25_B2_Test.pdf", CFG)
-    assert r["number"] == 17 and r["slots"] and r["started_at"]
+from test_report import read
 
 
 def test_town_is_used_when_district_is_unknown():

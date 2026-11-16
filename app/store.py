@@ -237,10 +237,6 @@ def renumber(con, year):
     con.executemany("UPDATE incident SET revision = revision + 1 WHERE id = ?", [(i,) for i in changed])
 
 
-def is_empty(con):
-    return not con.execute("SELECT 1 FROM incident LIMIT 1").fetchone()
-
-
 # ---------------------------------------------------------------- Schreiben
 def _placeholders(values):
     return ",".join("?" * len(values))
