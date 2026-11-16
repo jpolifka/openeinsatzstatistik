@@ -32,62 +32,62 @@ colors:
   late-text: "#9A4A00"
 typography:
   display:
-    fontFamily: "Sansation, Segoe UI, system-ui, sans-serif"
+    fontFamily: "system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif"
     fontSize: "3.1rem"
     fontWeight: 700
     lineHeight: 1.15
   headline:
-    fontFamily: "Sansation, Segoe UI, system-ui, sans-serif"
+    fontFamily: "system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif"
     fontSize: "1.7rem"
     fontWeight: 700
     lineHeight: 1.2
   title:
-    fontFamily: "Sansation, Segoe UI, system-ui, sans-serif"
+    fontFamily: "system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif"
     fontSize: "1.3rem"
     fontWeight: 700
     lineHeight: 1.2
   body:
-    fontFamily: "Sansation, Segoe UI, system-ui, sans-serif"
+    fontFamily: "system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif"
     fontSize: "15px"
     fontWeight: 400
     lineHeight: 1.5
   label:
-    fontFamily: "Sansation, Segoe UI, system-ui, sans-serif"
+    fontFamily: "system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif"
     fontSize: "0.85rem"
     fontWeight: 700
     lineHeight: 1.35
   label-sm:
-    fontFamily: "Sansation, Segoe UI, system-ui, sans-serif"
+    fontFamily: "system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif"
     fontSize: "0.78rem"
     fontWeight: 700
     lineHeight: 1.35
   body-sm:
-    fontFamily: "Sansation, Segoe UI, system-ui, sans-serif"
+    fontFamily: "system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif"
     fontSize: "0.92rem"
     fontWeight: 400
     lineHeight: 1.5
   subtitle:
-    fontFamily: "Sansation, Segoe UI, system-ui, sans-serif"
+    fontFamily: "system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif"
     fontSize: "1rem"
     fontWeight: 700
     lineHeight: 1.3
   number:
-    fontFamily: "Sansation, Segoe UI, system-ui, sans-serif"
+    fontFamily: "system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif"
     fontSize: "1.5rem"
     fontWeight: 700
     lineHeight: 1.2
   prompt-title:
-    fontFamily: "Sansation, Segoe UI, system-ui, sans-serif"
+    fontFamily: "system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif"
     fontSize: "1.15rem"
     fontWeight: 700
     lineHeight: 1.2
   digits:
-    fontFamily: "Ziffern, Sansation, Segoe UI, system-ui, sans-serif"
+    fontFamily: "system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif"
     fontSize: "1rem"
     fontWeight: 400
     lineHeight: 1.5
   kpi-value:
-    fontFamily: "Sansation, Segoe UI, system-ui, sans-serif"
+    fontFamily: "system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif"
     fontSize: "1.9rem"
     fontWeight: 700
     lineHeight: 1.1
@@ -205,9 +205,9 @@ Eine Kennfarbe in Abstufungen, dazu neutrale Grautöne und ein Statusgrün, das 
 
 ## Typography
 
-**Schrift:** Sansation (Gewichte 300, 400, 700; lokal ausgeliefert, mit Segoe UI und System-Sans als Rückfall)
+**Schrift:** Systemschriften (`system-ui`, Segoe UI, Roboto, Helvetica, Arial), wie das BKS-Portal des Landes; es wird keine Schrift ausgeliefert. Jede Wehr kann in den Einstellungen eine eigene Schriftdatei (normal, optional fett) hinterlegen; `/api/theme.css` setzt dafür `--font`.
 
-**Charakter:** Eine freundliche, leicht geometrische Sans mit kantigem Ton. Kraft kommt aus dem Gewicht 700 für Überschriften, Beschriftungen und Zahlen; der Fließtext bleibt ruhig.
+**Charakter:** Eine neutrale, vertraute Sans. Kraft kommt aus dem Gewicht 700 für Überschriften, Beschriftungen und Zahlen; der Fließtext bleibt ruhig.
 
 ### Hierarchy
 - **Display** (700, 3,1 rem, 1,15): Hero-Kennzahl.
@@ -270,7 +270,7 @@ Abgerundete, freundliche Formen mit gestaffelten Radien: 6 px (Chips), 8 px (Ein
 - Weiß, 1 px Rand in `--field-line`, 8 px Radius. Fokus: 2-px-Ring in `--brand` mit 1 px Abstand und Rand in `--brand`; kein heller Hof. Jedes Feld hat einen sichtbaren oder `aria-label`-Namen, ein Platzhalter ersetzt ihn nicht. Auf Touchgeräten mindestens 44 px hoch.
 
 ### Zahlen
-- Ziffern in Daten (Tabellen, Kennzahlen, Chips, Eingaben) kommen aus `--font-num`: eine Systemschrift mit eindeutiger Eins und Null (`@font-face "Ziffern"`, nur U+0030–0039); Buchstaben und Überschriften bleiben Sansation, weil dort Eins und I, Null und O verwechselt werden.
+- Ziffern in Daten (Tabellen, Kennzahlen, Chips, Eingaben) kommen aus `--font-num`, standardmäßig dieselbe Schrift wie der Text. Bei einer eigenen Wehrschrift mit verwechselbarer Eins und Null lässt sich `--font-num` getrennt setzen.
 
 ### Zeitstrahl
 - Im Einsatzdetail zeigt ein Zeitstrahl je Fahrzeug Ausrücken (`--brand-accent`) und Anfahrt (`--brand`) auf einer Minutenachse ab Alarm; die Zeitgrenze ist eine gestrichelte Linie in `--late-text`. Verspätung steht zusätzlich als Wort und △. Ein Umschalter „Zeitstrahl / Tabelle“ hält die genauen Werte erreichbar; die Wahl bleibt erhalten.
@@ -303,7 +303,7 @@ Abgerundete, freundliche Formen mit gestaffelten Radien: 6 px (Chips), 8 px (Ein
 - **Do** neue Felder und Kennzahlen in `help.js` erklären und Änderungen in `changelog.js` eintragen.
 
 ### Don't:
-- **Don't** Sansation für Ziffern in Daten verwenden (1 = I, 0 = O).
+- **Don't** Schriften von fremden Servern laden: Eine Wehrschrift kommt nur als hochgeladene Datei über `/api/branding/…` (CSP `font-src 'self'`).
 - **Don't** den Seitentitel umbrechen lassen: Der Kopf hat in jeder Ansicht dieselbe Höhe (Titel einzeilig, Beschriftungen von Wehr und Jahr entfallen bis 1560 px).
 - **Don't** leere Diagramme mit Strichen zeigen; Leerzustände sagen, was fehlt und was zu tun ist.
 - **Don't** `--brand-accent` auf dem Kopfverlauf als Fokusfarbe verwenden (unter 2:1).

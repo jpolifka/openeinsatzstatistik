@@ -22,6 +22,15 @@ ASSETS = {"logo-light": "Logo hell (für die farbige Kopfzeile)", "logo-dark": "
           "icon": "Symbol (Browser-Tab)"}
 MAX_ASSET_BYTES = 512 * 1024
 
+# Schriftdateien einer Wehr (Tabelle asset, wie die Logos): normal und fett; ohne Datei gilt die Systemschrift
+FONTS = {"font": "Schrift (normal)", "font-bold": "Schrift (fett)"}
+FONT_WEIGHTS = {"font": 400, "font-bold": 700}
+MAX_FONT_BYTES = 1024 * 1024
+FONT_FAMILY = "Wehrschrift"
+FONT_FORMATS = {"font/woff2": "woff2", "font/woff": "woff", "font/ttf": "truetype", "font/otf": "opentype"}
+# Systemschriften wie im BKS-Portal des Landes; muss zu --font in static/app.css passen
+SYSTEM_FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
+
 
 def _rgb(hex_color):
     return tuple(int(hex_color[i:i + 2], 16) for i in (1, 3, 5))
@@ -112,11 +121,24 @@ def palette(colors):
     }
 
 
-def css(colors):
-    """Stylesheet, das die Tokens aus app.css überschreibt; leer ohne eigene Farben."""
-    if not normalize(colors):
+def font_css(files):
+    """@font-face und --font für die Schriftdateien einer Wehr; files = [(Name in FONTS, Adresse, MIME-Typ)]."""
+    faces = ""
+    for name, url, mime in files:
+        if name in FONTS and mime in FONT_FORMATS:
+            faces += (f'@font-face{{font-family:"{FONT_FAMILY}";font-style:normal;font-weight:{FONT_WEIGHTS[name]};'
+                      f'font-display:swap;src:url("{url}") format("{FONT_FORMATS[mime]}")}}\n')
+    if not faces:
         return ""
-    return ":root{" + "".join(f"{name}:{value};" for name, value in palette(colors).items()) + "}\n"
+    return faces + f':root{{--font:"{FONT_FAMILY}",{SYSTEM_FONT};}}\n'
+
+
+def css(colors, fonts=()):
+    """Stylesheet, das die Tokens aus app.css überschreibt (Farben, Schrift der Wehr); leer ohne beides."""
+    out = font_css(fonts)
+    if normalize(colors):
+        out += ":root{" + "".join(f"{name}:{value};" for name, value in palette(colors).items()) + "}\n"
+    return out
 
 
 def image_type(data):
@@ -127,4 +149,19 @@ def image_type(data):
         return "image/jpeg"
     if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
         return "image/webp"
+    return None
+
+
+def font_type(data):
+    """Schriftformat am Dateianfang -> MIME-Typ, sonst None (WOFF2, WOFF, TrueType, OpenType). Bei WOFF/WOFF2 muss die
+    im Kopf angegebene Länge zur Datei passen (schützt vor abgeschnittenen oder untergeschobenen Dateien)."""
+    head = data[:4]
+    if head in (b"wOF2", b"wOFF"):
+        if len(data) < 48 or int.from_bytes(data[8:12], "big") != len(data):
+            return None
+        return "font/woff2" if head == b"wOF2" else "font/woff"
+    if len(data) >= 12 and head in (b"\x00\x01\x00\x00", b"true"):
+        return "font/ttf"
+    if len(data) >= 12 and head == b"OTTO":
+        return "font/otf"
     return None

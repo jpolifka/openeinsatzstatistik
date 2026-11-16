@@ -52,12 +52,10 @@
   --shadow: 0 1px 2px rgba(51, 0, 0, .06), 0 6px 20px rgba(122, 0, 0, .06);
   --dialog-shadow: 0 30px 80px rgba(60, 0, 0, .35);
   --backdrop: rgba(40, 0, 0, .45);
-  --font: "Sansation", "Segoe UI", system-ui, sans-serif;
-  --font-num: "Ziffern", var(--font);   /* Zahlen in Daten: eindeutige 1 und 0 (Sansation: 1 = I, 0 = O) */
+  /* Systemschriften wie im BKS-Portal; eine Wehr kann eine eigene Schriftdatei hinterlegen (/api/theme.css setzt --font) */
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-num: var(--font);   /* Zahlen in Daten, bei Bedarf getrennt einstellbar */
 }
-/* Nur die Ziffern kommen aus einer Systemschrift mit eindeutiger Eins und Null; Buchstaben bleiben in Sansation */
-@font-face { font-family: "Ziffern"; unicode-range: U+0030-0039;
-  src: local("Segoe UI"), local("Helvetica Neue"), local("Arial"), local("Liberation Sans"), local("DejaVu Sans"); }
 
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; scrollbar-color: var(--brand-accent) transparent; }

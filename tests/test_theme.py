@@ -91,3 +91,16 @@ def test_vg_view_and_login_page_are_neutral(branded):
 def test_tenant_without_colors_keeps_default_theme(make_client):
     make_tenant("wehr-a1")
     assert make_client().get("/api/theme.css").text == ""
+
+
+def test_font_type_and_css():
+    woff2 = b"wOF2" + b"\x00\x01\x00\x00" + (64).to_bytes(4, "big") + b"\x00" * 52
+    assert theme.font_type(woff2) == "font/woff2"
+    assert theme.font_type(woff2.replace(b"wOF2", b"wOFF")) == "font/woff"
+    assert theme.font_type(woff2[:63]) is None and theme.font_type(b"") is None
+    assert theme.font_type(b"OTTO" + b"\x00" * 20) == "font/otf"
+    assert theme.font_type(b"\x89PNG\r\n\x1a\n" + b"\x00" * 20) is None
+    css = theme.css({}, [("font", "/api/branding/x/font?v=1", "font/woff2")])
+    assert css.startswith('@font-face{font-family:"Wehrschrift"') and 'url("/api/branding/x/font?v=1")' in css
+    assert theme.SYSTEM_FONT in css
+    assert theme.css({}, []) == "" and theme.css({}, [("font", "/x", "text/html")]) == ""

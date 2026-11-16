@@ -55,7 +55,7 @@ Weiße Schrift auf Stahlblau und Nachtblau erreicht mindestens 5,6:1 (WCAG AA); 
 
 ## Marke und Oberfläche der Wehr
 
-Die Oberfläche gehört der Wehr: Wehr-Rot (oder eigene Farbe), eigenes Logo, Schrift Sansation (siehe `DESIGN.md`).
+Die Oberfläche gehört der Wehr: Wehr-Rot (oder eigene Farbe), eigenes Logo, auf Wunsch eigene Schrift (siehe `DESIGN.md`).
 Die Marke erscheint dort nur zurückhaltend:
 
 - **Footer:** „openEinsatzstatistik – freie Software“ als Link zum Quellcode (Pflicht aus der AGPL, nicht entfernen).
@@ -72,7 +72,7 @@ Die Wortmarke ist in **Roboto** gesetzt, einer Schrift dieses Stapels (SIL Open 
 - **Wortmarke:** „open“ in Roboto Regular, „Einsatzstatistik“ in Roboto Bold, Unterzeile in Roboto Medium, Versalien, weit gesperrt.
 - **Websites, Folien, Dokumente:** `-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif`. Es muss nichts geladen werden, der DSGVO-Aufwand für Webfonts entfällt.
 - **Schnitte:** Regular für Text, Bold für Überschriften und Hervorhebungen, Overlines in Versalien mit weiter Laufweite. Fließtext 16 px mit 1,6 Zeilenabstand.
-- **In der App** bleibt die Schrift der Oberfläche (Sansation, siehe `DESIGN.md`).
+- **In der App** gelten dieselben Systemschriften; eine Wehr kann eine eigene Schriftdatei hinterlegen (siehe `DESIGN.md`).
 
 ## Bildwelt und Icons
 
