@@ -1,17 +1,17 @@
 :root {
-  /* Farben der Wehr: Standard ist ein neutrales Feuerwehrrot. Eigene Farben setzt /api/theme.css
-     (app/theme.py leitet alle --brand-* Tokens aus Haupt- und dunkler Farbe ab). */
-  --brand: #D90000;            /* Hauptfarbe / Überschriften */
-  --brand-dark: #7A0000;       /* starke Hervorhebung / wichtige Kacheln */
-  --brand-mid: #C9363F;        /* Tabellenköpfe / sekundäre Flächen */
-  --brand-accent: #E0525C;     /* leichtere Hervorhebung */
-  --brand-light: #F6DADC;      /* dezente Kacheln / Tabellenzeilen */
-  --brand-pale: #FCEEEF;       /* Hintergrundflächen */
-  --brand-gradient: #A30000;   /* Mitte des Kopf-Verlaufs */
-  --brand-hover: #B80000;
-  --brand-light-hover: #F0C6CA;
-  --brand-mid-hover: #B82E36;
-  --brand-shadow: rgba(217, 0, 0, .25);
+  /* Farben der Wehr: Standard ist Bordeaux mit Sand für Tabellen und Flächen (Farbkonzept: docs/marke.md).
+     Eigene Farben setzt /api/theme.css (app/theme.py leitet alle --brand-* Tokens aus Haupt- und dunkler Farbe ab). */
+  --brand: #7C2734;            /* Hauptfarbe / Überschriften */
+  --brand-dark: #44151D;       /* starke Hervorhebung / wichtige Kacheln */
+  --brand-mid: #8C414C;        /* Tabellenköpfe / sekundäre Flächen */
+  --brand-accent: #A36871;     /* leichtere Hervorhebung */
+  --brand-light: #E9D6CE;      /* Sand: Tabellenzeilen, dezente Kacheln */
+  --brand-pale: #F5ECE8;       /* Hintergrundflächen */
+  --brand-gradient: #601E28;   /* Mitte des Kopf-Verlaufs */
+  --brand-hover: #69212C;
+  --brand-light-hover: #DFC8BE;
+  --brand-mid-hover: #7E3A44;
+  --brand-shadow: rgba(124, 39, 52, .25);
   --text: #333333;         /* Fließtext */
   --gray: #6B6B6B;         /* sekundäre Beschriftungen */
   --light-gray: #F2F2F2;   /* neutrale Flächen */
@@ -24,19 +24,20 @@
   --night: #2E2E2E;
   --previous: #8F8F8F;
   --gridline: #ECECEC;
-  --track: #F3E4E5;
+  --track: #F0E3DD;
 
   --ok-bg: #E3F1E6;        /* Status „erledigt“ (unabhängig von den Farben der Wehr) */
   --ok-text: #1E5A2C;
   /* Status: unabhängig von den Farben der Wehr, damit „Hinweis“ und „Fehler“ in jeder Wehr unterscheidbar bleiben */
-  --warn-bg: #FFF1CC;       /* Hinweis, zu prüfen */
-  --warn-text: #5E3A00;
-  --warn-line: #E2B24A;
-  --error-bg: #FDEBEA;      /* Fehler, nicht gespeichert */
-  --error-text: #8C1111;
-  --error-line: #D98A8A;
+  --signal: #D46E3B;        /* Signalorange: Hinweise und Fehler (wie in den Schulungsunterlagen des Landesamts) */
+  --warn-bg: #FBEBE2;       /* Hinweis, zu prüfen */
+  --warn-text: #8F3E14;
+  --warn-line: #D46E3B;
+  --error-bg: #F6D9CA;      /* Fehler, nicht gespeichert: kräftigere Tönung, dunklere Schrift und Linie */
+  --error-text: #6E2A0C;
+  --error-line: #B8541F;
   --turnout: #2B7A8C;       /* Zeitstrahl: Ausrücken, bewusst komplementär zum Wehr-Rot und unabhängig von der Wehrfarbe */
-  --late-text: #9A4A00;     /* verspätet: eigener Ton, nicht vom Wehr-Rot abgeleitet (Symbol und Text stehen dabei) */
+  --late-text: #8F3E14;     /* verspätet: Signal-Ton, dunkel genug für Text (Symbol und Wort stehen dabei) */
   --shade: rgba(0,0,0,.14); /* neutrale Abdunklung (Reiterstreifen, Schatten) */
   --shade-soft: rgba(0,0,0,.08);
   --shade-faint: rgba(0,0,0,.04);
@@ -49,9 +50,9 @@
   --on-brand-fill: rgba(255,255,255,.14);
   --on-brand-line: rgba(255,255,255,.4);
   --radius: 14px;
-  --shadow: 0 1px 2px rgba(51, 0, 0, .06), 0 6px 20px rgba(122, 0, 0, .06);
-  --dialog-shadow: 0 30px 80px rgba(60, 0, 0, .35);
-  --backdrop: rgba(40, 0, 0, .45);
+  --shadow: 0 1px 2px rgba(29, 9, 12, .06), 0 6px 20px rgba(68, 21, 29, .06);
+  --dialog-shadow: 0 30px 80px rgba(34, 10, 14, .35);
+  --backdrop: rgba(22, 7, 10, .45);
   /* Systemschriften wie im BKS-Portal; eine Wehr kann eine eigene Schriftdatei hinterlegen (/api/theme.css setzt --font) */
   --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-num: var(--font);   /* Zahlen in Daten, bei Bedarf getrennt einstellbar */

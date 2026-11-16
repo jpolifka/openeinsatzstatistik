@@ -14,8 +14,10 @@ WHITE, BLACK = (255, 255, 255), (0, 0, 0)
 MIN_TEXT_CONTRAST = 4.5        # weiße Schrift auf Kopfzeile, Knöpfen, Tabellenköpfen (WCAG AA)
 MIN_CHART_CONTRAST = 3.0       # Diagrammfarben gegen den weißen Hintergrund
 
-# Neutrales Farbschema: Anmeldung, Gesamtansicht einer VG, Wehren ohne Zuordnung
-NEUTRAL = {"brand": "#2F6D92", "brand_dark": "#1B3F55"}   # Stahlblau und Nachtblau der Marke (docs/marke.md)
+# Neutrales Farbschema: Anmeldung, Gesamtansicht einer VG, Wehren ohne Zuordnung. Leer, weil dort keine Farben
+# überschrieben werden; die Standardwerte in app.css entsprechen palette({"brand": "#7C2734"}) mit Sand (#E9D6CE) für
+# die Flächentöne (tests/test_theme.py prüft die Übereinstimmung).
+NEUTRAL = {}   # = die Standardfarben aus static/app.css (Bordeaux mit Sand, docs/marke.md)
 
 # Logos: Name -> Bezeichnung; erlaubte Bildformate (am Inhalt erkannt, kein SVG wegen eingebetteter Skripte)
 ASSETS = {"logo-light": "Logo hell (für die farbige Kopfzeile)", "logo-dark": "Logo dunkel (Fußzeile)",

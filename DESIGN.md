@@ -1,15 +1,16 @@
 ---
 name: openEinsatzstatistik
-description: Einsatzstatistik für Feuerwehren – sachliche Auswertung in Wehr-Rot auf weißen Karten
+description: Einsatzstatistik für Feuerwehren – sachliche Auswertung in Bordeaux mit Sand auf weißen Karten
 colors:
-  brand: "#D90000"
-  brand-dark: "#7A0000"
-  brand-gradient: "#A30000"
-  brand-mid: "#C9363F"
-  brand-accent: "#E0525C"
-  brand-hover: "#B80000"
-  brand-light: "#F6DADC"
-  brand-pale: "#FCEEEF"
+  brand: "#7C2734"
+  brand-dark: "#44151D"
+  brand-gradient: "#601E28"
+  brand-mid: "#8C414C"
+  brand-accent: "#A36871"
+  brand-hover: "#69212C"
+  brand-light: "#E9D6CE"
+  brand-pale: "#F5ECE8"
+  signal: "#D46E3B"
   text: "#333333"
   gray: "#6B6B6B"
   light-gray: "#F2F2F2"
@@ -17,17 +18,17 @@ colors:
   line: "#E4E4E4"
   field-line: "#858585"
   gridline: "#ECECEC"
-  track: "#F3E4E5"
+  track: "#F0E3DD"
   series: "#4A4A4A"
   series-night: "#2E2E2E"
   series-previous: "#8F8F8F"
   ok-bg: "#E3F1E6"
   ok-text: "#1E5A2C"
-  warn-bg: "#FFF1CC"
-  warn-text: "#5E3A00"
-  warn-line: "#E2B24A"
-  error-bg: "#FDEBEA"
-  error-text: "#8C1111"
+  warn-bg: "#FBEBE2"
+  warn-text: "#8F3E14"
+  warn-line: "#D46E3B"
+  error-bg: "#F6D9CA"
+  error-text: "#6E2A0C"
   error-line: "#D98A8A"
   late-text: "#9A4A00"
 typography:
@@ -170,29 +171,30 @@ Die Farben gehören der jeweiligen Wehr: Alle Rottöne sind Tokens, die `/api/th
 
 ## Colors
 
-Eine Kennfarbe in Abstufungen, dazu neutrale Grautöne und ein Statusgrün, das unabhängig von der Wehr bleibt.
+Eine Kennfarbe in Abstufungen (Standard: Bordeaux), dazu Sand für Flächen, Signalorange für Hinweise und Fehler und ein Statusgrün. Die Farben stammen aus den Schulungsunterlagen des Landesamts für Brand- und Katastrophenschutz; Konzept und Verwendung: `docs/marke.md`.
 
 ### Primary
-- **Signalrot der Wehr** (#D90000, `--brand`): Überschriften, Hauptaktion, aktive Reiter-Akzente, Erreichungsgrad.
-- **Tiefes Wachrot** (#7A0000, `--brand-dark`): Anfang des Kopfverlaufs, Hero-Kennzahl, Summenfenster, Text auf hellen Rotflächen.
-- **Verlaufsrot** (#A30000, `--brand-gradient`): Mitte des Kopfverlaufs.
+- **Bordeaux** (#7C2734, `--brand`; Standard, jede Wehr kann eine eigene Hauptfarbe wählen): Überschriften, Hauptaktion, aktive Reiter-Akzente, Erreichungsgrad.
+- **Tiefes Bordeaux** (#44151D, `--brand-dark`): Anfang des Kopfverlaufs, Hero-Kennzahl, Summenfenster, Text auf hellen Rotflächen.
+- **Verlaufston** (#601E28, `--brand-gradient`): Mitte des Kopfverlaufs.
 
 ### Secondary
-- **Gedämpftes Rot** (#C9363F, `--brand-mid`): Tabellenköpfe, Panel-Überschriften, sekundäre Flächen.
-- **Helles Akzentrot** (#E0525C, `--brand-accent`): Fokusring, Hover-Rahmen, gestrichelter Rahmen der Ablage. Weiß darauf hat nur 3,8:1; nicht als Textfarbe verwenden.
+- **Gedämpftes Bordeaux** (#8C414C, `--brand-mid`): Tabellenköpfe, Panel-Überschriften, sekundäre Flächen.
+- **Helles Akzent-Bordeaux** (#A36871, `--brand-accent`): Fokusring, Hover-Rahmen, gestrichelter Rahmen der Ablage. Weiß darauf hat nur etwa 4:1; nicht als Textfarbe verwenden.
 
 ### Neutral
-- **Rosa-Papier** (#FCEEEF, `--brand-pale`): Seitenhintergrund.
-- **Rosenschimmer** (#F6DADC, `--brand-light`): Schlüsselwort-Chips, Hinweiszeilen, dezente Kacheln.
+- **Sandpapier** (#F5ECE8, `--brand-pale`): Seitenhintergrund.
+- **Sand** (#E9D6CE, `--brand-light`): Tabellenzeilen, Schlüsselwort-Chips, dezente Kacheln.
 - **Kartenweiß** (#FFFFFF): Karten, Eingaben, Dialoge.
 - **Tintengrau** (#333333, `--text`): Fließtext.
 - **Beschriftungsgrau** (#6B6B6B, `--gray`): Sekundärtext; 4,8:1 auf hellem Grau.
 - **Haarlinie** (#E4E4E4, `--line`): Trennlinien in Karten und Tabellen; Raster in #ECECEC. Nicht für Bedienelemente.
-- **Feldlinie** (#858585, `--field-line`): Rahmen von Eingaben, Auswahlfeldern, Suchfeld, Farbwahl und Outline-Knöpfen; 3,7:1 auf Weiß, 3,3:1 auf Rosa-Papier.
+- **Feldlinie** (#858585, `--field-line`): Rahmen von Eingaben, Auswahlfeldern, Suchfeld, Farbwahl und Outline-Knöpfen; 3,7:1 auf Weiß, etwa 3:1 auf Sandpapier.
 - **Waldgrün** (#1E5A2C auf #E3F1E6): Status „erledigt“.
-- **Bernstein** (#5E3A00 auf #FFF1CC, Linie #E2B24A): Status „zu prüfen“, neue Personen, Prüfhinweise.
-- **Verspätet-Ocker** (#9A4A00, `--late-text`): zu spät eingetroffene Zeiten und Zu-erledigen-Marke; nicht vom Wehr-Rot abgeleitet, steht immer mit Symbol und verstecktem Text („nicht innerhalb von 10 Minuten“).
-- **Fehlerrot** (#8C1111 auf #FDEBEA, Linie #D98A8A): Fehlermeldungen und „nicht gespeichert“; immer mit Symbol und Überschrift, auch in Wehren mit rotem Theme.
+- **Signalorange** (#D46E3B, `--signal`): Linie und Symbole für Hinweise und Fehler; als Fläche nur getönt, als Schrift nur in der dunklen Fassung.
+- **Hinweis** (#8F3E14 auf #FBEBE2, Linie #D46E3B): Status „zu prüfen“, neue Personen, Prüfhinweise.
+- **Verspätet-Signal** (#8F3E14, `--late-text`): zu spät eingetroffene Zeiten und Zu-erledigen-Marke; steht immer mit Symbol und verstecktem Text („nicht innerhalb von 10 Minuten“).
+- **Fehler** (#6E2A0C auf #F6D9CA, Linie #B8541F): Fehlermeldungen und „nicht gespeichert“, kräftiger getönt und dunkler als der Hinweis; immer mit Symbol und Überschrift.
 
 ### Named Rules
 **The Wehr-Token Rule.** Jede Farbe der Marke kommt aus einem `--brand-*`-Token. Feste Hex-Werte in Regeln sind nur für neutrale Grautöne zulässig und gehören auch dann auf Tokens.
@@ -201,7 +203,7 @@ Eine Kennfarbe in Abstufungen, dazu neutrale Grautöne und ein Statusgrün, das 
 
 **The Control-Edge Rule.** Alles, was man anklicken oder ausfüllen kann, hat einen Rand mit mindestens 3:1 (`--field-line`). `--line` trennt nur Inhalt.
 
-**The Status Rule.** Rot der Wehr bedeutet Marke, nie Fehler. Zustände tragen eigene, von der Wehr unabhängige Töne: neutral = bereit, Bernstein (`--warn-*`) = zu prüfen, Grün (`--ok-*`) = erledigt, Fehlerrot (`--error-*`) = nicht gespeichert. Jeder Status nennt sich außerdem mit einem Wort (und meist einem Symbol); Farbe allein trägt nie die Bedeutung.
+**The Status Rule.** Die Farbe der Wehr bedeutet Marke, nie Fehler. Zustände tragen eigene, von der Wehr unabhängige Töne: neutral = bereit, Signalorange hell (`--warn-*`) = zu prüfen, Grün (`--ok-*`) = erledigt, Signalorange kräftig (`--error-*`) = nicht gespeichert. Hinweis und Fehler teilen den Farbton und unterscheiden sich durch Tönung, Schriftfarbe, Wort und Symbol. Jeder Status nennt sich außerdem mit einem Wort (und meist einem Symbol); Farbe allein trägt nie die Bedeutung.
 
 ## Typography
 
@@ -212,7 +214,7 @@ Eine Kennfarbe in Abstufungen, dazu neutrale Grautöne und ein Statusgrün, das 
 ### Hierarchy
 - **Display** (700, 3,1 rem, 1,15): Hero-Kennzahl.
 - **Headline** (700, 1,7 rem, 1,2): Seitentitel im Kopf.
-- **Title** (700, 1,3 rem / 1,05 rem, 1,2): Karten- und Abschnittsüberschriften, in Markenrot.
+- **Title** (700, 1,3 rem / 1,05 rem, 1,2): Karten- und Abschnittsüberschriften, in der Markenfarbe.
 - **Body** (400, 15 px, 1,5): Fließtext, Tabellen.
 - **Label** (700, 0,85 rem) und **Label klein** (700, 0,78 rem): Kennzahlentitel, Feldnamen, Spaltenköpfe, Panel-Überschriften (Versalien, Sperrung 0,08 em). Nichts ist kleiner als 0,78 rem.
 - **Body klein** (400, 0,92 rem) und **Untertitel** (700, 1 rem): Tabellen, Kartenuntertitel. Weitere Stufen: 1,3 / 1,5 / 1,7 / 1,9 / 3,1 rem für Überschriften und Kennzahlen.
@@ -312,5 +314,5 @@ Abgerundete, freundliche Formen mit gestaffelten Radien: 6 px (Chips), 8 px (Ein
 - **Don't** Schatten in Schatten schachteln oder Karten in Karten ohne Linie darstellen.
 - **Don't** echte Namen in Beispielen oder Screenshots zeigen.
 - **Don't** `window.confirm`/`alert` verwenden; Rückfragen und Fehler laufen über `askConfirm`/`reportError`, Fehler am Ort des Geschehens über `noticeBox`.
-- **Don't** Rot der Wehr für Fehler oder „neu“ einsetzen; dafür gibt es die Statusfarben.
+- **Don't** die Farbe der Wehr für Fehler oder „neu“ einsetzen; dafür gibt es die Statusfarben.
 - **Don't** Bedeutung allein über Farbe tragen; Status braucht Text oder Symbol.
