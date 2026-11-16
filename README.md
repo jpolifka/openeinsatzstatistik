@@ -87,7 +87,7 @@ Code und `docker-compose.yml` enthalten keine Standardwerte. Ohne `.env` startet
 | `APP_PORT`     | ja          | Port auf dem Host, z. B. `8112`. Hinter einem Reverse Proxy auf demselben Host `127.0.0.1:8112`, damit die App nur über den Proxy erreichbar ist |
 | `ADMIN_EMAILS` | nein        | Superadmins, durch Komma getrennt. Gesetzt = Anmeldung an; alle anderen Benutzer werden den Wehren zugeordnet (siehe [Mandanten und Rollen](#mandanten-und-rollen)). Leer: die App startet nicht, außer mit `AUTH_DISABLED=1` (nur lokale Entwicklung, dann ist jeder Superadmin). |
 | `BASE_URL`     | mit `ADMIN_EMAILS` | Öffentliche Adresse der App, z. B. `https://einsatz.example.org`. Daraus entsteht der Link in der Mail. Mit `https://` wird das Sitzungs-Cookie nur über HTTPS gesendet |
-| `SMTP_HOST`    | nein        | SMTP-Server des Postfachs der eigenen Domain, z. B. `smtp.strato.de`. Leer = kein Versand, Link steht nur im Log (`docker compose logs`) |
+| `SMTP_HOST`    | nein        | SMTP-Server des Postfachs der eigenen Domain (z. B. `smtp.strato.de`) oder eines Versanddienstes (z. B. `smtp-relay.brevo.com`). Leer = kein Versand, Link steht nur im Log (`docker compose logs`) |
 | `SMTP_PORT`, `SMTP_SECURITY` | mit `SMTP_HOST` | `465` + `ssl` oder `587` + `starttls` |
 | `SMTP_USER`, `SMTP_PASSWORD` | mit `SMTP_HOST` | Zugangsdaten des Postfachs |
 | `MAIL_FROM`    | mit `SMTP_HOST` | Absender, z. B. `Einsatzstatistik <statistik@example.org>` – Adresse des Postfachs oder ein Alias davon |
@@ -111,7 +111,8 @@ startet die App nicht (sonst liefe sie still ohne Schutz).
 
 ### Mailversand
 
-Die Anmeldelinks gehen per SMTP über das Postfach der eigenen Domain hinaus (kein Dritt-Dienst).
+Die Anmeldelinks gehen per SMTP hinaus, entweder über ein Postfach der eigenen Domain oder über einen
+Versanddienst wie Brevo (siehe unten). Die App nutzt nur SMTP und kennt keine Dienst-APIs.
 Damit sie bei Domains mit `DMARC p=reject` ankommen, muss SPF oder DKIM zur Absenderdomain passen:
 
 - **SPF:** Der SPF-Eintrag der Domain muss den Ausgangsserver des Anbieters erlauben (bei Strato:
@@ -125,6 +126,22 @@ Damit sie bei Domains mit `DMARC p=reject` ankommen, muss SPF oder DKIM zur Abse
   neuen Selektor wählen.
 - **Prüfen:** `docker compose exec einsatzberichte python -m app.mail check` zeigt SPF, DKIM und DMARC;
   `… python -m app.mail test <adresse>` schickt eine Test-Mail. Beim Start steht das Ergebnis im Log.
+
+**Variante Brevo** (Domain bei Strato, DNS bei Cloudflare; kein Postfach nötig, Cloudflare Email Routing
+für den Empfang bleibt unberührt):
+
+1. Bei Brevo ein Konto anlegen, unter *Senders, Domains & Dedicated IPs → Domains* die Domain hinzufügen
+   und die angezeigten DNS-Einträge (Brevo-Code als TXT, DKIM, DMARC) in Cloudflare anlegen. CNAMEs auf
+   **DNS only** (graue Wolke) stellen. Ein vorhandener SPF-Eintrag bleibt der einzige; Brevo verlangt
+   keinen eigenen, ergänze ihn nur, wenn Brevo es anzeigt.
+2. Unter *SMTP & API* den SMTP-Schlüssel erzeugen. Der SMTP-Login ist nicht die Konto-Mail und der
+   Schlüssel nicht das Konto-Passwort.
+3. In der `.env`: `SMTP_HOST=smtp-relay.brevo.com`, `SMTP_PORT=587`, `SMTP_SECURITY=starttls`,
+   `SMTP_USER` = SMTP-Login, `SMTP_PASSWORD` = SMTP-Schlüssel, `MAIL_FROM` = Adresse auf der
+   authentifizierten Domain. `DKIM_SELECTOR` und `DKIM_KEY_FILE` leer lassen, Brevo signiert selbst.
+4. `docker compose up -d`, dann `… python -m app.mail test <adresse>`. Die Meldung „DKIM: die App
+   signiert nicht“ in `check` ist hier erwartet; ob Brevos Signatur zur Domain passt, zeigt der
+   Kopf der Test-Mail (`dkim=pass`).
 
 Die frühere Variable `RESEND_API_KEY` wird nicht mehr unterstützt; ist sie gesetzt, startet die App nicht.
 
