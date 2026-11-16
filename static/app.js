@@ -290,8 +290,16 @@ function applyBranding() {
 // Auswahl der Wehr in der Kopfzeile, nur wenn mehrere sichtbar sind
 function renderScopes() {
   $("#scope-select").hidden = config.scopes.length < 2;
-  $("#scope").innerHTML = config.scopes.map((s) =>
-    `<option value="${esc(s.key)}" ${s.key === config.scope ? "selected" : ""}>${esc(s.name)}</option>`).join("");
+  // Zweistufig: je Verbandsgemeinde eine Gruppe, darin zuerst die Gesamtansicht, dann die Wehren.
+  const groups = new Map();
+  for (const s of config.scopes) {
+    if (!groups.has(s.vg)) groups.set(s.vg, []);
+    groups.get(s.vg).push(s);
+  }
+  $("#scope").innerHTML = [...groups].map(([vg, items]) =>
+    `<optgroup label="${esc(vg || "")}">` + items.map((s) =>
+      `<option value="${esc(s.key)}" ${s.key === config.scope ? "selected" : ""}>${esc(s.key.startsWith("t:") ? s.name : s.name.split(" · ")[0] + " (Gesamtansicht)")}</option>`
+    ).join("") + `</optgroup>`).join("");
 }
 
 async function loadYears() {
