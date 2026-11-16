@@ -37,7 +37,8 @@ def test_new_roles_exist_with_expected_rights(world):
     assert rbac.PEOPLE in perms("bki") and rbac.INCIDENTS in perms("bki") and rbac.ROLES_MANAGE not in perms("bki")
     assert perms("bki_deputy") == perms("bki")
     assert perms("deputy_lead") == perms("lead")
-    assert rbac.PEOPLE not in perms("vg_lead")           # Bestandsrolle unverändert
+    assert rbac.PEOPLE in perms("vg_lead") and rbac.PEOPLE in perms("vg_deputy")      # Wehrleiter/in wie im BKS
+    assert rbac.PEOPLE not in perms("vg_stats")
     assert roles.find("vg_lead", 1).label == "Wehrleiter/in" and roles.find("editor", 1).label.startswith("Bearbeiter")
 
 
@@ -106,6 +107,6 @@ def test_migration_of_old_database_adds_bks_roles(tmp_path):
     db.migrate(con, db.CENTRAL_MIGRATIONS)
     assert {"bki", "deputy_lead", "dispatch_lead"} <= {r["key"] for r in con.execute("SELECT key FROM role")}
     roles = rbac.Roles(con)
-    assert rbac.PEOPLE not in roles.permissions(roles.find("vg_lead", None).id)
+    assert rbac.PEOPLE in roles.permissions(roles.find("vg_lead", None).id)
     rbac.add_roles(con)                                    # wiederholbar
     assert len([r for r in roles]) == len(list(rbac.Roles(con)))

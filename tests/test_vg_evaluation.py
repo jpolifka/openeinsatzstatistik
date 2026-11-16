@@ -76,8 +76,9 @@ def test_vg_export_has_sheets_per_tenant(vg):
     response = vg.get("/api/export?year=2025")
     assert response.status_code == 200
     workbook = openpyxl.load_workbook(io.BytesIO(response.content))
-    # Wehrleiter: ohne Anwesenheit (Namen sehen nur Wehrführer und Erfasser)
-    assert workbook.sheetnames == ["Übersicht", "Einsätze Wehr wehr-a1", "Einsätze Wehr wehr-a2"]
+    # Wehrleiter/in hat Personenrechte: je Wehr mit Anwesenheit
+    assert workbook.sheetnames == ["Übersicht", "Einsätze Wehr wehr-a1", "Anwesenheit Wehr wehr-a1",
+                                   "Einsätze Wehr wehr-a2", "Anwesenheit Wehr wehr-a2"]
     summary = workbook["Übersicht"]
     assert [summary.cell(r, 1).value for r in (4, 5, 6)] == ["Wehr wehr-a1", "Wehr wehr-a2", "Summe (Beteiligungen)"]
     assert summary["B6"].value == 3

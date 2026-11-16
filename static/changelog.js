@@ -19,7 +19,7 @@ const CHANGELOG = [
     items: [
       "<b>Rollen wie im BKS-Portal:</b> Neue Funktionen als Rollen: Stellv. Wehrführer/in, Stellv. Wehrleiter/in, Brand- und Katastrophenschutzinspekteur/in (und Stellvertretung), Sachbearbeiter/in Brand- u. KatS bzw. Feuerwehr, FEZ der VG sowie Leitstellenleitung und -personal. „Erfasser“ heißt jetzt „Bearbeiter/in Einsatzberichte“. Die Rechte bestehender Zuordnungen ändern sich nicht.",
       "<b>Aufgabenträger:</b> Eine VG ist jetzt Verbandsgemeinde, kreisfreie Stadt, Landkreis oder Leitstelle (Einstellungen → Verbandsgemeinden). Die Art bestimmt, welche Rollen dort vergeben werden können.",
-      "<b>Personen in Rollen der VG:</b> Anwesenheit und Personal lassen sich jetzt auch einer Rolle der VG geben. Die neuen Funktionsrollen haben dieses Recht; Wehrleiter/in und Statistik VG unverändert nicht.",
+      "<b>Personen in Rollen der VG:</b> Anwesenheit und Personal lassen sich jetzt auch einer Rolle der VG geben. Die neuen Funktionsrollen und Wehrleiter/in (samt Stellvertretung) haben dieses Recht; „Statistik VG“ weiterhin nicht.",
     ],
   },
   {
