@@ -414,7 +414,7 @@ $("#year").addEventListener("change", async (e) => {
 });
 
 // Auswertungen (Einsatzgeschehen, Zeiten & Kräfte, Belastung) und Übersicht teilen sich die Bedienung
-const evaluationViews = ["overview", "evaluation", "times", "load"];
+const evaluationViews = ["overview", "evaluation", "times", "load", "incidents"];
 function onEvaluationViews(type, handler) {
   for (const key of evaluationViews) $(`#view-${key}`).addEventListener(type, handler);
 }
