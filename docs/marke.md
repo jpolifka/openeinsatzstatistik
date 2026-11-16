@@ -1,7 +1,7 @@
 # Marke: openEinsatzstatistik
 
-Dieses Dokument legt fest, wie das Projekt auftritt. Es folgt dem Erscheinungsbild von **Polifka IT Beratung**
-(Stahlblau, Bernstein-Akzent, weich gerundete Formen), damit Projekt und Anbieter erkennbar zusammengehören. Alle Dateien liegen in [`brand/`](../brand/).
+Dieses Dokument legt fest, wie das Projekt auftritt. Formen und Aufbau folgen dem Erscheinungsbild von **Polifka IT Beratung**, die Farben den Schulungsunterlagen des Landesamts (siehe unten)
+(weich gerundete Formen, ruhiger Aufbau), damit Projekt und Anbieter erkennbar zusammengehören. Alle Dateien liegen in [`brand/`](../brand/).
 
 ![Logo](../brand/logo-horizontal.svg)
 
@@ -17,7 +17,7 @@ Dieses Dokument legt fest, wie das Projekt auftritt. Es folgt dem Erscheinungsbi
 ## Logo
 
 Die **Bildmarke** zeigt eine Auswertung als drei Balken, wobei der höchste Balken eine Flamme ist: Statistik über Einsätze.
-Das Gehäuse ist wie der Rechner im Polifka-Logo weich gerundet. Die Flamme ist das einzige Bernstein im Zeichen.
+Das Gehäuse ist wie der Rechner im Polifka-Logo weich gerundet. Die Flamme ist das einzige Signalorange im Zeichen.
 
 | Datei | Einsatz |
 |---|---|
@@ -36,31 +36,43 @@ Schriften sind in allen SVG-Dateien zu Pfaden umgewandelt, es braucht keine Inst
 
 **Nicht erlaubt:** verzerren, drehen, Farben tauschen, Verläufe, Schatten, Konturen, Bildmarke ohne Gehäuse benutzen (außer in den App-Kacheln), Flamme einzeln verwenden, Wortmarke neu setzen.
 
-## Farben
+## Farben und Farbkonzept
 
-Die Palette ist die von Polifka IT Beratung, bewusst schmal. Faustregel: **70 % Weiß/Neutral, 25 % Blau, höchstens 5 % Bernstein.**
+Die Farben folgen den Schulungsunterlagen des Landesamts für Brand- und Katastrophenschutz (Bordeaux als Standardfarbe, Sand für Tabellen, Signalorange für Hinweise und Fehler), damit sich Material von Wehren, Landesamt und diesem Projekt zusammen gut liest. Es werden nur Farben übernommen, **keine Logos, Wappen oder Wortmarken** des Landes oder des Landesamts; die Marke erweckt keinen amtlichen Eindruck.
 
-| Name | Wert | Einsatz |
-|---|---|---|
-| Stahlblau | `#2F6D92` | Markenfarbe: Bildmarke, Wortmarke, Links, Buttons |
-| Nachtblau | `#1B3F55` | dunkle Flächen: Social-Bild, Fußzeile, Titelfolie |
-| Blau hell | `#E3EEF5` | getönte Hintergründe |
-| Bernstein | `#E0A43A` | **nur** die Flamme und einzelne Markierungen, nie als Text auf Weiß |
-| Tinte | `#14293A` | Text, nie reines Schwarz |
-| Himmel | `#7AB3D6` | Blau auf dunklen Flächen |
+| Rolle | Name | Wert | Einsatz |
+|---|---|---|---|
+| Hauptfarbe | Bordeaux | `#7C2734` | Zeichen, Wortmarke, Überschriften, Hauptaktionen, Tabellenköpfe (abgedunkelt) |
+| Dunkel | Tiefes Bordeaux | `#44151D` | dunkle Flächen: Social-Bild, Kopf-Verlauf, Titelfolie |
+| Fläche | Sand | `#E9D6CE` | Tabellenzeilen, Kacheln, Hinweisflächen, Hintergründe |
+| Signal | Signalorange | `#D46E3B` | Hinweise und Fehler (Linie, Symbol, getönte Fläche), die Flamme im Zeichen |
+| Text | Tinte | `#2B1A1D` | Text, nie reines Schwarz |
+| Status | Waldgrün | `#1E5A2C` auf `#E3F1E6` | „erledigt“ |
+| Daten | Graphit | Grautöne | Diagramme, unabhängig von der Markenfarbe |
 
-Druck (Richtwerte, vor dem Auftrag Andruck prüfen): Stahlblau ca. CMYK 80/40/15/20, Pantone 7698 C; Bernstein ca. CMYK 10/38/90/0.
+Abgeleitet (App und Material): Bordeaux gedämpft `#8C414C` (Tabellenköpfe, weiße Schrift 7,1:1), Bordeaux hell `#A36871` (Fokusring), Sandpapier `#F5ECE8` (Seitenhintergrund), Signalorange dunkel `#8F3E14` (Schrift auf hellem Grund, 7,3:1).
 
-Weiße Schrift auf Stahlblau und Nachtblau erreicht mindestens 5,6:1 (WCAG AA); Bernstein dient nur als Zeichen, nicht als Textfarbe.
+**Kontraste:** weiße Schrift auf Bordeaux 9,6:1, Bordeaux auf Sand 6,8:1, Tinte auf Sand 11,8:1. Signalorange `#D46E3B` ist **keine Schriftfarbe** (3,4:1 auf Weiß): Text in Hinweisen und Fehlern steht in der dunklen Fassung (`#8F3E14` bzw. `#6E2A0C`). Die Flamme im Zeichen ist Gestaltung, die Balken tragen die Aussage.
+
+### Konzepte nach Einsatz
+
+1. **Oberfläche (App):** weiße Karten, Sandpapier als Grund, Bordeaux für Kopf, Überschriften und Hauptaktion, Sand für Tabellenzeilen und Chips, Diagramme grau. Hinweis und Fehler teilen den Farbton Signalorange und unterscheiden sich durch Tönung (Fehler kräftiger und dunkler), Wort und Symbol: Farbe allein trägt nie die Bedeutung.
+2. **Schulung und Dokumente:** wie in den Unterlagen des Landesamts: großflächige Bordeaux-Kapitelseiten mit weißer Schrift, Fließtext schwarz-warm auf Weiß, Tabellen mit Sand-Hintergrund und Bordeaux-Kopfzeile, Hinweise in Signalorange mit Wort („Hinweis“, „Achtung“).
+3. **Digital und Social:** Tiefes Bordeaux als Grund, weißes Logo, Sand für Kleingedrucktes, Signalorange nur einmal (Flamme).
+4. **Wehr-individuell:** Eine Wehr wählt ihre Hauptfarbe (und optional eine dunkle); die App leitet die Töne ab und prüft den Kontrast. Hinweise und Fehler bleiben signalorange, damit sie in jeder Wehr gleich erkennbar sind.
+
+Faustregel für eine Fläche: **70 % Weiß/Sand, 25 % Bordeaux, höchstens 5 % Signalorange.**
+
+Druck (Richtwerte, vor dem Auftrag Andruck prüfen): Bordeaux ca. CMYK 30/90/70/40; Sand ca. 8/18/20/0; Signalorange ca. 0/68/82/0. Das Bordeaux in den gedruckten Unterlagen des Landesamts wirkt heller und roter als `#7C2734`; für Material, das neben diesen Unterlagen liegt, den Ton per Andruck angleichen.
 
 ## Marke und Oberfläche der Wehr
 
-Die Oberfläche gehört der Wehr: Wehr-Rot (oder eigene Farbe), eigenes Logo, auf Wunsch eigene Schrift (siehe `DESIGN.md`).
+Die Oberfläche gehört der Wehr: Bordeaux (oder eigene Farbe), eigenes Logo, auf Wunsch eigene Schrift (siehe `DESIGN.md`).
 Die Marke erscheint dort nur zurückhaltend:
 
 - **Footer:** „openEinsatzstatistik – freie Software“ als Link zum Quellcode (Pflicht aus der AGPL, nicht entfernen).
 - **Ohne Wehr-Logo:** die Bildmarke als Ersatz in Kopfzeile, Footer und Browser-Tab.
-- **Anmeldung und VG-Gesamtansicht:** neutrales Farbschema in Stahlblau (`theme.NEUTRAL`).
+- **Anmeldung und VG-Gesamtansicht:** die Standardfarben (Bordeaux mit Sand), unabhängig von der gewählten Wehr.
 
 Für Website, Folien, Handzettel, GitHub und Mailings gilt das Erscheinungsbild dieses Dokuments mit der Schrift unten.
 
@@ -77,8 +89,8 @@ Die Wortmarke ist in **Roboto** gesetzt, einer Schrift dieses Stapels (SIL Open 
 ## Bildwelt und Icons
 
 - Fotos: echte Wehren bei der Arbeit, Tageslicht, keine Stockbilder mit Blaulicht-Effekten. Nur mit Einwilligung der Abgebildeten, keine Einsatzkräfte erkennbar ohne Zustimmung, keine Unfallopfer.
-- Icons: Linien-Icons mit 2 px Strich und runden Enden, einfarbig in Stahlblau oder Tinte.
-- Diagramme in der App sind grau, das Rot der Wehr hebt hervor. Auf Marken-Material gilt: Blau für Daten, Bernstein für die eine Hervorhebung.
+- Icons: Linien-Icons mit 2 px Strich und runden Enden, einfarbig in Bordeaux oder Tinte.
+- Diagramme in der App sind grau, die Farbe der Wehr hebt hervor. Auf Marken-Material gilt: Bordeaux für Daten, Signalorange für die eine Hervorhebung.
 
 ## Rechtliches
 

@@ -85,7 +85,7 @@ def test_vg_view_and_login_page_are_neutral(branded):
     assert branded.get("/api/config").json()["branding"] == {"logo_light": None, "logo_dark": None, "icon": None}
     branded.cookies.clear()
     page = branded.get("/login").text
-    assert theme.NEUTRAL["brand"] in page and "Altenau" not in page
+    assert "<style></style>" in page and "Altenau" not in page      # keine eigenen Farben: Standard aus app.css
 
 
 def test_tenant_without_colors_keeps_default_theme(make_client):
@@ -104,3 +104,32 @@ def test_font_type_and_css():
     assert css.startswith('@font-face{font-family:"Wehrschrift"') and 'url("/api/branding/x/font?v=1")' in css
     assert theme.SYSTEM_FONT in css
     assert theme.css({}, []) == "" and theme.css({}, [("font", "/x", "text/html")]) == ""
+
+
+def _app_css_tokens():
+    import os
+    import re
+    css = open(os.path.join(os.path.dirname(__file__), "..", "static", "app.css"), encoding="utf-8").read()
+    root = css[:css.index("\n}\n")]
+    return {m.group(1): m.group(2).strip() for m in re.finditer(r"(--[\w-]+):\s*([^;]+);", root)}
+
+
+def test_default_colors_follow_the_palette_of_the_primary_color():
+    """Die Standardwerte in app.css sind Bordeaux #7C2734 nach theme.palette; nur die Flächentöne sind Sand."""
+    tokens = _app_css_tokens()
+    derived = theme.palette({"brand": "#7C2734"})
+    for name in ("--brand", "--brand-dark", "--brand-mid", "--brand-accent", "--brand-gradient", "--brand-hover",
+                 "--brand-mid-hover"):
+        assert tokens[name].upper() == derived[name].upper(), name
+    assert tokens["--brand-light"].upper() == "#E9D6CE"
+
+
+def test_default_colors_are_readable():
+    t = _app_css_tokens()
+    assert theme.contrast("#FFFFFF", t["--brand"]) >= 7 and theme.contrast("#FFFFFF", t["--brand-mid"]) >= theme.MIN_TEXT_CONTRAST
+    assert theme.contrast(t["--brand"], t["--brand-light"]) >= theme.MIN_TEXT_CONTRAST          # Markenfarbe auf Sand
+    assert theme.contrast(t["--text"], t["--brand-light"]) >= theme.MIN_TEXT_CONTRAST
+    for kind in ("warn", "error"):                                                                # Hinweis und Fehler
+        assert theme.contrast(t[f"--{kind}-text"], t[f"--{kind}-bg"]) >= theme.MIN_TEXT_CONTRAST, kind
+        assert theme.contrast(t[f"--{kind}-line"], "#FFFFFF") >= 3, kind
+    assert t["--signal"].upper() == "#D46E3B" and theme.contrast(t["--late-text"], "#FFFFFF") >= theme.MIN_TEXT_CONTRAST

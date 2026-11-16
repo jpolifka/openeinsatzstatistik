@@ -17,7 +17,9 @@ from PIL import Image
 FONTS = "/fonts"
 OUT = "/out"
 
-BLAU, TIEF, HELL, AKZENT, INK = "#2F6D92", "#1B3F55", "#E3EEF5", "#E0A43A", "#14293A"
+# Bordeaux (Hauptfarbe), dunkles Bordeaux, Sand (Tabellen, Flächen), Signalorange (Hinweise, Fehler, Flamme), Tinte
+BLAU, TIEF, HELL, AKZENT, INK = "#7C2734", "#44151D", "#E9D6CE", "#D46E3B", "#2B1A1D"
+ROSE = "#D9B3A8"   # Sand auf dunklem Grund (Kleingedrucktes im Social-Bild)
 
 _fonts = {}
 
@@ -160,9 +162,9 @@ def dots(x, y, cols, rows, pitch, color, r=2, opacity=1):
 
 
 def social(w=1280, h=640):
-    """GitHub-Vorschau / Open Graph: Bernstein nur einmal (Flamme), Rest Blau, Weiß und Nachtblau."""
+    """GitHub-Vorschau / Open Graph: Signalorange nur einmal (Flamme), Rest Bordeaux, Weiß und Sand."""
     body = f'<rect width="{w}" height="{h}" fill="{TIEF}"/>'
-    body += dots(w - 420, 48, 14, 11, 24, "#7AB3D6", 2, .3)
+    body += dots(w - 420, 48, 14, 11, 24, ROSE, 2, .3)
     body += f'<g transform="translate(790 150) scale(5.6)">{mark_inner(case=BLAU)}</g>'
     parts, w1, _ = wordmark_parts("#fff", 74, x=72, y=250)
     body += parts
@@ -172,7 +174,7 @@ def social(w=1280, h=640):
     d, _ = text_path(REGULAR, "Frei, quelloffen, mandantenfähig.", 28, 72, 506)
     body += f'<path d="{d}" fill="{HELL}"/>'
     cr, _ = text_path(MEDIUM, "AGPL-3.0  ·  POLIFKA IT BERATUNG", 18, 72, h - 52, 2)
-    body += f'<path d="{cr}" fill="#7AB3D6"/>'
+    body += f'<path d="{cr}" fill="{ROSE}"/>'
     return svg(w, h, body)
 
 
