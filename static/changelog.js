@@ -6,6 +6,12 @@
 // noch ein Eintrag hinzu, bekommt er `version` ("JJJJ-MM-TT.2", dann .3 …); ohne `version` gilt das Datum.
 const CHANGELOG = [
   {
+    date: "2026-11-18",
+    items: [
+      "<b>Anmeldung:</b> Die Anmelde-Mail kommt jetzt im Aussehen deiner Wehr (Farbe, Logo, Name). Zusätzlich zum Link enthält sie einen 8-stelligen Code, den du auf der Anmeldeseite eingeben kannst – praktisch, wenn du die Mail auf dem Handy liest, dich aber am Computer anmelden willst. Code und Link gelten 15 Minuten und nur einmal.",
+    ],
+  },
+  {
     date: "2026-11-16",
     version: "2026-11-16.9",
     items: [

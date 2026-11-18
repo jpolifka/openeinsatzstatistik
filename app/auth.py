@@ -4,8 +4,8 @@ Anmeldung per Magic Link.
 
 Aktiv, sobald ADMIN_EMAILS gesetzt ist. Berechtigt sind die Superadmins aus ADMIN_EMAILS und
 alle Adressen mit einer Zuordnung zu einer aktiven Wehr bzw. VG (tenancy.is_allowed). Wer sich
-anmelden will, gibt seine Adresse ein und bekommt per Mail (mail.py, SMTP der eigenen Domain) einen Link, der 15 Minuten gilt
-und nur einmal benutzt werden kann. Danach hält ein signiertes Cookie die Sitzung (30 Tage).
+anmelden will, gibt seine Adresse ein und bekommt per Mail (mail.py, SMTP der eigenen Domain) einen Link und einen
+8-stelligen Code (Tabelle login_code, nur als HMAC), die 15 Minuten gelten und nur einmal (gemeinsam) benutzt werden können. Danach hält ein signiertes Cookie die Sitzung (30 Tage).
 Wird die letzte Zuordnung einer Adresse entfernt, verliert sie beim nächsten Aufruf den Zugang.
 
 Links sind mit HMAC signiert (Schlüssel aus SECRET_KEY oder session.key im Datenordner). Sitzungen
@@ -28,7 +28,7 @@ from urllib.parse import urlsplit
 from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from app import db, mail, tenancy, theme
+from app import db, login_mail, mail, tenancy, theme
 
 log = logging.getLogger("openeinsatzstatistik")
 
@@ -42,6 +42,9 @@ AUTH_DISABLED = os.environ.get("AUTH_DISABLED", "").strip().lower() in ("1", "tr
 COOKIE = "session"
 SCOPE_COOKIE = "scope"     # ausgewählte Wehr, wird bei jeder Anfrage gegen die Zuordnungen geprüft
 LINK_TTL = 15 * 60
+CODE_DIGITS = 8                # Anmeldecode als Alternative zum Link (gleiche Gültigkeit, gilt nur einmal)
+CODE_ATTEMPTS = 5              # Fehlversuche je Code, danach ist er ungültig
+CODE_FAILURES_PER_HOUR = 10    # Fehlversuche je Adresse und Stunde über alle Codes
 SESSION_TTL = 30 * 24 * 60 * 60
 # Wer sich so lange nicht gemeldet hat, muss sich neu anmelden (ein gestohlenes Cookie veraltet damit früher)
 SESSION_IDLE = 7 * 24 * 60 * 60
@@ -216,7 +219,47 @@ def _use_link(token):
                            (token_hash, now + LINK_TTL)).rowcount
     if not used:
         return None
+    with tenancy.central() as con:          # der Code derselben Mail ist damit ebenfalls verbraucht
+        con.execute("DELETE FROM login_code WHERE email = ?", (email,))
     return email
+
+
+# ---------------------------------------------------------------- Anmeldecode
+def _new_code(email, link_token):
+    """Neuen Code für die Adresse speichern (ersetzt den alten) -> Ziffernfolge."""
+    code = f"{secrets.randbelow(10 ** CODE_DIGITS):0{CODE_DIGITS}d}"
+    with tenancy.central() as con:
+        con.execute("INSERT OR REPLACE INTO login_code (email, code_hash, link_hash, expires, attempts) "
+                    "VALUES (?, ?, ?, ?, 0)",
+                    (email, _mac("code", f"{email}|{code}"), _hash(link_token), time.time() + LINK_TTL))
+    return code
+
+
+def _use_code(email, code):
+    """Prüft Adresse und Code, entwertet Code und zugehörigen Link. Liefert die Adresse oder None."""
+    email = tenancy.normalize_email(email)[:254]
+    code = re.sub(r"\D", "", code or "")
+    now = time.time()
+    with tenancy.central() as con:
+        con.execute("DELETE FROM login_failure WHERE at < ?", (now - 3600,))
+        failures = con.execute("SELECT COUNT(*) FROM login_failure WHERE email = ?", (email,)).fetchone()[0]
+        if failures >= CODE_FAILURES_PER_HOUR:
+            return None
+        row = con.execute("SELECT code_hash, link_hash, expires, attempts FROM login_code WHERE email = ?",
+                          (email,)).fetchone()
+        good = bool(row) and row["expires"] > now and row["attempts"] < CODE_ATTEMPTS and len(code) == CODE_DIGITS \
+            and hmac.compare_digest(row["code_hash"], _mac("code", f"{email}|{code}"))
+        if not good:
+            con.execute("INSERT INTO login_failure (email, at) VALUES (?, ?)", (email, now))
+            if row:
+                if row["attempts"] + 1 >= CODE_ATTEMPTS:
+                    con.execute("DELETE FROM login_code WHERE email = ?", (email,))
+                else:
+                    con.execute("UPDATE login_code SET attempts = attempts + 1 WHERE email = ?", (email,))
+            return None
+        con.execute("DELETE FROM login_code WHERE email = ?", (email,))
+        con.execute("INSERT OR IGNORE INTO consumed_magic_link VALUES (?, ?)", (row["link_hash"], now + LINK_TTL))
+    return email if tenancy.is_allowed(email) else None
 
 
 # ---------------------------------------------------------------- Mailversand
@@ -249,22 +292,22 @@ def send_link(email, host=None):
             log.warning("Auffällig viele Anmeldelinks in der letzten Stunde (%s) – mögliche Mail-Flut", MAIL_TOTAL_ALERT_PER_HOUR)
         _last_mail[email] = now
         _sent.append((now, email))
-    link = f"{link_base(host)}/auth/verify?token={_sign('link', email, LINK_TTL)}"
+    token = _sign("link", email, LINK_TTL)
+    link = f"{link_base(host)}/auth/verify?token={token}"
     if not mail.enabled():
-        if _is_local():          # lokale Entwicklung ohne Mailversand: Link im Log
-            log.warning("SMTP_HOST fehlt – Anmeldelink für %s: %s", email, link)
+        if _is_local():          # lokale Entwicklung ohne Mailversand: Link und Code im Log
+            log.warning("SMTP_HOST fehlt – Anmeldelink für %s: %s (Code %s)", email, link, _new_code(email, token))
         else:
             log.error("SMTP_HOST fehlt – Anmeldelink für %s nicht versendet", email)
         return
-    text = (f"Hallo,\n\nmit diesem Link meldest du dich bei der Einsatzstatistik an:\n{link}\n\n"
-                "Der Link gilt 15 Minuten und nur einmal. Wenn du keine Anmeldung angefordert hast, "
-                "kannst du diese Mail ignorieren.")
-    body = (f"<p>Hallo,</p><p>mit diesem Link meldest du dich bei der Einsatzstatistik an:</p>"
-                f"<p><a href=\"{html.escape(link)}\">Jetzt anmelden</a></p>"
-                "<p>Der Link gilt 15 Minuten und nur einmal. Wenn du keine Anmeldung angefordert hast, "
-                "kannst du diese Mail ignorieren.</p>")
+    code = _new_code(email, token)
     try:
-        mail.send(email, "Anmeldung Einsatzstatistik", text, body)
+        subject, text, body, images = login_mail.build(tenancy.mail_tenant(email), link, code, LINK_TTL // 60)
+    except Exception:            # Gestaltung der Wehr darf die Anmeldung nie verhindern
+        log.exception("Gestaltung der Anmeldemail fehlgeschlagen, neutrale Mail")
+        subject, text, body, images = login_mail.build(None, link, code, LINK_TTL // 60)
+    try:
+        mail.send(email, subject, text, body, images=images)
     except (smtplib.SMTPException, OSError) as e:
         log.error("Mailversand über %s fehlgeschlagen: %s", mail.SMTP_HOST, e)
         # Gleich wieder anfordern lassen statt 60 Sekunden ohne Mail
@@ -292,6 +335,18 @@ def _login_form(note=""):
 <button type="submit" class="btn btn-primary">Anmeldelink anfordern</button></form>""")
 
 
+def _code_form(email, note=""):
+    """Hinweis nach der Anforderung mit Feld für den Code – für bekannte und unbekannte Adressen gleich."""
+    return _page(f"""{note}<p>Wenn die Adresse berechtigt ist, ist jetzt eine Mail mit Anmeldelink und Code unterwegs. \
+Beides gilt {LINK_TTL // 60} Minuten.</p>
+<form method="post" action="/auth/code" class="login-form">
+<input type="hidden" name="email" value="{html.escape(email)}">
+<label class="field"><span>Anmeldecode aus der Mail</span><input type="text" name="code" required autofocus \
+autocomplete="one-time-code" inputmode="numeric" pattern="[0-9 ]*" maxlength="{CODE_DIGITS + 2}"></label>
+<button type="submit" class="btn btn-primary">Mit Code anmelden</button></form>
+<p><a href="/login">Zurück</a></p>""")
+
+
 @router.get("/login")
 def login_page(request: Request):
     if current_user(request):
@@ -303,8 +358,7 @@ def login_page(request: Request):
 def login_request(request: Request, background: BackgroundTasks, email: str = Form(...)):
     # Erst nach der Antwort senden: sonst verriete die Antwortzeit, ob die Adresse berechtigt ist
     background.add_task(send_link, email, request.headers.get("host"))
-    return _page("<p>Wenn die Adresse berechtigt ist, ist jetzt ein Anmeldelink unterwegs. "
-                 "Er gilt 15 Minuten.</p><p><a href=\"/login\">Zurück</a></p>")
+    return _code_form(email)
 
 
 @router.get("/auth/verify")
@@ -325,6 +379,19 @@ def verify(request: Request, token: str = Form("")):
     if not email:
         return _login_form('<p class="message message-error">Der Link ist abgelaufen oder wurde schon benutzt. '
                            'Bitte einen neuen anfordern.</p>')
+    return _start_session(request, email)
+
+
+@router.post("/auth/code")
+def verify_code(request: Request, email: str = Form(""), code: str = Form("")):
+    found = _use_code(email, code)
+    if not found:
+        return _code_form(email, '<p class="message message-error">Code falsch, abgelaufen oder zu oft falsch '
+                                 'eingegeben. Bitte erneut versuchen oder einen neuen anfordern.</p>')
+    return _start_session(request, found)
+
+
+def _start_session(request, email):
     log.info("Anmeldung: %s", email)
     tenancy.record_login(email)
     response = RedirectResponse("/", 303)

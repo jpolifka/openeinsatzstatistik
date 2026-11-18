@@ -490,6 +490,29 @@ def is_allowed(email):
             (email,)).fetchone() is not None
 
 
+def mail_tenant(email):
+    """Wehr, in deren Gestaltung die Anmeldemail kommt („First Hit“): zuerst die älteste direkte Zuordnung
+    zu einer aktiven Wehr, sonst die erste aktive Wehr der ältesten VG-Zuordnung, sonst None (neutral).
+    Liefert nur ein Tenant ohne Rechte – gelesen werden später nur Farben, Name und Logo."""
+    email = normalize_email(email)
+    if not os.path.exists(central_path()):
+        return None
+    cols = "t.id, t.slug, t.name, t.vg_id, v.slug AS vg_slug, v.name AS vg_name"
+    with central() as con:
+        row = con.execute(
+            f"SELECT {cols} FROM membership m JOIN tenant t ON t.id = m.scope_id JOIN vg v ON v.id = t.vg_id "
+            "WHERE m.email = ? AND m.scope = 'tenant' AND t.active ORDER BY m.created, m.scope_id LIMIT 1",
+            (email,)).fetchone()
+        if row is None:
+            row = con.execute(
+                f"SELECT {cols} FROM membership m JOIN tenant t ON t.vg_id = m.scope_id JOIN vg v ON v.id = t.vg_id "
+                "WHERE m.email = ? AND m.scope = 'vg' AND t.active ORDER BY m.created, m.scope_id, t.id LIMIT 1",
+                (email,)).fetchone()
+    if row is None:
+        return None
+    return Tenant(row["id"], row["slug"], row["name"], row["vg_id"], row["vg_slug"], row["vg_name"], frozenset())
+
+
 def record_login(email):
     with central() as con:
         con.execute("UPDATE account SET last_login = datetime('now', 'localtime') WHERE email = ?",

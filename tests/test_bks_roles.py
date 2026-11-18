@@ -126,7 +126,7 @@ def test_create_vg_with_kind_via_api(world):
 def test_migration_of_old_database_adds_bks_roles(tmp_path):
     con = sqlite3.connect(tmp_path / "c.db")
     con.row_factory = sqlite3.Row
-    db.migrate(con, db.CENTRAL_MIGRATIONS[:-3])
+    db.migrate(con, db.CENTRAL_MIGRATIONS[:-4])
     with_roles = {r["key"] for r in con.execute("SELECT key FROM role")}
     assert "bki" not in with_roles
     db.migrate(con, db.CENTRAL_MIGRATIONS)

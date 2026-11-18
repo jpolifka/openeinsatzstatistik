@@ -288,6 +288,15 @@ def _add_consumed_magic_links(con):
     con.execute("CREATE TABLE consumed_magic_link (token_hash TEXT PRIMARY KEY, expires REAL NOT NULL)")
 
 
+def _add_login_codes(con):
+    """Anmeldecode als Alternative zum Link: höchstens einer je Adresse, nur als HMAC gespeichert.
+    link_hash = SHA-256 des zugehörigen Links, damit Code und Link sich gegenseitig entwerten."""
+    con.execute("CREATE TABLE login_code (email TEXT PRIMARY KEY, code_hash TEXT NOT NULL, link_hash TEXT NOT NULL, "
+                "expires REAL NOT NULL, attempts INTEGER NOT NULL DEFAULT 0)")
+    con.execute("CREATE TABLE login_failure (email TEXT NOT NULL, at REAL NOT NULL)")
+    con.execute("CREATE INDEX login_failure_email ON login_failure (email, at)")
+
+
 def _add_sessions(con):
     """Serverseitige Sitzungen: im Cookie liegt nur ein Zufallswert, hier steht sein SHA-256."""
     con.execute("CREATE TABLE session (id INTEGER PRIMARY KEY AUTOINCREMENT, token_hash TEXT NOT NULL UNIQUE, "
@@ -362,7 +371,7 @@ CENTRAL_MIGRATIONS = [_create_central_schema, _add_dpa, _add_records, _add_notic
                       _records_per_vg, _add_consumed_magic_links, _add_completed_imports, _add_tenant_archive,
                       _add_vg_defaults, _settings_for_fee_roles, _add_sessions,
                       _add_vg_kind, _add_bks_roles, _vg_lead_people,
-                      _bks_role_tiers]
+                      _bks_role_tiers, _add_login_codes]
 
 
 def migrate(con, steps=TENANT_MIGRATIONS):
