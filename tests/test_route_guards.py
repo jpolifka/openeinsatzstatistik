@@ -7,7 +7,7 @@ from app import db, main, store, tenancy
 from conftest import grant, login, make_tenant
 
 # Ohne Anmeldung erreichbar (Middleware main.require_login)
-PUBLIC = {"/health", "/login", "/logout", "/auth/verify", "/"}
+PUBLIC = {"/health", "/login", "/logout", "/auth/verify", "/auth/code", "/"}
 # Endpunkte mit Einsatz-, Wehr- oder VG-Bezug: Rechte prüft der Endpunkt je Bereich (Matrix in test_access.py)
 SCOPED = {
     "/api/incidents/{key}", "/api/members", "/api/admin/{slug}/settings", "/api/admin/{slug}/keywords",

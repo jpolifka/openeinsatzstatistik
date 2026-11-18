@@ -135,7 +135,7 @@ def test_failed_mail_allows_immediate_retry(client, monkeypatch):
     monkeypatch.setattr(mail, "SMTP_HOST", "smtp.example.org")
     calls = []
 
-    def fail(to, subject, text, html):
+    def fail(to, subject, text, html, **kwargs):
         calls.append(to)
         raise OSError("kein Netz")
 

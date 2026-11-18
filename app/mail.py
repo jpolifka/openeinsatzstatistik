@@ -74,7 +74,7 @@ def check_config():
 
 
 # ---------------------------------------------------------------- Mail bauen und senden
-def build(to, subject, text, html, reply_to=None):
+def build(to, subject, text, html, reply_to=None, images=()):
     name, address, domain = sender()
     msg = EmailMessage()
     msg["From"] = email.utils.formataddr((name, address))
@@ -86,6 +86,9 @@ def build(to, subject, text, html, reply_to=None):
     msg["Message-ID"] = email.utils.make_msgid(domain=domain)
     msg.set_content(text)
     msg.add_alternative(html, subtype="html")
+    for cid, data, mime in images:       # eingebettete Bilder (Logo), im HTML als src="cid:…"
+        maintype, _, subtype = mime.partition("/")
+        msg.get_payload()[1].add_related(data, maintype, subtype, cid=f"<{cid}>", disposition="inline")
     return msg
 
 
@@ -102,12 +105,12 @@ def sign(data):
     return signature + data
 
 
-def send(to, subject, text, html, reply_to=None):
+def send(to, subject, text, html, reply_to=None, images=()):
     """Mail über den SMTP-Server des Domain-Anbieters einliefern; Fehler als smtplib.SMTPException/OSError."""
     _, address, _ = sender()
     # SMTP verlangt CRLF als Zeilenende; smtplib wandelt Bytes nicht um (sonst 554 bei Strato).
     # Signiert wird danach genau das, was eingeliefert wird.
-    data = build(to, subject, text, html, reply_to).as_bytes(policy=email.policy.SMTP)
+    data = build(to, subject, text, html, reply_to, images).as_bytes(policy=email.policy.SMTP)
     if DKIM_SELECTOR:
         data = sign(data)
     context = ssl.create_default_context()
