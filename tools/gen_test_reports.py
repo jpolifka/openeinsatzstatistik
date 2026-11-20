@@ -218,7 +218,7 @@ def people_rows(rng, setup, members, crews, wehr):
             if not free:
                 break
             last, first = free.pop()
-            role = LEADERS[0] if k == 0 and total > 2 else rng.choice(ROLES[:5])
+            role = LEADERS[0] if k == 0 else rng.choice(ROLES[:5])
             if role == LEADERS[0] and leader is None:
                 leader = f"{first} {last}"
             on_agt = k < resp
