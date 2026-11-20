@@ -326,7 +326,8 @@ def _page(content, status_code=200):
 <img class="topbar-logo" src="/static/img/app-icon-light.svg" alt="">
 <div class="topbar-title"><span class="topbar-kicker">Einsatzstatistik</span><h1>Anmeldung</h1></div>
 </div></header>
-<main class="page"><div class="card login-card">{content}</div></main></body></html>""", status_code)
+<main class="page"><div class="card login-card">{content}</div></main>
+<footer class="footer"><a class="footer-link" href="/impressum">Impressum</a><span aria-hidden="true">·</span><a class="footer-link" href="/datenschutz">Datenschutz</a><span aria-hidden="true">·</span><a class="footer-link" href="/barrierefreiheit">Barrierefreiheit</a></footer></body></html>""", status_code)
 
 
 def _login_form(note=""):

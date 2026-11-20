@@ -23,7 +23,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app import admin, importing, auth, db, dpa, feedback, import_queue, mail, legacy, rbac, tenancy, theme
+from app import admin, importing, auth, db, dpa, feedback, import_queue, legal, mail, legacy, rbac, tenancy, theme
 from app.rbac import STATS
 from app.request_limits import UPLOAD_ROUTES, RequestSizeLimit
 from app.incident_schema import FORM_FIELDS
@@ -60,6 +60,7 @@ async def lifespan(_app):
     if not db.DATA_DIR:
         raise RuntimeError("DATA_DIR fehlt (siehe README)")
     auth.check_config()
+    legal.check_config()
     if legacy.needs_migration(db.DATA_DIR):
         legacy.migrate_single_install(db.DATA_DIR)
     elif legacy.legacy_emails():
@@ -96,11 +97,12 @@ app.include_router(auth.router)
 app.include_router(admin.router)
 app.include_router(dpa.router)
 app.include_router(feedback.router)
+app.include_router(legal.router)
 for _module in (evaluation, incidents, reports, records, export):
     app.include_router(_module.router)
 
-# Ohne Anmeldung erreichbar: Health-Check, Anmeldeseiten und Logos/CSS/JS (keine Einsatzdaten)
-PUBLIC_PATHS = ("/health", "/login", "/logout")
+# Ohne Anmeldung erreichbar: Health-Check, Anmeldeseiten, Impressum & Co. und Logos/CSS/JS (keine Einsatzdaten)
+PUBLIC_PATHS = ("/health", "/login", "/logout", "/impressum", "/datenschutz", "/barrierefreiheit")
 
 
 @app.middleware("http")
