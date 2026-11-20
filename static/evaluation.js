@@ -60,7 +60,7 @@ function evaluationToolbar({ exports = true } = {}) {
   </div>` : "<div></div>";
   const chosen = state.tenantFilter.size ? tenants.filter((t) => state.tenantFilter.has(t.slug)).map((t) => t.name).join(", ") : "";
   return `<div class="evaluation-toolbar no-print">${chips}<div class="toolbar-right">
-      ${exports ? `<button type="button" class="btn btn-light btn-small" data-action="summary-export" data-tip="Kennzahlen je Wehr, ohne Namen">Kennzahlen (Excel)</button>` : ""}
+      ${exports ? `<button type="button" class="btn btn-light btn-small" data-action="summary-export" data-tip="Alle Auswertungen als Excel-Mappe, dazu Listen der Einsätze und Fahrzeuge (nur mit Recht auf die Einsätze)">Auswertung (Excel)</button>` : ""}
       <button type="button" class="btn btn-light btn-small" data-action="print" data-tip="Druckansicht, im Druckdialog „Als PDF sichern“">Drucken / PDF</button>
     </div></div>
     <p class="print-only print-stamp">${esc(config.name)} · Einsatzstatistik ${state.year}${chosen ? ` · ${esc(chosen)}` : ""} · Stand ${formatDate(new Date().toISOString())}</p>`;

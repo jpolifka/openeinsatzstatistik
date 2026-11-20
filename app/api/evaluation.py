@@ -43,22 +43,9 @@ def evaluate(tenants, year, limit):
 
 
 
-@router.get("/api/evaluation")
-def api_evaluation(year: Optional[int] = None, limit: Optional[int] = None, tenants: Optional[str] = None,
-                   a: tenancy.Access = Depends(access)):
-    """Auswertung der Auswahl – einer Wehr oder (summiert) mehrerer Wehren einer VG.
-
-    Ohne Recht auf Einsätze/Personal kommt die Anwesenheit (Namen) nicht mit; in der
-    Gesamtansicht gibt es sie nie (Kameraden gehören zu einer Wehr).
-    """
-    selection = filtered(a.selection_with(STATS), tenants)
+def build_evaluation(selection, a, year, limit, parts, months):
+    """Auswertung der Auswahl (Grundlage von /api/evaluation und der Excel-Auswertung) -> (Ergebnis, parts)."""
     cfg = selection_config(selection, a)
-    limit = limit or cfg.default_limit
-    if limit not in cfg.response_limits:
-        allowed = " oder ".join(str(x) for x in cfg.response_limits)
-        raise HTTPException(400, f"Die Zeitgrenze muss {allowed} Minuten sein.")
-    year = year or latest_year(selection)
-    parts, months = evaluate(selection, year, limit)
     current = [e for _, evaluated, _ in parts for e in evaluated]
     previous = [i for _, _, prev in parts for i in prev]
     single = len(selection) == 1 and not a.vg
@@ -94,6 +81,25 @@ def api_evaluation(year: Optional[int] = None, limit: Optional[int] = None, tena
             "participations": len(current), "unique": unique, "without_dispatch_number": without,
             "rows": [without_plan({"slug": t.slug, "name": t.name, **metrics.summary(evaluated, limit, t.config)},
                                    plan_visible(t)) for t, evaluated, _ in parts]}
-    return result
+    return result, parts
 
 
+
+
+@router.get("/api/evaluation")
+def api_evaluation(year: Optional[int] = None, limit: Optional[int] = None, tenants: Optional[str] = None,
+                   a: tenancy.Access = Depends(access)):
+    """Auswertung der Auswahl – einer Wehr oder (summiert) mehrerer Wehren einer VG.
+
+    Ohne Recht auf Einsätze/Personal kommt die Anwesenheit (Namen) nicht mit; in der
+    Gesamtansicht gibt es sie nie (Kameraden gehören zu einer Wehr).
+    """
+    selection = filtered(a.selection_with(STATS), tenants)
+    cfg = selection_config(selection, a)
+    limit = limit or cfg.default_limit
+    if limit not in cfg.response_limits:
+        allowed = " oder ".join(str(x) for x in cfg.response_limits)
+        raise HTTPException(400, f"Die Zeitgrenze muss {allowed} Minuten sein.")
+    year = year or latest_year(selection)
+    parts, months = evaluate(selection, year, limit)
+    return build_evaluation(selection, a, year, limit, parts, months)[0]

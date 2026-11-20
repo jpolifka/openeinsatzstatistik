@@ -193,7 +193,8 @@ gesperrt. Geprüft wird im Backend, die Oberfläche blendet nur aus.
 - Einsatzliste aller Wehren mit Markierung der Wehr; Personal gibt es nur je Wehr.
 - Excel-Export als eine Mappe mit Übersicht und je Wehr Einsatzübersicht (Anwesenheit nicht für
   den Wehrleiter).
-  „Kennzahlen (Excel)“ enthält nur die Zahlen je Wehr, ohne Namen.
+  „Auswertung (Excel)“ enthält die Kennzahlen je Wehr und alle Auswertungsblätter der Oberfläche; die Listen aller
+  Einsätze und Fahrzeuge nur für Wehren, deren Einsätze man sehen darf (Namen nur mit Recht auf Personen).
 - „Drucken / PDF“ öffnet die Druckansicht der Auswertung (im Druckdialog als PDF sichern).
 - Bericht einlesen verteilt die Berichte auf die passende Wehr (über die berichtende Einheit; die
   eigenen Fahrzeuge im Bericht nur bei Wehren ohne BKS-Kennung). Haben andere Wehren denselben
