@@ -240,15 +240,15 @@ const VIEWS = {
   incidents: { label: "Einsätze", sub: "Einsätze", load: loadIncidents, render: renderIncidents, permission: "incidents.view",
     help: () => state.editing != null ? "sec_capture" : "sec_metrics" },
   // Personal gehört zu einer Wehr – nicht in der Gesamtansicht einer VG
-  members: { label: "Personal", title: "Einsatzteilnahmen", load: loadMembers, render: renderMembers, permission: "people.view", single: true,
+  members: { label: "Personal", sub: "Einsätze", title: "Einsatzteilnahmen", load: loadMembers, render: renderMembers, permission: "people.view", single: true,
     help: "sec_members" },
 };
 // Hauptreiter: Jeder bündelt Ansichten (Schlüssel in VIEWS); mehrere erscheinen als Unterreiter darunter.
 const NAV = [
   { key: "overview", label: "Übersicht", views: ["overview"] },
-  { key: "incidents", label: "Einsätze", views: ["incidents", "fees", "records"] },
+  { key: "incidents", label: "Einsätze", views: ["incidents", "trainings", "fees", "records"] },
   { key: "evaluation", label: "Auswertungen", views: ["evaluation", "times", "load", "aborts", "resources", "fire"] },
-  { key: "members", label: "Personal", views: ["members"] },
+  { key: "members", label: "Personal", views: ["members", "training_members"] },
   { key: "admin", label: "Einstellungen", views: ["admin", "dpa"] },
 ];
 const navGroup = (view) => NAV.find((g) => g.views.includes(view));

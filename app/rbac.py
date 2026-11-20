@@ -35,6 +35,8 @@ WRITE = "incidents.edit"
 DELETE = "incidents.delete"
 PEOPLE = "people.view"
 PEOPLE_EDIT = "people.edit"
+TRAININGS = "trainings.view"
+TRAININGS_EDIT = "trainings.edit"
 SETTINGS = "tenant.settings"
 KEYWORDS = "tenant.keywords"
 VG_OVERVIEW = "vg.overview"
@@ -72,6 +74,8 @@ PERMISSIONS = {p.key: p for p in (
     Permission(DELETE, "Einsätze", "Einsätze löschen", BOTH, (WRITE,)),
     Permission(PEOPLE, "Personen", "Anwesenheit und Personal sehen", BOTH, (INCIDENTS,)),
     Permission(PEOPLE_EDIT, "Personen", "Anwesenheit bearbeiten", BOTH, (PEOPLE, WRITE)),
+    Permission(TRAININGS, "Übungen", "Übungsdienste und Teilnahmen sehen", BOTH),
+    Permission(TRAININGS_EDIT, "Übungen", "Übungsdienste erfassen und ändern", BOTH, (TRAININGS,)),
     Permission(SETTINGS, "Wehr", "Einstellungen, Fahrzeuge, Farben und Logos", BOTH),
     Permission(KEYWORDS, "Wehr", "Stichwortkatalog", BOTH),
     Permission(VG_OVERVIEW, "Verbandsgemeinde", "Gesamtansicht der VG", VG, (STATS,)),
@@ -105,11 +109,14 @@ _WEHR = ("lead", "deputy_lead", "editor", "viewer")
 # Drei Stufen: Sachbearbeitung (Einsätze und Personen bearbeiten), Leitung (zusätzlich Freigabe, Einstellungen, Benutzer),
 # VG-Verwaltung (vg_lead: alles, auch Gebühren, AVV und Rollenpflege). Die Rollen erben nicht von vg_stats, damit
 # z. B. „AVV ausfüllen“ nicht bei jeder Funktion landet.
-_STAFF = {STATS, VG_OVERVIEW, DPA_VIEW, PLAN_VIEW, INCIDENTS, EXPORT, IMPORT, WRITE, DELETE, PEOPLE, PEOPLE_EDIT}
+_STAFF = {STATS, VG_OVERVIEW, DPA_VIEW, PLAN_VIEW, INCIDENTS, EXPORT, IMPORT, WRITE, DELETE, PEOPLE, PEOPLE_EDIT,
+          TRAININGS, TRAININGS_EDIT}
 _OFFICER = _STAFF | {VG_RECORDS}
 _LEAD = _STAFF | {PLAN_RELEASE, SETTINGS, KEYWORDS, USERS_VIEW, USERS_GRANT}
 BKS_ROLES = (
     ("deputy_lead", "tenant", "Stellv. Wehrführer/in", "lead", set(), (), ()),
+    # Eigene Rolle für Übungsdienste (nur dort bearbeiten); Auswertung ansehen, damit die Oberfläche startet
+    ("trainer", "tenant", "Ausbilder/in (Übungsdienste)", None, {STATS, TRAININGS, TRAININGS_EDIT}, (), ()),
     ("vg_deputy", "vg", "Stellv. Wehrleiter/in", "vg_lead", set(), (), ("vg",)),
     ("fez", "vg", "FEZ der VG (Bearbeiter/in, Wehrführer/in)", None, _LEAD | {VG_RECORDS}, _WEHR, ("vg", "city")),
     ("bki", "vg", "Brand- und Katastrophenschutzinspekteur/in", None, _LEAD | {VG_RECORDS}, _WEHR,
@@ -123,8 +130,8 @@ BKS_ROLES = (
 )
 # Umbenennung der Startrollen und zusätzliche Verteilung (Schlüssel bleiben, Rechte unverändert)
 BKS_LABELS = {"editor": "Bearbeiter/in Einsatzberichte", "lead": "Wehrführer/in", "vg_lead": "Wehrleiter/in"}
-BKS_GRANTS = {"lead": ("deputy_lead",),
-              "vg_lead": ("deputy_lead", "vg_deputy", "fez", "bki", "bki_deputy", "officer_kats", "officer_fire")}
+BKS_GRANTS = {"lead": ("deputy_lead", "trainer"),
+              "vg_lead": ("deputy_lead", "trainer", "vg_deputy", "fez", "bki", "bki_deputy", "officer_kats", "officer_fire")}
 
 
 class Invalid(ValueError):

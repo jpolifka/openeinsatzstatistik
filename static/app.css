@@ -857,3 +857,17 @@ a { color: var(--brand-dark); }
   .preview-status > div { flex: 1 1 55%; }
   .status-toggle { margin-left: auto; }
 }
+
+/* Übungsdienste (trainings.js) */
+.chip-toggle { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--field-line); border-radius: 999px; padding: 5px 12px; background: var(--white); color: inherit; font: inherit; cursor: pointer; }
+.chip-toggle:hover { background: var(--brand-light); }
+.chip-toggle.on { background: var(--brand-light); border-color: var(--brand); color: var(--brand-dark); font-weight: 700; }
+.chip-toggle.new { cursor: default; }
+.chip-remove { border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; padding: 0 2px; }
+.toolbar-inline { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0; }
+.toolbar-inline input { border: 1px solid var(--field-line); border-radius: 8px; padding: 8px 10px; background: var(--white); min-width: 0; font: inherit; }
+.training-form, .training-row, .notice-card { margin-bottom: 14px; padding-bottom: 14px; }
+.training-form > *, .training-row > .small, .training-row details, .notice-card > * { margin-left: 18px; margin-right: 18px; }
+.training-form > h3, .training-form > h4 { margin-top: 14px; }
+.member-admin { list-style: none; margin: 0; padding: 0 18px 12px; display: grid; gap: 6px; }
+.member-admin li { display: flex; justify-content: space-between; gap: 12px; align-items: center; }

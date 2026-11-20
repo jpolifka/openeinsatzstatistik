@@ -242,9 +242,39 @@ def _write_instructions(ws, sheet, last_member_column):
         row[0].alignment = Alignment(wrap_text=True, vertical="top")
 
 
-def write_workbook(incidents, members, year, target, cfg):
+TRAINING_SHEET = "Übungen"
+TRAINING_COLUMNS = (("Datum", 11, "DD.MM.YYYY"), ("Beginn", 8, "hh:mm"), ("Ende", 8, "hh:mm"),
+                    ("Dauer (h)", 10, "0.00"), ("Thema", 40, None), ("Kategorie", 18, None), ("Ort", 18, None),
+                    ("Ausbilder/in", 20, None), ("Teilnehmer", 11, "0"), ("Namen", 60, None), ("Notizen", 40, None))
+
+
+def _write_trainings(ws, trainings, year):
+    """Blatt Übungen: eine Zeile je Übungsdienst (nur Liste, Übungen sind nicht Teil der Einsatzübersicht)."""
+    ws["A1"] = f"Übungsdienste {year} (nicht in der Einsatzstatistik enthalten)"
+    ws["A1"].font = Font(name="Calibri", size=14, bold=True)
+    for i, (title, width, _) in enumerate(TRAINING_COLUMNS, start=1):
+        _style_header(ws.cell(HEADER_ROW, i, title), horizontal="center", vertical="center")
+        ws.column_dimensions[get_column_letter(i)].width = width
+    for r, t in enumerate(sorted(trainings, key=lambda t: t["started_at"]), start=FIRST_ROW):
+        start, end = parse_iso(t["started_at"]), parse_iso(t["ended_at"])
+        values = [start.date(), start.time(), end.time(), round(t["duration_min"] / 60, 2), t["topic"], t["category"],
+                  t["place"], t["trainer"], len(t["participants"]), "; ".join(p["name"] for p in t["participants"]),
+                  t["notes"]]
+        for i, (value, (_, _, number_format)) in enumerate(zip(values, TRAINING_COLUMNS), start=1):
+            cell = ws.cell(r, i, value)
+            if isinstance(value, str):
+                cell.data_type = "s"          # kein Formelstart aus Nutzertext
+            cell.border = BORDER
+            if number_format:
+                cell.number_format = number_format
+            if i in (5, 10, 11):
+                cell.alignment = Alignment(wrap_text=True, vertical="top")
+
+
+def write_workbook(incidents, members, year, target, cfg, trainings=None):
     """incidents wie aus store.load_incidents, members wie aus store.members_of_year, cfg: TenantConfig.
-    members=None: ohne Blatt Anwesenheit (Benutzer ohne Recht auf Anwesenheit)."""
+    members=None: ohne Blatt Anwesenheit (Benutzer ohne Recht auf Anwesenheit).
+    trainings (trainings.load): zusätzliches Blatt Übungen; None oder leer = ohne."""
     sheet = Sheet(cfg, year, incidents)
     wb = openpyxl.Workbook()
     overview = wb.active
@@ -252,6 +282,8 @@ def write_workbook(incidents, members, year, target, cfg):
     _write_overview(overview, sheet, incidents, year)
     last_member_column = None if members is None else \
         _write_attendance(wb.create_sheet(ATTENDANCE_SHEET), sheet, incidents, members, OVERVIEW_SHEET)
+    if trainings:
+        _write_trainings(wb.create_sheet(TRAINING_SHEET), trainings, year)
     _write_instructions(wb.create_sheet("Anleitung"), sheet, last_member_column)
     wb.calculation = CalcProperties(fullCalcOnLoad=True)
     wb.save(target)
