@@ -108,6 +108,22 @@ def test_statistics_role_gets_summary_without_names(vg):
     assert "Wehr wehr-a1" in cells and not any("Muster" in c for c in cells)
 
 
+def test_summary_export_is_a_full_report(vg):
+    response = vg.get("/api/export/summary?year=2025")
+    workbook = openpyxl.load_workbook(io.BytesIO(response.content))
+    assert workbook.sheetnames == ["Übersicht", "Statistik", "Eintreffen und Zeiten", "Belastung", "Abbrüche und Anlagen",
+                                   "Fahrzeuge und Atemschutz", "Brand und Rettung", "Einsätze", "Einsatzfahrzeuge"]
+    incidents = workbook["Einsätze"]
+    assert incidents.max_row == 3 + 3 and incidents["A3"].value == "Wehr"          # drei Einsätze, Kopfzeile in Zeile 3
+
+
+def test_statistics_role_report_has_no_lists(vg):
+    login(vg, "vgstats@example.org")
+    workbook = openpyxl.load_workbook(io.BytesIO(vg.get("/api/export/summary?year=2025").content))
+    assert "Einsätze" not in workbook.sheetnames and "Einsatzfahrzeuge" not in workbook.sheetnames
+    assert "Statistik" in workbook.sheetnames
+
+
 def test_summary_export_respects_selection_and_limit(vg):
     response = vg.get("/api/export/summary?year=2025&tenants=wehr-a2&limit=10")
     assert response.status_code == 200

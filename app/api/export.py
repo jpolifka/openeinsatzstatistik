@@ -8,12 +8,12 @@ from typing import Optional
 from fastapi import Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
-from app import excel_export, metrics, store, tenancy, tenant_config
-from app.rbac import EXPORT, PEOPLE, STATS
+from app import excel_export, excel_report, metrics, store, tenancy, tenant_config
+from app.rbac import EXPORT, INCIDENTS, PEOPLE, STATS
 
 from fastapi import APIRouter
 from app.api.common import PLAN_KEYS, XLSX, access, filtered, latest_year, names_for, plan_visible, without_plan
-from app.api.evaluation import evaluate
+from app.api.evaluation import build_evaluation, evaluate
 router = APIRouter()
 
 
@@ -26,9 +26,9 @@ def _xlsx(write, name):
     return StreamingResponse(buffer, media_type=XLSX, headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
 
-def _summary(tenants, year, limit):
+def _summary(tenants, year, limit, parts=None):
     """Kennzahlzeilen je Wehr, Summenzeile und Hinweise für die Excel-Übersicht."""
-    parts, _ = evaluate(tenants, year, limit)
+    parts = parts or evaluate(tenants, year, limit)[0]
     rows = [without_plan({"name": t.name, **metrics.summary(evaluated, limit, t.config)}, plan_visible(t))
             for t, evaluated, _ in parts]
     everything = [e for _, evaluated, _ in parts for e in evaluated]
@@ -81,13 +81,18 @@ def api_export(year: Optional[int] = None, a: tenancy.Access = Depends(access)):
 @router.get("/api/export/summary")
 def api_export_summary(year: Optional[int] = None, limit: Optional[int] = None,
                        tenants: Optional[str] = None, a: tenancy.Access = Depends(access)):
-    """Kennzahlen je Wehr als Excel – ohne Namen, daher auch für Rollen nur mit Statistik."""
+    """Auswertung als Excel: Kennzahlen je Wehr und alle Auswertungsblätter der Oberfläche. Ohne Namen, daher auch für
+    Rollen nur mit Statistik; Listen aller Einsätze und Fahrzeuge nur für Wehren mit Recht auf die Einsätze."""
     tenants = filtered(a.selection_with(STATS), tenants)
     year = year or latest_year(tenants)
     limit = limit if limit is not None else tenants[0].config.default_limit
     if limit not in {value for t in tenants for value in t.config.response_limits}:
         raise HTTPException(422, "Unbekannte Zeitgrenze.")
-    _, rows, total, notes = _summary(tenants, year, limit)
-    return _xlsx(lambda target: excel_export.write_summary_workbook(rows, total, year, limit, target, notes),
-                 f"Kennzahlen_{a.vg or tenants[0].slug}_{year}")
-
+    evaluated_parts, months = evaluate(tenants, year, limit)
+    _, rows, total, notes = _summary(tenants, year, limit, evaluated_parts)
+    result, _ = build_evaluation(tenants, a, year, limit, evaluated_parts, months)
+    lists = [{"name": t.name, "cfg": t.config, "evaluated": evaluated, "plan": plan_visible(t), "people": t.can(PEOPLE)}
+             for t, evaluated, _ in evaluated_parts if t.can(INCIDENTS)]
+    return _xlsx(lambda target: excel_report.write_report_workbook(result, rows, total, year, limit, target, notes,
+                                                                    lists),
+                 f"Auswertung_{a.vg or tenants[0].slug}_{year}")

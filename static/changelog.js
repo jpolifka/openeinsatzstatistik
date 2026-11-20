@@ -7,6 +7,13 @@
 const CHANGELOG = [
   {
     date: "2026-11-20",
+    version: "2026-11-20.2",
+    items: [
+      "<b>Excel-Auswertung:</b> Der Excel-Export in der Auswertung („Auswertung (Excel)“) enthält jetzt alles auf einen Blick: Kennzahlen je Wehr, Statistik, Eintreffen und Zeiten, Belastung, Abbrüche und Anlagen, Fahrzeuge und Atemschutz, Brand und Rettung, bei Berechtigung das Personal – dazu die vollständige Liste aller Einsätze und aller Einsatzfahrzeuge zum Filtern und Weiterrechnen.",
+    ],
+  },
+  {
+    date: "2026-11-20",
     items: [
       "<b>Rechtliches:</b> Im Fußbereich (und auf der Anmeldeseite) stehen jetzt Impressum, Datenschutzerklärung und Erklärung zur Barrierefreiheit.",
     ],
