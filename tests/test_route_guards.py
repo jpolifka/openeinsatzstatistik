@@ -28,7 +28,8 @@ SELECTED = {
     "/api/incidents", "/api/notices", "/api/notices/{notice_id}/done", "/api/pending", "/api/pending/read",
     "/api/pending/{key}", "/api/records", "/api/records/review-all", "/api/records/{bks_record_id}/fees",
     "/api/records/{bks_record_id}/review", "/api/reports", "/api/reports/accept", "/api/reports/cancel",
-    "/api/reports/jobs/{job}", "/api/scope", "/api/theme.css", "/api/years",
+    "/api/reports/jobs/{job}", "/api/scope", "/api/theme.css", "/api/trainings", "/api/trainings/members/{member_id}",
+    "/api/trainings/{training_id}", "/api/years",
 }
 SUPER = {
     "/api/super/overview", "/api/super/sessions", "/api/super/sessions/{session_id}", "/api/super/tenants",
