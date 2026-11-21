@@ -19,7 +19,8 @@ jobs:
       # Der Lock ist maßgeblich: stimmt er nicht mit requirements.txt überein, schlägt die Prüfung fehl
       - run: python -m pip install pip-tools==7.7.0
       - run: python -m piptools compile --quiet --generate-hashes --output-file=/tmp/requirements.lock --strip-extras requirements.txt
-      - run: diff <(grep -v '^#' requirements.lock) <(grep -v '^#' /tmp/requirements.lock)
+      # nur Paket und Version vergleichen: die Hashes hängen von der Plattform ab (Wheels für x86_64 bzw. arm64)
+      - run: diff <(grep -oE '^[A-Za-z0-9_.-]+==[^ ]+' requirements.lock) <(grep -oE '^[A-Za-z0-9_.-]+==[^ ]+' /tmp/requirements.lock)
         shell: bash
       - run: python -m pip install pip-audit==2.10.1
       - run: python -m pip_audit --require-hashes -r requirements.lock
