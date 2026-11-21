@@ -208,3 +208,13 @@ def test_people_admin_needs_settings_right(make_client):
         login(client, email)
         client.cookies.set("scope", "t:wehr-a1")
         assert client.get("/api/admin/wehr-a1/members").status_code == expected, email
+
+
+def test_people_lists_are_sorted_by_last_name(client):
+    with db.connection(tenancy.tenant_path("wehr-a1")) as con:
+        directory = store.MemberDirectory(con)
+        for last, first in (("Zander", "Anna"), ("Österle", "Karl"), ("Beispiel", "Zoe"), ("Beispiel", "Anton")):
+            directory.find_or_create(last, first)
+    expected = ["Beispiel, Anton", "Beispiel, Zoe", "Muster, Max", "Österle, Karl", "Zander, Anna"]
+    assert [p["name"] for p in _people(client)] == expected
+    assert [m["name"] for m in client.get("/api/trainings?year=2025").json()["members"]] == expected

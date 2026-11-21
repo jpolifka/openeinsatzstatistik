@@ -65,8 +65,8 @@ def _rows(con):
         "GROUP BY a.member_id")}
     trainings = {r[0]: r[1] for r in con.execute(
         "SELECT member_id, COUNT(*) FROM training_attendance GROUP BY member_id")}
-    people = [dict(r) for r in con.execute(
-        "SELECT id, name, last_name, first_name, active FROM member ORDER BY sort_order, name")]
+    people = sorted((dict(r) for r in con.execute("SELECT id, name, last_name, first_name, active FROM member")),
+                    key=lambda p: names.sort_key(p["name"]))
     similar = _similar(people)
     by_id = {p["id"]: p for p in people}
     for p in people:

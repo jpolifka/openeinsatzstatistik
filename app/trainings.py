@@ -6,7 +6,7 @@ Excel-Export der Einsätze und keine VG-Gesamtansicht ein. Gemeinsam ist nur der
 """
 import datetime as dt
 
-from app import store
+from app import names, store
 from app.timeutil import normalize_iso, parse_iso
 
 MAX_DAYS = 14                       # längste Übung (z. B. Lehrgang); darüber ist es vermutlich ein Tippfehler
@@ -115,11 +115,11 @@ def load(con, year=None, training_id=None):
     rows = [dict(r) for r in con.execute(sql + " ORDER BY started_at DESC, id DESC", params)]
     people = {}
     for r in con.execute("SELECT a.training_id, m.id, m.name FROM training_attendance a "
-                         "JOIN member m ON m.id = a.member_id ORDER BY m.sort_order, m.name"):
+                         "JOIN member m ON m.id = a.member_id"):
         people.setdefault(r["training_id"], []).append({"id": r["id"], "name": r["name"]})
     for row in rows:
         row["duration_min"] = duration_min(row)
-        row["participants"] = people.get(row["id"], [])
+        row["participants"] = sorted(people.get(row["id"], []), key=lambda p: names.sort_key(p["name"]))
     return rows
 
 
@@ -147,6 +147,7 @@ def summary(trainings):
 
 def directory(con):
     """Personenstamm für die Teilnehmerwahl (auch Ausgeschiedene, mit Kennzeichen)."""
-    return [{"id": r["id"], "name": r["name"], "active": bool(r["active"])}
-            for r in con.execute("SELECT id, name, active FROM member ORDER BY sort_order, name")]
+    rows = [{"id": r["id"], "name": r["name"], "active": bool(r["active"])}
+            for r in con.execute("SELECT id, name, active FROM member")]
+    return sorted(rows, key=lambda r: names.sort_key(r["name"]))
 

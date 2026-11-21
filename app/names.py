@@ -125,3 +125,9 @@ def _edit_distance(a, b):
 def _first_names_fit(known, given):
     """Vornamen passen: einer fehlt, einer ist Anfang des anderen (Initiale, Kurzform) oder kleiner Tippfehler."""
     return not known or not given or _prefix_match(known, given) or _similarity(known, given) >= 0.7
+
+
+def sort_key(name):
+    """Sortierschlüssel für Personenlisten: nach Nachname, dann Vorname ('Nachname, Vorname'), ohne Akzente/Groß-Kleinschreibung."""
+    last, first = name_readings(name or "")[0]
+    return (normalize(last), normalize(first), name or "")

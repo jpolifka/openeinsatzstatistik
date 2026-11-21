@@ -369,7 +369,8 @@ async function runAdminAction(button) {
     }
     case "person-merge": {
       const m = admin.people.members.find((x) => x.id === Number(button.dataset.id));
-      const options = admin.people.members.filter((x) => x.id !== m.id).map((x) => ({ value: x.id, label: x.name }));
+      const options = admin.people.members.filter((x) => x.id !== m.id).sort((x, y) => x.name.localeCompare(y.name, "de"))
+        .map((x) => ({ value: x.id, label: x.name }));
       const into = await askAdminChoice({ title: `${m.name} zusammenführen`, label: "Gehört zu dieser Person",
         text: `Einsätze und Übungen von „${m.name}“ gehen auf die gewählte Person über, der Eintrag „${m.name}“ entfällt. Das lässt sich nicht rückgängig machen.`,
         options, confirm: "Zusammenführen", danger: true });
