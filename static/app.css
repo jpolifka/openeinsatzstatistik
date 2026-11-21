@@ -877,6 +877,7 @@ a { color: var(--brand-dark); }
 
 /* QR-Code zur Anmeldung: nur der Dialog wird gedruckt */
 .checkin-print { text-align: center; }
+.checkin-print a { overflow-wrap: anywhere; }
 .checkin-print img { max-width: 100%; height: auto; }
 @media print {
   body.print-checkin > *:not(#checkin-dialog) { display: none !important; }
