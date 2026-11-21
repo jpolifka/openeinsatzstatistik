@@ -857,3 +857,20 @@ a { color: var(--brand-dark); }
   .preview-status > div { flex: 1 1 55%; }
   .status-toggle { margin-left: auto; }
 }
+
+/* Übungsdienste (trainings.js) */
+.chip-toggle { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--field-line); border-radius: 999px; padding: 5px 12px; background: var(--white); color: inherit; font: inherit; cursor: pointer; }
+.chip-toggle:hover { background: var(--brand-light); }
+.chip-toggle.on { background: var(--brand-light); border-color: var(--brand); color: var(--brand-dark); font-weight: 700; }
+.chip-toggle.new { cursor: default; }
+.chip-remove { border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; padding: 0 2px; }
+.toolbar-inline { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0; }
+.toolbar-inline input { border: 1px solid var(--field-line); border-radius: 8px; padding: 8px 10px; background: var(--white); min-width: 0; font: inherit; }
+.training-form h4 { margin-top: 18px; }
+.training-detail { display: block; }
+.training-detail > * { margin: 0 0 8px; }
+.warn-text { color: var(--warn-text); }
+.person-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.person-form { display: grid; gap: 10px; padding: 6px 0; }
+.person-form .toolbar-inline { align-items: flex-end; }
+.person-edit-row > td { background: var(--brand-pale); border-radius: 0; padding: 12px 14px; }

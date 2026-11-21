@@ -363,15 +363,39 @@ def _add_manual_fields(con):
     con.execute("ALTER TABLE incident ADD COLUMN manual_fields TEXT NOT NULL DEFAULT '[]'")
 
 
+def _add_trainings(con):
+    """Übungsdienste ohne BKS-Bericht: eigene Tabellen, damit sie nie in die Einsatzauswertungen geraten.
+    Der Personenstamm (member) wird gemeinsam genutzt; active = false blendet Ausgeschiedene in der Auswahl aus."""
+    con.execute("CREATE TABLE training (id INTEGER PRIMARY KEY, year INTEGER NOT NULL, started_at TEXT NOT NULL, "
+                "ended_at TEXT NOT NULL, topic TEXT NOT NULL, trainer TEXT, place TEXT, category TEXT, notes TEXT, "
+                "revision INTEGER NOT NULL DEFAULT 0, "
+                "created TEXT NOT NULL DEFAULT (datetime('now', 'localtime')), modified TEXT)")
+    con.execute("CREATE INDEX training_year ON training(year, started_at)")
+    con.execute("CREATE TABLE training_attendance (training_id INTEGER NOT NULL REFERENCES training(id) "
+                "ON DELETE CASCADE, member_id INTEGER NOT NULL REFERENCES member(id) ON DELETE CASCADE, "
+                "PRIMARY KEY (training_id, member_id))")
+    con.execute("ALTER TABLE member ADD COLUMN active INTEGER NOT NULL DEFAULT 1")
+
+
+def _add_training_roles(con):
+    """Rechte für Übungsdienste: Erfasser/in, Wehrleiter/in (und alle, die davon erben) bekommen sie; dazu die eigene
+    Rolle Ausbilder/in (rbac.BKS_ROLES, add_roles setzt auch die Stufen der BKS-Rollen mit den neuen Rechten)."""
+    from app import rbac
+    ids = rbac.add_roles(con)
+    for key in ("editor", "vg_lead"):
+        con.executemany("INSERT OR IGNORE INTO role_permission (role_id, permission) VALUES (?, ?)",
+                        [(ids[key], p) for p in (rbac.TRAININGS, rbac.TRAININGS_EDIT)])
+
+
 # Neue Schemaänderungen nur hinten anfügen; PRAGMA user_version zählt die erledigten Schritte.
 TENANT_MIGRATIONS = [_create_legacy_schema, _rename_to_english, _add_tenant_tables, _add_bks_ids,
                      _add_pending_reports, _add_fleet_names, _add_incident_revision, _add_import_jobs,
-                     _add_abort_reason, _add_report_details, _add_manual_fields]
+                     _add_abort_reason, _add_report_details, _add_manual_fields, _add_trainings]
 CENTRAL_MIGRATIONS = [_create_central_schema, _add_dpa, _add_records, _add_notices, _add_fee_schedules, _add_roles,
                       _records_per_vg, _add_consumed_magic_links, _add_completed_imports, _add_tenant_archive,
                       _add_vg_defaults, _settings_for_fee_roles, _add_sessions,
                       _add_vg_kind, _add_bks_roles, _vg_lead_people,
-                      _bks_role_tiers, _add_login_codes]
+                      _bks_role_tiers, _add_login_codes, _add_training_roles]
 
 
 def migrate(con, steps=TENANT_MIGRATIONS):

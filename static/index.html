@@ -33,6 +33,10 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0-4.5 4.5M12 4l4.5 4.5M5 20h14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <span>Bericht einlesen</span>
         </button>
+        <button type="button" class="btn btn-white" id="btn-training" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>Übung erfassen</span>
+        </button>
         <button type="button" class="btn-help-header" id="btn-help" aria-label="Hilfe öffnen" title="Hilfe">?</button>
         <form method="post" action="/logout" id="logout" hidden>
           <button type="submit" class="btn-help-header" aria-label="Abmelden">
@@ -98,6 +102,8 @@
     </section>
 
     <section id="view-members" class="view" hidden></section>
+    <section id="view-trainings" class="view" hidden></section>
+    <section id="view-training_members" class="view" hidden></section>
 
     <section id="view-admin" class="view" hidden></section>
 
@@ -106,6 +112,18 @@
     <section id="view-records" class="view" hidden></section>
     <section id="view-fees" class="view" hidden></section>
   </main>
+
+  <!-- Übung erfassen oder ändern (trainings.js) -->
+  <dialog id="training-dialog" class="dialog" aria-labelledby="training-title">
+    <div class="dialog-header">
+      <div>
+        <h2 id="training-title">Übung erfassen</h2>
+        <p class="muted">Übungsdienste ohne BKS-Bericht. Sie erscheinen in keiner Auswertung und nicht in der Einsatzliste, unter Einsätze → Übungen und Personal → Übungen.</p>
+      </div>
+      <button type="button" class="btn-close" data-close="training-dialog" aria-label="Schließen"></button>
+    </div>
+    <div class="dialog-body" id="training-form-body"></div>
+  </dialog>
 
   <!-- Bericht einlesen (PDF oder Excel-Export) -->
   <dialog id="pdf-dialog" class="dialog" aria-labelledby="pdf-title">
@@ -200,6 +218,7 @@
   <script src="/static/imports.js"></script>
   <script src="/static/analysis.js"></script>
   <script src="/static/operations.js"></script>
+  <script src="/static/trainings.js"></script>
   <script src="/static/records.js"></script>
   <script src="/static/admin_views.js"></script>
   <script src="/static/admin.js"></script>

@@ -418,6 +418,28 @@ const HELP_SECTIONS = [
     },
   },
   {
+    id: "sec_training",
+    title: "Übungsdienste",
+    intro: "Übungen ohne BKS-Bericht: Datum, Thema, Zeitraum und Teilnehmer. Erfassen über den Knopf <b>Übung erfassen</b> oben neben „Bericht einlesen“; die Liste der Übungen (aufklappen, bearbeiten) steht unter Einsätze → Übungen, die Teilnahme je Person unter Personal → Übungen. <b>Übungen fließen in keine Auswertung, keinen Einsatz-Export der Statistik und keine Gesamtansicht der Verbandsgemeinde ein.</b>",
+    entries: {
+      training_time: {
+        title: "Beginn und Ende",
+        short: "Datum und Uhrzeit; das Enddatum ist mit dem Startdatum vorbelegt.",
+        text: "Das Enddatum übernimmt das Startdatum, bis du es von Hand änderst – für mehrtägige Übungen (höchstens 14 Tage). Das Ende muss nach dem Beginn liegen; die Dauer errechnet die Anwendung.",
+      },
+      training_people: {
+        title: "Teilnehmer",
+        short: "Per Klick aus dem Personenstamm übernehmen; neue Personen eingeben.",
+        text: "Ein Klick auf eine Person schaltet die Teilnahme um; „Alle übernehmen“ wählt alle aktiven Personen aus. Eine neue Person (Nachname, Vorname) wird beim Speichern in den Personenstamm übernommen – gibt es sie schon, wird die vorhandene verwendet. Ausgeschiedene Personen lassen sich im Reiter Personal → Übungen kennzeichnen; sie erscheinen dann nicht mehr in der Auswahl, ihre Daten bleiben erhalten.",
+      },
+      training_optional: {
+        title: "Kategorie, Ort, Ausbilder/in, Notizen",
+        short: "Freiwillige Angaben.",
+        text: "Alle vier Felder sind freiwillig und dienen nur der Übersicht und dem Excel-Export (Blatt „Übungen“, nur für Berechtigte).",
+      },
+    },
+  },
+  {
     id: "sec_shortcuts",
     title: "Tastenkürzel und Bedienhilfen",
     intro: "Die Tasten wirken, solange kein Eingabefeld und kein Dialog aktiv ist.",
@@ -488,6 +510,11 @@ const HELP_SECTIONS = [
         title: "Orte und Zeitgrenzen",
         short: "Einsatzgebiete und Ausrückebereich für „Eintreffen und verfügbare Kräfte“.",
         text: "Ein Einsatz gehört zu dem Ort, mit dessen <b>Namen</b> der Einsatzort beginnt (z. B. „Musterstadt-Nord“ → Musterstadt, Groß-/Kleinschreibung egal). Nur Orte mit Haken bei <b>Ausrückebereich</b> zählen für „Eintreffen und verfügbare Kräfte“. Dazu kommen die Mindest-Alarmstufe, die Zeitgrenzen (mehrere möglich, z. B. 8 und 10 Minuten), die zweite Grenze für „Stärke nach … Min.“ und die Stunden, die als Tag gelten. Orte und Zeitgrenzen gibt die Verbandsgemeinde für alle Wehren der VG vor; dort setzt sie auch je Wehr die Haken des Ausrückebereichs.",
+      },
+      admin_people: {
+        title: "Personenstamm",
+        short: "Personen der Wehr: anlegen, Schreibweise korrigieren, Doppelte zusammenführen, Wehr wechseln.",
+        text: "Der Personenstamm ist der Abgleich für eingelesene Berichte: Jeder Name aus einem Bericht wird mit dieser Liste verglichen, wen es noch nicht gibt, wird neu angelegt. Gleicht ein Name nicht eindeutig, entstehen Doppelte wie <i>Rott, Michael</i> und <i>Röttgen, Michael</i>. Die Liste weist deshalb auf <b>ähnliche Einträge</b> hin. <b>Zusammenführen</b> überträgt Einsätze und Übungen auf die richtige Person und entfernt den Doppelten. <b>Bearbeiten</b> öffnet je Person Name, Wehr und „ausgetreten“ (blendet nur in der Auswahl bei Übungen aus). Ein Wechsel legt die Person in der anderen Wehr der Verbandsgemeinde an und kennzeichnet sie hier als ausgetreten; die bisherigen Einsätze bleiben bei der alten Wehr. Löschen geht nur ohne Einsätze und Übungen. Den Personenstamm pflegt die Wehrführung; wer nur Übungen oder Einsätze erfasst, sieht diesen Bereich nicht.",
       },
       admin_keywords: {
         title: "Stichwortkatalog",
@@ -585,6 +612,16 @@ const HELP_SECTIONS = [
         title: "Anwesenheit bearbeiten",
         short: "Anwesenheit eines Einsatzes ändern und Personen ergänzen.",
         text: "Anwesenheit eines Einsatzes ändern und Personen ergänzen. In einer Rolle der VG gilt das für alle Wehren der VG.",
+      },
+      perm_trainings_view: {
+        title: "Übungsdienste und Teilnahmen sehen",
+        short: "Reiter Übungen unter Einsätze und Personal; Namen der Teilnehmer.",
+        text: "Übungsdienste, Teilnehmer und Teilnahmen je Person sehen. Übungen sind nie Teil der Einsatzstatistik. In einer Rolle der VG gilt das für alle Wehren der VG.",
+      },
+      perm_trainings_edit: {
+        title: "Übungsdienste erfassen und ändern",
+        short: "Übungen anlegen, ändern, löschen; neue Teilnehmer eintragen.",
+        text: "Übungen anlegen, ändern und löschen. Dabei können neue Teilnehmer eingetragen werden; den Personenstamm pflegt die Wehrführung. Die Rolle „Ausbilder/in“ enthält nur dieses Recht (und die Auswertung zum Ansehen).",
       },
       perm_tenant_settings: {
         title: "Einstellungen, Fahrzeuge, Farben, Logos und Schrift",

@@ -14,6 +14,7 @@ const ADMIN_SECTIONS = [
   { key: "bks", label: "BKS-Kennung", tenant: "tenant.settings", vg: "tenant.settings" },
   { key: "places", label: "Orte & Zeitgrenzen", tenant: "tenant.settings", vg: "tenant.settings" },
   { key: "keywords", label: "Stichworte", tenant: "tenant.keywords", vg: "tenant.keywords" },
+  { key: "people", label: "Personen", tenant: "tenant.settings" },
   { key: "fees", label: "Gebührenordnung", vg: "vg.fees" },
   { key: "users", label: "Benutzer", any: true }, { key: "roles", label: "Rollen", any: true },
   { key: "super", label: "Wehren & VGs", superOnly: true },
@@ -26,6 +27,9 @@ const admin = {
   overview: null, slug: null, section: null, settings: null, keywords: null, memberships: null, superOverview: null,
   check: null, importFile: null, importPreview: null, keywordQuery: "", keywordEdit: null, parseResult: null, error: "",
   fees: null, feeDraft: null,
+  people: null,               // Personenstamm der gewählten Wehr (Einstellungen → Personen)
+  personEdit: null,           // Person in Bearbeitung: { id, last_name, first_name }
+  personQuery: "", personFlagged: false, personInactive: false,
   userScopes: null,           // Bereiche, in denen der Benutzer Rollen vergeben darf, mit den Rollen
   effective: null,            // Rechte einer Person mit Herkunft (Benutzer → „Rechte“)
   events: null,               // Protokoll der Vergaben und Rollenänderungen
@@ -46,7 +50,7 @@ const fleetCompact = () => (recall(fleetCompactKey()) ?? (admin.vg ? "1" : "0"))
 
 // Hilfe zum gerade offenen Bereich der Verwaltung
 const ADMIN_HELP = { unit: () => admin.vg ? "admin_vg_defaults" : "admin_colors", fleet: () => admin.vg ? "admin_vg_vehicles" : "admin_fleet",
-  bks: "admin_bks", places: "admin_places", keywords: "admin_keywords", fees: "fees", users: "admin_users",
+  bks: "admin_bks", places: "admin_places", keywords: "admin_keywords", people: "admin_people", fees: "fees", users: "admin_users",
   roles: () => admin.roleDraft ? "admin_role_editor" : "admin_roles", sessions: "admin_sessions" };
 
 VIEWS.admin = { label: "Einstellungen", sub: "Einstellungen", load: loadAdmin, render: renderAdmin, noYear: true,
@@ -94,6 +98,10 @@ async function loadAdmin() {
   }
   if (s === "keywords" && admin.keywords?.scope !== keywordsScope()) {
     admin.keywords = { ...(await api(keywordsUrl())), scope: keywordsScope() };
+  }
+  if (s === "people" && admin.people?.slug !== admin.slug) {
+    admin.people = { slug: admin.slug, ...(await api(`/api/admin/${admin.slug}/members`)) };
+    admin.personEdit = null;
   }
   if (s === "users" && !admin.memberships) setMemberships(await api("/api/admin/memberships"));
   if (s === "roles" && !admin.roles) admin.roles = await api("/api/admin/roles");
@@ -161,7 +169,7 @@ function renderAdmin() {
   const body = ({
     unit: () => admin.vg ? vgUnitSection() : unitSection(), fleet: () => admin.vg ? vgFleetSection() : fleetSection(),
     bks: () => admin.vg ? vgBksSection() : bksSection(), places: () => admin.vg ? vgPlacesSection() : placesSection(),
-    keywords: keywordsSection, users: usersSection, roles: rolesSection, super: superSection, sessions: sessionsSection, fees: feesSection,
+    keywords: keywordsSection, people: peopleSection, users: usersSection, roles: rolesSection, super: superSection, sessions: sessionsSection, fees: feesSection,
   }[admin.section] || (() => `<p class="muted">Hier gibt es für dich nichts zu verwalten.</p>`))();
   $("#view-admin").innerHTML = `<div class="card admin-card">
     <div class="admin-head">${sections}${tenantSelect}</div>
@@ -341,6 +349,38 @@ async function runAdminAction(button) {
       admin.parseResult = (await apiJson("/api/admin/parse-test", "POST", admin.vg
         ? { line: $("#parse-line").value, vg: admin.vg } : { line: $("#parse-line").value, unit_marker: d.unit_marker }));
       return rerender();
+    case "person-add": {
+      const last = $("#person-last").value.trim(), first = $("#person-first").value.trim();
+      if (!last) { toast("Bitte einen Nachnamen eingeben."); $("#person-last").focus(); return; }
+      return peopleChanged(await apiJson(peopleUrl(), "POST", { last_name: last, first_name: first }), "Person angelegt");
+    }
+    case "person-edit":
+      admin.personEdit = { ...admin.people.members.find((m) => m.id === Number(button.dataset.id)) };
+      return rerender();
+    case "person-cancel":
+      admin.personEdit = null;
+      return rerender();
+    case "person-save": {
+      const e = admin.personEdit, to = $("#person-edit-tenant").value;
+      let result = await apiJson(peopleUrl(`/${e.id}`), "PUT", { last_name: $("#person-edit-last").value,
+        first_name: $("#person-edit-first").value, active: !$("#person-edit-left").checked });
+      if (to) result = await apiJson(peopleUrl(`/${e.id}/transfer`), "POST", { to_slug: to });
+      return peopleChanged(result, to ? "Person ist in die andere Wehr gewechselt" : "Person gespeichert");
+    }
+    case "person-merge": {
+      const m = admin.people.members.find((x) => x.id === Number(button.dataset.id));
+      const options = admin.people.members.filter((x) => x.id !== m.id).map((x) => ({ value: x.id, label: x.name }));
+      const into = await askAdminChoice({ title: `${m.name} zusammenführen`, label: "Gehört zu dieser Person",
+        text: `Einsätze und Übungen von „${m.name}“ gehen auf die gewählte Person über, der Eintrag „${m.name}“ entfällt. Das lässt sich nicht rückgängig machen.`,
+        options, confirm: "Zusammenführen", danger: true });
+      if (!into) return;
+      return peopleChanged(await apiJson(peopleUrl(`/${m.id}/merge`), "POST", { into: Number(into) }), "Personen zusammengeführt");
+    }
+    case "person-delete": {
+      const m = admin.people.members.find((x) => x.id === Number(button.dataset.id));
+      if (!await askConfirm({ title: `${m.name} löschen?`, text: "Die Person hat keine Einsätze und Übungen.", confirm: "Löschen", danger: true })) return;
+      return peopleChanged(await api(peopleUrl(`/${m.id}`), { method: "DELETE" }), "Person gelöscht");
+    }
     case "keyword-save": {
       const keywordCode = $("#keyword-code").value.trim().toUpperCase();
       const existing = admin.keywords.keywords.find((x) => x.code === keywordCode);
@@ -519,6 +559,17 @@ function askAdminChoice({ title, text = "", label, options = [], input = false, 
   });
 }
 
+const peopleUrl = (path = "") => `/api/admin/${admin.slug}/members${path}`;
+
+async function peopleChanged(result, message) {
+  admin.people = { slug: admin.slug, ...result };
+  admin.personEdit = null;
+  trainingState.data = null;                       // Teilnehmerwahl der Übungen neu holen
+  if (affectsCurrent()) await refreshCurrentTenant();
+  toast(message);
+  renderAdmin();
+}
+
 async function keywordsChanged(message) {
   if (affectsCurrent()) await refreshCurrentTenant();
   toast(message);
@@ -686,6 +737,11 @@ function handleAdminInput(e) {
     adminData().response_limits = t.value.split(/[,;\s]+/).map(Number).filter((n) => n > 0);
     return;
   }
+  if (t.dataset.personSearch !== undefined) {
+    admin.personQuery = t.value;
+    $("#person-list").innerHTML = personListHtml();
+    return;
+  }
   if (t.dataset.userFilter !== undefined) { admin.userFilter = t.value; renderAdmin(); return; }
   if (t.dataset.superSearch !== undefined) { admin.superQuery = t.value; $("#super-list").innerHTML = superListHtml(); return; }
   if (t.dataset.fleetSearch !== undefined) { admin.fleetQuery = t.value; filterFleetRows(); return; }
@@ -701,6 +757,11 @@ function handleAdminInput(e) {
 
 $("#view-admin").addEventListener("change", async (e) => {
   const t = e.target;
+  if (t.dataset.personFlagged !== undefined || t.dataset.personInactive !== undefined) {
+    if (t.dataset.personFlagged !== undefined) admin.personFlagged = t.checked; else admin.personInactive = t.checked;
+    $("#person-list").innerHTML = personListHtml();
+    return;
+  }
   try {
     if (t.dataset.adminTenant !== undefined) {
       if (!await confirmDiscard()) { t.value = admin.vg ? `vg:${admin.vg}` : admin.slug; return; }

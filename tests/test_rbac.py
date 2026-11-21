@@ -52,7 +52,7 @@ def test_old_memberships_are_migrated(tmp_path):
     roles = rbac.Roles(con)
     lead = roles.find("lead", 1)
     assert {rbac.STATS, rbac.PEOPLE, rbac.SETTINGS} <= roles.permissions(lead.id)        # geerbt über Erfasser
-    assert {r.key for r in roles if r.id in roles.grants(lead.id)} == {"editor", "viewer", "deputy_lead"}
+    assert {r.key for r in roles if r.id in roles.grants(lead.id)} == {"editor", "viewer", "deputy_lead", "trainer"}
     assert rbac.PEOPLE in roles.permissions(roles.find("vg_lead", 1).id)
     con.close()
 

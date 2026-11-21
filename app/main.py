@@ -28,6 +28,7 @@ from app.rbac import STATS
 from app.request_limits import UPLOAD_ROUTES, RequestSizeLimit
 from app.incident_schema import FORM_FIELDS
 from app.api import evaluation, export, incidents, records, reports
+from app.api import trainings as training_api
 from app.api.common import selection_config
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -98,7 +99,7 @@ app.include_router(admin.router)
 app.include_router(dpa.router)
 app.include_router(feedback.router)
 app.include_router(legal.router)
-for _module in (evaluation, incidents, reports, records, export):
+for _module in (evaluation, incidents, reports, records, export, training_api):
     app.include_router(_module.router)
 
 # Ohne Anmeldung erreichbar: Health-Check, Anmeldeseiten, Impressum & Co. und Logos/CSS/JS (keine Einsatzdaten)

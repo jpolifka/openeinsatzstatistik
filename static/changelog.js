@@ -6,6 +6,20 @@
 // noch ein Eintrag hinzu, bekommt er `version` ("JJJJ-MM-TT.2", dann .3 …); ohne `version` gilt das Datum.
 const CHANGELOG = [
   {
+    date: "2026-11-21",
+    items: [
+      "<b>Übungen übersichtlicher:</b> „Übung erfassen“ steht jetzt als eigener Knopf oben neben „Bericht einlesen“. Die Übungen stehen wie die Einsätze in einer aufklappbaren Liste (Einsätze → Übungen, mit Balken für die Teilnehmerzahl und Bearbeiten); Personal → Übungen zeigt die Teilnahme je Person, ebenfalls aufklappbar. Den Übungsleiter schlägt die App beim Tippen aus dem Personenstamm vor.",
+      "<b>Personenstamm in den Einstellungen:</b> Einstellungen → Personen (für die Wehrführung): Personen anlegen, Schreibweisen korrigieren, Doppelte wie „Rott, Michael“ und „Röttgen, Michael“ zusammenführen, Ausgetretene kennzeichnen und bei einem Wechsel in eine andere Wehr der Verbandsgemeinde übergeben. Ähnliche Einträge werden markiert, so zeigt die Liste auch, ob alle Namen richtig erkannt wurden.",
+    ],
+  },
+  {
+    date: "2026-11-20",
+    version: "2026-11-20.3",
+    items: [
+      "<b>Übungsdienste:</b> Übungen ohne BKS-Bericht lassen sich jetzt erfassen (Knopf „Übung erfassen“): Datum, Thema, Beginn und Ende (auch über mehrere Tage), optional Kategorie, Ort, Ausbilder/in und Notizen. Die Teilnehmer übernimmst du per Klick aus dem Personenstamm. Unter Personal → Übungen siehst du die Teilnahmen je Person. Neue Rolle „Ausbilder/in“ nur für Übungen. Der Excel-Export enthält ein eigenes Blatt „Übungen“. <b>Übungen zählen in keiner Auswertung.</b>",
+    ],
+  },
+  {
     date: "2026-11-20",
     version: "2026-11-20.2",
     items: [

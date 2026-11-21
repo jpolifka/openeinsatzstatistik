@@ -8,8 +8,8 @@ from typing import Optional
 from fastapi import Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
-from app import excel_export, excel_report, metrics, store, tenancy, tenant_config
-from app.rbac import EXPORT, INCIDENTS, PEOPLE, STATS
+from app import excel_export, excel_report, metrics, store, tenancy, tenant_config, trainings
+from app.rbac import EXPORT, INCIDENTS, PEOPLE, STATS, TRAININGS
 
 from fastapi import APIRouter
 from app.api.common import PLAN_KEYS, XLSX, access, filtered, latest_year, names_for, plan_visible, without_plan
@@ -61,9 +61,11 @@ def api_export(year: Optional[int] = None, a: tenancy.Access = Depends(access)):
         with tenant.connection() as con:
             incidents = names_for(tenant, store.load_incidents(con, year=year))
             members = store.members_of_year(con, year) if tenant.can(PEOPLE) else None
+            sessions = trainings.load(con, year=year) if tenant.can(TRAININGS) else None
         if not incidents:
             raise HTTPException(404, "Keine Einsätze für den Export.")
-        return _xlsx(lambda target: excel_export.write_workbook(incidents, members, year, target, tenant.config),
+        return _xlsx(lambda target: excel_export.write_workbook(incidents, members, year, target, tenant.config,
+                                                                sessions),
                      f"Einsaetze_{tenant.slug}_{year}")
     limit = tenants[0].config.default_limit
     parts, rows, total, notes = _summary(tenants, year, limit)
