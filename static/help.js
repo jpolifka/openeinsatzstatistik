@@ -420,7 +420,7 @@ const HELP_SECTIONS = [
   {
     id: "sec_training",
     title: "Übungsdienste",
-    intro: "Übungen ohne BKS-Bericht: Datum, Thema, Zeitraum und Teilnehmer. Erfassen über den Knopf <b>Übung erfassen</b> oben neben „Bericht einlesen“; Übersicht, Teilnahmen je Person und Liste der Übungen unter Personal → Übungen. <b>Übungen fließen in keine Auswertung, keinen Einsatz-Export der Statistik und keine Gesamtansicht der Verbandsgemeinde ein.</b>",
+    intro: "Übungen ohne BKS-Bericht: Datum, Thema, Zeitraum und Teilnehmer. Erfassen über den Knopf <b>Übung erfassen</b> oben neben „Bericht einlesen“; die Liste der Übungen (aufklappen, bearbeiten) steht unter Einsätze → Übungen, die Teilnahme je Person unter Personal → Übungen. <b>Übungen fließen in keine Auswertung, keinen Einsatz-Export der Statistik und keine Gesamtansicht der Verbandsgemeinde ein.</b>",
     entries: {
       training_time: {
         title: "Beginn und Ende",

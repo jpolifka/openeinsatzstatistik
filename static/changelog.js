@@ -8,7 +8,7 @@ const CHANGELOG = [
   {
     date: "2026-11-21",
     items: [
-      "<b>Übungen übersichtlicher:</b> „Übung erfassen“ steht jetzt als eigener Knopf oben neben „Bericht einlesen“. Unter Personal → Übungen zeigen Kennzahlen, ein Balken je Person und aufklappbare Zeilen (Übungen der Person, Teilnehmer je Übung) die Beteiligung auf einen Blick. Den Übungsleiter schlägt die App beim Tippen aus dem Personenstamm vor.",
+      "<b>Übungen übersichtlicher:</b> „Übung erfassen“ steht jetzt als eigener Knopf oben neben „Bericht einlesen“. Die Übungen stehen wie die Einsätze in einer aufklappbaren Liste (Einsätze → Übungen, mit Balken für die Teilnehmerzahl und Bearbeiten); Personal → Übungen zeigt die Teilnahme je Person, ebenfalls aufklappbar. Den Übungsleiter schlägt die App beim Tippen aus dem Personenstamm vor.",
       "<b>Personenstamm in den Einstellungen:</b> Einstellungen → Personen (für die Wehrführung): Personen anlegen, Schreibweisen korrigieren, Doppelte wie „Rott, Michael“ und „Röttgen, Michael“ zusammenführen, Ausgetretene kennzeichnen und bei einem Wechsel in eine andere Wehr der Verbandsgemeinde übergeben. Ähnliche Einträge werden markiert, so zeigt die Liste auch, ob alle Namen richtig erkannt wurden.",
     ],
   },
