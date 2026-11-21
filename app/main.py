@@ -23,7 +23,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app import admin, importing, auth, db, dpa, feedback, import_queue, legal, mail, legacy, rbac, tenancy, theme
+from app import admin, importing, auth, db, checkin, dpa, feedback, import_queue, legal, mail, legacy, rbac, tenancy, theme
 from app.rbac import STATS
 from app.request_limits import UPLOAD_ROUTES, RequestSizeLimit
 from app.incident_schema import FORM_FIELDS
@@ -37,7 +37,7 @@ log = logging.getLogger("openeinsatzstatistik")
 
 class _MaskLoginToken(logging.Filter):
     """Der Anmeldelink steht als Query-Parameter in der Adresse; im Zugriffslog darf er nicht lesbar sein."""
-    TOKEN = re.compile(r"(token=)[^&\s\"]+")
+    TOKEN = re.compile(r"(token=|/checkin/)[^&\s\"?]+")
 
     def filter(self, record):
         if isinstance(record.args, tuple):
@@ -99,6 +99,7 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 app.include_router(auth.router)
 app.include_router(admin.router)
 app.include_router(dpa.router)
+app.include_router(checkin.router)
 app.include_router(feedback.router)
 app.include_router(legal.router)
 for _module in (evaluation, incidents, reports, records, export, training_api):
@@ -112,7 +113,7 @@ PUBLIC_PATHS = ("/health", "/login", "/logout", "/impressum", "/datenschutz", "/
 async def require_login(request: Request, call_next):
     """Anmeldung per Magic Link, wenn ADMIN_EMAILS gesetzt ist (siehe auth.py)."""
     path = request.scope["path"]
-    public = path in PUBLIC_PATHS or path.startswith(("/auth/", "/static/"))
+    public = path in PUBLIC_PATHS or path.startswith(("/auth/", "/static/", checkin.PATH))
     if auth.enabled() and not public and not auth.current_user(request):
         # Direkt im Browser geöffnete API-Adressen (z. B. Export) auch zur Anmeldeseite
         if path.startswith("/api/") and "text/html" not in request.headers.get("accept", ""):

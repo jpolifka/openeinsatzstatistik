@@ -125,6 +125,18 @@
     <div class="dialog-body" id="training-form-body"></div>
   </dialog>
 
+  <!-- QR-Code zur Anmeldung ohne Benutzerkonto (trainings.js) -->
+  <dialog id="checkin-dialog" class="dialog" aria-labelledby="checkin-title">
+    <div class="dialog-header">
+      <div>
+        <h2 id="checkin-title">QR-Code zur Anmeldung</h2>
+        <p class="muted">Wer ihn scannt, trägt nur seinen Namen ein und ist für die Übung des Tages angemeldet. Der Code verfällt nicht.</p>
+      </div>
+      <button type="button" class="btn-close" data-close="checkin-dialog" aria-label="Schließen"></button>
+    </div>
+    <div class="dialog-body" id="checkin-body"></div>
+  </dialog>
+
   <!-- Bericht einlesen (PDF oder Excel-Export) -->
   <dialog id="pdf-dialog" class="dialog" aria-labelledby="pdf-title">
     <div class="dialog-header">

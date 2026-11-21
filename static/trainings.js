@@ -153,7 +153,8 @@ function renderTrainings() {
     ${open(t.id) ? `<tr class="detail"><td colspan="8">${trainingDetailHtml(t)}</td></tr>` : ""}`;
   $("#view-trainings").innerHTML = `<div class="card list-card members-table">
     <div class="toolbar"><div><h3>Übungen ${state.year}</h3>
-      <p class="muted small">${plural(s.count, "Übung", "Übungen")} · ${formatHours(s.minutes)} Übungszeit · Zeile aufklappen zeigt Teilnehmer und Notizen · Nicht Teil der Einsatzstatistik${can("trainings.edit") ? " · Neue Übung: „Übung erfassen“ oben" : ""}</p></div></div>
+      <p class="muted small">${plural(s.count, "Übung", "Übungen")} · ${formatHours(s.minutes)} Übungszeit · Zeile aufklappen zeigt Teilnehmer und Notizen · Nicht Teil der Einsatzstatistik${can("trainings.edit") ? " · Neue Übung: „Übung erfassen“ oben" : ""}</p></div>
+      ${can("trainings.edit") ? `<button type="button" class="btn btn-light btn-small" data-tr-action="qr">QR-Code zur Anmeldung</button>` : ""}</div>
     <div class="table-wrap"><table class="table"><thead><tr><th>Datum</th><th class="hide-mobile">Zeit</th><th>Thema</th>
       <th class="hide-mobile">Kategorie</th><th class="hide-mobile">Ort</th><th class="right hide-mobile">Dauer</th><th>Teilnehmer</th><th class="col-toggle"><span class="visually-hidden">Details anzeigen</span></th></tr></thead>
       <tbody>${trainings.map(row).join("")}</tbody></table></div>
@@ -203,6 +204,36 @@ async function openTrainingForm(makeDraft, editing) {
   renderTrainingDialog();
   if (!trainingDialog().open) trainingDialog().showModal();
   $("#tr-topic")?.focus();
+}
+
+// ------------------------------------------------------------ QR-Code zur Anmeldung (ohne Benutzerkonto)
+const checkinDialog = () => $("#checkin-dialog");
+
+async function renderCheckin() {
+  const { url } = await api("/api/trainings/checkin");
+  $("#checkin-body").innerHTML = `<div class="checkin-print">
+      <img src="/api/trainings/checkin.svg?v=${Date.now()}" alt="QR-Code zur Anmeldung zum Übungsdienst" width="280" height="280">
+      <p class="small"><a href="${esc(url)}" target="_blank" rel="noopener">${esc(url)}</a></p></div>
+    <div class="form-actions">
+      <button type="button" class="btn btn-outline" data-checkin="rotate">Neuen Code erzeugen</button>
+      <button type="button" class="btn btn-primary" data-checkin="print">Drucken</button></div>
+    <p class="muted small">Ohne bestehende Übung am Tag legt die erste Anmeldung „Übung TT.MM.JJJJ“ an – bitte danach unter Einsätze → Übungen bearbeiten. „Neuen Code erzeugen“ macht ausgehängte Codes ungültig.</p>`;
+}
+
+async function openCheckin() {
+  try { await renderCheckin(); } catch (e) { toast(e.message); return; }
+  if (!checkinDialog().open) checkinDialog().showModal();
+}
+
+async function checkinClick(e) {
+  const button = e.target.closest("[data-checkin]");
+  if (!button) return;
+  if (button.dataset.checkin === "print") {
+    document.body.classList.add("print-checkin"); window.print(); document.body.classList.remove("print-checkin"); return;
+  }
+  if (!confirm("Neuen Code erzeugen? Bereits ausgehängte QR-Codes funktionieren danach nicht mehr.")) return;
+  try { await apiJson("/api/trainings/checkin/rotate", "POST", {}); await renderCheckin(); toast("Neuer Code erzeugt."); }
+  catch (err) { toast(err.message); }
 }
 
 const closeTrainingForm = () => { if (trainingDialog().open) trainingDialog().close(); };
@@ -311,6 +342,7 @@ async function trainingClick(e) {
   switch (button.dataset.trAction) {
     case "edit": openTrainingForm(() => draftFromTraining(trainingState.data.trainings.find((t) => t.id === Number(button.dataset.id))), Number(button.dataset.id)); break;
     case "delete": deleteTraining(Number(button.dataset.id)); break;
+    case "qr": await openCheckin(); break;
     case "cancel": closeTrainingForm(); break;
     case "save": await saveTraining(); break;
     case "all": for (const m of trainingState.data.members) if (m.active) d.memberIds.add(m.id); refreshTrainingPeople(); break;
@@ -331,6 +363,7 @@ for (const view of [$("#view-trainings"), $("#view-training_members")]) view.add
   if (row && e.target === row && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); row.click(); }
 });
 trainingDialog().addEventListener("click", trainingClick);
+checkinDialog().addEventListener("click", checkinClick);
 trainingDialog().addEventListener("close", () => { trainingState.editing = trainingState.draft = null; });
 trainingDialog().addEventListener("input", (e) => {
   if (e.target.dataset.tr) updateDraftField(e.target);

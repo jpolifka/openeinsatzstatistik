@@ -3,10 +3,11 @@
 Rechte: TRAININGS (sehen), TRAININGS_EDIT (ändern); immer nur die ausgewählte Wehr."""
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+import segno
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
-from app import tenancy, trainings
+from app import checkin, tenancy, trainings
 from app.api.common import access
 from app.rbac import TRAININGS, TRAININGS_EDIT
 
@@ -55,6 +56,27 @@ def api_trainings(year: Optional[int] = None, a: tenancy.Access = Depends(access
         rows = trainings.load(con, year=year)
         return {"year": year, "years": years, "trainings": rows, "summary": trainings.summary(rows),
                 "members": trainings.directory(con)}
+
+
+@router.get("/api/trainings/checkin")
+def api_checkin_link(request: Request, a: tenancy.Access = Depends(access)):
+    """Link des QR-Codes zur Anmeldung ohne Benutzerkonto."""
+    return {"url": checkin.link_for(a.current(TRAININGS_EDIT), str(request.base_url))}
+
+
+@router.get("/api/trainings/checkin.svg")
+def api_checkin_qr(request: Request, a: tenancy.Access = Depends(access)):
+    link = checkin.link_for(a.current(TRAININGS_EDIT), str(request.base_url))
+    svg = segno.make(link, error="m", micro=False).svg_inline(scale=8, border=2, dark="#000", light="#fff")
+    return Response(svg, media_type="image/svg+xml", headers={"Cache-Control": "no-store"})
+
+
+@router.post("/api/trainings/checkin/rotate")
+def api_checkin_rotate(request: Request, a: tenancy.Access = Depends(access)):
+    """Neuen Code erzeugen: bisherige Aushänge werden ungültig."""
+    tenant = a.current(TRAININGS_EDIT)
+    checkin.rotate(tenant)
+    return {"url": checkin.link_for(tenant, str(request.base_url))}
 
 
 @router.post("/api/trainings")

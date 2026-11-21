@@ -5,6 +5,7 @@ Eigene Tabellen (training, training_attendance), nie in incident: Übungen flie�
 Excel-Export der Einsätze und keine VG-Gesamtansicht ein. Gemeinsam ist nur der Personenstamm (member).
 """
 import datetime as dt
+import threading
 
 from app import names, store
 from app.timeutil import normalize_iso, parse_iso
@@ -76,6 +77,36 @@ def create(con, fields, member_ids=(), new_members=()):
         "VALUES (:year, :started_at, :ended_at, :topic, :trainer, :place, :category, :notes)", clean).lastrowid
     _set_participants(con, training_id, ids)
     return training_id
+
+
+_checkin_lock = threading.Lock()      # nur ein Worker: verhindert zwei Übungen bei gleichzeitigen ersten Anmeldungen
+
+
+def check_in(con, last_name, first_name, now):
+    """Anmeldung einer Person zur Übung des Tages (QR-Code, ohne Benutzerkonto).
+
+    Gibt es für den Tag noch keine Übung, entsteht „Übung TT.MM.JJJJ“ mit Platzhalterzeit 19–21 Uhr; sie muss von
+    der Übungsleitung bearbeitet werden. Mehrfaches Anmelden ist unschädlich. Rückgabe: (Übungs-ID, neu angelegt)."""
+    last, first = " ".join((last_name or "").split()), " ".join((first_name or "").split())
+    if not last:
+        raise ValueError("Bitte den Nachnamen angeben.")
+    if len(last) > 60 or len(first) > 60:
+        raise ValueError("Der Name ist zu lang.")
+    day = now.date().isoformat()
+    with _checkin_lock:
+        row = con.execute("SELECT id FROM training WHERE started_at LIKE ? ORDER BY started_at, id LIMIT 1",
+                          (day + "%",)).fetchone()
+        created = row is None
+        training_id = row["id"] if row else create(con, {
+            "topic": f"Übung {now:%d.%m.%Y}", "started_at": f"{day}T19:00", "ended_at": f"{day}T21:00"})
+        member_id = store.MemberDirectory(con).find_or_create(last, first)
+        con.execute("UPDATE member SET active = 1 WHERE id = ?", (member_id,))
+        added = con.execute("INSERT OR IGNORE INTO training_attendance (training_id, member_id) VALUES (?, ?)",
+                            (training_id, member_id)).rowcount
+        if added:       # eine gerade geöffnete Bearbeitung bemerkt die neue Teilnahme (409) statt sie zu überschreiben
+            con.execute("UPDATE training SET revision = revision + 1, modified = datetime('now', 'localtime') "
+                        "WHERE id = ?", (training_id,))
+    return training_id, created
 
 
 def update(con, training_id, fields, revision, member_ids=(), new_members=()):

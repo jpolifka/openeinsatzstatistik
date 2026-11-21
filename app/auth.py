@@ -281,6 +281,22 @@ def _use_code(email, code):
 
 
 # ---------------------------------------------------------------- Mailversand
+def _on_host(host):
+    """BASE_URL mit anderem Host (Schema und Port bleiben)."""
+    base = urlsplit(BASE_URL)
+    return f"{base.scheme}://{host}" + (f":{base.port}" if base.port else "")
+
+
+def vg_base(vg_id):
+    """Basisadresse einer VG aus der Konfiguration: <Subdomain>.BASE_DOMAIN, sonst BASE_URL (leer ohne BASE_URL).
+    Nie aus dem Host einer Anfrage."""
+    if not (BASE_URL and BASE_DOMAIN):
+        return BASE_URL
+    with tenancy.central() as con:
+        row = con.execute("SELECT subdomain FROM vg WHERE id = ?", (vg_id,)).fetchone()
+    return _on_host(f"{row['subdomain']}.{BASE_DOMAIN}") if row and row["subdomain"] else BASE_URL
+
+
 def link_base(email, host=None):
     """Basisadresse für den Anmeldelink: der Host einer VG der Person (<Subdomain>.BASE_DOMAIN) – bevorzugt der,
     unter dem die Anmeldung angefordert wurde (exakter Vergleich), sonst der der ältesten Zuordnung –, sonst
@@ -293,8 +309,7 @@ def link_base(email, host=None):
     asked = (host or "").strip().lower()
     asked = asked.rsplit(":", 1)[0] if ":" in asked and not asked.endswith("]") else asked
     chosen = asked if asked in hosts else hosts[0]
-    base = urlsplit(BASE_URL)
-    return f"{base.scheme}://{chosen}" + (f":{base.port}" if base.port else "")
+    return _on_host(chosen)
 
 
 def send_link(email, host=None):

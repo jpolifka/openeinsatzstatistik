@@ -432,6 +432,11 @@ const HELP_SECTIONS = [
         short: "Per Klick aus dem Personenstamm übernehmen; neue Personen eingeben.",
         text: "Ein Klick auf eine Person schaltet die Teilnahme um; „Alle übernehmen“ wählt alle aktiven Personen aus. Eine neue Person (Nachname, Vorname) wird beim Speichern in den Personenstamm übernommen – gibt es sie schon, wird die vorhandene verwendet. Ausgeschiedene Personen lassen sich im Reiter Personal → Übungen kennzeichnen; sie erscheinen dann nicht mehr in der Auswahl, ihre Daten bleiben erhalten.",
       },
+      training_qr: {
+        title: "QR-Code zur Anmeldung",
+        short: "Wehrmitglieder melden sich per QR-Code ohne Benutzerkonto zur Übung des Tages an.",
+        text: "Unter Einsätze → Übungen zeigt „QR-Code zur Anmeldung“ einen Code zum Ausdrucken und Aushängen. Wer ihn scannt, gibt nur Vor- und Nachnamen ein und wird für die Übung des heutigen Tages eingetragen; unbekannte Namen werden im Personenstamm angelegt (Tippfehler lassen sich unter Einstellungen → Personen zusammenführen). Gibt es für den Tag noch keine Übung, legt die erste Anmeldung „Übung TT.MM.JJJJ“ mit der Platzhalterzeit 19–21 Uhr an – bitte danach bearbeiten. Der Code verfällt nicht; „Neuen Code erzeugen“ macht ausgehängte Codes ungültig. Dafür ist das Recht „Übungen erfassen und ändern“ nötig.",
+      },
       training_optional: {
         title: "Kategorie, Ort, Ausbilder/in, Notizen",
         short: "Freiwillige Angaben.",
