@@ -3,6 +3,7 @@ import datetime as dt
 import decimal
 import json
 import multiprocessing
+import os
 import sys
 import threading
 
@@ -65,8 +66,18 @@ def decode(value):
     raise ValueError("Unbekanntes Leseergebnis.")
 
 
+# Nur diese Umgebungsvariablen bleiben im Leseprozess; Geheimnisse (SECRET_KEY, SMTP_*, DKIM_* …) gehören dort nicht hin
+_KEEP_ENV = ("PATH", "LANG", "LC_ALL", "TMPDIR", "PYTHONHASHSEED")
+
+
+def _scrub_environment():
+    for name in [n for n in os.environ if n not in _KEEP_ENV]:
+        del os.environ[name]
+
+
 def _child(connection, kind, path):
     try:
+        _scrub_environment()
         if sys.platform.startswith("linux"):
             import resource
             resource.setrlimit(resource.RLIMIT_AS, (ADDRESS_SPACE,) * 2)
