@@ -361,14 +361,11 @@ async function runAdminAction(button) {
       admin.personEdit = null;
       return rerender();
     case "person-save": {
-      const e = admin.personEdit;
-      return peopleChanged(await apiJson(peopleUrl(`/${e.id}`), "PUT", { last_name: $("#person-edit-last").value,
-        first_name: $("#person-edit-first").value, active: e.active }), "Person gespeichert");
-    }
-    case "person-active": {
-      const m = admin.people.members.find((x) => x.id === Number(button.dataset.id));
-      return peopleChanged(await apiJson(peopleUrl(`/${m.id}`), "PUT", { last_name: m.last_name, first_name: m.first_name,
-        active: !m.active }), m.active ? "Als ausgeschieden gekennzeichnet" : "Wieder aktiv");
+      const e = admin.personEdit, to = $("#person-edit-tenant").value;
+      let result = await apiJson(peopleUrl(`/${e.id}`), "PUT", { last_name: $("#person-edit-last").value,
+        first_name: $("#person-edit-first").value, active: !$("#person-edit-left").checked });
+      if (to) result = await apiJson(peopleUrl(`/${e.id}/transfer`), "POST", { to_slug: to });
+      return peopleChanged(result, to ? "Person ist in die andere Wehr gewechselt" : "Person gespeichert");
     }
     case "person-merge": {
       const m = admin.people.members.find((x) => x.id === Number(button.dataset.id));
@@ -378,17 +375,6 @@ async function runAdminAction(button) {
         options, confirm: "Zusammenführen", danger: true });
       if (!into) return;
       return peopleChanged(await apiJson(peopleUrl(`/${m.id}/merge`), "POST", { into: Number(into) }), "Personen zusammengeführt");
-    }
-    case "person-transfer": {
-      const m = admin.people.members.find((x) => x.id === Number(button.dataset.id));
-      const own = admin.overview.tenants.find((t) => t.slug === admin.slug);
-      const options = admin.overview.tenants.filter((t) => t.vg_slug === own.vg_slug && t.slug !== own.slug
-        && t.permissions.includes("tenant.settings")).map((t) => ({ value: t.slug, label: t.name }));
-      if (!options.length) { toast("Es gibt keine andere Wehr in dieser Verbandsgemeinde, für die du Personen pflegen darfst."); return; }
-      const to = await askAdminChoice({ title: `${m.name} wechselt die Wehr`, label: "Neue Wehr", options, confirm: "Wechseln",
-        text: `Die Person wird in der neuen Wehr angelegt und hier als ausgeschieden gekennzeichnet. Bisherige Einsätze und Übungen bleiben hier erhalten.` });
-      if (!to) return;
-      return peopleChanged(await apiJson(peopleUrl(`/${m.id}/transfer`), "POST", { to_slug: to }), "Person ist gewechselt");
     }
     case "person-delete": {
       const m = admin.people.members.find((x) => x.id === Number(button.dataset.id));

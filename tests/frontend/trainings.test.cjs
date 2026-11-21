@@ -43,6 +43,7 @@ test("Übersicht: Balken für die Häufigkeit, Zeilen klappen auf", () => {
   assert.match(html, /class="track"/);                                   // Balken
   assert.match(html, /data-tr-person="1"[^>]*aria-expanded="true"/);     // aufgeklappt
   assert.match(html, /Knoten/);                                           // Detailzeile der Person
+  assert.match(html, /data-tr-open="5"/);                                 // Übung in der Detailzeile ist ein Link
   assert.match(html, /data-tr-training="5"[^>]*aria-expanded="false"/);
 });
 

@@ -969,43 +969,51 @@ function sessionsSection() {
 }
 
 // ------------------------------------------------------------ Personen
-// Personenstamm der Wehr: zugleich der Abgleich der eingelesenen Namen (Dubletten, Schreibvarianten, Wehrwechsel)
+// Personenstamm der Wehr: zugleich der Abgleich der eingelesenen Namen. Keine Statistik, je Person ein „Bearbeiten“.
+function personEditHtml(m) {
+  const own = admin.overview.tenants.find((t) => t.slug === admin.slug);
+  const others = admin.overview.tenants.filter((t) => t.vg_slug === own?.vg_slug && t.slug !== admin.slug && t.permissions.includes("tenant.settings"));
+  return `<tr class="person-edit-row"><td colspan="2"><div class="person-form">
+    <div class="toolbar-inline">
+      <label class="field"><span>Nachname</span><input type="text" id="person-edit-last" value="${esc(admin.personEdit.last_name)}" maxlength="60"></label>
+      <label class="field"><span>Vorname</span><input type="text" id="person-edit-first" value="${esc(admin.personEdit.first_name)}" maxlength="60"></label>
+      ${others.length ? `<label class="field"><span>Wehr</span><select id="person-edit-tenant"><option value="">bleibt in ${esc(own.name)}</option>
+        ${others.map((t) => `<option value="${esc(t.slug)}">wechselt nach ${esc(t.name)}</option>`).join("")}</select></label>`
+        : `<input type="hidden" id="person-edit-tenant" value="">`}</div>
+    <label class="toggle"><input type="checkbox" id="person-edit-left" ${admin.personEdit.active ? "" : "checked"}> ausgetreten (erscheint nicht mehr in der Auswahl bei Übungen)</label>
+    <div class="admin-actions left">
+      <button type="button" class="btn btn-primary btn-small" data-admin-action="person-save">Speichern</button>
+      <button type="button" class="btn btn-outline btn-small" data-admin-action="person-cancel">Abbrechen</button>
+      <button type="button" class="btn btn-light btn-small" data-admin-action="person-merge" data-id="${m.id}">Doppelten Eintrag zusammenführen …</button>
+      ${m.incidents || m.trainings ? "" : `<button type="button" class="btn btn-outline btn-small" data-admin-action="person-delete" data-id="${m.id}">Löschen</button>`}</div>
+    </div></td></tr>`;
+}
+
 function personListHtml() {
   const { members } = admin.people, query = fold(admin.personQuery.trim());
   const list = members.filter((m) => (admin.personInactive || m.active || admin.personEdit?.id === m.id)
     && (!admin.personFlagged || m.similar.length)
     && (!query || fold(m.name).includes(query)));
-  const editing = (m) => admin.personEdit?.id === m.id;
-  const row = (m) => editing(m) ? `<tr class="current"><td colspan="2"><div class="toolbar-inline">
-      <input type="text" id="person-edit-last" value="${esc(admin.personEdit.last_name)}" maxlength="60" aria-label="Nachname">
-      <input type="text" id="person-edit-first" value="${esc(admin.personEdit.first_name)}" maxlength="60" aria-label="Vorname"></div></td>
-      <td colspan="3" class="right"><button type="button" class="btn btn-outline btn-small" data-admin-action="person-cancel">Abbrechen</button>
-        <button type="button" class="btn btn-primary btn-small" data-admin-action="person-save">Speichern</button></td></tr>`
-    : `<tr class="${m.active ? "" : "inactive"}"><td><b>${esc(m.name)}</b>${m.active ? "" : ` <span class="tenant-badge">ausgeschieden</span>`}
+  const row = (m) => admin.personEdit?.id === m.id ? personEditHtml(m)
+    : `<tr class="${m.active ? "" : "inactive"}"><td><b>${esc(m.name)}</b>${m.active ? "" : ` <span class="tenant-badge">ausgetreten</span>`}
       ${m.similar.length ? `<div class="small warn-text">Ähnlich: ${m.similar.map((x) => esc(x.name)).join(" · ")}</div>` : ""}</td>
-      <td class="right">${m.incidents || "–"}</td><td class="right">${m.trainings || "–"}</td><td class="right">${m.last ? formatDate(m.last) : "–"}</td>
-      <td><div class="person-actions"><button type="button" class="btn btn-light btn-small" data-admin-action="person-edit" data-id="${m.id}">Bearbeiten</button>
-        <button type="button" class="btn btn-light btn-small" data-admin-action="person-active" data-id="${m.id}">${m.active ? "Ausgeschieden" : "Wieder aktiv"}</button>
-        <button type="button" class="btn btn-light btn-small" data-admin-action="person-merge" data-id="${m.id}">Zusammenführen</button>
-        <button type="button" class="btn btn-light btn-small" data-admin-action="person-transfer" data-id="${m.id}">Wehr wechseln</button>
-        ${m.incidents || m.trainings ? "" : `<button type="button" class="btn btn-outline btn-small" data-admin-action="person-delete" data-id="${m.id}">Löschen</button>`}</div></td></tr>`;
-  return `<table class="mini-table admin-table"><thead><tr><th>Name</th><th class="right">Einsätze</th><th class="right">Übungen</th><th class="right">Zuletzt</th><th></th></tr></thead>
-    <tbody>${list.map(row).join("") || `<tr><td colspan="5" class="muted">Keine Person gefunden.</td></tr>`}</tbody></table>`;
+      <td class="right"><button type="button" class="btn btn-light btn-small" data-admin-action="person-edit" data-id="${m.id}">Bearbeiten</button></td></tr>`;
+  return `<table class="mini-table admin-table"><thead><tr><th>Name</th><th></th></tr></thead>
+    <tbody>${list.map(row).join("") || `<tr><td colspan="2" class="muted">Keine Person gefunden.</td></tr>`}</tbody></table>`;
 }
 
 function peopleSection() {
   const { members } = admin.people;
-  const flagged = members.filter((m) => m.similar.length).length, inactive = members.filter((m) => !m.active).length;
+  const flagged = members.filter((m) => m.similar.length).length, left = members.filter((m) => !m.active).length;
   return `<h3>Personenstamm</h3>
     <p class="small muted">${plural(members.length, "Person", "Personen")}. Beim Einlesen eines Berichts werden die Namen mit dieser Liste abgeglichen; wen es noch nicht gibt, wird neu angelegt.
-    Hier pflegst du die Liste: Personen anlegen, Schreibweisen korrigieren, Doppelte zusammenführen und bei einem Wechsel in eine andere Wehr der Verbandsgemeinde übergeben.
-    Ausgeschiedene Personen erscheinen nicht mehr in der Auswahl bei Übungen; ihre Einsätze und Teilnahmen bleiben erhalten.</p>
+    Mit „Bearbeiten“ korrigierst du den Namen, übergibst die Person an eine andere Wehr der Verbandsgemeinde oder markierst sie als ausgetreten. Einsätze und Übungen bleiben erhalten.</p>
     <div class="toolbar-inline new-person">
       <input type="text" id="person-last" placeholder="Nachname" maxlength="60" aria-label="Nachname der neuen Person">
       <input type="text" id="person-first" placeholder="Vorname" maxlength="60" aria-label="Vorname der neuen Person">
       <button type="button" class="btn btn-primary btn-small" data-admin-action="person-add">Person anlegen</button></div>
     <div class="admin-status section-gap"><input type="search" class="search" data-person-search value="${esc(admin.personQuery)}" placeholder="Person suchen" aria-label="Person suchen">
       <label class="toggle"><input type="checkbox" data-person-flagged ${admin.personFlagged ? "checked" : ""}> nur mit ähnlichem Eintrag (${flagged})</label>
-      <label class="toggle"><input type="checkbox" data-person-inactive ${admin.personInactive ? "checked" : ""}> Ausgeschiedene zeigen (${inactive})</label></div>
+      <label class="toggle"><input type="checkbox" data-person-inactive ${admin.personInactive ? "checked" : ""}> Ausgetretene zeigen (${left})</label></div>
     <div class="table-wrap" id="person-list">${personListHtml()}</div>`;
 }
