@@ -519,6 +519,13 @@ async function runAdminAction(button) {
       admin.superOverview = await apiJson("/api/super/tenants", "POST", {
         name: $("#tenant-name").value, vg: $("#tenant-vg").value, email: $("#tenant-email").value || null });
       return superChanged("Wehr angelegt");
+    case "delete-vg": {
+      const name = admin.superOverview.vgs.find((v) => v.slug === slug)?.name || slug;
+      if (!await askConfirm({ title: `VG „${name}“ löschen?`, danger: true, confirm: "Löschen",
+        text: "Zuordnungen, Rollen, Vorgaben und Gebührenordnungen der VG werden gelöscht. Das lässt sich nicht rückgängig machen." })) return;
+      admin.superOverview = await api(`/api/super/vgs/${slug}?confirm=${encodeURIComponent(slug)}`, { method: "DELETE" });
+      return superChanged("VG gelöscht");
+    }
     case "delete-tenant": {
       const name = admin.superOverview.tenants.find((t) => t.slug === slug)?.name || slug;
       if (!await askConfirm({ title: `Wehr „${name}“ archivieren?`, danger: true, confirm: "Archivieren",

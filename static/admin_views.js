@@ -913,6 +913,9 @@ function superDetail(vg) {
       ${access.map((m) => `<tr><td>${esc(m.email)}</td><td>${esc(m.name)}</td><td>${esc(m.label)}</td></tr>`).join("")
         || `<tr><td colspan="3" class="muted">Keine Zuordnungen.</td></tr>`}
     </tbody></table></div>
+    <h3 class="section-gap">VG löschen</h3>
+    ${mine.length ? `<p class="small muted">Eine VG lässt sich erst löschen, wenn sie keine Wehren mehr hat (Wehren archivieren oder verschieben).</p>`
+      : `<div class="admin-actions left"><button type="button" class="btn btn-outline" data-admin-action="delete-vg" data-slug="${esc(vg.slug)}">VG löschen</button></div>`}
     <p class="small muted">Rollen vergeben und entziehen unter <button type="button" class="btn-link" data-admin-section="users">Benutzer</button>.
     Archivierte Wehren werden nicht gelöscht, sondern im Datenordner unter <code>deleted/</code> abgelegt.</p>`;
 }

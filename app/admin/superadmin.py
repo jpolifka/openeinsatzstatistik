@@ -80,6 +80,29 @@ def rename_vg(slug: str, v: VgIn, a: tenancy.Access = Depends(access)):
     return super_overview(a)
 
 
+@router.delete("/api/super/vgs/{slug}")
+def delete_vg(slug: str, confirm: str = "", a: tenancy.Access = Depends(access)):
+    """Leere VG entfernen (ohne Wehren): Zuordnungen, eigene Rollen, Vorgaben und Gebührenordnungen der VG
+    werden gelöscht; das Protokoll und hochgeladene AVV-Dateien bleiben erhalten."""
+    _superadmin(a)
+    if confirm != slug:
+        _invalid("Zum Bestätigen den Kurznamen der VG eintippen.")
+    with tenancy.central() as con:
+        row = con.execute("SELECT id, name FROM vg WHERE slug = ?", (slug,)).fetchone()
+        if not row:
+            raise HTTPException(404, "Verbandsgemeinde nicht gefunden.")
+        if con.execute("SELECT 1 FROM tenant WHERE vg_id = ?", (row["id"],)).fetchone():
+            _invalid("Die VG hat noch Wehren. Zuerst alle Wehren archivieren oder in eine andere VG verschieben.")
+        con.execute("DELETE FROM membership WHERE (scope = 'vg' AND scope_id = ?) "
+                    "OR role_id IN (SELECT id FROM role WHERE vg_id = ?)", (row["id"], row["id"]))
+        con.execute("DELETE FROM account WHERE NOT EXISTS (SELECT 1 FROM membership m WHERE m.email = account.email)")
+        rbac.log(con, a.email, "VG gelöscht", row["name"], row["id"])
+        con.execute("DELETE FROM vg WHERE id = ?", (row["id"],))
+    tenancy.forget_vg_config(row["id"])
+    log.warning("VG %s gelöscht durch %s", slug, a.email or "lokal")
+    return super_overview(a)
+
+
 class TenantIn(BaseModel):
     slug: str = ""                   # leer = <vg>-<wehr>-<lfd>; die Oberfläche schickt nie einen
     name: str = Field(min_length=2, max_length=80)

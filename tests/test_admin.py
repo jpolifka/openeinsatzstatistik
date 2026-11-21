@@ -391,3 +391,17 @@ def test_settings_do_not_overwrite_newer_fleet(world):
     fresh = _settings(world)
     assert "02/99" in [v["call_sign"] for v in fresh["fleet"]]
     assert world.put("/api/admin/wehr-a1/settings", json=fresh).status_code == 200
+
+
+def test_delete_vg_only_when_empty(world):
+    """Eine VG lässt sich nur als Superadmin und nur ohne Wehren löschen; ihre Zuordnungen verschwinden mit."""
+    _as(world, "admin@example.org")
+    assert world.post("/api/super/vgs", json={"slug": "vg-leer", "name": "VG Leer"}).status_code == 200
+    _as(world, "vglead@example.org")
+    assert world.delete("/api/super/vgs/vg-a?confirm=vg-a").status_code == 403
+    _as(world, "admin@example.org")
+    assert world.delete("/api/super/vgs/vg-a?confirm=vg-a").status_code == 422      # hat Wehren
+    assert world.delete("/api/super/vgs/vg-leer").status_code == 422                # ohne Bestätigung
+    assert world.delete("/api/super/vgs/vg-leer?confirm=vg-leer").status_code == 200
+    assert "vg-leer" not in [v["slug"] for v in world.get("/api/super/overview").json()["vgs"]]
+    assert world.delete("/api/super/vgs/vg-leer?confirm=vg-leer").status_code == 404
