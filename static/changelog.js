@@ -7,6 +7,13 @@
 const CHANGELOG = [
   {
     date: "2026-11-21",
+    version: "2026-11-21.4",
+    items: [
+      "<b>Anmeldung zur Übung per QR-Code:</b> Unter Einsätze → Übungen gibt es einen QR-Code zum Aushängen. Wehrmitglieder tragen sich damit ohne Benutzerkonto nur mit ihrem Namen für die Übung des Tages ein. Gibt es noch keine Übung für den Tag, legt die erste Anmeldung „Übung TT.MM.JJJJ“ an – sie muss danach bearbeitet werden.",
+    ],
+  },
+  {
+    date: "2026-11-21",
     version: "2026-11-21.3",
     items: [
       "<b>Sicherer Anmeldelink:</b> Superadmins legen je Verbandsgemeinde eine Subdomain fest (Einstellungen → Wehren &amp; VGs). Anmeldelinks führen nur noch auf diese festgelegte Adresse (oder die Hauptadresse), nie auf eine Adresse aus der Anfrage. Eine Wehr lässt sich nicht mehr verschieben, solange Personen Rollen der bisherigen VG haben – diese Rollen müssen zuerst entzogen werden.",

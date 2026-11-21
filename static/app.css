@@ -874,3 +874,12 @@ a { color: var(--brand-dark); }
 .person-form { display: grid; gap: 10px; padding: 6px 0; }
 .person-form .toolbar-inline { align-items: flex-end; }
 .person-edit-row > td { background: var(--brand-pale); border-radius: 0; padding: 12px 14px; }
+
+/* QR-Code zur Anmeldung: nur der Dialog wird gedruckt */
+.checkin-print { text-align: center; }
+.checkin-print img { max-width: 100%; height: auto; }
+@media print {
+  body.print-checkin > *:not(#checkin-dialog) { display: none !important; }
+  body.print-checkin #checkin-dialog { position: static; border: 0; box-shadow: none; }
+  body.print-checkin #checkin-dialog .btn-close, body.print-checkin #checkin-dialog .form-actions, body.print-checkin #checkin-dialog .muted { display: none; }
+}

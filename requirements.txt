@@ -7,3 +7,4 @@ defusedxml==0.7.1      # openpyxl nutzt es automatisch: keine XML-Entity-Angriff
 dkimpy==1.1.8
 dnspython==2.9.2
 cryptography==50.0.2
+segno==1.6.6

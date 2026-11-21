@@ -30,6 +30,7 @@ SELECTED = {
     "/api/pending/{key}", "/api/records", "/api/records/review-all", "/api/records/{bks_record_id}/fees",
     "/api/records/{bks_record_id}/review", "/api/reports", "/api/reports/accept", "/api/reports/cancel",
     "/api/reports/jobs/{job}", "/api/scope", "/api/theme.css", "/api/trainings",
+    "/api/trainings/checkin", "/api/trainings/checkin.svg", "/api/trainings/checkin/rotate",
     "/api/trainings/{training_id}", "/api/years",
 }
 SUPER = {
