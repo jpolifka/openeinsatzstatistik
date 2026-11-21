@@ -160,6 +160,13 @@ def change_tenant(slug: str, t: TenantChange, confirm: str = "", a: tenancy.Acce
             if row["id"] != cur["vg_id"]:
                 if confirm != slug:
                     _invalid("Zum Verschieben den Kurznamen der Wehr bestätigen.")
+                foreign = con.execute(
+                    "SELECT m.email, r.label FROM membership m JOIN role r ON r.id = m.role_id "
+                    "WHERE m.scope = 'tenant' AND m.scope_id = ? AND r.vg_id IS NOT NULL AND r.vg_id <> ?",
+                    (cur["id"], row["id"])).fetchall()
+                if foreign:
+                    _invalid("Die Wehr hat Zuordnungen mit Rollen der bisherigen VG. Zuerst entziehen: "
+                             + "; ".join(f"{f['email']} ({f['label']})" for f in foreign[:10]))
                 con.execute("UPDATE tenant SET vg_id = ? WHERE slug = ?", (row["id"], slug))
                 rbac.log(con, a.email, "Wehr verschoben", f"{cur['name']} → {row['name']}", row["id"], cur["id"])
         if t.active is not None:

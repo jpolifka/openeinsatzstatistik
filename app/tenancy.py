@@ -680,6 +680,9 @@ def access_for(email, scope=None):
             "SELECT m.scope, m.scope_id, m.role_id, COALESCE(t.vg_id, m.scope_id) AS vg_id FROM membership m "
             "LEFT JOIN tenant t ON m.scope = 'tenant' AND t.id = m.scope_id WHERE m.email = ?",
             (email,)).fetchall() if email else []
+    # Rolle einer fremden VG (z. B. nach Verschiebung der Wehr) gewährt nichts
+    memberships = [m for m in memberships if (role := roles.get(m["role_id"])) is not None
+                   and (role.vg_id is None or role.vg_id == m["vg_id"])]
     permissions = {r["slug"]: rbac.allowed(rbac.ALL_PERMISSIONS, "tenant") if superadmin else set() for r in rows}
     vg_permissions = {}
     for m in memberships:
