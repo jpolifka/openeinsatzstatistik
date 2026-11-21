@@ -97,7 +97,6 @@ Code und `docker-compose.yml` enthalten keine Standardwerte. Ohne `.env` startet
 | `SECRET_KEY`   | nein        | Schlüssel für die Anmeldelinks. Leer = wird als `daten/session.key` erzeugt |
 | `APP_BIND`     | nein        | Host-Adresse der Portbindung, Standard `127.0.0.1`; `0.0.0.0` nur bei bewusst benötigtem direktem Netzwerkzugriff |
 | `APP_UID`, `APP_GID` | nein  | Container-Benutzer übersteuern (Standard: Besitzer von `daten/`, root ist nicht erlaubt) |
-| `KEEP_UPLOADS` | nein        | Fehlersuche: `1` legt jeden hochgeladenen Bericht zusätzlich in `daten/debug-reports` ab (enthält Namen, wird nach 3 Tagen gelöscht, Warnung im Log) |
 
 **Reverse Proxy:** Die App muss an der Wurzel der Domain laufen (nicht unter einem Unterpfad).
 Weiterleitungen sind relative Pfade, `X-Forwarded-*`-Header werden nicht benötigt. Bei nginx
