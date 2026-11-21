@@ -35,11 +35,30 @@ def test_budget_refuses_more_than_left():
 
 
 def test_zip_with_too_many_reports_reads_only_the_first(monkeypatch):
-    monkeypatch.setattr(importing, "ZIP_MAX_PDFS", 1)
+    monkeypatch.setattr(importing, "MAX_FILES", 1)
     spool, errors = importing.collect_uploads([_upload("b.zip", _zip({"a.pdf": b"1", "b.pdf": b"2"}).getvalue())])
     with spool:
         assert [n for n, _ in spool.files] == ["a.pdf"]
-    assert "Mehr als 1 Berichte" in errors[0]["message"]
+    assert errors[0]["message"] == importing.TOO_MANY_FILES
+
+
+def test_loose_files_and_zip_share_one_file_limit(monkeypatch):
+    monkeypatch.setattr(importing, "MAX_FILES", 3)
+    uploads = [_upload("1.pdf", b"1"), _upload("z.zip", _zip({"a.pdf": b"2", "b.pdf": b"3", "c.pdf": b"4"}).getvalue()),
+               _upload("2.pdf", b"5")]
+    spool, errors = importing.collect_uploads(uploads)
+    with spool:
+        assert [n for n, _ in spool.files] == ["1.pdf", "a.pdf", "b.pdf"]
+    assert [e["message"] for e in errors] == [importing.TOO_MANY_FILES] * 2
+
+
+def test_parse_time_budget_skips_remaining_files(monkeypatch, tmp_path):
+    monkeypatch.setattr(importing, "MAX_PARSE_SECONDS", -1)
+    monkeypatch.setattr(importing, "_read_report", lambda *a: pytest.fail("darf nicht gelesen werden"))
+    path = tmp_path / "a.pdf"
+    path.write_bytes(b"x")
+    reports, errors, notes = importing.read_files([("a.pdf", str(path))], [], None)
+    assert reports == [] and "Zeitbudget" in errors[0]["message"]
 
 
 def test_zip_entry_exceeding_limit_while_reading_is_reported(monkeypatch):

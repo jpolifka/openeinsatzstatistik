@@ -26,7 +26,7 @@ def super_overview(a: tenancy.Access = Depends(access)):
     _superadmin(a)
     with tenancy.central() as con:
         vgs = [dict(r) for r in con.execute(
-            "SELECT v.id, v.slug, v.name, v.kind, COALESCE(d.status, 'pending') AS dpa FROM vg v "
+            "SELECT v.id, v.slug, v.name, v.kind, v.subdomain, COALESCE(d.status, 'pending') AS dpa FROM vg v "
             "LEFT JOIN dpa d ON d.vg_id = v.id ORDER BY v.name")]
         tenants = [dict(r) for r in con.execute(
             "SELECT t.slug, t.name, t.active, t.created, v.slug AS vg FROM tenant t JOIN vg v ON v.id = t.vg_id "
@@ -46,6 +46,7 @@ def super_overview(a: tenancy.Access = Depends(access)):
 class VgIn(BaseModel):
     slug: str = ""   # leer = aus dem Namen bilden; Benutzer sehen den Kurznamen nicht
     name: str = Field(min_length=2, max_length=80)
+    subdomain: Optional[str] = None   # Host des Anmeldelinks: <subdomain>.BASE_DOMAIN; leer = keine
     kind: Optional[str] = None   # Art des Aufgabenträgers (rbac.KINDS); leer = vg bzw. unverändert
 
 
@@ -54,7 +55,8 @@ def create_vg(v: VgIn, a: tenancy.Access = Depends(access)):
     _superadmin(a)
     try:
         with tenancy.central() as con:
-            tenancy.create_vg(con, v.slug.strip() or tenancy.suggest_vg_slug(con, v.name), v.name, v.kind or "vg")
+            tenancy.create_vg(con, v.slug.strip() or tenancy.suggest_vg_slug(con, v.name), v.name, v.kind or "vg",
+                              v.subdomain)
             rbac.log(con, a.email, "VG angelegt", v.name)
     except ValueError as e:
         _invalid(str(e))
@@ -73,6 +75,8 @@ def rename_vg(slug: str, v: VgIn, a: tenancy.Access = Depends(access)):
         try:
             if v.kind and v.kind != row["kind"]:
                 tenancy.set_vg_kind(con, row["id"], v.kind)
+            if v.subdomain is not None:
+                tenancy.set_vg_subdomain(con, row["id"], v.subdomain)
         except ValueError as e:
             _invalid(str(e))
         con.execute("UPDATE vg SET name = ? WHERE slug = ?", (v.name.strip(), slug))
@@ -160,6 +164,13 @@ def change_tenant(slug: str, t: TenantChange, confirm: str = "", a: tenancy.Acce
             if row["id"] != cur["vg_id"]:
                 if confirm != slug:
                     _invalid("Zum Verschieben den Kurznamen der Wehr bestätigen.")
+                foreign = con.execute(
+                    "SELECT m.email, r.label FROM membership m JOIN role r ON r.id = m.role_id "
+                    "WHERE m.scope = 'tenant' AND m.scope_id = ? AND r.vg_id IS NOT NULL AND r.vg_id <> ?",
+                    (cur["id"], row["id"])).fetchall()
+                if foreign:
+                    _invalid("Die Wehr hat Zuordnungen mit Rollen der bisherigen VG. Zuerst entziehen: "
+                             + "; ".join(f"{f['email']} ({f['label']})" for f in foreign[:10]))
                 con.execute("UPDATE tenant SET vg_id = ? WHERE slug = ?", (row["id"], slug))
                 rbac.log(con, a.email, "Wehr verschoben", f"{cur['name']} → {row['name']}", row["id"], cur["id"])
         if t.active is not None:

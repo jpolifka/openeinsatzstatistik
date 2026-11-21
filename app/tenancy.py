@@ -385,13 +385,50 @@ def suggest_slug(con, name, vg_slug=""):
     raise ValueError("Kein freier Kurzname gefunden.")
 
 
-def create_vg(con, slug, name, kind="vg"):
+SUBDOMAIN = re.compile(r"[a-z0-9]([a-z0-9-]{0,40}[a-z0-9])?")
+
+
+def check_subdomain(value):
+    """Subdomain einer VG (nur der Teil vor BASE_DOMAIN) -> kleingeschrieben, None = keine."""
+    value = (value or "").strip().lower()
+    if not value:
+        return None
+    if not SUBDOMAIN.fullmatch(value):
+        raise ValueError("Subdomain: nur Kleinbuchstaben, Ziffern und Bindestrich (ohne Punkt, höchstens 42 Zeichen).")
+    return value
+
+
+def set_vg_subdomain(con, vg_id, subdomain):
+    subdomain = check_subdomain(subdomain)
+    if subdomain and con.execute("SELECT 1 FROM vg WHERE subdomain = ? AND id <> ?", (subdomain, vg_id)).fetchone():
+        raise ValueError(f"Die Subdomain „{subdomain}“ wird schon von einer anderen VG verwendet.")
+    con.execute("UPDATE vg SET subdomain = ? WHERE id = ?", (subdomain, vg_id))
+
+
+def login_subdomains(email):
+    """Subdomains der VGs, in denen die Adresse eine Zuordnung zu einer aktiven Wehr hat – die älteste Zuordnung
+    zuerst. Aus ihnen (und nur aus ihnen) entsteht das Ziel des Anmeldelinks."""
+    email = normalize_email(email)
+    if not email or not os.path.exists(central_path()):
+        return []
+    with central() as con:
+        rows = con.execute(
+            "SELECT v.subdomain, m.created, m.scope_id FROM membership m JOIN tenant t ON "
+            "(m.scope = 'tenant' AND t.id = m.scope_id) OR (m.scope = 'vg' AND t.vg_id = m.scope_id) "
+            "JOIN vg v ON v.id = t.vg_id WHERE m.email = ? AND t.active AND v.subdomain IS NOT NULL "
+            "ORDER BY m.created, m.scope_id", (email,)).fetchall()
+    return list(dict.fromkeys(r["subdomain"] for r in rows))
+
+
+def create_vg(con, slug, name, kind="vg", subdomain=None):
     """Neue VG (Aufgabenträger der Art kind, siehe rbac.KINDS): ohne Wehren gibt es nichts in ihre Vorgaben
     zu übernehmen (defaults_lifted)."""
     if kind not in rbac.KINDS:
         raise ValueError("Unbekannte Art des Aufgabenträgers.")
-    return con.execute("INSERT INTO vg (slug, name, defaults_lifted, kind) VALUES (?, ?, 1, ?)",
-                       (check_slug(slug), name.strip(), kind)).lastrowid
+    vg_id = con.execute("INSERT INTO vg (slug, name, defaults_lifted, kind) VALUES (?, ?, 1, ?)",
+                        (check_slug(slug), name.strip(), kind)).lastrowid
+    set_vg_subdomain(con, vg_id, subdomain)
+    return vg_id
 
 
 def set_vg_kind(con, vg_id, kind):
@@ -680,6 +717,9 @@ def access_for(email, scope=None):
             "SELECT m.scope, m.scope_id, m.role_id, COALESCE(t.vg_id, m.scope_id) AS vg_id FROM membership m "
             "LEFT JOIN tenant t ON m.scope = 'tenant' AND t.id = m.scope_id WHERE m.email = ?",
             (email,)).fetchall() if email else []
+    # Rolle einer fremden VG (z. B. nach Verschiebung der Wehr) gewährt nichts
+    memberships = [m for m in memberships if (role := roles.get(m["role_id"])) is not None
+                   and (role.vg_id is None or role.vg_id == m["vg_id"])]
     permissions = {r["slug"]: rbac.allowed(rbac.ALL_PERMISSIONS, "tenant") if superadmin else set() for r in rows}
     vg_permissions = {}
     for m in memberships:

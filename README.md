@@ -87,7 +87,7 @@ Code und `docker-compose.yml` enthalten keine Standardwerte. Ohne `.env` startet
 | `APP_PORT`     | ja          | Port auf dem Host, z. B. `8112`. Hinter einem Reverse Proxy auf demselben Host `127.0.0.1:8112`, damit die App nur über den Proxy erreichbar ist |
 | `ADMIN_EMAILS` | nein        | Superadmins, durch Komma getrennt. Gesetzt = Anmeldung an; alle anderen Benutzer werden den Wehren zugeordnet (siehe [Mandanten und Rollen](#mandanten-und-rollen)). Leer: die App startet nicht, außer mit `AUTH_DISABLED=1` (nur lokale Entwicklung, dann ist jeder Superadmin). |
 | `BASE_URL`     | mit `ADMIN_EMAILS` | Öffentliche Adresse der App, z. B. `https://einsatz.example.org`. Daraus entsteht der Link in der Mail. Mit `https://` wird das Sitzungs-Cookie nur über HTTPS gesendet |
-| `ALLOWED_DOMAINS` | nein | Domains (Komma getrennt), deren Subdomains im Anmeldelink stehen dürfen: Der Link führt auf den Host, unter dem die Anmeldung angefordert wurde. Andere Hosts bekommen `BASE_URL` |
+| `BASE_DOMAIN` | nein | Basisdomain der VG-Subdomains: Der Superadmin legt je VG eine Subdomain fest, Anmeldelinks gehen nur an `<Subdomain>.BASE_DOMAIN` einer VG der Person (nie an einen Host aus der Anfrage), sonst an `BASE_URL` (muss bei öffentlicher Adresse `https://` sein) |
 | `SMTP_HOST`    | nein        | SMTP-Server des Postfachs der eigenen Domain (z. B. `smtp.strato.de`) oder eines Versanddienstes (z. B. `smtp-relay.brevo.com`). Leer = kein Versand, Link steht nur im Log (`docker compose logs`) |
 | `SMTP_PORT`, `SMTP_SECURITY` | mit `SMTP_HOST` | `465` + `ssl` oder `587` + `starttls` |
 | `SMTP_USER`, `SMTP_PASSWORD` | mit `SMTP_HOST` | Zugangsdaten des Postfachs |

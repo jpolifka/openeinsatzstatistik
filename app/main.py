@@ -75,6 +75,7 @@ async def lifespan(_app):
         return [tenant for vg_id in vg_ids for tenant in tenancy.vg_tenants(vg_id)]
     stop = asyncio.Event()
     worker = asyncio.create_task(import_queue.run_worker(stop, active_tenants, importing.after_import))
+    purger = asyncio.create_task(importing.purge_debug_reports_regularly(stop))
     mail.log_check()
     if importing.keeping_uploads():
         log.warning("KEEP_UPLOADS ist gesetzt: Berichte mit Namen werden %s Tage in debug-reports abgelegt. "
@@ -84,6 +85,7 @@ async def lifespan(_app):
     finally:
         stop.set()
         await worker
+        await purger
 
 
 # Keine API-Dokumentation: die Oberfläche braucht sie nicht, sie verriete nur die Endpunkte

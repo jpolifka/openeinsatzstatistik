@@ -387,6 +387,36 @@ def _add_training_roles(con):
                         [(ids[key], p) for p in (rbac.TRAININGS, rbac.TRAININGS_EDIT)])
 
 
+def _guard_membership_vg(con):
+    """Eine Zuordnung darf nur Rollen tragen, die global sind oder zur VG des Bereichs gehören (Wehr: zur VG der Wehr).
+    Bestehende Verstöße (z. B. nach dem Verschieben einer Wehr) werden entzogen und protokolliert, dann sichern
+    Trigger die Regel dauerhaft – auch beim Verschieben einer Wehr in eine andere VG."""
+    area = ("CASE {m}.scope WHEN 'vg' THEN {m}.scope_id ELSE (SELECT vg_id FROM tenant WHERE id = {m}.scope_id) END")
+    bad = ("FROM membership m JOIN role r ON r.id = m.role_id "
+           f"WHERE r.vg_id IS NOT NULL AND r.vg_id <> {area.format(m='m')}")
+    for row in con.execute(f"SELECT m.email, r.label, m.scope, m.scope_id {bad}").fetchall():
+        con.execute("INSERT INTO role_event (email, action, detail) VALUES (NULL, ?, ?)",
+                    ("Zuordnung wegen VG-Wechsel entzogen", f"{row['email']}: {row['label']} ({row['scope']} {row['scope_id']})"))
+    con.execute(f"DELETE FROM membership WHERE rowid IN (SELECT m.rowid {bad})")
+    message = "Die Rolle gehört zu einer anderen VG."
+    for change in ("INSERT", "UPDATE"):
+        con.execute(
+            f"CREATE TRIGGER membership_vg_{change.lower()} BEFORE {change} ON membership WHEN EXISTS ("
+            f"SELECT 1 FROM role r WHERE r.id = NEW.role_id AND r.vg_id IS NOT NULL AND r.vg_id <> {area.format(m='NEW')}) "
+            f"BEGIN SELECT RAISE(ABORT, '{message}'); END")
+    con.execute(
+        "CREATE TRIGGER tenant_vg_move BEFORE UPDATE OF vg_id ON tenant WHEN NEW.vg_id <> OLD.vg_id AND EXISTS ("
+        "SELECT 1 FROM membership m JOIN role r ON r.id = m.role_id WHERE m.scope = 'tenant' AND m.scope_id = OLD.id "
+        "AND r.vg_id IS NOT NULL AND r.vg_id <> NEW.vg_id) "
+        "BEGIN SELECT RAISE(ABORT, 'Die Wehr hat Zuordnungen mit Rollen der bisherigen VG.'); END")
+
+
+def _add_vg_subdomain(con):
+    """Subdomain je VG (nur der Teil vor BASE_DOMAIN): Magic Links gehen ausschließlich an konfigurierte Hosts."""
+    con.execute("ALTER TABLE vg ADD COLUMN subdomain TEXT")
+    con.execute("CREATE UNIQUE INDEX vg_subdomain ON vg(subdomain) WHERE subdomain IS NOT NULL")
+
+
 # Neue Schemaänderungen nur hinten anfügen; PRAGMA user_version zählt die erledigten Schritte.
 TENANT_MIGRATIONS = [_create_legacy_schema, _rename_to_english, _add_tenant_tables, _add_bks_ids,
                      _add_pending_reports, _add_fleet_names, _add_incident_revision, _add_import_jobs,
@@ -395,7 +425,8 @@ CENTRAL_MIGRATIONS = [_create_central_schema, _add_dpa, _add_records, _add_notic
                       _records_per_vg, _add_consumed_magic_links, _add_completed_imports, _add_tenant_archive,
                       _add_vg_defaults, _settings_for_fee_roles, _add_sessions,
                       _add_vg_kind, _add_bks_roles, _vg_lead_people,
-                      _bks_role_tiers, _add_login_codes, _add_training_roles]
+                      _bks_role_tiers, _add_login_codes, _add_training_roles,
+                      _guard_membership_vg, _add_vg_subdomain]
 
 
 def migrate(con, steps=TENANT_MIGRATIONS):

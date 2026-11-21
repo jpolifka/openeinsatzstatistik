@@ -3,12 +3,16 @@ import datetime as dt
 import decimal
 import json
 import multiprocessing
+import os
 import sys
 import threading
 
 GENERIC_ERROR = "Die Datei konnte nicht gelesen werden. Ist es ein Einsatzbericht aus dem BKS-Portal?"
 MAX_SECONDS = 45
 MAX_RESULT_BYTES = 32 * 1024 * 1024
+# Adressraum je Leseprozess. Gesamtbudget im Container (docker-compose: mem_limit 2g): WORKERS × ADDRESS_SPACE
+# + Hauptprozess (~300 MiB) + tmpfs (256 MiB) bleibt darunter (tests/test_parser_budget.py)
+ADDRESS_SPACE = 640 * 1024 * 1024
 WORKERS = 2                                      # Dateien, die gleichzeitig gelesen werden
 _slots = threading.BoundedSemaphore(WORKERS)
 
@@ -62,11 +66,21 @@ def decode(value):
     raise ValueError("Unbekanntes Leseergebnis.")
 
 
+# Nur diese Umgebungsvariablen bleiben im Leseprozess; Geheimnisse (SECRET_KEY, SMTP_*, DKIM_* …) gehören dort nicht hin
+_KEEP_ENV = ("PATH", "LANG", "LC_ALL", "TMPDIR", "PYTHONHASHSEED")
+
+
+def _scrub_environment():
+    for name in [n for n in os.environ if n not in _KEEP_ENV]:
+        del os.environ[name]
+
+
 def _child(connection, kind, path):
     try:
+        _scrub_environment()
         if sys.platform.startswith("linux"):
             import resource
-            resource.setrlimit(resource.RLIMIT_AS, (768 * 1024 * 1024,) * 2)
+            resource.setrlimit(resource.RLIMIT_AS, (ADDRESS_SPACE,) * 2)
             resource.setrlimit(resource.RLIMIT_CPU, (MAX_SECONDS, MAX_SECONDS))
         result = read_local(kind, path)
         connection.send_bytes(json.dumps({"ok": True, "result": encode(result)}).encode())

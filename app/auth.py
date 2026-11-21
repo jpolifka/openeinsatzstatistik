@@ -33,11 +33,16 @@ from app import db, login_mail, mail, tenancy, theme
 log = logging.getLogger("openeinsatzstatistik")
 
 BASE_URL = os.environ.get("BASE_URL", "").rstrip("/")
-# Domains, deren Subdomains im Anmeldelink verwendet werden dürfen (sonst immer BASE_URL)
-ALLOWED_DOMAINS = [d.strip().lower().lstrip(".") for d in os.environ.get("ALLOWED_DOMAINS", "").split(",") if d.strip()]
+# Basisdomain der VG-Subdomains (Superadmin legt sie je VG fest): Anmeldelinks gehen nur an BASE_URL oder an
+# <Subdomain>.<BASE_DOMAIN> einer VG der Person – nie an einen Host aus der Anfrage
+BASE_DOMAIN = os.environ.get("BASE_DOMAIN", "").strip().lower().lstrip(".")
 SECRET_KEY = os.environ.get("SECRET_KEY", "")
 # Ohne Anmeldung ist jeder Zugriff Superadmin: nur auf ausdrückliche Anweisung (lokale Entwicklung)
 AUTH_DISABLED = os.environ.get("AUTH_DISABLED", "").strip().lower() in ("1", "true", "yes", "ja")
+
+# Adresse, an die der Dienst gebunden ist (docker-compose reicht APP_BIND durch, das Image setzt 0.0.0.0);
+# nicht gesetzt = lokaler Start von uvicorn
+APP_BIND = os.environ.get("APP_BIND", "").strip().strip("[]")
 
 COOKIE = "session"
 SCOPE_COOKIE = "scope"     # ausgewählte Wehr, wird bei jeder Anfrage gegen die Zuordnungen geprüft
@@ -71,8 +76,21 @@ def _is_local():
     return urlsplit(BASE_URL).hostname in ("localhost", "127.0.0.1", "::1")
 
 
+def _bind_is_local():
+    return APP_BIND in ("", "127.0.0.1", "localhost", "::1")
+
+
 def check_config():
     """Bricht den Start ab, wenn die Anmeldung so nicht funktionieren kann."""
+    if BASE_URL and not _is_local() and not BASE_URL.startswith("https://"):
+        # Sonst gingen Anmeldelinks und Sitzungscookies (ohne Secure) im Klartext über das Netz
+        raise RuntimeError("Eine nicht lokale BASE_URL muss mit https:// beginnen.")
+    if AUTH_DISABLED and not _bind_is_local():
+        raise RuntimeError("AUTH_DISABLED=1 gibt es nur mit lokaler Bindung (APP_BIND=127.0.0.1): "
+                           "sonst wäre jeder im Netz Superadmin.")
+    if os.environ.get("ALLOWED_DOMAINS"):
+        raise RuntimeError("ALLOWED_DOMAINS gibt es nicht mehr: BASE_DOMAIN setzen und je VG eine Subdomain "
+                           "festlegen (siehe README)")
     if enabled() and not BASE_URL:
         raise RuntimeError("ADMIN_EMAILS ist gesetzt, BASE_URL fehlt (siehe README)")
     if not enabled() and BASE_URL and not _is_local():
@@ -263,15 +281,20 @@ def _use_code(email, code):
 
 
 # ---------------------------------------------------------------- Mailversand
-def link_base(host):
-    """Basisadresse für den Anmeldelink: der Host der Anfrage, wenn er zu einer erlaubten Domain
-    gehört (Schema wie BASE_URL), sonst BASE_URL. Verhindert Host-Header-Fälschung."""
-    host = (host or "").strip().lower()
-    name = host.rsplit(":", 1)[0] if ":" in host and not host.endswith("]") else host
-    if BASE_URL and any(name == d or name.endswith("." + d) for d in ALLOWED_DOMAINS) \
-            and re.fullmatch(r"[a-z0-9.-]+(:\d{1,5})?", host):
-        return f"{urlsplit(BASE_URL).scheme}://{host}"
-    return BASE_URL
+def link_base(email, host=None):
+    """Basisadresse für den Anmeldelink: der Host einer VG der Person (<Subdomain>.BASE_DOMAIN) – bevorzugt der,
+    unter dem die Anmeldung angefordert wurde (exakter Vergleich), sonst der der ältesten Zuordnung –, sonst
+    BASE_URL. Der Host-Header erzeugt nie selbst ein Ziel (kein Host-Poisoning); Schema und Port wie BASE_URL."""
+    if not (BASE_URL and BASE_DOMAIN):
+        return BASE_URL
+    hosts = [f"{sub}.{BASE_DOMAIN}" for sub in tenancy.login_subdomains(email)]
+    if not hosts:
+        return BASE_URL
+    asked = (host or "").strip().lower()
+    asked = asked.rsplit(":", 1)[0] if ":" in asked and not asked.endswith("]") else asked
+    chosen = asked if asked in hosts else hosts[0]
+    base = urlsplit(BASE_URL)
+    return f"{base.scheme}://{chosen}" + (f":{base.port}" if base.port else "")
 
 
 def send_link(email, host=None):
@@ -293,7 +316,7 @@ def send_link(email, host=None):
         _last_mail[email] = now
         _sent.append((now, email))
     token = _sign("link", email, LINK_TTL)
-    link = f"{link_base(host)}/auth/verify?token={token}"
+    link = f"{link_base(email, host)}/auth/verify?token={token}"
     if not mail.enabled():
         if _is_local():          # lokale Entwicklung ohne Mailversand: Link und Code im Log
             log.warning("SMTP_HOST fehlt – Anmeldelink für %s: %s (Code %s)", email, link, _new_code(email, token))

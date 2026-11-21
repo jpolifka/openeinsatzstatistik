@@ -7,6 +7,13 @@
 const CHANGELOG = [
   {
     date: "2026-11-21",
+    version: "2026-11-21.3",
+    items: [
+      "<b>Sicherer Anmeldelink:</b> Superadmins legen je Verbandsgemeinde eine Subdomain fest (Einstellungen → Wehren &amp; VGs). Anmeldelinks führen nur noch auf diese festgelegte Adresse (oder die Hauptadresse), nie auf eine Adresse aus der Anfrage. Eine Wehr lässt sich nicht mehr verschieben, solange Personen Rollen der bisherigen VG haben – diese Rollen müssen zuerst entzogen werden.",
+    ],
+  },
+  {
+    date: "2026-11-21",
     version: "2026-11-21.2",
     items: [
       "<b>Verbandsgemeinde löschen:</b> Superadmins können unter Einstellungen → Wehren &amp; VGs eine VG ohne Wehren löschen. Zuordnungen und Rollen der VG werden dabei entfernt.",

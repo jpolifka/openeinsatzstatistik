@@ -6,16 +6,27 @@ set -eu
 
 data="${DATA_DIR:-/daten}"
 
+# Einsatzdaten enthalten Namen: nur der Besitzer darf lesen. Läuft als der Besitzer der Dateien (der Container hat
+# kein CAP_FOWNER); bleibt danach etwas für Gruppe/andere offen oder ist etwas nicht lesbar, startet die App nicht.
+harden() {
+    "$@" chmod -R go-rwx "$data" 2>/dev/null || true
+    if ! loose="$("$@" find "$data" -perm /077 -print -quit)" || [ -n "$loose" ]; then
+        echo "Die Rechte in $data lassen sich nicht auf 'nur Besitzer' beschränken (${loose:-nicht lesbar})." \
+             "Bitte den Ordner dem Benutzer geben, unter dem die App läuft (APP_UID/APP_GID), oder die Rechte" \
+             "auf dem Host setzen (chmod -R go-rwx)." >&2
+        exit 1
+    fi
+}
+
 if [ "$(id -u)" != 0 ]; then
     # Bereits mit festem Benutzer gestartet (z. B. docker run --user)
     umask 077
+    harden env
     exec "$@"
 fi
 
-# Einsatzdaten enthalten Namen: nur der Besitzer darf lesen (neue Dateien und vorhandene)
 umask 077
 mkdir -p "$data"
-chmod -R go-rwx "$data" || true
 uid="${APP_UID:-$(stat -c %u "$data")}"
 gid="${APP_GID:-$(stat -c %g "$data")}"
 
@@ -35,4 +46,5 @@ if [ "$uid" = 0 ]; then
     fi
 fi
 
+harden setpriv --reuid="$uid" --regid="$gid" --clear-groups --
 exec setpriv --reuid="$uid" --regid="$gid" --clear-groups -- "$@"

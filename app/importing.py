@@ -2,6 +2,7 @@
 """Berichte einlesen (PDF, Excel-Export, ZIP): Lesen, Zuordnen zur Wehr, Weitergeben, Nachbearbeitung.
 Kein HTTP außer den Fehlerklassen der Anfrage.
 """
+import asyncio
 import concurrent.futures
 import os
 import shutil
@@ -17,7 +18,8 @@ from app.api.common import incident_json, incident_key, log, safe_filename
 
 
 # ---------------------------------------------------------------- Berichte einlesen (PDF, Excel-Export)
-ZIP_MAX_PDFS = 500
+MAX_FILES = 100                      # Berichte je Auftrag: lose und aus ZIP-Dateien zusammen
+MAX_PARSE_SECONDS = 600              # Lesezeit je Auftrag insgesamt; danach werden weitere Dateien übersprungen
 ZIP_MAX_BYTES = 50 * 1024 * 1024     # je entpacktem Bericht
 UPLOAD_MAX_BYTES = 100 * 1024 * 1024  # je Upload: hochgeladen bzw. entpackt zusammen (Platte, tmpfs des Containers)
 REPORT_TYPES = (".pdf", ".xlsx")
@@ -33,8 +35,15 @@ def is_upload(filename):
 class Budget:
     """Bytes, die ein Upload insgesamt noch belegen darf (hochgeladen und entpackt)."""
 
-    def __init__(self, limit=None):
+    def __init__(self, limit=None, files=None):
         self.left = UPLOAD_MAX_BYTES if limit is None else limit
+        self.files_left = MAX_FILES if files is None else files
+
+    def take_file(self):
+        if self.files_left <= 0:
+            return False
+        self.files_left -= 1
+        return True
 
     def take(self, size):
         if size > self.left:
@@ -43,6 +52,7 @@ class Budget:
         return True
 
 
+TOO_MANY_FILES = f"Zu viele Berichte – je Auftrag höchstens {MAX_FILES}, die übrigen werden nicht gelesen."
 TOO_BIG = f"Zu groß – je Upload höchstens {UPLOAD_MAX_BYTES // (1024 * 1024)} MB, bitte in Teilen hochladen."
 
 
@@ -110,14 +120,15 @@ def _unpack_zip(stream, zip_name, errors, budget, spool):
                and not i.filename.startswith("__MACOSX/") and not os.path.basename(i.filename).startswith("._")]
     if not entries:
         errors.append({"file": zip_name, "message": "Die ZIP-Datei enthält keinen Bericht (PDF oder Excel-Export)."})
-    if len(entries) > ZIP_MAX_PDFS:
-        errors.append({"file": zip_name, "message": f"Mehr als {ZIP_MAX_PDFS} Berichte, nur die ersten werden gelesen."})
-        entries = entries[:ZIP_MAX_PDFS]
+    if len(entries) > budget.files_left:
+        errors.append({"file": zip_name, "message": TOO_MANY_FILES})
+        entries = entries[:max(budget.files_left, 0)]
     for info in entries:
         name = safe_filename(info.filename)
         if info.file_size > ZIP_MAX_BYTES:
             errors.append({"file": name, "message": "Bericht in der ZIP-Datei ist zu groß."})
             continue
+        budget.take_file()
         shown, path = spool.target(name)
         try:
             with archive.open(info) as fh:      # Größe aus dem Verzeichnis nicht trauen: begrenzt lesen
@@ -206,6 +217,9 @@ def collect_uploads(uploads):
                     break
                 _unpack_zip(stream, filename, errors, budget, spool)
             else:
+                if not budget.take_file():
+                    errors.append({"file": filename, "message": TOO_MANY_FILES})
+                    break
                 shown, path = spool.target(filename)
                 size = _save(upload.file, path, budget.left)
                 if size is None:
@@ -226,6 +240,36 @@ def keeping_uploads():
     return os.environ.get("KEEP_UPLOADS", "").strip().lower() in ("1", "true", "yes", "ja")
 
 
+def purge_debug_reports():
+    """Abgelegte Berichte entfernen, die älter als KEEP_UPLOADS_DAYS Tage sind – unabhängig davon, ob
+    KEEP_UPLOADS noch gesetzt ist und ob gerade etwas hochgeladen wird."""
+    folder = os.path.join(db.DATA_DIR or "", "debug-reports")
+    if not os.path.isdir(folder):
+        return
+    cutoff = time.time() - KEEP_UPLOADS_DAYS * 86400
+    for old in os.listdir(folder):
+        old_path = os.path.join(folder, old)
+        try:
+            if os.path.isfile(old_path) and os.path.getmtime(old_path) < cutoff:
+                os.remove(old_path)
+        except OSError:
+            log.exception("DEBUG: %s nicht entfernt", old)
+
+
+async def purge_debug_reports_regularly(stop, interval=3600):
+    """Beim Start und danach stündlich aufräumen, bis stop gesetzt wird."""
+    while True:
+        try:
+            purge_debug_reports()      # nur ein Verzeichnis lesen: kurz genug ohne Thread
+        except Exception:
+            log.exception("DEBUG: Aufräumen fehlgeschlagen")
+        try:
+            await asyncio.wait_for(stop.wait(), interval)
+            return
+        except asyncio.TimeoutError:
+            pass
+
+
 def keep_for_debug(files):
     """Nur mit KEEP_UPLOADS=1: hochgeladene Berichte zusätzlich in DATA_DIR/debug-reports ablegen (enthalten
     Namen, nur zur Fehlersuche); Dateien älter als KEEP_UPLOADS_DAYS Tage werden dabei entfernt.
@@ -235,11 +279,7 @@ def keep_for_debug(files):
     try:
         folder = os.path.join(db.DATA_DIR, "debug-reports")
         os.makedirs(folder, exist_ok=True)
-        cutoff = time.time() - KEEP_UPLOADS_DAYS * 86400
-        for old in os.listdir(folder):
-            old_path = os.path.join(folder, old)
-            if os.path.isfile(old_path) and os.path.getmtime(old_path) < cutoff:
-                os.remove(old_path)
+        purge_debug_reports()
         stamp = time.strftime("%Y%m%d-%H%M%S")
         for filename, path in files:
             shutil.copyfile(path, os.path.join(folder, f"{stamp}-{safe_filename(os.path.basename(filename))}"))
@@ -253,10 +293,14 @@ def read_files(files, tenants, email=None, progress=None):
     Dateien; progress() je Datei."""
     reports, errors, notes = [], [], []
     keep_for_debug(files)
+    deadline = time.monotonic() + MAX_PARSE_SECONDS
 
     def read(job):
         filename, path = job
         try:
+            if time.monotonic() > deadline:       # Zeitbudget des Auftrags aufgebraucht: nichts mehr starten
+                raise ValueError("Das Zeitbudget für diesen Auftrag ist aufgebraucht – bitte diese Datei in einem "
+                                 "kleineren Auftrag erneut einlesen.")
             return _read_report(path, filename, tenants), None
         except Exception as e:
             return None, e
