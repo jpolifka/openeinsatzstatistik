@@ -15,7 +15,8 @@ COPY static ./static
 # Tests: docker build --target test -t openeinsatzstatistik-test . && docker run --rm openeinsatzstatistik-test
 FROM base AS test
 COPY requirements-dev.txt pytest.ini ./
-RUN pip install --no-cache-dir -r requirements-dev.txt
+# Laufzeitpakete sind durch requirements.txt = Lock festgelegt (CI prüft die Übereinstimmung); pip check findet Konflikte
+RUN pip install --no-cache-dir -r requirements-dev.txt && pip check
 COPY tests ./tests
 CMD ["python", "-m", "pytest", "-q"]
 
