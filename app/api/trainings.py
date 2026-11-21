@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Übungsdienste: Liste, Erfassen, Ändern und Löschen (der Personenstamm wird unter Einstellungen → Personen gepflegt).
 Rechte: TRAININGS (sehen), TRAININGS_EDIT (ändern); immer nur die ausgewählte Wehr."""
+import io
 from typing import List, Optional
 
 import segno
@@ -67,8 +68,10 @@ def api_checkin_link(request: Request, a: tenancy.Access = Depends(access)):
 @router.get("/api/trainings/checkin.svg")
 def api_checkin_qr(request: Request, a: tenancy.Access = Depends(access)):
     link = checkin.link_for(a.current(TRAININGS_EDIT), str(request.base_url))
-    svg = segno.make(link, error="m", micro=False).svg_inline(scale=8, border=2, dark="#000", light="#fff")
-    return Response(svg, media_type="image/svg+xml", headers={"Cache-Control": "no-store"})
+    out = io.BytesIO()      # eigenständiges SVG (mit xmlns), sonst zeigt <img> es nicht an
+    segno.make(link, error="m", micro=False).save(out, kind="svg", scale=8, border=2, dark="#000", light="#fff",
+                                                  xmldecl=True, svgns=True)
+    return Response(out.getvalue(), media_type="image/svg+xml", headers={"Cache-Control": "no-store"})
 
 
 @router.post("/api/trainings/checkin/rotate")

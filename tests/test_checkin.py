@@ -134,6 +134,7 @@ def test_admin_api_needs_edit_right(setup, monkeypatch):
     assert url == f"https://stat.example.org{_link()}"
     svg = setup.get("/api/trainings/checkin.svg")
     assert svg.status_code == 200 and svg.headers["content-type"].startswith("image/svg+xml") and "<svg" in svg.text
+    assert 'xmlns="http://www.w3.org/2000/svg"' in svg.text      # sonst zeigt <img> es nicht an
 
 
 def test_link_uses_vg_subdomain_not_request_host(setup, monkeypatch):
