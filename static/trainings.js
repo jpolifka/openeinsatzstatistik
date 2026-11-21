@@ -1,12 +1,14 @@
 "use strict";
 
-// Übungsdienste (ohne BKS-Bericht): Erfassung im Hauptreiter Einsätze, Teilnahmen im Hauptreiter Personal.
-// Wird nach app.js geladen und trägt sich in VIEWS ein. Übungen fließen in keine Auswertung ein (eigene Tabellen).
+// Übungsdienste (ohne BKS-Bericht): Erfassen über den Knopf „Übung erfassen“ oben (Dialog), Übersicht, Teilnahmen und
+// Liste der Übungen im Hauptreiter Personal → Übungen. Wird nach app.js geladen und trägt sich in VIEWS ein.
+// Übungen fließen in keine Auswertung ein (eigene Tabellen). Den Personenstamm pflegt Einstellungen → Personen.
 const trainingState = {
   data: null, year: null,
   editing: null,             // null | "new" | Übungs-ID
   draft: null,               // Stand des Formulars: Felder, memberIds (Set), newMembers, revision
   search: "", pendingDelete: null,
+  openPeople: new Set(), openTrainings: new Set(),     // aufgeklappte Zeilen
 };
 
 async function loadTrainings() {
@@ -71,8 +73,7 @@ function trainingPeopleCount() {
 
 function trainingFormHtml() {
   const d = trainingState.draft, minutes = draftMinutes(d);
-  return `<div class="card training-form" data-training-form>
-    <h3>${d.id ? "Übung bearbeiten" : "Neue Übung"}</h3>
+  return `<div class="training-form" data-training-form>
     <div class="form-grid">
       ${trainingField("Thema", "topic", d.topic, { span: "span-2", attributes: 'maxlength="200" required' })}
       ${trainingField("Beginn (Datum)", "startDate", d.startDate, { type: "date" })}
@@ -81,7 +82,8 @@ function trainingFormHtml() {
       ${trainingField("Ende (Uhrzeit)", "endTime", d.endTime, { type: "time" })}
       ${trainingField("Kategorie (optional)", "category", d.category, { attributes: 'maxlength="80"' })}
       ${trainingField("Ort (optional)", "place", d.place, { attributes: 'maxlength="120"' })}
-      ${trainingField("Ausbilder/in (optional)", "trainer", d.trainer, { attributes: 'maxlength="120"' })}
+      ${trainingField("Übungsleiter/in (optional)", "trainer", d.trainer, { attributes: 'maxlength="120" list="tr-trainer-list" autocomplete="off"' })}
+      <datalist id="tr-trainer-list">${trainingState.data.members.filter((m) => m.active).map((m) => `<option value="${esc(m.name)}">`).join("")}</datalist>
       <div class="field span-2"><span><label for="tr-notes">Notizen (optional)</label></span>
         <textarea id="tr-notes" data-tr="notes" rows="2" maxlength="2000">${esc(d.notes)}</textarea></div>
     </div>
@@ -98,72 +100,108 @@ function trainingFormHtml() {
       <input type="text" id="tr-new-first" placeholder="Vorname" maxlength="60" aria-label="Vorname der neuen Person">
       <button type="button" class="btn btn-light btn-small" data-tr-action="add-new">Neue Person hinzufügen</button>
     </div>
-    <p class="small muted">Neue Personen werden beim Speichern in den Personenstamm übernommen.</p>
+    <p class="small muted">Neue Personen werden beim Speichern in den Personenstamm übernommen; dort (Einstellungen → Personen) pflegst du ihn.</p>
     <div class="form-actions">
-      <button type="button" class="btn btn-outline btn-small" data-tr-action="cancel">Abbrechen</button>
-      <button type="button" class="btn btn-primary btn-small" data-tr-action="save">Speichern</button>
+      <button type="button" class="btn btn-outline" data-tr-action="cancel">Abbrechen</button>
+      <button type="button" class="btn btn-primary" data-tr-action="save">Speichern</button>
     </div></div>`;
 }
 
-// ------------------------------------------------------------ Liste
-function trainingRowHtml(t) {
-  const names = t.participants.map((p) => esc(p.name)).join("; ") || "–";
-  const days = t.started_at.slice(0, 10) === t.ended_at.slice(0, 10)
-    ? `${formatDate(t.started_at)} ${formatTime(t.started_at)}–${formatTime(t.ended_at)}`
-    : `${formatDateTime(t.started_at)} – ${formatDateTime(t.ended_at)}`;
-  const meta = [t.category, t.place, t.trainer && `Ausbilder/in: ${t.trainer}`].filter(Boolean).map(esc).join(" · ");
-  return `<div class="card training-row" data-training="${t.id}">
-    <div class="toolbar"><div><h3>${esc(t.topic)}</h3>
-      <p class="muted small">${days} · ${formatDuration(t.duration_min)} · ${plural(t.participants.length, "Teilnehmer", "Teilnehmer")}${meta ? ` · ${meta}` : ""}</p></div>
-      ${can("trainings.edit") ? `<div class="form-actions">
-        <button type="button" class="btn btn-outline btn-small" data-tr-action="delete" data-id="${t.id}">Löschen</button>
-        <button type="button" class="btn btn-light btn-small" data-tr-action="edit" data-id="${t.id}">Bearbeiten</button></div>` : ""}</div>
-    ${t.notes ? `<p class="small">${esc(t.notes)}</p>` : ""}
-    <details><summary class="small">Teilnehmer anzeigen</summary><p class="small">${names}</p></details></div>`;
+// ------------------------------------------------------------ Übersicht (Reiter Personal → Übungen)
+const TRAINING_COLUMNS = [["name", "Name", ""], ["trainings", "Übungen", ""], ["rate", "Beteiligung", "right hide-mobile"],
+  ["hours", "Stunden", "right hide-mobile"], ["last", "Zuletzt", "right hide-mobile"]];
+
+const trainingDays = (t) => t.started_at.slice(0, 10) === t.ended_at.slice(0, 10)
+  ? `${formatDate(t.started_at)} ${formatTime(t.started_at)}–${formatTime(t.ended_at)}`
+  : `${formatDateTime(t.started_at)} – ${formatDateTime(t.ended_at)}`;
+
+const trainingBar = (value, max) => `<div class="inline-bar"><b>${value}</b><span class="track"><span style="width:${(value / Math.max(1, max)) * 100}%"></span></span></div>`;
+const trainingChevron = (open) => `<td class="col-toggle">${ICON_CHEVRON}</td>`;
+
+/** Übungen einer Person im Jahr (Detailzeile der Teilnahmetabelle). */
+function personTrainingsHtml(person) {
+  const rows = trainingState.data.trainings.filter((t) => t.participants.some((p) => p.id === person.id));
+  return `<div class="member-incidents"><table class="mini-table"><thead><tr><th>Datum</th><th>Thema</th><th>Dauer</th><th>Übungsleiter/in</th></tr></thead>
+    <tbody>${rows.map((t) => `<tr><td>${trainingDays(t)}</td><td>${esc(t.topic)}</td><td>${formatDuration(t.duration_min)}</td><td>${esc(t.trainer || "–")}</td></tr>`).join("")}</tbody></table></div>`;
 }
 
-function renderTrainings() {
-  const data = trainingState.data;
-  const list = data.trainings.filter((t) => t.id !== trainingState.pendingDelete);
-  $("#view-trainings").innerHTML = `
-    <div class="card notice-card"><p class="small muted">Übungsdienste ohne BKS-Bericht. Sie erscheinen in keiner Auswertung und
-      nicht in der Einsatzliste – nur hier und im Reiter Personal → Übungen.</p></div>
-    ${trainingState.editing ? trainingFormHtml() : (can("trainings.edit")
-      ? `<p><button type="button" class="btn btn-primary" data-tr-action="new">Neue Übung erfassen</button></p>` : "")}
-    ${list.map(trainingRowHtml).join("") || `<p class="empty-note">Für ${state.year} ist keine Übung erfasst.</p>`}`;
+/** Teilnehmer, Notizen und Aktionen einer Übung (Detailzeile der Übungsliste). */
+function trainingDetailHtml(t) {
+  const meta = [t.category, t.place, t.trainer && `Übungsleiter/in: ${t.trainer}`].filter(Boolean).map(esc).join(" · ");
+  return `<div class="detail-grid training-detail">
+    ${meta ? `<p class="small">${meta}</p>` : ""}${t.notes ? `<p class="small">${esc(t.notes)}</p>` : ""}
+    <p class="small"><b>Teilnehmer:</b> ${t.participants.map((p) => esc(p.name)).join("; ") || "–"}</p>
+    ${can("trainings.edit") ? `<div class="form-actions">
+      <button type="button" class="btn btn-outline btn-small" data-tr-action="delete" data-id="${t.id}">Löschen</button>
+      <button type="button" class="btn btn-light btn-small" data-tr-action="edit" data-id="${t.id}">Bearbeiten</button></div>` : ""}</div>`;
 }
-
-// ------------------------------------------------------------ Teilnahmen (Reiter Personal)
-const TRAINING_COLUMNS = [["name", "Name"], ["trainings", "Übungen"], ["rate", "Beteiligung"], ["hours", "Stunden"], ["last", "Zuletzt"]];
 
 function renderTrainingMembers() {
   const data = trainingState.data, s = data.summary;
   const sort = trainingState.sort || (trainingState.sort = { field: "trainings", descending: true });
   const cmp = (x, y) => sort.field === "name" ? x.name.localeCompare(y.name, "de") : (x[sort.field] ?? "") > (y[sort.field] ?? "") ? 1 : -1;
-  const list = [...s.members].sort((x, y) => sort.descending ? cmp(y, x) : cmp(x, y));
-  const edit = can("trainings.edit");
-  $("#view-training_members").innerHTML = `<div class="card list-card members-table">
-    <div class="toolbar"><div><h3>Übungsteilnahme ${state.year}</h3>
-      <p class="muted small">${plural(list.length, "Person", "Personen")} · ${plural(s.count, "Übung", "Übungen")} · ${formatHours(s.minutes)} Übungszeit
-      · Diese Zahlen gehören nicht zur Einsatzstatistik.</p></div></div>
-    <div class="table-wrap"><table class="table"><thead><tr>${TRAINING_COLUMNS.map(([f, title]) =>
-      `<th class="sortable ${f === "name" ? "" : "right"}" aria-sort="${sort.field === f ? (sort.descending ? "descending" : "ascending") : "none"}"><button type="button" class="sort-button" data-tr-sort="${f}">${title}${sort.field === f ? (sort.descending ? " ▾" : " ▴") : ""}</button></th>`).join("")}</tr></thead>
-      <tbody>${list.map((m) => `<tr><td><strong>${esc(m.name)}</strong></td><td class="right">${m.trainings}</td>
-        <td class="right">${percent(m.rate)}</td><td class="right">${num(m.hours)}</td><td class="right">${formatDate(m.last)}</td></tr>`).join("")}</tbody></table></div>
-    ${list.length ? "" : `<p class="empty-note">Für ${state.year} sind keine Übungsteilnahmen erfasst.</p>`}</div>
-    ${edit ? `<div class="card"><h3>Personenstamm</h3>
-      <p class="muted small">Ausgeschiedene Personen erscheinen nicht mehr in der Auswahl bei neuen Übungen; ihre Einsätze und Teilnahmen bleiben erhalten.</p>
-      <ul class="member-admin">${data.members.map((m) => `<li><span ${m.active ? "" : 'class="muted"'}>${esc(m.name)}${m.active ? "" : " (ausgeschieden)"}</span>
-        <button type="button" class="btn btn-light btn-small" data-tr-active="${m.id}" data-active="${m.active ? "0" : "1"}">${m.active ? "Ausgeschieden" : "Wieder aktiv"}</button></li>`).join("")}</ul></div>` : ""}`;
+  const people = [...s.members].sort((x, y) => sort.descending ? cmp(y, x) : cmp(x, y));
+  const trainings = data.trainings.filter((t) => t.id !== trainingState.pendingDelete);
+  const maxCount = Math.max(1, ...people.map((m) => m.trainings));
+  const maxParticipants = Math.max(1, ...trainings.map((t) => t.participants.length));
+  const average = people.length && s.count ? people.reduce((sum, m) => sum + m.rate, 0) / people.length : null;
+  const open = (set, id) => set.has(id);
+  const personRow = (m, i) => `<tr class="row ${open(trainingState.openPeople, m.id) ? "open" : ""}" data-tr-person="${m.id}" tabindex="0" aria-expanded="${open(trainingState.openPeople, m.id)}">
+      <td class="muted">${i + 1}</td>
+      <td><strong>${esc(m.name)}</strong><span class="member-sub">${percent(m.rate).replace(" ", "\u00a0")} · ${num(m.hours)}\u00a0h</span></td>
+      <td>${trainingBar(m.trainings, maxCount)}</td>
+      <td class="right hide-mobile">${percent(m.rate)}</td><td class="right hide-mobile">${num(m.hours)}</td>
+      <td class="right hide-mobile">${formatDate(m.last)}</td>${trainingChevron()}</tr>
+    ${open(trainingState.openPeople, m.id) ? `<tr class="detail"><td colspan="${TRAINING_COLUMNS.length + 2}">${personTrainingsHtml(m)}</td></tr>` : ""}`;
+  const trainingRow = (t) => `<tr class="row ${open(trainingState.openTrainings, t.id) ? "open" : ""}" data-tr-training="${t.id}" tabindex="0" aria-expanded="${open(trainingState.openTrainings, t.id)}">
+      <td>${trainingDays(t)}</td><td><strong>${esc(t.topic)}</strong></td>
+      <td class="right hide-mobile">${formatDuration(t.duration_min)}</td>
+      <td>${trainingBar(t.participants.length, maxParticipants)}</td>${trainingChevron()}</tr>
+    ${open(trainingState.openTrainings, t.id) ? `<tr class="detail"><td colspan="5">${trainingDetailHtml(t)}</td></tr>` : ""}`;
+  $("#view-training_members").innerHTML = `
+    <div class="kpis kpis-4">
+      ${analysisKpi("Übungen", s.count, `im Jahr ${state.year}`)}
+      ${analysisKpi("Übungszeit", formatHours(s.minutes), "alle Übungen zusammen")}
+      ${analysisKpi("Teilnehmende", people.length, "Personen mit mindestens einer Übung")}
+      ${analysisKpi("Beteiligung", percent(average), "durchschnittlich je Person")}</div>
+    <div class="card list-card members-table section-gap">
+      <div class="toolbar"><div><h3>Teilnahme je Person ${state.year}</h3>
+        <p class="muted small">Beteiligung = Anteil der Übungen, bei denen die Person dabei war · Diese Zahlen gehören nicht zur Einsatzstatistik.</p></div></div>
+      <div class="table-wrap"><table class="table"><thead><tr><th class="col-number">Nr.</th>${TRAINING_COLUMNS.map(([f, title, cls]) =>
+        `<th class="sortable ${cls}" aria-sort="${sort.field === f ? (sort.descending ? "descending" : "ascending") : "none"}"><button type="button" class="sort-button" data-tr-sort="${f}">${title}${sort.field === f ? (sort.descending ? " ▾" : " ▴") : ""}</button></th>`).join("")}<th class="col-toggle"><span class="visually-hidden">Übungen anzeigen</span></th></tr></thead>
+        <tbody>${people.map(personRow).join("")}</tbody></table></div>
+      ${people.length ? "" : `<p class="empty-note">Für ${state.year} sind keine Übungsteilnahmen erfasst.</p>`}</div>
+    <div class="card list-card members-table section-gap">
+      <div class="toolbar"><div><h3>Übungen ${state.year}</h3>
+        <p class="muted small">${can("trainings.edit") ? "Neue Übungen erfasst du oben mit „Übung erfassen“. " : ""}Eine Zeile aufklappen zeigt Teilnehmer und Notizen.</p></div></div>
+      <div class="table-wrap"><table class="table"><thead><tr><th>Datum</th><th>Thema</th><th class="right hide-mobile">Dauer</th><th>Teilnehmer</th><th class="col-toggle"><span class="visually-hidden">Details anzeigen</span></th></tr></thead>
+        <tbody>${trainings.map(trainingRow).join("")}</tbody></table></div>
+      ${trainings.length ? "" : `<p class="empty-note">Für ${state.year} ist keine Übung erfasst.</p>`}</div>`;
 }
 
 // ------------------------------------------------------------ Bedienung
-function openTrainingForm(draft, editing) {
-  trainingState.draft = draft;
+const trainingDialog = () => $("#training-dialog");
+
+function renderTrainingDialog() {
+  $("#training-title").textContent = trainingState.draft.id ? "Übung bearbeiten" : "Übung erfassen";
+  $("#training-form-body").innerHTML = trainingFormHtml();
+}
+
+/** Öffnet den Dialog (vom Knopf oben bzw. „Bearbeiten“ in der Liste); newDraft erst nach dem Laden der Personen. */
+async function openTrainingForm(makeDraft, editing) {
+  try { await loadTrainings(); } catch (e) { toast(e.message); return; }
+  trainingState.draft = makeDraft();
   trainingState.editing = editing;
   trainingState.search = "";
-  renderTrainings();
+  renderTrainingDialog();
+  if (!trainingDialog().open) trainingDialog().showModal();
   $("#tr-topic")?.focus();
+}
+
+const closeTrainingForm = () => { if (trainingDialog().open) trainingDialog().close(); };
+
+function showTrainings() {
+  if (state.view === "training_members") VIEWS.training_members.render();
 }
 
 function updateDraftField(el) {
@@ -200,10 +238,11 @@ async function saveTraining() {
   try {
     await apiJson(d.id ? `/api/trainings/${d.id}` : "/api/trainings", d.id ? "PUT" : "POST", trainingPayload(d));
   } catch (e) { toast(e.message); return; }
-  trainingState.editing = trainingState.draft = null;
+  const year = Number(d.startDate.slice(0, 4));
+  closeTrainingForm();
   await reloadTrainings();
-  VIEWS[state.view].render();
-  toast("Übung gespeichert.");
+  showTrainings();
+  toast(year === state.year ? "Übung gespeichert." : `Übung gespeichert (Jahr ${year}).`);
 }
 
 function deleteTraining(id) {
@@ -211,10 +250,10 @@ function deleteTraining(id) {
   if (!training) return;
   // Wie bei Einsätzen: erst ausblenden, endgültig löschen erst nach Ablauf der Rückgängig-Zeit
   trainingState.pendingDelete = id;
-  renderTrainings();
+  showTrainings();
   let undone = false;
   toast("Übung gelöscht.", { action: "Rückgängig", duration: 6000, onAction: () => {
-    undone = true; trainingState.pendingDelete = null; renderTrainings();
+    undone = true; trainingState.pendingDelete = null; showTrainings();
   } });
   setTimeout(async () => {
     if (undone) return;
@@ -222,7 +261,7 @@ function deleteTraining(id) {
     catch (e) { toast(e.message); }
     trainingState.pendingDelete = null;
     await reloadTrainings();
-    VIEWS[state.view].render();
+    showTrainings();
   }, 6200);
 }
 
@@ -244,22 +283,22 @@ async function trainingClick(e) {
     renderTrainingMembers();
     return;
   }
-  const active = e.target.closest("[data-tr-active]");
-  if (active) {
-    try { await apiJson(`/api/trainings/members/${active.dataset.trActive}`, "PUT", { active: active.dataset.active === "1" }); }
-    catch (error) { toast(error.message); return; }
-    await reloadTrainings();
+  const person = e.target.closest("tr[data-tr-person]"), training = e.target.closest("tr[data-tr-training]");
+  if (person || training) {
+    const [set, id] = person ? [trainingState.openPeople, Number(person.dataset.trPerson)] : [trainingState.openTrainings, Number(training.dataset.trTraining)];
+    if (set.has(id)) set.delete(id); else set.add(id);
     renderTrainingMembers();
+    $(`#view-training_members tr[${person ? "data-tr-person" : "data-tr-training"}="${id}"]`)?.focus({ preventScroll: true });
     return;
   }
+  if (e.target.closest("tr.detail") && !e.target.closest("[data-tr-action]")) return;
   const button = e.target.closest("[data-tr-action]");
   if (!button) return;
   const d = trainingState.draft;
   switch (button.dataset.trAction) {
-    case "new": openTrainingForm(emptyTrainingDraft(), "new"); break;
-    case "edit": openTrainingForm(draftFromTraining(trainingState.data.trainings.find((t) => t.id === Number(button.dataset.id))), Number(button.dataset.id)); break;
+    case "edit": openTrainingForm(() => draftFromTraining(trainingState.data.trainings.find((t) => t.id === Number(button.dataset.id))), Number(button.dataset.id)); break;
     case "delete": deleteTraining(Number(button.dataset.id)); break;
-    case "cancel": trainingState.editing = trainingState.draft = null; renderTrainings(); break;
+    case "cancel": closeTrainingForm(); break;
     case "save": await saveTraining(); break;
     case "all": for (const m of trainingState.data.members) if (m.active) d.memberIds.add(m.id); refreshTrainingPeople(); break;
     case "none": d.memberIds.clear(); d.newMembers = []; refreshTrainingPeople(); break;
@@ -267,18 +306,22 @@ async function trainingClick(e) {
   }
 }
 
-VIEWS.trainings = { label: "Übungen", sub: "Übungen", title: "Übungsdienste", load: loadTrainings, render: renderTrainings,
-  permission: "trainings.view", single: true, help: "sec_training" };
-VIEWS.training_members = { label: "Übungen", sub: "Übungen", title: "Übungsteilnahme", load: loadTrainings, render: renderTrainingMembers,
+VIEWS.training_members = { label: "Übungen", sub: "Übungen", title: "Übungen", load: loadTrainings, render: renderTrainingMembers,
   permission: "trainings.view", single: true, help: "sec_training" };
 
-$("#view-trainings").addEventListener("click", trainingClick);
+$("#btn-training").addEventListener("click", () => openTrainingForm(emptyTrainingDraft, "new"));
 $("#view-training_members").addEventListener("click", trainingClick);
-$("#view-trainings").addEventListener("input", (e) => {
+$("#view-training_members").addEventListener("keydown", (e) => {
+  const row = e.target.closest("tr[data-tr-person], tr[data-tr-training]");
+  if (row && e.target === row && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); row.click(); }
+});
+trainingDialog().addEventListener("click", trainingClick);
+trainingDialog().addEventListener("close", () => { trainingState.editing = trainingState.draft = null; });
+trainingDialog().addEventListener("input", (e) => {
   if (e.target.dataset.tr) updateDraftField(e.target);
   if (e.target.id === "tr-search") { trainingState.search = e.target.value; refreshTrainingPeople(); }
 });
-$("#view-trainings").addEventListener("keydown", (e) => {
+trainingDialog().addEventListener("keydown", (e) => {
   if (e.key === "Enter" && (e.target.id === "tr-new-last" || e.target.id === "tr-new-first")) { e.preventDefault(); addNewTrainingMember(); }
 });
 document.addEventListener("app:data", () => { trainingState.data = null; });

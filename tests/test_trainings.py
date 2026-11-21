@@ -70,13 +70,12 @@ def test_update_and_delete_need_current_revision(client):
     assert client.delete(url + "?revision=1").status_code == 404
 
 
-def test_member_inactive_and_summary(client):
+def test_summary_and_reactivation(client):
     ids = _member_ids(client)
     client.post("/api/trainings", json={**BODY, "member_ids": [ids["Muster, Max"]]})
-    result = client.put(f"/api/trainings/members/{ids['Muster, Max']}", json={"active": False}).json()
-    assert result["members"][0]["active"] is False
+    client.put(f"/api/admin/wehr-a1/members/{ids['Muster, Max']}", json={"last_name": "Muster", "first_name": "Max", "active": False})
     data = client.get("/api/trainings?year=2025").json()
-    assert data["summary"]["count"] == 1
+    assert data["members"][0]["active"] is False and data["summary"]["count"] == 1
     person = data["summary"]["members"][0]
     assert person["trainings"] == 1 and person["hours"] == 2.5 and person["rate"] == 1
     # eine ausgeschiedene Person wird bei erneuter Eingabe wieder aktiv
@@ -141,3 +140,71 @@ def test_trainer_role_is_minimal(data_dir):
         permissions = roles.permissions(roles.find("trainer", None).id)
     assert permissions == {rbac.STATS, rbac.TRAININGS, rbac.TRAININGS_EDIT}
     assert rbac.TRAININGS in rbac.close({rbac.TRAININGS_EDIT})          # Ändern setzt Sehen voraus
+
+
+# ------------------------------------------------------------ Personenstamm (Einstellungen → Personen)
+def _people(client, slug="wehr-a1"):
+    return client.get(f"/api/admin/{slug}/members").json()["members"]
+
+
+def test_people_create_rename_and_duplicates(client):
+    url = "/api/admin/wehr-a1/members"
+    assert client.post(url, json={"last_name": "Beispiel", "first_name": "Erika"}).status_code == 200
+    # gleicher Name und Schreibvariante, die der Namensabgleich ohnehin zuordnen würde
+    assert client.post(url, json={"last_name": "Beispiel", "first_name": "Erika"}).status_code == 409
+    assert client.post(url, json={"last_name": "Beispie", "first_name": "Erika"}).status_code == 409
+    erika = next(p for p in _people(client) if p["last_name"] == "Beispiel")
+    assert client.put(f"{url}/{erika['id']}", json={"last_name": "Muster", "first_name": "Max"}).status_code == 409
+    assert client.put(f"{url}/{erika['id']}", json={"last_name": "Beispiel", "first_name": "Erika", "active": False}).status_code == 200
+    assert next(p for p in _people(client) if p["id"] == erika["id"])["active"] is False
+
+
+def test_people_similar_hints_and_delete_guard(client):
+    url = "/api/admin/wehr-a1/members"
+    with db.connection(tenancy.tenant_path("wehr-a1")) as con:        # Direkt angelegt: „Rott“ ≠ „Röttgen“ für den Abgleich
+        directory = store.MemberDirectory(con)
+        directory.find_or_create("Rott", "Michael", "Rott, Michael")
+        directory.find_or_create("Röttgen", "Michael", "Röttgen, Michael")
+    people = {p["name"]: p for p in _people(client)}
+    assert [s["name"] for s in people["Rott, Michael"]["similar"]] == ["Röttgen, Michael"]
+    assert people["Muster, Max"]["similar"] == [] and people["Muster, Max"]["incidents"] == 1
+    assert client.delete(f"{url}/{people['Muster, Max']['id']}").status_code == 409      # hat Einsätze
+    assert client.delete(f"{url}/{people['Rott, Michael']['id']}").status_code == 200
+
+
+def test_people_merge_moves_attendance(client):
+    url = "/api/admin/wehr-a1/members"
+    with db.connection(tenancy.tenant_path("wehr-a1")) as con:
+        other = store.MemberDirectory(con).find_or_create("Mustermann", "M.", "Mustermann, M.")
+    ids = _member_ids(client)
+    body = {**BODY, "member_ids": [ids["Muster, Max"], other]}
+    client.post("/api/trainings", json=body)
+    result = client.post(f"{url}/{other}/merge", json={"into": ids["Muster, Max"]}).json()["members"]
+    assert [p["name"] for p in result] == ["Muster, Max"] and result[0]["trainings"] == 1 and result[0]["incidents"] == 1
+    assert client.post(f"{url}/{ids['Muster, Max']}/merge", json={"into": ids["Muster, Max"]}).status_code == 422
+
+
+def test_people_transfer_between_tenants(client):
+    make_tenant("wehr-a2")
+    make_tenant("wehr-b1", vg="vg-b")
+    ids = _member_ids(client)
+    url = f"/api/admin/wehr-a1/members/{ids['Muster, Max']}/transfer"
+    assert client.post(url, json={"to_slug": "wehr-b1"}).status_code == 422          # andere VG
+    assert client.post(url, json={"to_slug": "wehr-a1"}).status_code == 422
+    assert client.post(url, json={"to_slug": "wehr-zz"}).status_code == 403
+    result = client.post(url, json={"to_slug": "wehr-a2"}).json()["members"]
+    assert result[0]["active"] is False and result[0]["incidents"] == 1                  # Historie bleibt hier
+    assert [(p["name"], p["active"]) for p in _people(client, "wehr-a2")] == [("Muster, Max", True)]
+
+
+def test_people_admin_needs_settings_right(make_client):
+    """Den Personenstamm pflegt die Wehrführung (SETTINGS); wer nur Übungen oder Einsätze erfasst, sieht ihn nicht."""
+    vg, a1 = make_tenant("wehr-a1")
+    for email, role in (("trainer@example.org", "trainer"), ("editor@example.org", "editor"), ("lead@example.org", "lead")):
+        grant(email, role, a1)
+    client = make_client(login=True)
+    for email, expected in (("trainer@example.org", 403), ("editor@example.org", 403), ("lead@example.org", 200)):
+        client.cookies.clear()
+        login(client, email)
+        client.cookies.set("scope", "t:wehr-a1")
+        assert client.get("/api/admin/wehr-a1/members").status_code == expected, email

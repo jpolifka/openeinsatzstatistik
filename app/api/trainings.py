@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Übungsdienste: Liste, Erfassen, Ändern, Löschen und Personenstamm (aktiv/ausgeschieden).
+"""Übungsdienste: Liste, Erfassen, Ändern und Löschen (der Personenstamm wird unter Einstellungen → Personen gepflegt).
 Rechte: TRAININGS (sehen), TRAININGS_EDIT (ändern); immer nur die ausgewählte Wehr."""
 from typing import List, Optional
 
@@ -83,14 +83,3 @@ def api_delete_training(training_id: int, revision: Optional[int] = None, a: ten
         _errors(lambda: trainings.delete(con, training_id, revision))
     return {"ok": True}
 
-
-class ActiveIn(BaseModel):
-    active: bool
-
-
-@router.put("/api/trainings/members/{member_id}")
-def api_member_active(member_id: int, body: ActiveIn, a: tenancy.Access = Depends(access)):
-    """Person im Personenstamm als aktiv bzw. ausgeschieden kennzeichnen (nur die Auswahl bei Übungen)."""
-    with a.current(TRAININGS_EDIT).connection() as con:
-        _errors(lambda: trainings.set_active(con, member_id, body.active))
-        return {"members": trainings.directory(con)}

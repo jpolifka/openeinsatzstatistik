@@ -150,7 +150,3 @@ def directory(con):
     return [{"id": r["id"], "name": r["name"], "active": bool(r["active"])}
             for r in con.execute("SELECT id, name, active FROM member ORDER BY sort_order, name")]
 
-
-def set_active(con, member_id, active):
-    if not con.execute("UPDATE member SET active = ? WHERE id = ?", (1 if active else 0, member_id)).rowcount:
-        raise KeyError(member_id)

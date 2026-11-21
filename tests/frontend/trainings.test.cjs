@@ -6,27 +6,44 @@ const vm = require("node:vm");
 
 function load() {
   const els = {};
-  const el = (key) => (els[key] ||= { innerHTML: "", value: "", textContent: "", addEventListener() {}, focus() {} });
+  const el = (key) => (els[key] ||= { innerHTML: "", value: "", textContent: "", addEventListener() {}, focus() {}, open: false });
   const context = vm.createContext({
     VIEWS: {}, document: { addEventListener() {} }, state: { year: 2026 }, config: { permissions: ["trainings.view", "trainings.edit"] },
     $: el, esc: (s) => String(s ?? ""), pad2: (n) => String(n).padStart(2, "0"), plural: (n, one, many) => `${n} ${n === 1 ? one : many}`,
     formatDuration: (m) => `${m} min`, formatDate: (i) => i, formatTime: (i) => i, formatDateTime: (i) => i, formatHours: (m) => `${m / 60} h`,
-    num: (n) => String(n), percent: (q) => `${Math.round(q * 100)} %`, can: () => true, toast() {}, api: async () => ({}), apiJson: async () => ({}),
+    num: (n) => String(n), ICON_CHEVRON: "<svg></svg>", analysisKpi: (t, v) => `${t}:${v}`, percent: (q) => `${Math.round(q * 100)} %`, can: () => true, toast() {}, api: async () => ({}), apiJson: async () => ({}),
   });
   vm.runInContext(fs.readFileSync("static/trainings.js", "utf8"), context);
   return { context, els };
 }
 
-test("Ansichten sind registriert, in der Navigation und im HTML", () => {
+test("Eine Ansicht unter Personal, ein einziger Knopf oben, kein zweiter Reiter bei Einsätzen", () => {
   const { context } = load();
-  for (const key of ["trainings", "training_members"]) {
-    assert.equal(typeof context.VIEWS[key].render, "function");
-    assert.equal(context.VIEWS[key].permission, "trainings.view");
-    assert.match(fs.readFileSync("static/index.html", "utf8"), new RegExp(`id="view-${key}"`));
-  }
+  assert.equal(typeof context.VIEWS.training_members.render, "function");
+  assert.equal(context.VIEWS.training_members.permission, "trainings.view");
+  assert.equal(context.VIEWS.trainings, undefined);
+  const html = fs.readFileSync("static/index.html", "utf8");
+  assert.match(html, /id="view-training_members"/);
+  assert.match(html, /id="btn-training"/);
+  assert.match(html, /id="training-dialog"/);
+  assert.doesNotMatch(html, /id="view-trainings"/);
   const app = fs.readFileSync("static/app.js", "utf8");
-  assert.match(app, /views: \["incidents", "trainings", "fees", "records"\]/);
+  assert.match(app, /views: \["incidents", "fees", "records"\]/);
   assert.match(app, /views: \["members", "training_members"\]/);
+});
+
+test("Übersicht: Balken für die Häufigkeit, Zeilen klappen auf", () => {
+  const { context, els } = load();
+  vm.runInContext(`trainingState.data = { members: [], trainings: [{ id: 5, topic: "Knoten", started_at: "2026-03-01T19:00", ended_at: "2026-03-01T21:00",
+      duration_min: 120, trainer: "Muster, Max", notes: "", participants: [{ id: 1, name: "Muster, Max" }] }],
+    summary: { count: 1, minutes: 120, members: [{ id: 1, name: "Muster, Max", trainings: 1, minutes: 120, hours: 2, rate: 1, last: "2026-03-01T19:00" }] } };
+    trainingState.openPeople.add(1);`, context);
+  vm.runInContext("renderTrainingMembers()", context);
+  const html = els["#view-training_members"].innerHTML;
+  assert.match(html, /class="track"/);                                   // Balken
+  assert.match(html, /data-tr-person="1"[^>]*aria-expanded="true"/);     // aufgeklappt
+  assert.match(html, /Knoten/);                                           // Detailzeile der Person
+  assert.match(html, /data-tr-training="5"[^>]*aria-expanded="false"/);
 });
 
 test("Enddatum ist mit dem Startdatum vorbelegt; Dauer nur bei Ende nach Beginn", () => {
@@ -52,4 +69,14 @@ test("Teilnehmerwahl: ausgeschiedene Personen fehlen, neue Personen werden gesen
   const payload = vm.runInContext("trainingPayload(trainingState.draft)", context);
   assert.deepEqual(Array.from(payload.member_ids), [1]);
   assert.equal(payload.new_members[0].last_name, "Beispiel");
+});
+
+test("Übungsleiter wird aus dem Personenstamm vorgeschlagen", () => {
+  const { context } = load();
+  vm.runInContext(`trainingState.data = { members: [{ id: 1, name: "Muster, Max", active: true }, { id: 2, name: "Alt, Anna", active: false }] };
+    trainingState.draft = emptyTrainingDraft();`, context);
+  const html = vm.runInContext("trainingFormHtml()", context);
+  assert.match(html, /list="tr-trainer-list"/);
+  assert.match(html, /<option value="Muster, Max">/);
+  assert.doesNotMatch(html, /<option value="Alt, Anna">/);
 });

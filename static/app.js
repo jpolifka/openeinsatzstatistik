@@ -246,7 +246,7 @@ const VIEWS = {
 // Hauptreiter: Jeder bündelt Ansichten (Schlüssel in VIEWS); mehrere erscheinen als Unterreiter darunter.
 const NAV = [
   { key: "overview", label: "Übersicht", views: ["overview"] },
-  { key: "incidents", label: "Einsätze", views: ["incidents", "trainings", "fees", "records"] },
+  { key: "incidents", label: "Einsätze", views: ["incidents", "fees", "records"] },
   { key: "evaluation", label: "Auswertungen", views: ["evaluation", "times", "load", "aborts", "resources", "fire"] },
   { key: "members", label: "Personal", views: ["members", "training_members"] },
   { key: "admin", label: "Einstellungen", views: ["admin", "dpa"] },
@@ -752,13 +752,14 @@ document.addEventListener("keydown", async (e) => {
   }
   renderTabs();
   if (!config.tenants.length) {               // Superadmin ohne Wehr bzw. nur Wehren ohne AVV: Verwaltung, AVV
-    $("#btn-pdf").hidden = true;
+    $("#btn-pdf").hidden = $("#btn-training").hidden = true;
     $(".year-select:not(#scope-select)").hidden = true;
     await showView();
     return;
   }
   renderScopes();
   $("#btn-pdf").hidden = !can("reports.import");
+  $("#btn-training").hidden = !can("trainings.edit");
   $("#btn-export").hidden = !can("incidents.export");
   try {
     await loadYears();

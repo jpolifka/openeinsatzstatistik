@@ -14,17 +14,18 @@ Aufbau: ein Modul je Thema, jedes mit eigenem Router; hier werden sie zu `router
 - settings: Einstellungen, Bedarfsplan-Freigabe, Farben, Logos einer Wehr
 - vg: Gebührenordnung, Vorgaben und Fahrzeuge der VG
 - keywords: Stichwortkatalog von Wehr bzw. VG
+- people: Personenstamm einer Wehr (Abgleich, Zusammenführen, Wehrwechsel)
 - users, roles: Zuordnungen und Rollen
 - superadmin: VGs und Wehren (nur Superadmin)
 - common: Zugriff, Protokoll, Fehlermeldungen
 """
 from fastapi import APIRouter
 
-from app.admin import keywords, overview, roles, settings, superadmin, users, vg
+from app.admin import keywords, overview, people, roles, settings, superadmin, users, vg
 from app.admin.overview import has_admin
 
 router = APIRouter()
-for _module in (overview, settings, vg, keywords, users, roles, superadmin):
+for _module in (overview, settings, vg, keywords, people, users, roles, superadmin):
     router.include_router(_module.router)
 
 __all__ = ["router", "has_admin"]

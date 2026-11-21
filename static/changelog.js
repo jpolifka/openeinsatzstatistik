@@ -6,10 +6,17 @@
 // noch ein Eintrag hinzu, bekommt er `version` ("JJJJ-MM-TT.2", dann .3 …); ohne `version` gilt das Datum.
 const CHANGELOG = [
   {
+    date: "2026-11-21",
+    items: [
+      "<b>Übungen übersichtlicher:</b> „Übung erfassen“ steht jetzt als eigener Knopf oben neben „Bericht einlesen“. Unter Personal → Übungen zeigen Kennzahlen, ein Balken je Person und aufklappbare Zeilen (Übungen der Person, Teilnehmer je Übung) die Beteiligung auf einen Blick. Den Übungsleiter schlägt die App beim Tippen aus dem Personenstamm vor.",
+      "<b>Personenstamm in den Einstellungen:</b> Einstellungen → Personen (für die Wehrführung): Personen anlegen, Schreibweisen korrigieren, Doppelte wie „Rott, Michael“ und „Röttgen, Michael“ zusammenführen, Ausgeschiedene kennzeichnen und bei einem Wechsel in eine andere Wehr der Verbandsgemeinde übergeben. Ähnliche Einträge werden markiert, so zeigt die Liste auch, ob alle Namen richtig erkannt wurden.",
+    ],
+  },
+  {
     date: "2026-11-20",
     version: "2026-11-20.3",
     items: [
-      "<b>Übungsdienste:</b> Übungen ohne BKS-Bericht lassen sich jetzt erfassen (Einsätze → Übungen): Datum, Thema, Beginn und Ende (auch über mehrere Tage), optional Kategorie, Ort, Ausbilder/in und Notizen. Die Teilnehmer übernimmst du per Klick aus dem Personenstamm; neue Personen gibst du ein und sie landen im Personenstamm. Unter Personal → Übungen siehst du die Teilnahmen je Person, ausgeschiedene Personen lassen sich ausblenden. Neue Rolle „Ausbilder/in“ nur für Übungen. Der Excel-Export enthält ein eigenes Blatt „Übungen“. <b>Übungen zählen in keiner Auswertung.</b>",
+      "<b>Übungsdienste:</b> Übungen ohne BKS-Bericht lassen sich jetzt erfassen (Knopf „Übung erfassen“): Datum, Thema, Beginn und Ende (auch über mehrere Tage), optional Kategorie, Ort, Ausbilder/in und Notizen. Die Teilnehmer übernimmst du per Klick aus dem Personenstamm. Unter Personal → Übungen siehst du die Teilnahmen je Person. Neue Rolle „Ausbilder/in“ nur für Übungen. Der Excel-Export enthält ein eigenes Blatt „Übungen“. <b>Übungen zählen in keiner Auswertung.</b>",
     ],
   },
   {
