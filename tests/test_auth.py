@@ -4,7 +4,7 @@ import re
 import pytest
 
 from app import auth, mail, tenancy
-from conftest import grant, make_tenant
+from conftest import grant, login, make_tenant
 
 
 @pytest.fixture
@@ -179,23 +179,67 @@ def test_disabling_login_and_admins_together_is_refused(monkeypatch):
         auth.check_config()
 
 
-def test_link_base_uses_request_host_only_for_allowed_domains(monkeypatch):
+def _subdomain(vg, sub):
+    with tenancy.central() as con:
+        tenancy.set_vg_subdomain(con, con.execute("SELECT id FROM vg WHERE slug = ?", (vg,)).fetchone()[0], sub)
+
+
+def test_link_target_comes_from_membership_not_from_host_header(client, monkeypatch):
     monkeypatch.setattr(auth, "BASE_URL", "https://login.example.org")
-    monkeypatch.setattr(auth, "ALLOWED_DOMAINS", ["example.org", "example.de"])
-    assert auth.link_base("wehr1.example.org") == "https://wehr1.example.org"
-    assert auth.link_base("Wehr1.Example.DE") == "https://wehr1.example.de"
-    assert auth.link_base("example.org") == "https://example.org"
-    for fremd in ("evil.com", "example.org.evil.com", "xexample.org", "", None, "a.example.org/x", "a@example.org"):
-        assert auth.link_base(fremd) == "https://login.example.org"
-    monkeypatch.setattr(auth, "ALLOWED_DOMAINS", [])
-    assert auth.link_base("wehr1.example.org") == "https://login.example.org"
+    monkeypatch.setattr(auth, "BASE_DOMAIN", "example.org")
+    _subdomain("vg-a", "musterstadt")
+    mine = "https://musterstadt.example.org"
+    assert auth.link_base("m.muster@example.org", "musterstadt.example.org") == mine
+    assert auth.link_base("m.muster@example.org", "Musterstadt.Example.ORG:443") == mine
+    # Fremde, Geschwister- und Phantasie-Hosts erzeugen nie ein Ziel – es bleibt bei der eigenen VG
+    for fremd in ("evil.example.org", "evil.com", "musterstadt.example.org.evil.com", "xmusterstadt.example.org",
+                  "", None, "a.example.org/x", "a@example.org", "example.org"):
+        assert auth.link_base("m.muster@example.org", fremd) == mine
+    # Ohne Zuordnung zu einer VG mit Subdomain oder ohne BASE_DOMAIN: BASE_URL
+    assert auth.link_base("fremd@example.org", "musterstadt.example.org") == "https://login.example.org"
+    monkeypatch.setattr(auth, "BASE_DOMAIN", "")
+    assert auth.link_base("m.muster@example.org", "musterstadt.example.org") == "https://login.example.org"
 
 
-def test_login_link_points_to_request_host(client, monkeypatch, caplog):
+def test_link_target_vg_without_subdomain_uses_base_url(client, monkeypatch):
+    monkeypatch.setattr(auth, "BASE_URL", "https://login.example.org")
+    monkeypatch.setattr(auth, "BASE_DOMAIN", "example.org")
+    assert auth.link_base("m.muster@example.org", "wehr-a1.example.org") == "https://login.example.org"
+
+
+def test_subdomain_is_unique_and_checked(client):
+    make_tenant("wehr-b1", "vg-b")
+    _subdomain("vg-a", "Musterstadt")
+    with pytest.raises(ValueError, match="schon"):
+        _subdomain("vg-b", "musterstadt")
+    for bad in ("a.b", "-a", "a b", "a/b", "ä"):
+        with pytest.raises(ValueError, match="Subdomain"):
+            _subdomain("vg-b", bad)
+    _subdomain("vg-b", "")                       # leer = keine
+
+
+def test_superadmin_sets_subdomain(client):
+    login(client, "admin@example.org")
+    r = client.post("/api/super/vgs", json={"name": "VG Neustadt", "subdomain": "Neustadt"})
+    assert r.status_code == 200
+    assert {v["slug"]: v["subdomain"] for v in r.json()["vgs"]}["neustadt"] == "neustadt"
+    assert client.post("/api/super/vgs", json={"name": "VG Zwei", "subdomain": "neustadt"}).status_code == 422
+    assert client.put("/api/super/vgs/neustadt", json={"name": "VG Neustadt", "subdomain": "a.b"}).status_code == 422
+
+
+def test_login_link_points_to_configured_vg_host(client, monkeypatch, caplog):
     monkeypatch.setattr(auth, "BASE_URL", "http://localhost")
-    monkeypatch.setattr(auth, "ALLOWED_DOMAINS", ["localhost"])
-    client.post("/login", data={"email": "m.muster@example.org"}, headers={"host": "wehr1.localhost"})
+    monkeypatch.setattr(auth, "BASE_DOMAIN", "localhost")
+    _subdomain("vg-a", "wehr1")
+    client.post("/login", data={"email": "m.muster@example.org"}, headers={"host": "evil.localhost"})
     assert "http://wehr1.localhost/auth/verify?token=" in caplog.text
+    assert "evil.localhost" not in caplog.text
+
+
+def test_old_allowed_domains_setting_is_refused(monkeypatch):
+    monkeypatch.setenv("ALLOWED_DOMAINS", "example.org")
+    with pytest.raises(RuntimeError, match="BASE_DOMAIN"):
+        auth.check_config()
 
 
 def test_auth_disabled_needs_loopback_binding(monkeypatch):

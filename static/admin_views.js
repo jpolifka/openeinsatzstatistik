@@ -891,6 +891,7 @@ function superDetail(vg) {
     <div class="form-grid">
       ${adminField("Name", `<input type="text" data-vg-name="${esc(vg.slug)}" value="${esc(vg.name)}">`, "span-2")}
       ${adminField("Art", `<select data-vg-kind="${esc(vg.slug)}">${kindOptions(vg.kind)}</select>`)}
+      ${adminField("Subdomain (Anmeldelink)", `<input type="text" data-vg-subdomain="${esc(vg.slug)}" value="${esc(vg.subdomain || "")}" placeholder="musterstadt" autocomplete="off" autocapitalize="off">`)}
       <div class="field"><span>AVV</span><a href="#dpa" class="tenant-badge dpa-${vg.dpa}">${DPA_LABELS[vg.dpa]}</a></div>
       <div class="field"><span>&nbsp;</span><button type="button" class="btn btn-outline" data-admin-action="rename-vg" data-slug="${esc(vg.slug)}">Speichern</button></div>
     </div>
@@ -930,6 +931,7 @@ function superSection() {
         <div class="form-grid">
           ${adminField("Name", `<input type="text" id="vg-name" placeholder="VG Musterstadt">`)}
           ${adminField("Art", `<select id="vg-kind">${kindOptions("vg")}</select>`)}
+          ${adminField("Subdomain (Anmeldelink)", `<input type="text" id="vg-subdomain" placeholder="musterstadt" autocomplete="off" autocapitalize="off">`)}
           <div class="field"><button type="button" class="btn btn-light" data-admin-action="create-vg">VG anlegen</button></div>
         </div>
         <p class="small muted">Neue VGs starten mit „AVV ausstehend“: Ihre Wehren sind gesperrt, bis der Vertrag unter „Auftragsverarbeitung“ bestätigt ist.</p></details>

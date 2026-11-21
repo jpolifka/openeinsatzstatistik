@@ -496,11 +496,11 @@ async function runAdminAction(button) {
       toast("Alle anderen abgemeldet");
       return rerender();
     case "create-vg":
-      admin.superOverview = await apiJson("/api/super/vgs", "POST", { name: $("#vg-name").value, kind: $("#vg-kind").value });
+      admin.superOverview = await apiJson("/api/super/vgs", "POST", { name: $("#vg-name").value, kind: $("#vg-kind").value, subdomain: $("#vg-subdomain").value });
       toast("VG angelegt");
       return rerender();
     case "rename-vg":
-      admin.superOverview = await apiJson(`/api/super/vgs/${slug}`, "PUT", { slug, name: $(`[data-vg-name="${slug}"]`).value, kind: $(`[data-vg-kind="${slug}"]`).value });
+      admin.superOverview = await apiJson(`/api/super/vgs/${slug}`, "PUT", { slug, name: $(`[data-vg-name="${slug}"]`).value, kind: $(`[data-vg-kind="${slug}"]`).value, subdomain: $(`[data-vg-subdomain="${slug}"]`).value });
       toast("Gespeichert");
       return rerender();
     case "move-tenant": {
