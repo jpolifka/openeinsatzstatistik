@@ -9,6 +9,9 @@ import threading
 GENERIC_ERROR = "Die Datei konnte nicht gelesen werden. Ist es ein Einsatzbericht aus dem BKS-Portal?"
 MAX_SECONDS = 45
 MAX_RESULT_BYTES = 32 * 1024 * 1024
+# Adressraum je Leseprozess. Gesamtbudget im Container (docker-compose: mem_limit 2g): WORKERS × ADDRESS_SPACE
+# + Hauptprozess (~300 MiB) + tmpfs (256 MiB) bleibt darunter (tests/test_parser_budget.py)
+ADDRESS_SPACE = 640 * 1024 * 1024
 WORKERS = 2                                      # Dateien, die gleichzeitig gelesen werden
 _slots = threading.BoundedSemaphore(WORKERS)
 
@@ -66,7 +69,7 @@ def _child(connection, kind, path):
     try:
         if sys.platform.startswith("linux"):
             import resource
-            resource.setrlimit(resource.RLIMIT_AS, (768 * 1024 * 1024,) * 2)
+            resource.setrlimit(resource.RLIMIT_AS, (ADDRESS_SPACE,) * 2)
             resource.setrlimit(resource.RLIMIT_CPU, (MAX_SECONDS, MAX_SECONDS))
         result = read_local(kind, path)
         connection.send_bytes(json.dumps({"ok": True, "result": encode(result)}).encode())
