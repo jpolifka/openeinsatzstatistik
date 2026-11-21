@@ -196,3 +196,26 @@ def test_login_link_points_to_request_host(client, monkeypatch, caplog):
     monkeypatch.setattr(auth, "ALLOWED_DOMAINS", ["localhost"])
     client.post("/login", data={"email": "m.muster@example.org"}, headers={"host": "wehr1.localhost"})
     assert "http://wehr1.localhost/auth/verify?token=" in caplog.text
+
+
+def test_auth_disabled_needs_loopback_binding(monkeypatch):
+    """BASE_URL lokal, aber Dienst im Netz veröffentlicht (APP_BIND=0.0.0.0): ohne Anmeldung nie."""
+    monkeypatch.setattr(tenancy, "ADMIN_EMAILS", set())
+    monkeypatch.setattr(auth, "BASE_URL", "http://localhost:8112")
+    monkeypatch.setattr(auth, "AUTH_DISABLED", True)
+    for bind in ("0.0.0.0", "192.168.1.5", "::"):
+        monkeypatch.setattr(auth, "APP_BIND", bind)
+        with pytest.raises(RuntimeError, match="APP_BIND"):
+            auth.check_config()
+    for bind in ("", "127.0.0.1", "[::1]".strip("[]")):
+        monkeypatch.setattr(auth, "APP_BIND", bind)
+        auth.check_config()
+
+
+def test_public_base_url_must_be_https(monkeypatch):
+    monkeypatch.setattr(tenancy, "ADMIN_EMAILS", {"admin@example.org"})
+    monkeypatch.setattr(auth, "AUTH_DISABLED", False)
+    monkeypatch.setattr(auth.mail, "SMTP_HOST", "smtp.example.org")
+    monkeypatch.setattr(auth, "BASE_URL", "http://einsatz.example.org")
+    with pytest.raises(RuntimeError, match="https"):
+        auth.check_config()

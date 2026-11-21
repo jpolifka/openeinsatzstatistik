@@ -39,6 +39,10 @@ SECRET_KEY = os.environ.get("SECRET_KEY", "")
 # Ohne Anmeldung ist jeder Zugriff Superadmin: nur auf ausdrückliche Anweisung (lokale Entwicklung)
 AUTH_DISABLED = os.environ.get("AUTH_DISABLED", "").strip().lower() in ("1", "true", "yes", "ja")
 
+# Adresse, an die der Dienst gebunden ist (docker-compose reicht APP_BIND durch, das Image setzt 0.0.0.0);
+# nicht gesetzt = lokaler Start von uvicorn
+APP_BIND = os.environ.get("APP_BIND", "").strip().strip("[]")
+
 COOKIE = "session"
 SCOPE_COOKIE = "scope"     # ausgewählte Wehr, wird bei jeder Anfrage gegen die Zuordnungen geprüft
 LINK_TTL = 15 * 60
@@ -71,8 +75,18 @@ def _is_local():
     return urlsplit(BASE_URL).hostname in ("localhost", "127.0.0.1", "::1")
 
 
+def _bind_is_local():
+    return APP_BIND in ("", "127.0.0.1", "localhost", "::1")
+
+
 def check_config():
     """Bricht den Start ab, wenn die Anmeldung so nicht funktionieren kann."""
+    if BASE_URL and not _is_local() and not BASE_URL.startswith("https://"):
+        # Sonst gingen Anmeldelinks und Sitzungscookies (ohne Secure) im Klartext über das Netz
+        raise RuntimeError("Eine nicht lokale BASE_URL muss mit https:// beginnen.")
+    if AUTH_DISABLED and not _bind_is_local():
+        raise RuntimeError("AUTH_DISABLED=1 gibt es nur mit lokaler Bindung (APP_BIND=127.0.0.1): "
+                           "sonst wäre jeder im Netz Superadmin.")
     if enabled() and not BASE_URL:
         raise RuntimeError("ADMIN_EMAILS ist gesetzt, BASE_URL fehlt (siehe README)")
     if not enabled() and BASE_URL and not _is_local():
