@@ -256,8 +256,8 @@ def purge_debug_reports():
             log.exception("DEBUG: %s nicht entfernt", old)
 
 
-async def purge_debug_reports_regularly(stop, interval=3600):
-    """Beim Start und danach stündlich aufräumen, bis stop gesetzt wird."""
+async def purge_debug_reports_regularly(stop, interval=86400):
+    """Beim Start und danach einmal am Tag aufräumen, bis stop gesetzt wird."""
     while True:
         try:
             purge_debug_reports()      # nur ein Verzeichnis lesen: kurz genug ohne Thread
