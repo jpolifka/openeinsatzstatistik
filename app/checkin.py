@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
 """Anmeldung zum Übungsdienst per QR-Code, ohne Benutzerkonto.
 
-Der Link `/checkin/<Wehr>.<Signatur>` steht auf einem Aushang und verfällt nie. Die Signatur ist ein HMAC über Wehr
-und Zähler `checkin_rev` (Tabelle `setting` der Wehr); „Neuen Code erzeugen“ erhöht den Zähler, der alte Aushang wird
-ungültig. Die Seite nimmt nur einen Namen entgegen, zeigt nie Namen aus dem Personenstamm und schreibt nur in
-Wehren, deren VG einen gültigen AVV hat (wie `tenancy.access_for`).
+Der Link `/checkin/<Wehr>.<Signatur>` steht auf einem Aushang und verfällt nie (nur „Neuen Code erzeugen“ macht ihn
+ungültig; die Signatur ist ein HMAC über Wehr und Zähler `checkin_rev`). Er allein berechtigt aber zu nichts: Die
+Seite verlangt die PIN der Übung (`training.checkin_pin`, gilt nur an den Tagen der Übung, siehe `trainings.check_in`)
+und legt keine Übung an. Eingaben landen in einer Warteschlange und werden erst von der Übungsleitung in Personenstamm
+und Teilnahme übernommen. Die Seite zeigt nie Namen aus dem Personenstamm und schreibt nur in Wehren, deren VG einen
+gültigen AVV hat (wie `tenancy.access_for`).
 """
 import datetime as dt
 import hmac
@@ -101,11 +103,13 @@ padding:.7rem 1.2rem}}</style></head><body><main class="page"><div class="card c
                         status_code=status, headers={"Cache-Control": "no-store"})
 
 
-def _form(first="", last="", error=""):
+def _form(first="", last="", error="", pin=""):
     e = html.escape
     notice = f'<p role="alert"><strong>{e(error)}</strong></p>' if error else ""
-    return (f'{notice}<p>Bitte Namen eintragen, um dich zur heutigen Übung anzumelden.</p>'
-            f'<form method="post"><label>Vorname<input name="first_name" value="{e(first)}" maxlength="60" '
+    return (f'{notice}<p>Bitte die PIN der heutigen Übung (nennt die Übungsleitung) und deinen Namen eintragen.</p>'
+            f'<form method="post"><label>PIN<input name="pin" value="{e(pin)}" maxlength="12" required '
+            f'inputmode="numeric" autocomplete="off"></label>'
+            f'<label>Vorname<input name="first_name" value="{e(first)}" maxlength="60" '
             f'autocomplete="given-name" autocapitalize="words"></label>'
             f'<label>Nachname<input name="last_name" value="{e(last)}" maxlength="60" required '
             f'autocomplete="family-name" autocapitalize="words"></label>'
@@ -125,7 +129,8 @@ def show(token: str):
 
 
 @router.post(PATH + "{token}", include_in_schema=False)
-def register(token: str, request: Request, first_name: str = Form(""), last_name: str = Form("")):
+def register(token: str, request: Request, first_name: str = Form(""), last_name: str = Form(""),
+             pin: str = Form("")):
     host = request.client.host if request.client else "?"
     if not _allowed("client", host):
         return HTMLResponse("<!doctype html><meta charset=\"utf-8\"><p>Zu viele Anmeldungen. "
@@ -138,9 +143,15 @@ def register(token: str, request: Request, first_name: str = Form(""), last_name
     now = dt.datetime.now()
     try:
         with tenant.connection() as con:
-            trainings.check_in(con, last_name, first_name, now)
+            found = trainings.check_in(con, pin, last_name, first_name, now)
+    except trainings.Locked as e:
+        return _page(tenant, f'<p role="alert"><strong>{html.escape(str(e))}</strong></p>', 429)
     except ValueError as e:
-        return _page(tenant, _form(first_name, last_name, str(e)), 422)
+        return _page(tenant, _form(first_name, last_name, str(e), pin), 422)
+    if found is None:       # absichtlich nicht unterscheiden: falsche PIN, keine Übung heute, abgelaufene PIN
+        return _page(tenant, _form(first_name, last_name, "Die PIN ist ungültig oder heute findet keine Übung "
+                                   "mit Anmeldung statt.", ""), 403)
     name = html.escape(" ".join(f"{first_name} {last_name}".split()))
-    return _page(tenant, f"<p>Danke, <strong>{name}</strong>. Du bist für die Übung am {now:%d.%m.%Y} eingetragen.</p>"
+    return _page(tenant, f"<p>Danke, <strong>{name}</strong>. Deine Anmeldung ist bei der Übungsleitung eingegangen "
+                         f"und wird dort bestätigt.</p>"
                          f'<p><a href="{PATH}{html.escape(token)}">Weitere Person anmelden</a></p>')

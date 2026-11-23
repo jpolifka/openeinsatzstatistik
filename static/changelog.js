@@ -6,6 +6,12 @@
 // noch ein Eintrag hinzu, bekommt er `version` ("JJJJ-MM-TT.2", dann .3 …); ohne `version` gilt das Datum.
 const CHANGELOG = [
   {
+    date: "2026-11-23",
+    items: [
+      "<b>QR-Anmeldung zur Übung jetzt mit PIN:</b> Jede Übung bekommt beim Anlegen eine PIN, die nur an den Tagen der Übung gilt (aufgeklappte Übung → Anmelde-PIN). Wer sich per QR-Code anmeldet, braucht sie. Die Anmeldungen warten in der Übung, bis die Übungsleitung sie übernimmt oder ablehnt; erst dann entsteht ggf. die Person im Personenstamm. Die Anmeldung legt keine Übung mehr an.",
+    ],
+  },
+  {
     date: "2026-11-21",
     version: "2026-11-21.4",
     items: [

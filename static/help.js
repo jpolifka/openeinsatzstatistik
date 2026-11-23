@@ -435,7 +435,7 @@ const HELP_SECTIONS = [
       training_qr: {
         title: "QR-Code zur Anmeldung",
         short: "Wehrmitglieder melden sich per QR-Code ohne Benutzerkonto zur Übung des Tages an.",
-        text: "Unter Einsätze → Übungen zeigt „QR-Code zur Anmeldung“ einen Code zum Ausdrucken und Aushängen. Wer ihn scannt, gibt nur Vor- und Nachnamen ein und wird für die Übung des heutigen Tages eingetragen; unbekannte Namen werden im Personenstamm angelegt (Tippfehler lassen sich unter Einstellungen → Personen zusammenführen). Gibt es für den Tag noch keine Übung, legt die erste Anmeldung „Übung TT.MM.JJJJ“ mit der Platzhalterzeit 19–21 Uhr an – bitte danach bearbeiten. Der Code verfällt nicht; „Neuen Code erzeugen“ macht ausgehängte Codes ungültig. Dafür ist das Recht „Übungen erfassen und ändern“ nötig.",
+        text: "Unter Einsätze → Übungen zeigt „QR-Code zur Anmeldung“ einen Code zum Ausdrucken und Aushängen. Wer ihn scannt, gibt die PIN der heutigen Übung sowie Vor- und Nachnamen ein. Jede Übung bekommt beim Anlegen eine eigene PIN (aufgeklappte Übung → Anmelde-PIN; sie gilt nur an den Tagen der Übung, „Neu erzeugen“ ersetzt sie). Die Übungsleitung nennt sie vor Ort. Es entsteht nie eine Übung durch die Anmeldung. Die Eingaben warten als „Wartende Anmeldungen“ in der aufgeklappten Übung; erst „Übernehmen“ legt die Person bei Bedarf im Personenstamm an und trägt die Teilnahme ein, „Ablehnen“ verwirft sie. Nach 30 falschen PINs an einem Tag ist die Anmeldung der Wehr bis zum nächsten Tag gesperrt. Der Code verfällt nicht; „Neuen Code erzeugen“ macht ausgehängte Codes ungültig. Dafür ist das Recht „Übungen erfassen und ändern“ nötig.",
       },
       training_optional: {
         title: "Kategorie, Ort, Ausbilder/in, Notizen",

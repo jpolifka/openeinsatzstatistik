@@ -54,7 +54,7 @@ def api_trainings(year: Optional[int] = None, a: tenancy.Access = Depends(access
     with tenant.connection() as con:
         years = trainings.years(con)
         year = year or years[0]
-        rows = trainings.load(con, year=year)
+        rows = trainings.load(con, year=year, with_checkin=tenant.can(TRAININGS_EDIT))
         return {"year": year, "years": years, "trainings": rows, "summary": trainings.summary(rows),
                 "members": trainings.directory(con)}
 
@@ -87,7 +87,7 @@ def api_create_training(body: TrainingIn, a: tenancy.Access = Depends(access)):
     with a.current(TRAININGS_EDIT).connection() as con:
         training_id = _errors(lambda: trainings.create(con, _fields(body), body.member_ids,
                                                        [m.model_dump() for m in body.new_members]))
-        return trainings.load(con, training_id=training_id)[0]
+        return trainings.load(con, training_id=training_id, with_checkin=True)[0]
 
 
 @router.put("/api/trainings/{training_id}")
@@ -97,7 +97,31 @@ def api_update_training(training_id: int, body: TrainingIn, a: tenancy.Access = 
     with a.current(TRAININGS_EDIT).connection() as con:
         _errors(lambda: trainings.update(con, training_id, _fields(body), body.revision, body.member_ids,
                                          [m.model_dump() for m in body.new_members]))
-        return trainings.load(con, training_id=training_id)[0]
+        return trainings.load(con, training_id=training_id, with_checkin=True)[0]
+
+
+@router.post("/api/trainings/{training_id}/checkin-pin")
+def api_new_pin(training_id: int, a: tenancy.Access = Depends(access)):
+    """Neue Anmelde-PIN der Übung (die bisherige gilt nicht mehr)."""
+    with a.current(TRAININGS_EDIT).connection() as con:
+        _errors(lambda: trainings.new_pin(con, training_id))
+        return trainings.load(con, training_id=training_id, with_checkin=True)[0]
+
+
+@router.post("/api/trainings/{training_id}/checkins/accept")
+@router.post("/api/trainings/{training_id}/checkins/{checkin_id}/accept")
+def api_accept_checkins(training_id: int, checkin_id: Optional[int] = None, a: tenancy.Access = Depends(access)):
+    """Wartende QR-Anmeldungen bestätigen (eine oder alle): erst jetzt entstehen Person und Teilnahme."""
+    with a.current(TRAININGS_EDIT).connection() as con:
+        _errors(lambda: trainings.accept_checkins(con, training_id, checkin_id))
+        return trainings.load(con, training_id=training_id, with_checkin=True)[0]
+
+
+@router.delete("/api/trainings/{training_id}/checkins/{checkin_id}")
+def api_reject_checkin(training_id: int, checkin_id: int, a: tenancy.Access = Depends(access)):
+    with a.current(TRAININGS_EDIT).connection() as con:
+        _errors(lambda: trainings.reject_checkin(con, training_id, checkin_id))
+        return trainings.load(con, training_id=training_id, with_checkin=True)[0]
 
 
 @router.delete("/api/trainings/{training_id}")

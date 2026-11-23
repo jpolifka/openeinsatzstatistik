@@ -5,6 +5,8 @@ Eigene Tabellen (training, training_attendance), nie in incident: Übungen flie�
 Excel-Export der Einsätze und keine VG-Gesamtansicht ein. Gemeinsam ist nur der Personenstamm (member).
 """
 import datetime as dt
+import json
+import secrets
 import threading
 
 from app import names, store
@@ -12,11 +14,18 @@ from app.timeutil import normalize_iso, parse_iso
 
 MAX_DAYS = 14                       # längste Übung (z. B. Lehrgang); darüber ist es vermutlich ein Tippfehler
 OPTIONAL = ("trainer", "place", "category", "notes")
+PIN_LENGTH = 6
+MAX_QUEUE = 200                     # offene Anmeldungen je Übung (Schutz vor Fluten über den öffentlichen Link)
+MAX_PIN_FAILS = 30                  # falsche PINs je Wehr und Tag, danach ist die Anmeldung für den Tag gesperrt
 LIMITS = {"topic": 200, "trainer": 120, "place": 120, "category": 80, "notes": 2000}
 
 
 class Stale(ValueError):
     """Die Übung wurde seit dem Öffnen geändert."""
+
+
+class Locked(ValueError):
+    """Zu viele falsche PINs: Die Anmeldung per QR-Code ist für heute gesperrt."""
 
 
 def _clean(fields):
@@ -69,44 +78,109 @@ def _set_participants(con, training_id, ids):
                     [(training_id, i) for i in ids])
 
 
+def _free_pin(con, started_at):
+    """Zufällige PIN, die am selben Starttag noch keine andere Übung hat (die PIN allein wählt die Übung)."""
+    taken = {r[0] for r in con.execute("SELECT checkin_pin FROM training WHERE substr(started_at, 1, 10) = ?",
+                                       (started_at[:10],))}
+    while True:
+        pin = f"{secrets.randbelow(10 ** PIN_LENGTH):0{PIN_LENGTH}d}"
+        if pin not in taken:
+            return pin
+
+
 def create(con, fields, member_ids=(), new_members=()):
     clean = _clean(fields)
     ids = _participants(con, member_ids, new_members)
+    clean["checkin_pin"] = _free_pin(con, clean["started_at"])
     training_id = con.execute(
-        "INSERT INTO training (year, started_at, ended_at, topic, trainer, place, category, notes) "
-        "VALUES (:year, :started_at, :ended_at, :topic, :trainer, :place, :category, :notes)", clean).lastrowid
+        "INSERT INTO training (year, started_at, ended_at, topic, trainer, place, category, notes, checkin_pin) "
+        "VALUES (:year, :started_at, :ended_at, :topic, :trainer, :place, :category, :notes, :checkin_pin)",
+        clean).lastrowid
     _set_participants(con, training_id, ids)
     return training_id
 
 
-_checkin_lock = threading.Lock()      # nur ein Worker: verhindert zwei Übungen bei gleichzeitigen ersten Anmeldungen
+_checkin_lock = threading.Lock()      # nur ein Worker: Zähler der falschen PINs und Obergrenze der Warteschlange
 
 
-def check_in(con, last_name, first_name, now):
-    """Anmeldung einer Person zur Übung des Tages (QR-Code, ohne Benutzerkonto).
+def _fails(con, day):
+    row = con.execute("SELECT value FROM setting WHERE key = 'checkin_fails'").fetchone()
+    data = json.loads(row[0]) if row else {}
+    return data.get("n", 0) if data.get("day") == day else 0
 
-    Gibt es für den Tag noch keine Übung, entsteht „Übung TT.MM.JJJJ“ mit Platzhalterzeit 19–21 Uhr; sie muss von
-    der Übungsleitung bearbeitet werden. Mehrfaches Anmelden ist unschädlich. Rückgabe: (Übungs-ID, neu angelegt)."""
+
+def check_in(con, pin, last_name, first_name, now):
+    """Anmeldung einer Person zur Übung des Tages (QR-Code, ohne Benutzerkonto) – nur mit der PIN dieser Übung.
+
+    Die Anmeldung landet in der Warteschlange `training_checkin` (Quarantäne): weder Personenstamm noch Teilnahme
+    werden angefasst, bis die Übungsleitung sie bestätigt. Eine Übung entsteht nie hierdurch. Die PIN gilt nur an den
+    Tagen der Übung; falsche PINs werden je Wehr und Tag gezählt (dauerhaft, `setting`). Rückgabe: Übungs-ID, bei
+    falscher PIN None (der Fehlversuch wird gespeichert, deshalb keine Ausnahme); `Locked` bei Sperre."""
     last, first = " ".join((last_name or "").split()), " ".join((first_name or "").split())
-    if not last:
-        raise ValueError("Bitte den Nachnamen angeben.")
-    if len(last) > 60 or len(first) > 60:
-        raise ValueError("Der Name ist zu lang.")
+    pin = "".join(c for c in (pin or "") if c.isdigit())
     day = now.date().isoformat()
     with _checkin_lock:
-        row = con.execute("SELECT id FROM training WHERE started_at LIKE ? ORDER BY started_at, id LIMIT 1",
-                          (day + "%",)).fetchone()
-        created = row is None
-        training_id = row["id"] if row else create(con, {
-            "topic": f"Übung {now:%d.%m.%Y}", "started_at": f"{day}T19:00", "ended_at": f"{day}T21:00"})
-        member_id = store.MemberDirectory(con).find_or_create(last, first)
+        fails = _fails(con, day)
+        if fails >= MAX_PIN_FAILS:
+            raise Locked("Zu viele falsche PINs. Die Anmeldung ist für heute gesperrt – bitte die Übungsleitung "
+                         "ansprechen.")
+        row = con.execute("SELECT id FROM training WHERE checkin_pin = ? AND substr(started_at, 1, 10) <= ? "
+                          "AND substr(ended_at, 1, 10) >= ? ORDER BY started_at, id LIMIT 1",
+                          (pin, day, day)).fetchone() if len(pin) == PIN_LENGTH else None
+        if not row:
+            con.execute("INSERT INTO setting (key, value) VALUES ('checkin_fails', ?) ON CONFLICT(key) DO UPDATE "
+                        "SET value = excluded.value", (json.dumps({"day": day, "n": fails + 1}),))
+            return None
+        if not last:
+            raise ValueError("Bitte den Nachnamen angeben.")
+        if len(last) > 60 or len(first) > 60:
+            raise ValueError("Der Name ist zu lang.")
+        if con.execute("SELECT COUNT(*) FROM training_checkin WHERE training_id = ?", (row["id"],)).fetchone()[0] \
+                >= MAX_QUEUE:
+            raise ValueError("Für diese Übung liegen schon sehr viele Anmeldungen vor. Bitte die Übungsleitung ansprechen.")
+        con.execute("INSERT OR IGNORE INTO training_checkin (training_id, last_name, first_name) VALUES (?, ?, ?)",
+                    (row["id"], last, first))
+    return row["id"]
+
+
+def new_pin(con, training_id):
+    """Neue PIN für die Übung (die bisherige gilt nicht mehr, auch für ältere Übungen ohne PIN)."""
+    row = con.execute("SELECT started_at FROM training WHERE id = ?", (training_id,)).fetchone()
+    if not row:
+        raise KeyError(training_id)
+    pin = _free_pin(con, row["started_at"])
+    con.execute("UPDATE training SET checkin_pin = ? WHERE id = ?", (pin, training_id))
+    return pin
+
+
+def accept_checkins(con, training_id, checkin_id=None):
+    """Wartende Anmeldungen bestätigen (eine oder alle): Person im Personenstamm finden oder anlegen, Teilnahme
+    eintragen. Erhöht die Revision, damit eine geöffnete Bearbeitung nichts überschreibt. Rückgabe: Anzahl."""
+    if not con.execute("SELECT 1 FROM training WHERE id = ?", (training_id,)).fetchone():
+        raise KeyError(training_id)
+    sql, params = "SELECT * FROM training_checkin WHERE training_id = ?", [training_id]
+    if checkin_id is not None:
+        sql, params = sql + " AND id = ?", params + [checkin_id]
+    rows = con.execute(sql, params).fetchall()
+    if checkin_id is not None and not rows:
+        raise KeyError(checkin_id)
+    directory = store.MemberDirectory(con)
+    for r in rows:
+        member_id = directory.find_or_create(r["last_name"], r["first_name"])
         con.execute("UPDATE member SET active = 1 WHERE id = ?", (member_id,))
-        added = con.execute("INSERT OR IGNORE INTO training_attendance (training_id, member_id) VALUES (?, ?)",
-                            (training_id, member_id)).rowcount
-        if added:       # eine gerade geöffnete Bearbeitung bemerkt die neue Teilnahme (409) statt sie zu überschreiben
-            con.execute("UPDATE training SET revision = revision + 1, modified = datetime('now', 'localtime') "
-                        "WHERE id = ?", (training_id,))
-    return training_id, created
+        con.execute("INSERT OR IGNORE INTO training_attendance (training_id, member_id) VALUES (?, ?)",
+                    (training_id, member_id))
+        con.execute("DELETE FROM training_checkin WHERE id = ?", (r["id"],))
+    if rows:
+        con.execute("UPDATE training SET revision = revision + 1, modified = datetime('now', 'localtime') "
+                    "WHERE id = ?", (training_id,))
+    return len(rows)
+
+
+def reject_checkin(con, training_id, checkin_id):
+    if not con.execute("DELETE FROM training_checkin WHERE id = ? AND training_id = ?",
+                       (checkin_id, training_id)).rowcount:
+        raise KeyError(checkin_id)
 
 
 def update(con, training_id, fields, revision, member_ids=(), new_members=()):
@@ -136,8 +210,9 @@ def duration_min(row):
     return round((parse_iso(row["ended_at"]) - parse_iso(row["started_at"])).total_seconds() / 60)
 
 
-def load(con, year=None, training_id=None):
-    """Übungen (neueste zuerst) mit Teilnehmern [{id, name}] und Dauer in Minuten."""
+def load(con, year=None, training_id=None, with_checkin=False):
+    """Übungen (neueste zuerst) mit Teilnehmern [{id, name}] und Dauer in Minuten. Nur mit `with_checkin` (Recht zum
+    Ändern) auch die PIN und die wartenden Anmeldungen [{id, name, match}] (match = Name der erkannten Person)."""
     sql, params = "SELECT * FROM training", []
     if training_id is not None:
         sql, params = sql + " WHERE id = ?", [training_id]
@@ -148,9 +223,22 @@ def load(con, year=None, training_id=None):
     for r in con.execute("SELECT a.training_id, m.id, m.name FROM training_attendance a "
                          "JOIN member m ON m.id = a.member_id"):
         people.setdefault(r["training_id"], []).append({"id": r["id"], "name": r["name"]})
+    waiting = {}
+    if with_checkin:
+        queue = con.execute("SELECT id, training_id, last_name, first_name FROM training_checkin ORDER BY id").fetchall()
+        directory = store.MemberDirectory(con) if queue else None
+        for r in queue:
+            found = directory.find(r["last_name"], r["first_name"])
+            waiting.setdefault(r["training_id"], []).append({
+                "id": r["id"], "name": f"{r['last_name']}, {r['first_name']}".strip(", "),
+                "match": directory.names[found] if found is not None else None})
     for row in rows:
         row["duration_min"] = duration_min(row)
         row["participants"] = sorted(people.get(row["id"], []), key=lambda p: names.sort_key(p["name"]))
+        if with_checkin:
+            row["checkins"] = waiting.get(row["id"], [])
+        else:
+            row.pop("checkin_pin", None)
     return rows
 
 

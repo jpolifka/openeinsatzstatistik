@@ -125,12 +125,27 @@ function personTrainingsHtml(person) {
     <tbody>${rows.map((t) => `<tr class="link-row" data-tr-open="${t.id}" tabindex="0"><td>${trainingDays(t)}</td><td>${esc(t.topic)}</td><td>${formatDuration(t.duration_min)}</td><td>${esc(t.trainer || "–")}</td></tr>`).join("")}</tbody></table></div>`;
 }
 
+/** PIN der QR-Anmeldung und wartende Anmeldungen (Quarantäne) einer Übung; nur mit Recht zum Ändern. */
+function checkinAdminHtml(t) {
+  const waiting = t.checkins || [];
+  const line = (c) => `<li>${esc(c.name)}${c.match ? ` <span class="muted">(entspricht ${esc(c.match)})</span>` : ` <span class="muted">(neue Person)</span>`}
+    <button type="button" class="btn btn-light btn-small" data-tr-action="accept-checkin" data-id="${t.id}" data-checkin-id="${c.id}">Übernehmen</button>
+    <button type="button" class="btn btn-outline btn-small" data-tr-action="reject-checkin" data-id="${t.id}" data-checkin-id="${c.id}">Ablehnen</button></li>`;
+  return `<div class="small"><p><b>Anmelde-PIN (QR-Code):</b> ${t.checkin_pin ? `<code>${esc(t.checkin_pin)}</code>` : "keine"}
+      <button type="button" class="btn btn-outline btn-small" data-tr-action="new-pin" data-id="${t.id}">${t.checkin_pin ? "Neu erzeugen" : "Erzeugen"}</button>
+      <span class="muted">gilt nur an den Tagen der Übung</span></p>
+    ${waiting.length ? `<p><b>Wartende Anmeldungen (${waiting.length}):</b>
+      <button type="button" class="btn btn-light btn-small" data-tr-action="accept-checkin" data-id="${t.id}">Alle übernehmen</button></p>
+      <ul class="plain">${waiting.map(line).join("")}</ul>` : ""}</div>`;
+}
+
 /** Teilnehmer, Notizen und Aktionen einer Übung (Detailzeile der Übungsliste). */
 function trainingDetailHtml(t) {
   const meta = [t.category, t.place, t.trainer && `Übungsleiter/in: ${t.trainer}`].filter(Boolean).map(esc).join(" · ");
   return `<div class="detail-grid training-detail">
     ${meta ? `<p class="small">${meta}</p>` : ""}${t.notes ? `<p class="small">${esc(t.notes)}</p>` : ""}
     <p class="small"><b>Teilnehmer:</b> ${t.participants.map((p) => esc(p.name)).join("; ") || "–"}</p>
+    ${can("trainings.edit") ? checkinAdminHtml(t) : ""}
     ${can("trainings.edit") ? `<div class="form-actions">
       <button type="button" class="btn btn-outline btn-small" data-tr-action="delete" data-id="${t.id}">Löschen</button>
       <button type="button" class="btn btn-light btn-small" data-tr-action="edit" data-id="${t.id}">Bearbeiten</button></div>` : ""}</div>`;
@@ -149,7 +164,7 @@ function renderTrainings() {
       <td><strong>${esc(t.topic)}</strong><span class="member-sub">${[t.category, t.place].filter(Boolean).map(esc).join(" · ")}</span></td>
       <td class="hide-mobile">${esc(t.category || "–")}</td><td class="hide-mobile">${esc(t.place || "–")}</td>
       <td class="right hide-mobile">${formatDuration(t.duration_min)}</td>
-      <td>${trainingBar(t.participants.length, maxParticipants)}</td>${trainingChevron()}</tr>
+      <td>${trainingBar(t.participants.length, maxParticipants)}${t.checkins?.length ? `<span class="member-sub">+ ${t.checkins.length} wartend</span>` : ""}</td>${trainingChevron()}</tr>
     ${open(t.id) ? `<tr class="detail"><td colspan="8">${trainingDetailHtml(t)}</td></tr>` : ""}`;
   $("#view-trainings").innerHTML = `<div class="card list-card members-table">
     <div class="toolbar"><div><h3>Übungen ${state.year}</h3>
@@ -217,7 +232,7 @@ async function renderCheckin() {
     <div class="form-actions">
       <button type="button" class="btn btn-outline" data-checkin="rotate">Neuen Code erzeugen</button>
       <button type="button" class="btn btn-primary" data-checkin="print">Drucken</button></div>
-    <p class="muted small">Ohne bestehende Übung am Tag legt die erste Anmeldung „Übung TT.MM.JJJJ“ an – bitte danach unter Einsätze → Übungen bearbeiten. „Neuen Code erzeugen“ macht ausgehängte Codes ungültig.</p>`;
+    <p class="muted small">Anmelden kann sich nur, wer die PIN der heutigen Übung kennt (Einsätze → Übungen, Übung aufklappen; wird beim Anlegen erzeugt). Anmeldungen warten dort auf deine Bestätigung. „Neuen Code erzeugen“ macht ausgehängte Codes ungültig.</p>`;
 }
 
 async function openCheckin() {
@@ -273,14 +288,16 @@ async function saveTraining() {
   const d = trainingState.draft;
   if (!d.topic.trim()) { toast("Bitte ein Thema angeben."); $("#tr-topic").focus(); return; }
   if (!draftMinutes(d)) { toast("Das Ende muss nach dem Beginn liegen."); return; }
+  let saved;
   try {
-    await apiJson(d.id ? `/api/trainings/${d.id}` : "/api/trainings", d.id ? "PUT" : "POST", trainingPayload(d));
+    saved = await apiJson(d.id ? `/api/trainings/${d.id}` : "/api/trainings", d.id ? "PUT" : "POST", trainingPayload(d));
   } catch (e) { toast(e.message); return; }
   const year = Number(d.startDate.slice(0, 4));
   closeTrainingForm();
   await reloadTrainings();
   showTrainings();
-  toast(year === state.year ? "Übung gespeichert." : `Übung gespeichert (Jahr ${year}).`);
+  const pin = !d.id && saved?.checkin_pin ? ` Anmelde-PIN für den QR-Code: ${saved.checkin_pin}` : "";
+  toast((year === state.year ? "Übung gespeichert." : `Übung gespeichert (Jahr ${year}).`) + pin, pin ? { duration: 15000 } : undefined);
 }
 
 function deleteTraining(id) {
@@ -301,6 +318,14 @@ function deleteTraining(id) {
     await reloadTrainings();
     showTrainings();
   }, 6200);
+}
+
+/** PIN erzeugen bzw. wartende Anmeldungen übernehmen/ablehnen; danach neu laden (Revision und Teilnehmer ändern sich). */
+async function checkinAction(url, method, message) {
+  try { await api(url, { method }); } catch (err) { toast(err.message); return; }
+  await reloadTrainings();
+  showTrainings();
+  toast(message);
 }
 
 async function trainingClick(e) {
@@ -343,6 +368,9 @@ async function trainingClick(e) {
     case "edit": openTrainingForm(() => draftFromTraining(trainingState.data.trainings.find((t) => t.id === Number(button.dataset.id))), Number(button.dataset.id)); break;
     case "delete": deleteTraining(Number(button.dataset.id)); break;
     case "qr": await openCheckin(); break;
+    case "new-pin": if (confirm("Neue PIN erzeugen? Die bisherige PIN gilt danach nicht mehr.")) await checkinAction(`/api/trainings/${button.dataset.id}/checkin-pin`, "POST", "Neue PIN erzeugt."); break;
+    case "accept-checkin": await checkinAction(`/api/trainings/${button.dataset.id}/checkins/${button.dataset.checkinId ? `${button.dataset.checkinId}/` : ""}accept`, "POST", "Anmeldung übernommen."); break;
+    case "reject-checkin": await checkinAction(`/api/trainings/${button.dataset.id}/checkins/${button.dataset.checkinId}`, "DELETE", "Anmeldung abgelehnt."); break;
     case "cancel": closeTrainingForm(); break;
     case "save": await saveTraining(); break;
     case "all": for (const m of trainingState.data.members) if (m.active) d.memberIds.add(m.id); refreshTrainingPeople(); break;

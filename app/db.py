@@ -377,6 +377,16 @@ def _add_trainings(con):
     con.execute("ALTER TABLE member ADD COLUMN active INTEGER NOT NULL DEFAULT 1")
 
 
+def _add_checkin_pin(con):
+    """QR-Anmeldung: PIN je Übung (nur am Tag der Übung gültig) und Warteschlange (Quarantäne) für Anmeldungen, die
+    erst die Übungsleitung in Personenstamm und Teilnahme übernimmt."""
+    con.execute("ALTER TABLE training ADD COLUMN checkin_pin TEXT")
+    con.execute("CREATE TABLE training_checkin (id INTEGER PRIMARY KEY, training_id INTEGER NOT NULL "
+                "REFERENCES training(id) ON DELETE CASCADE, last_name TEXT NOT NULL, first_name TEXT NOT NULL, "
+                "created TEXT NOT NULL DEFAULT (datetime('now', 'localtime')), "
+                "UNIQUE (training_id, last_name COLLATE NOCASE, first_name COLLATE NOCASE))")
+
+
 def _add_training_roles(con):
     """Rechte für Übungsdienste: Erfasser/in, Wehrleiter/in (und alle, die davon erben) bekommen sie; dazu die eigene
     Rolle Ausbilder/in (rbac.BKS_ROLES, add_roles setzt auch die Stufen der BKS-Rollen mit den neuen Rechten)."""
@@ -420,7 +430,8 @@ def _add_vg_subdomain(con):
 # Neue Schemaänderungen nur hinten anfügen; PRAGMA user_version zählt die erledigten Schritte.
 TENANT_MIGRATIONS = [_create_legacy_schema, _rename_to_english, _add_tenant_tables, _add_bks_ids,
                      _add_pending_reports, _add_fleet_names, _add_incident_revision, _add_import_jobs,
-                     _add_abort_reason, _add_report_details, _add_manual_fields, _add_trainings]
+                     _add_abort_reason, _add_report_details, _add_manual_fields, _add_trainings,
+                     _add_checkin_pin]
 CENTRAL_MIGRATIONS = [_create_central_schema, _add_dpa, _add_records, _add_notices, _add_fee_schedules, _add_roles,
                       _records_per_vg, _add_consumed_magic_links, _add_completed_imports, _add_tenant_archive,
                       _add_vg_defaults, _settings_for_fee_roles, _add_sessions,
