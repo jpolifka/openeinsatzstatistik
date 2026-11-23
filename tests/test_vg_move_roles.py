@@ -5,7 +5,7 @@ import sqlite3
 import pytest
 
 from app import db, tenancy
-from tests.conftest import make_tenant, login
+from tests.conftest import make_tenant
 
 
 def _own_role(con, vg_id):

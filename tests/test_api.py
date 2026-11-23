@@ -5,7 +5,7 @@ import zipfile
 
 import pytest
 
-from app import db, importing, main, store, tenancy
+from app import db, importing, store, tenancy
 from app.api import common as api_common
 from conftest import CFG, make_tenant
 from test_xlsx_report import make_workbook

@@ -7,8 +7,8 @@ import re
 
 import pytest
 
-from app import auth, db, login_mail, mail, tenancy
-from conftest import CFG, grant, make_tenant
+from app import auth, login_mail, mail, tenancy
+from conftest import grant, make_tenant
 
 PNG = bytes.fromhex("89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8ffff3f0005fe02fea7e6f1d70000000049454e44ae426082")
 EMAIL = "m.muster@example.org"
@@ -62,7 +62,7 @@ def test_first_hit_none_for_superadmin_without_membership(client):
 def test_mail_uses_tenant_name_color_and_inline_logo(client):
     _, tid = make_tenant("wehr-a", name="FF <Beispiel>")
     tenant = tenancy.vg_tenants(1)[0]
-    tenant.config  # Konfiguration laden
+    _ = tenant.config  # Konfiguration laden
     with tenant.connection() as con:
         con.execute("INSERT OR REPLACE INTO asset (name, content_type, data) VALUES ('logo-light', 'image/png', ?)", (PNG,))
     subject, text, body, images = login_mail.build(tenant, "http://x/auth/verify?token=t", "12345678", 15)

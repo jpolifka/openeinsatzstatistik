@@ -88,11 +88,9 @@ def test_checkin_goes_to_quarantine_not_to_master_data(setup):
     assert t["participants"] == [] and t["revision"] == 0 and "checkin_pin" not in t
 
 
-def test_pin_only_valid_on_the_day_of_the_training(setup):
-    _, pin = _training("2026-11-20T19:00", "2026-11-20T21:00")      # gestern
-    assert _post(setup, pin=pin).status_code == 403
-    _, pin = _training("2026-11-20T19:00", "2026-11-22T21:00")      # mehrtägig, heute dabei
-    assert _post(setup, pin=pin).status_code == 200
+def test_pin_is_not_bound_to_the_day(setup):
+    _, pin = _training("2026-11-10T19:00", "2026-11-10T21:00")
+    assert _post(setup, pin=pin).status_code == 200 and len(_queue()) == 1
 
 
 def test_lockout_after_too_many_wrong_pins_is_persistent(setup, monkeypatch):

@@ -133,7 +133,7 @@ function checkinAdminHtml(t) {
     <button type="button" class="btn btn-outline btn-small" data-tr-action="reject-checkin" data-id="${t.id}" data-checkin-id="${c.id}">Ablehnen</button></li>`;
   return `<div class="small"><p><b>Anmelde-PIN (QR-Code):</b> ${t.checkin_pin ? `<code>${esc(t.checkin_pin)}</code>` : "keine"}
       <button type="button" class="btn btn-outline btn-small" data-tr-action="new-pin" data-id="${t.id}">${t.checkin_pin ? "Neu erzeugen" : "Erzeugen"}</button>
-      <span class="muted">gilt nur an den Tagen der Übung</span></p>
+      <span class="muted">gilt, bis du eine neue erzeugst</span></p>
     ${waiting.length ? `<p><b>Wartende Anmeldungen (${waiting.length}):</b>
       <button type="button" class="btn btn-light btn-small" data-tr-action="accept-checkin" data-id="${t.id}">Alle übernehmen</button></p>
       <ul class="plain">${waiting.map(line).join("")}</ul>` : ""}</div>`;
@@ -232,7 +232,7 @@ async function renderCheckin() {
     <div class="form-actions">
       <button type="button" class="btn btn-outline" data-checkin="rotate">Neuen Code erzeugen</button>
       <button type="button" class="btn btn-primary" data-checkin="print">Drucken</button></div>
-    <p class="muted small">Anmelden kann sich nur, wer die PIN der heutigen Übung kennt (Einsätze → Übungen, Übung aufklappen; wird beim Anlegen erzeugt). Anmeldungen warten dort auf deine Bestätigung. „Neuen Code erzeugen“ macht ausgehängte Codes ungültig.</p>`;
+    <p class="muted small">Anmelden kann sich nur, wer die PIN einer Übung kennt (Einsätze → Übungen, Übung aufklappen; wird beim Anlegen erzeugt). Anmeldungen warten dort auf deine Bestätigung. „Neuen Code erzeugen“ macht ausgehängte Codes ungültig.</p>`;
 }
 
 async function openCheckin() {

@@ -315,7 +315,7 @@ def lift_vg_defaults():
         with central() as con:
             save_vg_settings(con, vg_id, settings)
             save_vg_keywords(con, vg_id, keywords)
-            for slug, cfg, kw in tenants:
+            for slug, _cfg, kw in tenants:
                 own = values[slug]
                 if slug not in configured:         # nichts eingestellt: künftig die Vorgaben
                     own = {key: v for key, v in own.items() if key not in INHERITED}

@@ -150,7 +150,7 @@ def _response(ws, r, year, limit):
         page.table("Kräfteaufbau", ["Minuten nach Alarm", "Ø Kräfte vor Ort", "Einsätze mit Angabe", "Einsätze gesamt"],
                    [(b["minutes"], b["crew"], b["valid"], b["total"]) for b in timing["build_up"]],
                    [INT, ONE, INT, INT])
-        for title, key, label in (("Zeiten nach Gebiet", "by_area", "name"), ("Zeiten nach Zeitfenster", "by_window", "key")):
+        for title, key, _label in (("Zeiten nach Gebiet", "by_area", "name"), ("Zeiten nach Zeitfenster", "by_window", "key")):
             page.table(title, ["", "Einsätze", "Ausrückdauer: Ø (min)", "Median", "90 % ≤",
                                "Eintreffen: Ø (min)", "Median", "90 % ≤"],
                        [((g["name"] if key == "by_area" else f"{g['day_type']} {g['hours']}"), g["count"],

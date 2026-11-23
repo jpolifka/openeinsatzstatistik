@@ -18,6 +18,8 @@ jobs:
           python-version: ${{ matrix.python }}
       # Der Lock ist maßgeblich: jede feste Version aus requirements.txt muss darin genauso stehen
       - run: python tools/check_lock.py
+      - run: python -m pip install ruff==0.17.6
+      - run: python -m ruff check app tools tests
       - run: python -m pip install pip-audit==2.10.1
       - run: python -m pip_audit --require-hashes -r requirements.lock
       # Getestet wird das Image, das auch ausgeliefert wird (nur der Lock, keine zweite Paketauflösung)

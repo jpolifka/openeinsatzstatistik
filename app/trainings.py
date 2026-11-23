@@ -78,10 +78,9 @@ def _set_participants(con, training_id, ids):
                     [(training_id, i) for i in ids])
 
 
-def _free_pin(con, started_at):
-    """Zufällige PIN, die am selben Starttag noch keine andere Übung hat (die PIN allein wählt die Übung)."""
-    taken = {r[0] for r in con.execute("SELECT checkin_pin FROM training WHERE substr(started_at, 1, 10) = ?",
-                                       (started_at[:10],))}
+def _free_pin(con):
+    """Zufällige PIN, die keine andere Übung hat (die PIN allein wählt die Übung)."""
+    taken = {r[0] for r in con.execute("SELECT checkin_pin FROM training WHERE checkin_pin IS NOT NULL")}
     while True:
         pin = f"{secrets.randbelow(10 ** PIN_LENGTH):0{PIN_LENGTH}d}"
         if pin not in taken:
@@ -91,7 +90,7 @@ def _free_pin(con, started_at):
 def create(con, fields, member_ids=(), new_members=()):
     clean = _clean(fields)
     ids = _participants(con, member_ids, new_members)
-    clean["checkin_pin"] = _free_pin(con, clean["started_at"])
+    clean["checkin_pin"] = _free_pin(con)
     training_id = con.execute(
         "INSERT INTO training (year, started_at, ended_at, topic, trainer, place, category, notes, checkin_pin) "
         "VALUES (:year, :started_at, :ended_at, :topic, :trainer, :place, :category, :notes, :checkin_pin)",
@@ -124,9 +123,8 @@ def check_in(con, pin, last_name, first_name, now):
         if fails >= MAX_PIN_FAILS:
             raise Locked("Zu viele falsche PINs. Die Anmeldung ist für heute gesperrt – bitte die Übungsleitung "
                          "ansprechen.")
-        row = con.execute("SELECT id FROM training WHERE checkin_pin = ? AND substr(started_at, 1, 10) <= ? "
-                          "AND substr(ended_at, 1, 10) >= ? ORDER BY started_at, id LIMIT 1",
-                          (pin, day, day)).fetchone() if len(pin) == PIN_LENGTH else None
+        row = con.execute("SELECT id FROM training WHERE checkin_pin = ?",
+                          (pin,)).fetchone() if len(pin) == PIN_LENGTH else None
         if not row:
             con.execute("INSERT INTO setting (key, value) VALUES ('checkin_fails', ?) ON CONFLICT(key) DO UPDATE "
                         "SET value = excluded.value", (json.dumps({"day": day, "n": fails + 1}),))
@@ -145,10 +143,9 @@ def check_in(con, pin, last_name, first_name, now):
 
 def new_pin(con, training_id):
     """Neue PIN für die Übung (die bisherige gilt nicht mehr, auch für ältere Übungen ohne PIN)."""
-    row = con.execute("SELECT started_at FROM training WHERE id = ?", (training_id,)).fetchone()
-    if not row:
+    if not con.execute("SELECT 1 FROM training WHERE id = ?", (training_id,)).fetchone():
         raise KeyError(training_id)
-    pin = _free_pin(con, row["started_at"])
+    pin = _free_pin(con)
     con.execute("UPDATE training SET checkin_pin = ? WHERE id = ?", (pin, training_id))
     return pin
 

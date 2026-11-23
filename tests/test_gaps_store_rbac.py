@@ -91,7 +91,7 @@ def test_update_that_loses_the_race_reports_stale(con, monkeypatch):
 
 def test_pending_report_replaces_older_version(con):
     report = {"bks_report_id": "9000001", "bks_record_id": "9000000", "keyword": "B2", "subcode": "08"}
-    first = store.add_pending(con, report, "a.pdf", b"x", "a@example.org")
+    store.add_pending(con, report, "a.pdf", b"x", "a@example.org")
     second = store.add_pending(con, report, "b.pdf", b"yy", "a@example.org")
     assert [p["filename"] for p in store.pending_reports(con)] == ["b.pdf"]
     assert store.pending_usage(con) == (1, 2)

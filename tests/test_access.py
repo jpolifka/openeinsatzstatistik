@@ -5,7 +5,7 @@ Aufbau: VG A mit den Wehren A1 und A2, VG B mit der Wehr B1, in jeder ein Einsat
 """
 import pytest
 
-from app import db, main, report, store, tenancy
+from app import db, store, tenancy
 from app.api import common as api_common
 from app.preview_sessions import PreviewSessions
 from conftest import grant, login, make_tenant
@@ -179,9 +179,11 @@ def test_vg_role_without_people_right_sees_no_attendance(world):
     assert "people.view" not in client.get("/api/config").json()["permissions"]
     export = client.get("/api/export?year=2025")
     assert export.status_code == 200
-    import io, openpyxl
+    import io
+    import openpyxl
     assert not any(n.startswith("Anwesenheit") for n in openpyxl.load_workbook(io.BytesIO(export.content)).sheetnames)
-    import io, openpyxl
+    import io
+    import openpyxl
     sheets = openpyxl.load_workbook(io.BytesIO(export.content))
     assert not any(c == "M. Muster" for ws in sheets for row in ws.iter_rows(values_only=True) for c in row)
     # Bearbeiten ohne EHF im Formular lässt ihn unverändert

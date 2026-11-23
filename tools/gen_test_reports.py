@@ -21,7 +21,6 @@ import datetime as dt
 import io
 import random
 import re
-import sys
 import zipfile
 import zlib
 from pathlib import Path

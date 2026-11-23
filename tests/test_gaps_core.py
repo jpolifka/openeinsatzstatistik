@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from app import db, records, store, tenancy, tenant_lifecycle
-from app.tenant_config import TenantConfig, Vehicle
+from app.tenant_config import Vehicle
 from conftest import CFG, make_tenant
 
 OTHER = dataclasses.replace(CFG, fleet=(Vehicle("01/46"),), own_prefix="01/", unit_marker="FW NR#.MUS 01")

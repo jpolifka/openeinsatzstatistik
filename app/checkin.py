@@ -3,7 +3,7 @@
 
 Der Link `/checkin/<Wehr>.<Signatur>` steht auf einem Aushang und verfällt nie (nur „Neuen Code erzeugen“ macht ihn
 ungültig; die Signatur ist ein HMAC über Wehr und Zähler `checkin_rev`). Er allein berechtigt aber zu nichts: Die
-Seite verlangt die PIN der Übung (`training.checkin_pin`, gilt nur an den Tagen der Übung, siehe `trainings.check_in`)
+Seite verlangt die PIN der Übung (`training.checkin_pin`, gilt bis zum Neuerzeugen, siehe `trainings.check_in`)
 und legt keine Übung an. Eingaben landen in einer Warteschlange und werden erst von der Übungsleitung in Personenstamm
 und Teilnahme übernommen. Die Seite zeigt nie Namen aus dem Personenstamm und schreibt nur in Wehren, deren VG einen
 gültigen AVV hat (wie `tenancy.access_for`).
@@ -106,7 +106,7 @@ padding:.7rem 1.2rem}}</style></head><body><main class="page"><div class="card c
 def _form(first="", last="", error="", pin=""):
     e = html.escape
     notice = f'<p role="alert"><strong>{e(error)}</strong></p>' if error else ""
-    return (f'{notice}<p>Bitte die PIN der heutigen Übung (nennt die Übungsleitung) und deinen Namen eintragen.</p>'
+    return (f'{notice}<p>Bitte die PIN der Übung (nennt die Übungsleitung) und deinen Namen eintragen.</p>'
             f'<form method="post"><label>PIN<input name="pin" value="{e(pin)}" maxlength="12" required '
             f'inputmode="numeric" autocomplete="off"></label>'
             f'<label>Vorname<input name="first_name" value="{e(first)}" maxlength="60" '
@@ -149,8 +149,8 @@ def register(token: str, request: Request, first_name: str = Form(""), last_name
     except ValueError as e:
         return _page(tenant, _form(first_name, last_name, str(e), pin), 422)
     if found is None:       # absichtlich nicht unterscheiden: falsche PIN, keine Übung heute, abgelaufene PIN
-        return _page(tenant, _form(first_name, last_name, "Die PIN ist ungültig oder heute findet keine Übung "
-                                   "mit Anmeldung statt.", ""), 403)
+        return _page(tenant, _form(first_name, last_name, "Die PIN ist ungültig "
+                                   "", ""), 403)
     name = html.escape(" ".join(f"{first_name} {last_name}".split()))
     return _page(tenant, f"<p>Danke, <strong>{name}</strong>. Deine Anmeldung ist bei der Übungsleitung eingegangen "
                          f"und wird dort bestätigt.</p>"

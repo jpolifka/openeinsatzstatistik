@@ -131,7 +131,7 @@ class ReadJobs:
             except HTTPException as e:
                 with self._lock:
                     job["error"] = (e.status_code, e.detail)
-            except Exception as e:  # unerwartet: melden statt still hängen
+            except Exception:  # unerwartet: melden statt still hängen
                 with self._lock:
                     log.exception("Lesevorgang fehlgeschlagen")
                     job["error"] = (500, "Beim Einlesen ist ein Fehler aufgetreten. Bitte erneut versuchen.")

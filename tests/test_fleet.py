@@ -3,7 +3,7 @@
 import dataclasses
 import datetime as dt
 
-from app import db, excel_export, importing, main, report, store, tenancy
+from app import db, excel_export, importing, report, store, tenancy
 from app.api import common as api_common
 from app.pdf_report import parse_report
 from app.tenant_config import Vehicle

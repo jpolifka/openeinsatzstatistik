@@ -9,9 +9,9 @@ import zipfile
 import pytest
 from fastapi import HTTPException
 
-from app import auth, bks_common, db, dpa, importing, mail, main, store, tenancy
+from app import auth, bks_common, db, importing, mail, main, store, tenancy
 from app.preview_sessions import UploadSlots
-from conftest import grant, login, make_tenant
+from conftest import grant, make_tenant
 
 
 @pytest.fixture

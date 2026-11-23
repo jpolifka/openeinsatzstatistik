@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from app import db, importing, parser_worker, preview_sessions, store, tenancy
+from app import importing, parser_worker, preview_sessions, store, tenancy
 from test_records import TEXTS, vg  # noqa: F401  (Fixture vg: drei Wehren einer VG, Texte der Berichte)
 from test_xlsx_report import make_workbook
 

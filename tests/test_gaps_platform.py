@@ -9,7 +9,7 @@ import dns.resolver
 import pytest
 from fastapi.testclient import TestClient
 
-from app import auth, db, legacy, mail, main, tenancy
+from app import auth, db, mail, main, tenancy
 from conftest import login
 from test_mail import _dns, smtp  # noqa: F401  (Fixture smtp)
 

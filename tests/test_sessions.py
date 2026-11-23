@@ -2,7 +2,7 @@
 """Sitzungen einsehen und beenden (nur Superadmin)."""
 import pytest
 
-from app import auth, tenancy
+from app import auth
 from conftest import grant, login, make_tenant
 
 

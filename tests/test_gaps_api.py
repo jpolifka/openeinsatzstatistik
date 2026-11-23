@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
 """Fehlerwege der API: unbekannte Einsätze, Export ohne Daten, Übernahme-Konflikte, Weitergabe, AVV."""
-import pytest
 
 from app import db, report, store, tenancy
-from conftest import CFG, grant, login, make_tenant
+from conftest import make_tenant
 from test_admin import world as admin_world  # noqa: F401
 from test_api import _create, client  # noqa: F401  (Fixture client mit Wehr wehr-a1)
 from test_dpa import PDF, _as, _fill, pending  # noqa: F401  (Fixture pending)

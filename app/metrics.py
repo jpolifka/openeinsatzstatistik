@@ -528,7 +528,7 @@ def fire_course(evaluated):
         start = parse_iso(i["started_at"])
         arrival = start + dt.timedelta(minutes=m["arrival_min"]) if start and m["arrival_min"] is not None else None
 
-        def after(stamp):
+        def after(stamp, arrival=arrival):
             at = parse_iso(stamp)
             minutes = (at - arrival).total_seconds() / 60 if at and arrival else None
             return minutes if minutes is not None and minutes >= 0 else None

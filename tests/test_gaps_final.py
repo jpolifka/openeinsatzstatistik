@@ -12,10 +12,10 @@ import openpyxl
 import pytest
 from fastapi import HTTPException
 
-from app import auth, db, importing, mail, main, records, report, store, tenancy, xlsx_report
+from app import db, importing, mail, main, records, report, store, tenancy, xlsx_report
 from app.api import common, reports as reports_api
 from app.tenant_config import Vehicle
-from conftest import CFG, grant, login, make_tenant
+from conftest import CFG, grant, make_tenant
 from test_admin import _as, world  # noqa: F401  (Fixture world)
 from test_api import client  # noqa: F401  (Fixture client)
 from test_mail import smtp  # noqa: F401  (Fixture smtp)

@@ -153,7 +153,6 @@ def test_reports_are_matched_to_the_reporting_tenant():
 
 
 def test_upload_in_vg_view_distributes_reports(vg, monkeypatch):
-    from app import main
     header = "FW NR#.MUS 01 Bad Neustadt Alarmierung: 12.03.2025 10:05:00 Einsatznummer: 1\n" \
              "Einsatznummer Leitstelle: 1250000001\n"
     texts = {"a1.pdf": (FULL, LEFT, ""), "a2.pdf": (header + FULL, LEFT, ""), "fremd.pdf": ("", "", "")}
@@ -178,7 +177,7 @@ def _bks(kind, report_id, unit):
 
 
 def test_multi_report_is_distributed_and_updates_on_reimport(vg, monkeypatch):
-    from app import main, records
+    from app import records
     texts = {"stamm.pdf": (MASTER + FULL.split("Anwesenheitsliste")[0], LEFT, ""),
              "a2.pdf": (_bks("Hauptbericht", "9000002", "FW NR#.MUS 01 Musterstadt") + FULL, LEFT, ""),
              "a1.pdf": (_bks("Nebenbericht", "9000003", "FW NR#.MUS 02 Musterdorf") + FULL, LEFT, ""),
@@ -215,7 +214,6 @@ def test_multi_report_is_distributed_and_updates_on_reimport(vg, monkeypatch):
 
 
 def test_single_tenant_skips_report_of_other_unit(make_client, monkeypatch):
-    from app import main
     make_tenant("wehr-a1")
     client = make_client()
     texts = {"fez.pdf": (_bks("Nebenbericht", "9000004", "FW NR#.MUS 00 FEZ VG") + FULL, LEFT, "")}

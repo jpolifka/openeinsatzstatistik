@@ -10,7 +10,7 @@ import pytest
 from app import pdf_report, xlsx_report
 from conftest import CFG
 from test_report import FULL, LEFT
-from test_xlsx_report import MAIN_ROW, make_workbook
+from test_xlsx_report import make_workbook
 
 
 def _workbook(rows_by_sheet):

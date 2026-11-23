@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 """Verwaltung: Eingabeprüfung, Fehlerfälle und seltene Wege der Admin-Endpunkte."""
-import dataclasses
 import io
 
 import openpyxl
@@ -8,7 +7,7 @@ import pytest
 
 from app import db, records, tenancy, tenant_lifecycle
 from app.tenant_config import TenantConfig
-from conftest import CFG, grant, login, make_tenant
+from conftest import grant, make_tenant
 from test_admin import _as, _fleet_payload, _settings, world  # noqa: F401  (Fixture world)
 
 
@@ -231,8 +230,8 @@ def test_slugs_are_generated(world):
     _as(world, "admin@example.org")
     created = world.post("/api/super/vgs", json={"name": "VG Musterstadt"}).json()
     assert "musterstadt" in [v["slug"] for v in created["vgs"]]
-    first = world.post("/api/super/tenants", json={"name": "Feuerwehr Bergheim", "vg": "musterstadt"}).json()
-    again = world.post("/api/super/tenants", json={"name": "Feuerwehr Bergheim", "vg": "musterstadt"}).json()
+    world.post("/api/super/tenants", json={"name": "Feuerwehr Bergheim", "vg": "musterstadt"}).json()
+    world.post("/api/super/tenants", json={"name": "Feuerwehr Bergheim", "vg": "musterstadt"}).json()
     other = world.post("/api/super/tenants", json={"name": "Feuerwehr Bergheim", "vg": "vg-b"}).json()
     slugs = [t["slug"] for t in other["tenants"]]
     assert {"musterstadt-bergheim-01", "musterstadt-bergheim-02", "b-bergheim-01"} <= set(slugs)

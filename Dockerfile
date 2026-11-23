@@ -18,7 +18,8 @@ COPY requirements-dev.txt pytest.ini ./
 # Laufzeitpakete sind durch requirements.txt = Lock festgelegt (CI prüft die Übereinstimmung); pip check findet Konflikte
 RUN pip install --no-cache-dir -r requirements-dev.txt && pip check
 COPY tests ./tests
-CMD ["python", "-m", "pytest", "-q"]
+# Mindestabdeckung: Zeilen und Zweige von app/ (gemessen ca. 99 %; die Schwelle ist bewusst niedriger)
+CMD ["python", "-m", "pytest", "-q", "--cov=app", "--cov-branch", "--cov-fail-under=95"]
 
 FROM base AS app
 RUN groupadd --gid 10001 einsatz && useradd --uid 10001 --gid 10001 --no-create-home einsatz \

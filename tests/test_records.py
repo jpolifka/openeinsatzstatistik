@@ -5,7 +5,7 @@ import dataclasses
 
 import pytest
 
-from app import db, main, records, store, tenancy
+from app import db, records, tenancy
 from app.tenant_config import Vehicle
 from conftest import CFG, grant, login, make_tenant
 from test_report import FULL, LEFT

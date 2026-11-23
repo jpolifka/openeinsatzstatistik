@@ -3,7 +3,7 @@
 Aktualisierung eines erfassten Einsatzes."""
 import pytest
 
-from app import db, import_queue, importing, records, store, tenancy
+from app import db, import_queue, importing, records, tenancy
 from conftest import make_tenant
 from test_xlsx_report import make_workbook
 
