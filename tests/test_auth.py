@@ -12,6 +12,7 @@ def client(make_client, monkeypatch):
     _, tenant_id = make_tenant("wehr-a1")
     grant("m.muster@example.org", "lead", tenant_id)
     monkeypatch.setattr(auth, "_last_mail", {})
+    monkeypatch.setattr(auth, "_sent", [])      # sonst erschöpfen mehrere Tests die Grenze je Adresse
     return make_client(login=True)
 
 

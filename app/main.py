@@ -110,6 +110,16 @@ PUBLIC_PATHS = ("/health", "/login", "/logout", "/impressum", "/datenschutz", "/
 
 
 @app.middleware("http")
+async def reject_cross_site_writes(request: Request, call_next):
+    """Schreibende Anfragen, die der Browser von einer anderen Seite aus auslöst, abweisen (CSRF). Zusätzlich zu
+    SameSite=Lax: mit VG-Subdomains gelten Geschwister-Subdomains als „same-site“. Ohne den Header (Skripte, ältere
+    Browser) wird nicht geprüft; dort schützt allein das Cookie."""
+    if request.method not in ("GET", "HEAD", "OPTIONS") and request.headers.get("sec-fetch-site") in ("cross-site", "same-site"):
+        return JSONResponse({"detail": "Anfrage von einer anderen Seite abgewiesen."}, status_code=403)
+    return await call_next(request)
+
+
+@app.middleware("http")
 async def require_login(request: Request, call_next):
     """Anmeldung per Magic Link, wenn ADMIN_EMAILS gesetzt ist (siehe auth.py)."""
     path = request.scope["path"]

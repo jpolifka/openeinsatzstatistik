@@ -19,7 +19,7 @@ test("Fehler erhält Seitenstruktur; Wiederholen lädt und zeichnet erneut", asy
     parseHash: () => ({ view: "incidents", params: new URLSearchParams() }), URLSearchParams,
     $: (key) => key === "button" ? { addEventListener: (_, fn) => { retry = fn; } }
       : key === ".view-load-error" ? section.children.find((v) => typeof v === "object") : elements[key],
-    noticeBox: (kind, title, text = "") => `${kind}|${title}|${text}`, Event: class {}, appTitle: "Einsatzstatistik",
+    esc: (s) => String(s), noticeBox: (kind, title, text = "") => `${kind}|${title}|${text}`, Event: class {}, appTitle: "Einsatzstatistik",
     document: { dispatchEvent() {}, createElement: () => ({ remove() { section.children.shift(); } }) },
   });
   const source = fs.readFileSync("static/app.js", "utf8");

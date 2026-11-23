@@ -55,16 +55,19 @@ SESSION_TTL = 30 * 24 * 60 * 60
 SESSION_IDLE = 7 * 24 * 60 * 60
 # Mindestabstand zwischen zwei Mails an dieselbe Adresse
 MAIL_COOLDOWN = 60
-# Obergrenze je Adresse. Die Gesamtzahl pro Stunde sperrt nichts (sonst könnte jemand mit ein paar bekannten Adressen
-# allen den Zugang blockieren), sie warnt nur im Log.
-MAIL_PER_ADDRESS_PER_DAY = 10
+# Obergrenze je Adresse und kurzem Zeitfenster. Kurz, weil jeder die Mail für eine bekannte Adresse auslösen kann: ein
+# Tageskontingent ließe sich so verbrauchen und sperrte die Person einen Tag lang aus; hier endet die Sperre nach
+# MAIL_WINDOW. Die Gesamtzahl pro Stunde sperrt nichts (sonst könnte jemand mit ein paar bekannten Adressen allen den
+# Zugang blockieren), sie warnt nur im Log.
+MAIL_PER_ADDRESS = 3
+MAIL_WINDOW = 15 * 60
 MAIL_TOTAL_ALERT_PER_HOUR = 200
 MAX_SESSIONS_PER_USER = 10
 
 router = APIRouter()
 _lock = threading.Lock()
 _last_mail = {}     # Adresse → Zeitpunkt der letzten Mail
-_sent = []          # (Zeitpunkt, Adresse) der Mails der letzten 24 Stunden
+_sent = []          # (Zeitpunkt, Adresse) der Mails der letzten Stunde
 _key = None
 
 
@@ -258,6 +261,8 @@ def _use_code(email, code):
     email = tenancy.normalize_email(email)[:254]
     code = re.sub(r"\D", "", code or "")
     now = time.time()
+    if not tenancy.is_allowed(email):      # Fehlversuche nur für echte Adressen zählen: sonst wüchse die Tabelle mit erfundenen
+        return None
     with tenancy.central() as con:
         con.execute("DELETE FROM login_failure WHERE at < ?", (now - 3600,))
         failures = con.execute("SELECT COUNT(*) FROM login_failure WHERE email = ?", (email,)).fetchone()[0]
@@ -322,8 +327,8 @@ def send_link(email, host=None):
         now = time.time()
         if now - _last_mail.get(email, 0) < MAIL_COOLDOWN:
             return
-        _sent[:] = [(t, a) for t, a in _sent if now - t < 24 * 3600]
-        if sum(a == email for _, a in _sent) >= MAIL_PER_ADDRESS_PER_DAY:
+        _sent[:] = [(t, a) for t, a in _sent if now - t < 3600]
+        if sum(a == email and now - t < MAIL_WINDOW for t, a in _sent) >= MAIL_PER_ADDRESS:
             log.warning("Anmeldelink für %s nicht versendet: Obergrenze für Mails erreicht", email)
             return
         if sum(now - t < 3600 for t, _ in _sent) == MAIL_TOTAL_ALERT_PER_HOUR:
