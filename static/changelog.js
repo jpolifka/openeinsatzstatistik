@@ -8,7 +8,7 @@ const CHANGELOG = [
   {
     date: "2026-11-23",
     items: [
-      "<b>QR-Anmeldung zur Übung jetzt mit PIN:</b> Jede Übung bekommt beim Anlegen eine PIN, die gilt, bis sie neu erzeugt wird (aufgeklappte Übung → Anmelde-PIN). Wer sich per QR-Code anmeldet, braucht sie. Die Anmeldungen warten in der Übung, bis die Übungsleitung sie übernimmt oder ablehnt; erst dann entsteht ggf. die Person im Personenstamm. Die Anmeldung legt keine Übung mehr an.",
+      "<b>QR-Anmeldung zur Übung jetzt mit PIN:</b> Jede Übung bekommt beim Anlegen eine PIN, die gilt, bis sie neu erzeugt wird (aufgeklappte Übung → Anmelde-PIN). Wer sich per QR-Code anmeldet, braucht sie. Die Anmeldungen warten in der Übung, bis die Übungsleitung sie übernimmt oder ablehnt; erst dann entsteht ggf. die Person im Personenstamm. Die Anmeldung legt keine Übung mehr an. Die PIN steht groß in der Übungsliste.",
     ],
   },
   {

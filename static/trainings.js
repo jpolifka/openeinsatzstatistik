@@ -131,9 +131,9 @@ function checkinAdminHtml(t) {
   const line = (c) => `<li>${esc(c.name)}${c.match ? ` <span class="muted">(entspricht ${esc(c.match)})</span>` : ` <span class="muted">(neue Person)</span>`}
     <button type="button" class="btn btn-light btn-small" data-tr-action="accept-checkin" data-id="${t.id}" data-checkin-id="${c.id}">Übernehmen</button>
     <button type="button" class="btn btn-outline btn-small" data-tr-action="reject-checkin" data-id="${t.id}" data-checkin-id="${c.id}">Ablehnen</button></li>`;
-  return `<div class="small"><p><b>Anmelde-PIN (QR-Code):</b> ${t.checkin_pin ? `<code>${esc(t.checkin_pin)}</code>` : "keine"}
+  return `<div class="small"><p><b>Anmelde-PIN (QR-Code):</b> ${t.checkin_pin ? `<span class="pin">${esc(t.checkin_pin)}</span>` : "keine"}
       <button type="button" class="btn btn-outline btn-small" data-tr-action="new-pin" data-id="${t.id}">${t.checkin_pin ? "Neu erzeugen" : "Erzeugen"}</button>
-      <span class="muted">gilt, bis du eine neue erzeugst</span></p>
+     </p>
     ${waiting.length ? `<p><b>Wartende Anmeldungen (${waiting.length}):</b>
       <button type="button" class="btn btn-light btn-small" data-tr-action="accept-checkin" data-id="${t.id}">Alle übernehmen</button></p>
       <ul class="plain">${waiting.map(line).join("")}</ul>` : ""}</div>`;
@@ -158,20 +158,22 @@ function renderTrainings() {
   const trainings = data.trainings.filter((t) => t.id !== trainingState.pendingDelete);
   const maxParticipants = Math.max(1, ...trainings.map((t) => t.participants.length));
   const open = (id) => trainingState.openTrainings.has(id);
+  const canEdit = can("trainings.edit");
   const row = (t) => `<tr class="row ${open(t.id) ? "open" : ""}" data-tr-training="${t.id}" tabindex="0" aria-expanded="${open(t.id)}">
       <td>${formatDate(t.started_at)}<span class="member-sub">${formatTime(t.started_at)}–${formatTime(t.ended_at)}</span></td>
       <td class="hide-mobile">${formatTime(t.started_at)}–${formatTime(t.ended_at)}</td>
       <td><strong>${esc(t.topic)}</strong><span class="member-sub">${[t.category, t.place].filter(Boolean).map(esc).join(" · ")}</span></td>
       <td class="hide-mobile">${esc(t.category || "–")}</td><td class="hide-mobile">${esc(t.place || "–")}</td>
       <td class="right hide-mobile">${formatDuration(t.duration_min)}</td>
+      ${canEdit ? `<td class="right">${t.checkin_pin ? `<span class="pin">${esc(t.checkin_pin)}</span>` : "–"}</td>` : ""}
       <td>${trainingBar(t.participants.length, maxParticipants)}${t.checkins?.length ? `<span class="member-sub">+ ${t.checkins.length} wartend</span>` : ""}</td>${trainingChevron()}</tr>
-    ${open(t.id) ? `<tr class="detail"><td colspan="8">${trainingDetailHtml(t)}</td></tr>` : ""}`;
+    ${open(t.id) ? `<tr class="detail"><td colspan="${canEdit ? 9 : 8}">${trainingDetailHtml(t)}</td></tr>` : ""}`;
   $("#view-trainings").innerHTML = `<div class="card list-card members-table">
     <div class="toolbar"><div><h3>Übungen ${state.year}</h3>
       <p class="muted small">${plural(s.count, "Übung", "Übungen")} · ${formatHours(s.minutes)} Übungszeit · Zeile aufklappen zeigt Teilnehmer und Notizen · Nicht Teil der Einsatzstatistik${can("trainings.edit") ? " · Neue Übung: „Übung erfassen“ oben" : ""}</p></div>
       ${can("trainings.edit") ? `<button type="button" class="btn btn-light btn-small" data-tr-action="qr">QR-Code zur Anmeldung</button>` : ""}</div>
     <div class="table-wrap"><table class="table"><thead><tr><th>Datum</th><th class="hide-mobile">Zeit</th><th>Thema</th>
-      <th class="hide-mobile">Kategorie</th><th class="hide-mobile">Ort</th><th class="right hide-mobile">Dauer</th><th>Teilnehmer</th><th class="col-toggle"><span class="visually-hidden">Details anzeigen</span></th></tr></thead>
+      <th class="hide-mobile">Kategorie</th><th class="hide-mobile">Ort</th><th class="right hide-mobile">Dauer</th>${canEdit ? `<th class="right">Anmelde-PIN</th>` : ""}<th>Teilnehmer</th><th class="col-toggle"><span class="visually-hidden">Details anzeigen</span></th></tr></thead>
       <tbody>${trainings.map(row).join("")}</tbody></table></div>
     ${trainings.length ? "" : `<p class="empty-note">Für ${state.year} ist keine Übung erfasst.</p>`}</div>`;
 }

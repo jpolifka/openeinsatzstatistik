@@ -884,3 +884,7 @@ a { color: var(--brand-dark); }
   body.print-checkin #checkin-dialog { position: static; border: 0; box-shadow: none; }
   body.print-checkin #checkin-dialog .btn-close, body.print-checkin #checkin-dialog .form-actions, body.print-checkin #checkin-dialog .muted { display: none; }
 }
+
+/* Anmelde-PIN der Übung (QR-Anmeldung): groß und gut vorlesbar */
+.pin { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 1.25rem; font-weight: 700;
+  letter-spacing: .12em; color: var(--brand); white-space: nowrap; }
