@@ -17,7 +17,7 @@ EMAIL = "m.muster@example.org"
 @pytest.fixture
 def client(make_client, monkeypatch):
     monkeypatch.setattr(auth, "_last_mail", {})
-    monkeypatch.setattr(auth, "_sent", [])         # sonst erschöpfen mehrere Tests die Tagesgrenze je Adresse
+    monkeypatch.setattr(auth, "_sent", [])         # sonst erschöpfen mehrere Tests die Grenze je Adresse
     return make_client(login=True)
 
 

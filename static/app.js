@@ -344,7 +344,7 @@ async function showView() {
       const error = document.createElement("div");
       error.className = "view-load-error";
       error.innerHTML = noticeBox("error", "Die Ansicht konnte nicht geladen werden.",
-        `${e.message} Mit „Erneut versuchen“ lädt sie neu. Hilft das nicht, bitte über „?“ → Feedback melden.`) + '<button type="button" class="btn btn-light">Erneut versuchen</button>';
+        `${esc(e.message)} Mit „Erneut versuchen“ lädt sie neu. Hilft das nicht, bitte über „?“ → Feedback melden.`) + '<button type="button" class="btn btn-light">Erneut versuchen</button>';
       $("button", error).addEventListener("click", () => showView());
       section.prepend(error);
     }

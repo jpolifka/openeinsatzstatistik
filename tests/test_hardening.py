@@ -161,9 +161,13 @@ def test_mails_per_address_are_capped(monkeypatch, data_dir):
     sent = []
     monkeypatch.setattr(mail, "send", lambda *args, **kwargs: sent.append(args[0]))
     monkeypatch.setattr(auth, "BASE_URL", "https://einsatz.example.org")
-    for _ in range(auth.MAIL_PER_ADDRESS_PER_DAY + 5):
+    for _ in range(auth.MAIL_PER_ADDRESS + 5):
         auth.send_link("admin@example.org")
-    assert len(sent) == auth.MAIL_PER_ADDRESS_PER_DAY
+    assert len(sent) == auth.MAIL_PER_ADDRESS
+    # Die Sperre ist kurz: nach dem Zeitfenster kommen wieder Mails (kein Aussperren über Tage)
+    monkeypatch.setattr(auth, "_sent", [(t - auth.MAIL_WINDOW - 1, a) for t, a in auth._sent])
+    auth.send_link("admin@example.org")
+    assert len(sent) == auth.MAIL_PER_ADDRESS + 1
 
 
 def test_access_log_masks_login_token():
@@ -268,3 +272,21 @@ def test_kept_uploads_need_flag_and_expire(monkeypatch, tmp_path):
     os.utime(old, (1, 1))
     importing.keep_for_debug([("b.pdf", str(source))])
     assert not old.exists() and len(list(folder.iterdir())) == 1
+
+
+@pytest.mark.parametrize("site, status", [("cross-site", 403), ("same-site", 403), ("same-origin", 200), ("none", 200)])
+def test_browser_writes_from_other_sites_are_refused(client, site, status):
+    response = client.post("/api/scope", json={"key": "nope"}, headers={"Sec-Fetch-Site": site})
+    # /api/scope antwortet für einen unbekannten Schlüssel selbst mit 403; entscheidend ist die Meldung der Sperre
+    assert ("abgewiesen" in response.json()["detail"]) == (status == 403)
+    # lesende Anfragen bleiben unberührt
+    assert client.get("/health", headers={"Sec-Fetch-Site": "cross-site"}).status_code == 200
+
+
+def test_code_failures_are_only_recorded_for_real_addresses(monkeypatch, data_dir):
+    monkeypatch.setattr(tenancy, "ADMIN_EMAILS", {"admin@example.org"})
+    assert auth._use_code("erfunden@example.org", "12345678") is None
+    assert auth._use_code("admin@example.org", "12345678") is None
+    with tenancy.central() as con:
+        rows = [r[0] for r in con.execute("SELECT email FROM login_failure")]
+    assert rows == ["admin@example.org"]
