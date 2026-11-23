@@ -108,3 +108,11 @@ def make_incident(**overrides):
 
 def vehicle(call_sign, crew, departed=None, arrived=None, name=None):
     return {"call_sign": call_sign, "name": name, "crew": crew, "departed": departed, "arrived": arrived}
+
+
+@pytest.fixture(autouse=True)
+def _no_process_limits(monkeypatch):
+    """`parser_worker._child` läuft in einigen Tests im Testprozess selbst; dessen echte Limits (Adressraum, CPU-Zeit)
+    würden den ganzen Lauf begrenzen und mit Abdeckungsmessung zu „can't start new thread“ führen."""
+    import resource
+    monkeypatch.setattr(resource, "setrlimit", lambda kind, values: None)

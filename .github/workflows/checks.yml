@@ -24,7 +24,7 @@ jobs:
       - run: python -m pip_audit --require-hashes -r requirements.lock
       # Getestet wird das Image, das auch ausgeliefert wird (nur der Lock, keine zweite Paketauflösung)
       - run: docker build --target test -t openeinsatzstatistik-test .
-      - run: docker run --rm -e COVERAGE_CORE=ctrace openeinsatzstatistik-test python -m pytest -q -x --cov=app --cov-branch --cov-fail-under=95
+      - run: docker run --rm openeinsatzstatistik-test
   javascript:
     runs-on: ubuntu-latest
     steps:
