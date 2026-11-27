@@ -14,8 +14,6 @@ VIEWS.fire = { label: "Brand & Rettung", sub: "Brand & Rettung", load: loadEvalu
 
 const ABORT_LONG = { false_alarm: "Täuschung, technischer oder böswilliger Alarm, kein Ereignis" };
 const shareOfKnown = (part, total) => total ? percent(part / total) : "–";
-// Zahl als Link in die Einsatzliste (nur mit Einsätzen und wenn die Liste Rechte hat)
-const countLink = (count, filters) => count && can("incidents.view") ? `<a href="${esc(listLink(filters))}">${count}</a>` : String(count);
 const NOT_STATED = "ältere Berichte erneut einlesen, damit die Angabe übernommen wird";
 
 // ------------------------------------------------------------ Abbrüche & Anlagen

@@ -7,6 +7,13 @@
 const CHANGELOG = [
   {
     date: "2026-11-27",
+    version: "2026-11-27.10",
+    items: [
+      "<b>Einsätze auch aus „Zeiten & Kräfte“ und „Belastung“:</b> Ein Klick auf die Zahl der Einsätze (Zeitfenster, Ort, lange, nächtliche und Wochenend-Einsätze, Dauerklassen) öffnet die passende Einsatzliste.",
+    ],
+  },
+  {
+    date: "2026-11-27",
     version: "2026-11-27.9",
     items: [
       "<b>Zwei FEZ:</b> In den Einstellungen (BKS-Kennung) lassen sich jetzt zwei FEZ eintragen (FEZ 1 und FEZ 2, z. B. für Tag und Nacht). Beide werden im Bericht erkannt und zählen für das Einsatzende. Nutzen mehrere Verbandsgemeinden dieselbe FEZ, trägt jede VG dieselbe Kennung ein.",

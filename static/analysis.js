@@ -24,6 +24,9 @@ function coverageText(valid, total, unit = INCIDENT_UNIT) {
 }
 
 const round1 = (v) => v == null ? null : Math.round(v * 10) / 10;
+// Zahl als Link in die Einsatzliste (nur mit Einsätzen und wenn die Liste Rechte hat)
+const countLink = (count, filters) => count && can("incidents.view") ? `<a href="${esc(listLink(filters))}">${count}</a>` : String(count);
+const linkIf = (count, filters) => count && can("incidents.view") ? listLink(filters) : null;
 const shareText = (count, total) => total ? `${percent(count / total)} der Einsätze` : "–";
 
 // Leerzustand statt Gerüst aus Strichen und leeren Achsen: sagt, was fehlt und was zu tun ist
@@ -148,9 +151,9 @@ function buildUpCard(t) {
     chart: columnChart(groups), table, extra: `<p class="small muted section-gap">${esc(coverageText(t.build_up[0]?.valid ?? 0, t.total))} (Einsätze mit Eintreffzeit).</p>` });
 }
 
-function groupTable(head, rows) {
+function groupTable(head, rows, filterOf) {
   const body = rows.map((g) => [`${esc(g.label)}${g.small ? ` <span class="small muted" data-tip="${SMALL_SAMPLE_NOTE}">(wenige Fälle)</span>` : ""}`,
-    g.count, minutes(g.turnout.median), minutes(g.arrival.median), minutes(g.arrival.p90)]);
+    countLink(g.count, filterOf(g)), minutes(g.turnout.median), minutes(g.arrival.median), minutes(g.arrival.p90)]);
   return dataTable([head, "Einsätze", "Ausrückdauer (Median)", "Zeit bis Eintreffen (Median)", "Zeit bis Eintreffen (90 %)"], body);
 }
 
@@ -161,8 +164,8 @@ function groupsCard(t) {
   const windows = t.by_window.map((w) => ({ ...w, label: `${w.day_type} ${w.hours}` }));
   const areas = t.by_area.map((a) => ({ ...a, label: a.name }));
   const small = [...windows, ...areas].some((g) => g.small && g.count);
-  return `<div class="grid">${plainCard(`Zeiten nach Tageszeit`, "Wann treten Verzögerungen wiederholt auf?", groupTable("Zeitfenster", windows))}</div>
-    <div class="grid">${plainCard("Zeiten nach Ort", "Einsatzgebiet wie im Einsatzgeschehen", groupTable("Ort", areas))}</div>
+  return `<div class="grid">${plainCard(`Zeiten nach Tageszeit`, "Wann treten Verzögerungen wiederholt auf?", groupTable("Zeitfenster", windows, (g) => ({ slot: g.key })))}</div>
+    <div class="grid">${plainCard("Zeiten nach Ort", "Einsatzgebiet wie im Einsatzgeschehen", groupTable("Ort", areas, (g) => ({ area: g.name })))}</div>
     ${small ? `<p class="small muted">Zeilen mit weniger als 5 Einsätzen sind als „wenige Fälle“ gekennzeichnet und kaum aussagekräftig.</p>` : ""}`;
 }
 
@@ -178,17 +181,19 @@ function renderTimes() {
     ${analysisKpi(`Ausrückdauer`, minutes(t.turnout.median), esc(`Median · 90 % ≤ ${minutes(t.turnout.p90)} · ${coverageText(t.turnout.valid, t.turnout.total)}`))}
     ${analysisKpi(`Anfahrtdauer je Fahrzeug`, minutes(t.travel.median), esc(`Median · 90 % ≤ ${minutes(t.travel.p90)} · ${coverageText(t.travel.valid, t.travel.total, VEHICLE_UNIT)}`))}
     ${analysisKpi(`Zeit bis Eintreffen`, minutes(t.arrival.median), esc(`Median · 90 % ≤ ${minutes(t.arrival.p90)} · ${coverageText(t.arrival.valid, t.arrival.total)}`))}
-    ${analysisKpi("Einsätze im Jahr", t.total, e.response_plan_hidden.length ? esc(`ohne ${e.response_plan_hidden.join(", ")} (nicht freigegeben)`) : `Jahr ${state.year}`)}
+    ${analysisKpi("Einsätze im Jahr", countLink(t.total, {}), e.response_plan_hidden.length ? esc(`ohne ${e.response_plan_hidden.join(", ")} (nicht freigegeben)`) : `Jahr ${state.year}`)}
   </div>
   <div class="grid grid-2">${timeSummaryCard(t)}${buildUpCard(t)}</div>${groupsCard(t)}`;
 }
 
 // ------------------------------------------------------------ Belastung
 function workloadCard(w, s) {
-  const part = (label, p) => [label, p.count, shareText(p.count, w.total), formatHours(p.hours * 60),
+  const part = (label, p, filters) => [label, countLink(p.count, filters), shareText(p.count, w.total), formatHours(p.hours * 60),
     p.staff_hours == null ? "–" : `${num(p.staff_hours, 0)} h${p.staff_recorded < p.staff_total ? ` (${p.staff_recorded} von ${p.staff_total} Einsätzen erfasst)` : ""}`];
-  const rows = [part(`Lang (ab ${formatDuration(w.long.minutes)})`, w.long), part("Nachts", w.night), part("Samstag, Sonntag, Feiertag", w.weekend)];
-  const items = rows.map(([label, count]) => ({ label, value: count, tip: `${label}: ${count} von ${w.total} Einsätzen` }));
+  const filters = [{ long: w.long.minutes }, { night: 1 }, { weekend: 1 }];
+  const rows = [part(`Lang (ab ${formatDuration(w.long.minutes)})`, w.long, filters[0]), part("Nachts", w.night, filters[1]),
+    part("Samstag, Sonntag, Feiertag", w.weekend, filters[2])];
+  const items = [w.long, w.night, w.weekend].map((p, n) => ({ label: rows[n][0], value: p.count, link: linkIf(p.count, filters[n]), tip: `${rows[n][0]}: ${p.count} von ${w.total} Einsätzen` }));
   return chartCard({ id: "workload", title: `Belastung durch lange und nächtliche Einsätze`,
     subtitle: "Welche Belastung steckt hinter der reinen Einsatzanzahl? Ein Einsatz kann in mehreren Zeilen vorkommen.",
     chart: barChart(items), table: dataTable(["Art", "Einsätze", "Anteil", "Einsatzstunden", "Personalstunden"], rows),
@@ -197,8 +202,9 @@ function workloadCard(w, s) {
 
 function durationCard(w) {
   const d = w.duration;
-  const items = w.buckets.map((b) => ({ label: b.label, value: b.count }));
-  const table = dataTable(["Dauer", "Einsätze", "Anteil"], w.buckets.map((b) => [b.label, b.count, shareOf(b.count, d.valid)]));
+  const span = (b) => ({ dur: `${b.from}-${b.to ?? ""}` });
+  const items = w.buckets.map((b) => ({ label: b.label, value: b.count, link: linkIf(b.count, span(b)) }));
+  const table = dataTable(["Dauer", "Einsätze", "Anteil"], w.buckets.map((b) => [b.label, countLink(b.count, span(b)), shareOf(b.count, d.valid)]));
   const extra = keyFigures([[formatDuration(d.median), "Median"], [formatDuration(d.p90), "90 % höchstens"], [formatDuration(d.average), "Durchschnitt"]]);
   return chartCard({ id: "durations", title: "Dauer der Einsätze",
     subtitle: `Alarm bis Einsatzende, ${coverageText(d.valid, d.total)}`, chart: barChart(items), table, extra });
@@ -220,9 +226,9 @@ function renderWorkload() {
   const e = state.evaluation, w = e.workload, s = e.statistics;
   if (!w.total) { $("#view-load").innerHTML = evaluationToolbar({ exports: false }) + noIncidentsCard(); return; }
   $("#view-load").innerHTML = evaluationToolbar({ exports: false }) + `<div class="kpis kpis-4">
-    ${analysisKpi(`Lange Einsätze`, w.long.count, esc(`ab ${formatDuration(w.long.minutes)} · ${shareText(w.long.count, w.total)}`))}
-    ${analysisKpi("Nächtliche Einsätze", w.night.count, esc(shareText(w.night.count, w.total)))}
-    ${analysisKpi("Samstag, Sonntag, Feiertag", w.weekend.count, esc(shareText(w.weekend.count, w.total)))}
+    ${analysisKpi(`Lange Einsätze`, countLink(w.long.count, { long: w.long.minutes }), esc(`ab ${formatDuration(w.long.minutes)} · ${shareText(w.long.count, w.total)}`))}
+    ${analysisKpi("Nächtliche Einsätze", countLink(w.night.count, { night: 1 }), esc(shareText(w.night.count, w.total)))}
+    ${analysisKpi("Samstag, Sonntag, Feiertag", countLink(w.weekend.count, { weekend: 1 }), esc(shareText(w.weekend.count, w.total)))}
     ${analysisKpi(`Gleichzeitig offen`, w.overlap.incidents_with_overlap, esc(`höchstens ${w.overlap.max_concurrent} zugleich`))}
   </div>
   <div class="grid grid-2">${workloadCard(w, s)}${durationCard(w)}</div><div class="grid">${overlapCard(w.overlap)}</div>`;

@@ -188,6 +188,7 @@ def test_workload_counts_long_night_and_weekend_incidents():
     assert (w["long"]["count"], w["night"]["count"], w["weekend"]["count"]) == (1, 1, 1)
     assert w["duration"]["valid"] == 2 and w["duration"]["total"] == 3
     assert sum(b["count"] for b in w["buckets"]) == 2
+    assert [(b["from"], b["to"]) for b in w["buckets"]][:2] == [(0, 30), (30, 60)] and w["buckets"][-1]["to"] is None
 
 
 def test_coverage_reports_available_data():

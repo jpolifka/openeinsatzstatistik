@@ -50,6 +50,8 @@ const LIST_FILTERS = {
   month: (v) => new Date(2000, Number(v) - 1).toLocaleString("de-DE", { month: "long" }), weekday: (v) => WEEKDAYS[Number(v)] || v,
   hour: (v) => `${pad2(v)}–${pad2((Number(v) + 1) % 24)} Uhr`, area: (v) => v, level: (v) => `Alarmstufe ${v}`,
   missing: (v) => MISSING_LABELS[v] || v,
+  slot: (v) => WINDOW_LABELS[v] || v, long: (v) => `Dauer ab ${v} Min.`, night: () => "nachts", weekend: () => "Sa/So/Feiertag",
+  dur: (v) => { const [from, to] = v.split("-"); return to ? `Dauer ${from}–${to} Min.` : `Dauer ab ${from} Min.`; },
   abort: (v) => v === "any" ? "abgebrochen" : `Abbruch: ${v}`, system: (v) => v === "-" ? "Anlage ohne Angabe" : `Anlage/Objekt ${v}`,
   vehicle: (v) => `Fahrzeug ${v}`, agt: () => "mit Atemschutz", fire: () => "Brandeinsätze",
   casualty: (v) => CASUALTY_LABELS[v] || v,
@@ -138,6 +140,14 @@ function matchesFilter(e) {
   if (f.area && e.area !== f.area) return false;
   if (f.level && levelOf(e.keyword) !== f.level) return false;
   if (f.missing && !lacks[f.missing]?.(e)) return false;
+  if (f.slot && (!start || e.weekend_or_holiday !== f.slot.startsWith("weekend") || e.daytime !== f.slot.endsWith("_day"))) return false;
+  if (f.long && !(e.duration_min >= Number(f.long))) return false;
+  if (f.night && (e.daytime !== false || !e.started_at)) return false;
+  if (f.weekend && !e.weekend_or_holiday) return false;
+  if (f.dur) {
+    const [from, to] = f.dur.split("-");
+    if (e.duration_min == null || e.duration_min < Number(from) || (to && e.duration_min >= Number(to))) return false;
+  }
   if (f.abort && !(f.abort === "any" ? e.abort_kind : e.abort_kind === f.abort)) return false;
   if (f.system && e.alarm_key !== f.system) return false;
   if (f.vehicle && !e.vehicles.some((v) => v.call_sign === f.vehicle && (v.alerted || v.departed || v.crew))) return false;

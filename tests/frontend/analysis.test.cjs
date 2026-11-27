@@ -117,3 +117,18 @@ test("Reiter: Auswertungen bündelt drei Ansichten, Verwaltung zwei", () => {
   context.config.vg = {};
   assert.ok(!context.allowedViews().includes("members"));
 });
+
+test("Belastung und Zeiten verlinken ihre Zahlen in die Einsatzliste, aber nur mit Recht", () => {
+  const { context, els } = load();
+  context.config.permissions.push("incidents.view");
+  context.state.evaluation = evaluation();
+  context.renderWorkload();
+  const html = els["#view-load"].innerHTML;
+  assert.match(html, /<a href="#incidents\?long=120">/);
+  assert.match(html, /<a href="#incidents\?night=1">/);
+  assert.match(html, /<a href="#incidents\?weekend=1">/);
+  const { context: plain, els: plainEls } = load();
+  plain.state.evaluation = evaluation();
+  plain.renderWorkload();
+  assert.doesNotMatch(plainEls["#view-load"].innerHTML, /<a href/);
+});
