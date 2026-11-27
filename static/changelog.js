@@ -7,6 +7,13 @@
 const CHANGELOG = [
   {
     date: "2026-11-27",
+    version: "2026-11-27.8",
+    items: [
+      "<b>Willkommensmail für Führungspersonen:</b> Wer als Wehrführung, Wehrleitung, Stellvertretung, Inspekteur oder Leitstellenleitung angelegt wird, bekommt einmal eine Mail mit Anmeldung und den ersten Schritten – im Aussehen der Wehr.",
+    ],
+  },
+  {
+    date: "2026-11-27",
     version: "2026-11-27.7",
     items: [
       "<b>Atemschutz nachhalten:</b> Wehrführung und Stellvertretung sehen unter Atemschutz → Auswertung per Klick auf den Namen alle Einträge einer Person (Einsätze, Übungen, Strecken mit Dauer, Ort, Druck und Abzeichnung) und ihre G26.3-Nachweise – ohne Notizen – und können das als PDF drucken. Jeder Abruf wird protokolliert. Der Auftragsverarbeitungsvertrag hat dazu eine neue Fassung.",

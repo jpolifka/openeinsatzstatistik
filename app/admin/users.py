@@ -6,7 +6,7 @@ import re
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app import rbac, tenancy
+from app import rbac, tenancy, welcome
 from app.rbac import USERS_VIEW
 
 from app.admin.common import _invalid, access, log
@@ -119,6 +119,8 @@ def grant_membership(m: MembershipIn, a: tenancy.Access = Depends(access)):
         rbac.log(con, a.email, "Rolle vergeben", f"{role.label} für {email} in {name}", vg_id,
                  scope_id if m.scope == "tenant" else None)
     log.info("Rolle %s für %s in %s %s vergeben durch %s", role.key, email, m.scope, m.slug, a.email or "lokal")
+    if role.key in welcome.LEADERSHIP:      # nach dem Speichern; ein Fehler beim Versand ändert nichts an der Zuordnung
+        welcome.send_welcome(email)
     return get_memberships(a)
 
 
