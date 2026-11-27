@@ -19,6 +19,7 @@ const ADMIN_SECTIONS = [
   { key: "users", label: "Benutzer", any: true }, { key: "roles", label: "Rollen", any: true },
   { key: "super", label: "Wehren & VGs", superOnly: true },
   { key: "sessions", label: "Sitzungen", superOnly: true },
+  { key: "agtcheck", label: "Atemschutz-Prüfung", superOnly: true },
 ];
 // Bereiche, deren Eingaben über „Speichern“ gesichert werden (Einstellungen der Wehr bzw. Vorgaben der VG)
 const SETTINGS_SECTIONS = ["unit", "fleet", "bks", "places"];
@@ -51,7 +52,7 @@ const fleetCompact = () => (recall(fleetCompactKey()) ?? (admin.vg ? "1" : "0"))
 // Hilfe zum gerade offenen Bereich der Verwaltung
 const ADMIN_HELP = { unit: () => admin.vg ? "admin_vg_defaults" : "admin_colors", fleet: () => admin.vg ? "admin_vg_vehicles" : "admin_fleet",
   bks: "admin_bks", places: "admin_places", keywords: "admin_keywords", people: "admin_people", fees: "fees", users: "admin_users",
-  roles: () => admin.roleDraft ? "admin_role_editor" : "admin_roles", sessions: "admin_sessions" };
+  roles: () => admin.roleDraft ? "admin_role_editor" : "admin_roles", sessions: "admin_sessions", agtcheck: "admin_agtcheck" };
 
 VIEWS.admin = { label: "Einstellungen", sub: "Einstellungen", load: loadAdmin, render: renderAdmin, noYear: true,
   visible: () => config.admin, help: () => helpValue(ADMIN_HELP[admin.section]) || "sec_admin" };
@@ -105,6 +106,7 @@ async function loadAdmin() {
   }
   if (s === "users" && !admin.memberships) setMemberships(await api("/api/admin/memberships"));
   if (s === "roles" && !admin.roles) admin.roles = await api("/api/admin/roles");
+  if (s === "agtcheck") admin.agtCheck = await api("/api/super/atemschutz");      // immer frisch (und protokolliert)
   if (s === "sessions") admin.sessions = await api("/api/super/sessions");     // immer frisch: ändert sich laufend
   if (s === "super" && !admin.superOverview) admin.superOverview = await api("/api/super/overview");
   if (s === "super" && !admin.memberships) setMemberships(await api("/api/admin/memberships"));
@@ -161,7 +163,7 @@ function renderAdmin() {
   const groups = adminChoiceGroups(vgs, tenants);
   const count = groups.reduce((n, g) => n + g.options.length, 0);
   const option = (c) => `<option value="${esc(c.key)}" ${c.key === current ? "selected" : ""}>${esc(c.label)}</option>`;
-  const tenantSelect = count > 1 && !["users", "roles", "super", "sessions"].includes(admin.section)
+  const tenantSelect = count > 1 && !["users", "roles", "super", "sessions", "agtcheck"].includes(admin.section)
     ? `<label class="field admin-tenant"><span>${admin.vg ? "Verbandsgemeinde" : "Feuerwehr"}</span><select data-admin-tenant>${groups.map((g) =>
       `<optgroup label="${esc(g.label)}">${g.options.map(option).join("")}</optgroup>`).join("")}</select></label>` : "";
   const sections = `<div class="segments" role="group" aria-label="Verwaltungsbereich">${adminSections().map(({ key, label }) =>
@@ -169,7 +171,7 @@ function renderAdmin() {
   const body = ({
     unit: () => admin.vg ? vgUnitSection() : unitSection(), fleet: () => admin.vg ? vgFleetSection() : fleetSection(),
     bks: () => admin.vg ? vgBksSection() : bksSection(), places: () => admin.vg ? vgPlacesSection() : placesSection(),
-    keywords: keywordsSection, people: peopleSection, users: usersSection, roles: rolesSection, super: superSection, sessions: sessionsSection, fees: feesSection,
+    keywords: keywordsSection, people: peopleSection, users: usersSection, roles: rolesSection, super: superSection, sessions: sessionsSection, agtcheck: agtCheckSection, fees: feesSection,
   }[admin.section] || (() => `<p class="muted">Hier gibt es für dich nichts zu verwalten.</p>`))();
   $("#view-admin").innerHTML = `<div class="card admin-card">
     <div class="admin-head">${sections}${tenantSelect}</div>

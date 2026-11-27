@@ -614,3 +614,39 @@ def test_transfer_twice_does_not_duplicate(world):
         own.absorb(package)
         own.absorb(package)
         assert len(own.entries(2025)) == 1
+
+
+# ---------------------------------------------------------------- Prüfansicht der Superadmins
+def test_superadmin_check_shows_numbers_only(world):
+    _as(world, "anna@example.org")
+    world.post("/api/atemschutz/me/entries", json={**ENTRY, "notes": "geheim", "place": "Geheimort"})
+    world.post("/api/atemschutz/me/medical", json={"examined_on": "2025-02-01", "valid_until": "2026-02-01"})
+    _as(world, "admin@example.org")
+    response = world.get("/api/super/atemschutz")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["deviations"] == []
+    t = next(t for t in data["tenants"] if t["slug"] == "wehr-a1")
+    assert (t["members"], t["with_email"], t["persons_with_data"], t["entries"], t["medical"]) == (2, 2, 1, 1, 1)
+    assert t["email_without_access"] == 0 and t["access_without_person"] == 0
+    text = response.text.lower()
+    assert "geheim" not in text and "anna@example.org" not in text and "berta@example.org" not in text and "beispiel" not in text
+    assert any(e["action"] == "agt.check.view" and e["email"] == "admin@example.org" for e in t["events"])
+
+
+def test_superadmin_check_finds_mismatches_and_wrong_rights(world):
+    with db.connection(tenancy.tenant_path("wehr-a1")) as con:
+        con.execute("UPDATE member SET email = 'ohne-zugang@example.org' WHERE id = ?", (world.ids["anna"],))   # Stamm ohne Zuordnung
+    with tenancy.central() as con:
+        con.execute("INSERT OR IGNORE INTO role_permission (role_id, permission) SELECT id, 'agt.evaluate' FROM role WHERE key = 'editor'")
+    _as(world, "admin@example.org")
+    data = world.get("/api/super/atemschutz").json()
+    t = next(t for t in data["tenants"] if t["slug"] == "wehr-a1")
+    assert t["email_without_access"] == 1 and t["access_without_person"] == 1          # Annas alte Zuordnung ist verwaist
+    assert any(d.startswith("editor") for d in data["deviations"])
+
+
+@pytest.mark.parametrize("email", ["lead@example.org", "vglead@example.org", "anna@example.org"])
+def test_only_superadmin_may_open_the_check(world, email):
+    _as(world, email)
+    assert world.get("/api/super/atemschutz").status_code == 403

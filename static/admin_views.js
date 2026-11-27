@@ -973,6 +973,33 @@ function sessionsSection() {
     Wer den Zugang ganz verlieren soll, dem entziehst du die Zuordnung unter „Benutzer“. „Zuletzt aktiv“ wird auf etwa 5 Minuten genau geführt.</p>`;
 }
 
+// ------------------------------------------------------------ Atemschutz-Prüfung (nur Superadmin)
+// Nur Zahlen, Rechte-Abgleich und Zugriffsprotokoll – nie Inhalte oder Daten einzelner Personen.
+function agtCheckSection() {
+  const c = admin.agtCheck;
+  const flag = (n) => n ? `<span class="warn-text"><b>${n}</b></span>` : `<span class="muted">0</span>`;
+  const rows = c.tenants.map((t) => `<tr><td><b>${esc(t.name)}</b><span class="member-sub">${esc(t.vg)}</span></td>
+    <td class="right">${t.members}</td><td class="right">${t.with_email}</td><td class="right">${flag(t.email_without_access)}</td>
+    <td class="right">${flag(t.access_without_person)}</td><td class="right">${t.persons_with_data}</td>
+    <td class="right">${t.entries}</td><td class="right">${t.medical}</td><td class="right">${t.reminders}</td></tr>`).join("");
+  const events = c.tenants.flatMap((t) => t.events.map((e) => ({ ...e, tenant: t.name })))
+    .sort((x, y) => y.at.localeCompare(x.at)).slice(0, 50);
+  return `<h3>Atemschutz-Prüfung</h3>
+    <p class="small muted">Prüfansicht für Superadmins: nur Zahlen und Rechte – <b>keine Inhalte und keine Daten einzelner Personen</b>; auch Superadmins haben keinen Zugriff auf die Atemschutz-Dokumentation. Dieser Abruf wird in jeder Wehr protokolliert.</p>
+    ${c.deviations.length ? errorBox(`Abweichende Rechte: ${c.deviations.join("; ")}`)
+      : noticeBox("info", "Rechte in Ordnung", "Nur Wehrführer/in (eigene Daten und Auswertung), Wehrleiter/in und „Atemschutz (eigene Daten)“ (nur eigene Daten) tragen Atemschutz-Rechte.")}
+    <p class="small">Erinnerungen per E-Mail: ${c.mail ? `eingerichtet (ab ${c.reminder_hour} Uhr)` : "Mailversand nicht eingerichtet – es werden keine Erinnerungen gesendet"}.</p>
+    <div class="table-wrap"><table class="mini-table admin-table"><thead><tr><th>Wehr</th><th class="right">Personen</th><th class="right">mit E-Mail</th>
+      <th class="right" data-tip="E-Mail im Stamm, aber keine Zuordnung „Atemschutz (eigene Daten)“ in dieser Wehr">E-Mail ohne Zugang</th>
+      <th class="right" data-tip="Zugang ohne passende Person (aktiv, E-Mail) im Stamm">Zugang ohne Person</th>
+      <th class="right">Personen mit Daten</th><th class="right">Einträge</th><th class="right">G26.3</th><th class="right">Erinnerungen</th></tr></thead>
+      <tbody>${rows || `<tr><td colspan="9" class="muted">Keine Wehren.</td></tr>`}</tbody></table></div>
+    <h3 class="section-gap">Letzte Zugriffe</h3>
+    <div class="table-wrap"><table class="mini-table admin-table"><thead><tr><th>Zeit</th><th>Wehr</th><th>Wer</th><th>Aktion</th></tr></thead>
+      <tbody>${events.map((e) => `<tr><td>${esc(e.at)}</td><td>${esc(e.tenant)}</td><td>${esc(e.email)}</td><td>${esc(e.action)}</td></tr>`).join("")
+        || `<tr><td colspan="4" class="muted">Noch keine Zugriffe.</td></tr>`}</tbody></table></div>`;
+}
+
 // ------------------------------------------------------------ Personen
 // Personenstamm der Wehr: zugleich der Abgleich der eingelesenen Namen. Keine Statistik, je Person ein „Bearbeiten“.
 function personEditHtml(m) {

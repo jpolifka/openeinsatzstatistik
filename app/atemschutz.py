@@ -23,7 +23,7 @@ MAX_ENTRIES = 5000                   # je Person (Schutz vor Fluten)
 MAX_MEDICAL = 100
 LIMITS = {"place": 120, "keyword": 120, "organisation": 120, "notes": 1000}
 # Funktionen, die über mehrere Personen lesen dürfen (Allowlist für den Quelltexttest)
-SUMMARY_FUNCTIONS = ("summary", "summary_years", "reminder_candidates")
+SUMMARY_FUNCTIONS = ("summary", "summary_years", "reminder_candidates", "integrity", "recent_audit")
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
@@ -372,3 +372,22 @@ def reminder_candidates(con):
         "SELECT m.id, m.email, r.offsets, (SELECT MAX(valid_until) FROM agt_medical WHERE member_id = m.id) AS valid_until "
         "FROM agt_reminder r JOIN member m ON m.id = r.member_id WHERE m.active = 1 AND m.email IS NOT NULL")
     return [(r["id"], r["email"], r["valid_until"], json.loads(r["offsets"])) for r in rows if r["valid_until"]]
+
+
+def integrity(con):
+    """Nur Zahlen für die Prüfansicht der Superadmins (keine Inhalte, keine Zuordnung von Daten zu Personen) plus die
+    E-Mail-Adressen der aktiven Personen im Stamm für den Abgleich mit den Zuordnungen (werden nicht ausgegeben)."""
+    one = lambda sql: con.execute(sql).fetchone()[0]          # noqa: E731
+    return {"members": one("SELECT COUNT(*) FROM member WHERE active = 1"),
+            "persons_with_data": one("SELECT COUNT(*) FROM (SELECT member_id FROM agt_entry UNION SELECT member_id FROM agt_medical)"),
+            "entries": one("SELECT COUNT(*) FROM agt_entry"), "medical": one("SELECT COUNT(*) FROM agt_medical"),
+            "reminders": one("SELECT COUNT(*) FROM agt_reminder"),
+            "emails": [r[0] for r in con.execute("SELECT lower(email) FROM member WHERE active = 1 AND email IS NOT NULL")]}
+
+
+def recent_audit(con, limit=20):
+    """Letzte Vermerke des Zugriffsprotokolls über Zugriffe der Wehrführung und Prüfungen: wer, was, wann. Eigene Einträge
+    der Personen (wer pflegt Daten) bleiben außen vor, sie verrieten, wer Atemschutz-Daten führt."""
+    return [{"email": r["email"], "action": r["action"], "at": r["at"]} for r in con.execute(
+        "SELECT email, action, at FROM agt_audit WHERE action IN ('agt.summary.view', 'agt.check.view', 'agt.transfer.in', "
+        "'agt.transfer.out') ORDER BY id DESC LIMIT ?", (limit,))]

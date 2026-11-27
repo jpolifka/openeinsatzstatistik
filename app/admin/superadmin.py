@@ -8,7 +8,7 @@ from app import tenant_lifecycle
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from app import auth, db, rbac, tenancy
+from app import agt_reminders, atemschutz, auth, db, mail, rbac, tenancy
 
 from app.admin.common import _invalid, access, log
 
@@ -41,6 +41,44 @@ def super_overview(a: tenancy.Access = Depends(access)):
         with db.connection(tenancy.tenant_path(t["slug"])) as con:
             t["incidents"] = con.execute("SELECT COUNT(*) FROM incident").fetchone()[0]
     return {"vgs": vgs, "tenants": tenants, "pending_archives": archives}
+
+
+# Rollen, die Atemschutz-Rechte haben dürfen (alles andere ist eine Abweichung)
+AGT_EXPECTED = {"lead": {rbac.AGT_OWN, rbac.AGT_EVAL}, "vg_lead": {rbac.AGT_OWN}, "agt_self": {rbac.AGT_OWN}}
+
+
+@router.get("/api/super/atemschutz")
+def super_atemschutz(a: tenancy.Access = Depends(access)):
+    """Prüfansicht der Atemschutz-Dokumentation für Superadmins: nur Zahlen, Rechte-Abgleich und Zugriffsprotokoll –
+    nie Inhalte oder Daten einzelner Personen. Der Abruf selbst wird in jeder Wehr protokolliert."""
+    _superadmin(a)
+    with tenancy.central() as con:
+        roles = rbac.Roles(con)
+        holders = {r.key + (f" (VG {r.vg_id})" if r.vg_id else ""): sorted(roles.permissions(r.id) & rbac.FIXED_PERMISSIONS)
+                   for r in roles if roles.permissions(r.id) & rbac.FIXED_PERMISSIONS}
+        tenants = [dict(r) for r in con.execute(
+            "SELECT t.id, t.slug, t.name, v.name AS vg FROM tenant t JOIN vg v ON v.id = t.vg_id WHERE t.active "
+            "ORDER BY v.name, t.name")]
+        archives = {r[0] for r in con.execute("SELECT slug FROM tenant_archive")}
+    deviations = [f"{key}: {', '.join(perms)}" for key, perms in holders.items()
+                  if key not in AGT_EXPECTED or set(perms) != AGT_EXPECTED[key]]
+    result = []
+    for t in tenants:
+        if t["slug"] in archives:
+            continue
+        with db.connection(tenancy.tenant_path(t["slug"])) as con:
+            atemschutz.audit(con, a.email, "agt.check.view")
+            data = atemschutz.integrity(con)
+            events = atemschutz.recent_audit(con)
+        with tenancy.central() as con:
+            role = tenancy.find_role(con, "agt_self", "tenant", t["id"])
+            holders_here = {r[0] for r in con.execute("SELECT email FROM membership WHERE scope = 'tenant' AND scope_id = ? "
+                                                      "AND role_id = ?", (t["id"], role.id))}
+        emails = set(data.pop("emails"))
+        result.append({"slug": t["slug"], "name": t["name"], "vg": t["vg"], **data,
+                       "with_email": len(emails), "email_without_access": len(emails - holders_here),
+                       "access_without_person": len(holders_here - emails), "events": events})
+    return {"tenants": result, "deviations": deviations, "mail": mail.enabled(), "reminder_hour": agt_reminders.HOUR}
 
 
 class VgIn(BaseModel):
