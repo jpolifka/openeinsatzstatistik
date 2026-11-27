@@ -16,6 +16,7 @@ def world(make_client, monkeypatch):
     monkeypatch.setattr(mail, "SMTP_HOST", "smtp.example.org")
     client.cookies.clear()
     login(client, "vglead@example.org")
+    tenancy.record_login("vglead@example.org")      # gilt als angemeldet: kommt im Nachversand nicht vor
     client.sent = sent
     client.a1 = a1
     client.vg_a = vg_a
@@ -103,7 +104,7 @@ def test_new_tenant_sends_welcome_to_first_lead(make_client, monkeypatch):
     sent = []
     monkeypatch.setattr(mail, "send", lambda to, subject, text, html, **kw: sent.append(to))
     make_tenant("wehr-a1", "vg-a")
-    client = make_client(login=True)       # Superadmin
+    client = login(make_client(login=True), "admin@example.org")       # Superadmin
     monkeypatch.setattr(mail, "SMTP_HOST", "smtp.example.org")
     response = client.post("/api/super/tenants", json={"name": "Neue Wehr", "vg": "vg-a", "email": "erste@example.org"})
     assert response.status_code == 200
