@@ -97,3 +97,14 @@ def test_build_without_tenant_is_neutral():
     subject, text, html, images = welcome.build(None, [("Wehrführer/in", "Beispiel")], "https://example.org")
     assert subject == welcome.SUBJECT and images == []
     assert "https://example.org" in text and "Beispiel" in html
+
+
+def test_new_tenant_sends_welcome_to_first_lead(make_client, monkeypatch):
+    monkeypatch.setattr(mail, "SMTP_HOST", "smtp.example.org")
+    sent = []
+    monkeypatch.setattr(mail, "send", lambda to, subject, text, html, **kw: sent.append(to))
+    make_tenant("wehr-a1", "vg-a")
+    client = make_client(login=True)       # Superadmin
+    response = client.post("/api/super/tenants", json={"name": "Neue Wehr", "vg": "vg-a", "email": "erste@example.org"})
+    assert response.status_code == 200
+    assert sent == ["erste@example.org"]

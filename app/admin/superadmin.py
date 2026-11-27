@@ -8,7 +8,7 @@ from app import tenant_lifecycle
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from app import agt_reminders, atemschutz, auth, db, mail, rbac, tenancy
+from app import agt_reminders, atemschutz, auth, db, mail, rbac, tenancy, welcome
 
 from app.admin.common import _invalid, access, log
 
@@ -202,6 +202,8 @@ def create_tenant(t: TenantIn, a: tenancy.Access = Depends(access)):
             rbac.log(con, a.email, "Rolle vergeben", f"{role.label} für {tenancy.normalize_email(t.email)} in {t.name}",
                      row["id"], tenant_id)
     log.info("Wehr %s angelegt durch %s", t.slug, a.email or "lokal")
+    if t.email:             # nach dem Speichern; ein Fehler beim Versand ändert nichts an der Wehr
+        welcome.send_welcome(t.email)
     return super_overview(a)
 
 
