@@ -132,3 +132,17 @@ test("Belastung und Zeiten verlinken ihre Zahlen in die Einsatzliste, aber nur m
   plain.renderWorkload();
   assert.doesNotMatch(plainEls["#view-load"].innerHTML, /<a href/);
 });
+
+test("Die Kacheln sind Links in die Einsatzliste – ohne Recht bleiben sie einfache Kacheln", () => {
+  const { context, els } = load();
+  context.config.permissions.push("incidents.view");
+  context.state.evaluation = evaluation();
+  context.renderWorkload();
+  const tiles = els["#view-load"].innerHTML.match(/<a class="kpi kpi-link"/g) || [];
+  assert.equal(tiles.length, 4);
+  assert.match(els["#view-load"].innerHTML, /<a class="kpi kpi-link" href="#incidents\?all=1"/);   // Gleichzeitig offen: alle, Filter zurücksetzen
+  const { context: plain, els: plainEls } = load();
+  plain.state.evaluation = evaluation();
+  plain.renderWorkload();
+  assert.doesNotMatch(plainEls["#view-load"].innerHTML, /kpi-link/);
+});

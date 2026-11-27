@@ -45,6 +45,7 @@ const lacks = {
 };
 
 // Filter aus der Auswertung: Schlüssel in der Adresse -> Beschriftung des Filter-Chips
+const ABORT_KIND_LABELS = { false_alarm: "Fehlalarm", standby: "Bereitstellung", not_needed: "nicht erforderlich", other: "sonstiger Grund" };
 const LIST_FILTERS = {
   tenants: (v) => v.split(",").map((slug) => config.tenants.find((t) => t.slug === slug)?.name || slug).join(", "),
   month: (v) => new Date(2000, Number(v) - 1).toLocaleString("de-DE", { month: "long" }), weekday: (v) => WEEKDAYS[Number(v)] || v,
@@ -52,9 +53,10 @@ const LIST_FILTERS = {
   missing: (v) => MISSING_LABELS[v] || v,
   slot: (v) => WINDOW_LABELS[v] || v, long: (v) => `Dauer ab ${v} Min.`, night: () => "nachts", weekend: () => "Sa/So/Feiertag",
   dur: (v) => { const [from, to] = v.split("-"); return to ? `Dauer ${from}–${to} Min.` : `Dauer ab ${from} Min.`; },
-  abort: (v) => v === "any" ? "abgebrochen" : `Abbruch: ${v}`, system: (v) => v === "-" ? "Anlage ohne Angabe" : `Anlage/Objekt ${v}`,
+  abort: (v) => v === "any" ? "abgebrochen" : `Abbruch: ${v.split(",").map((k) => ABORT_KIND_LABELS[k] || k).join(", ")}`,
+  system: (v) => v === "any" ? "Brandmeldeanlagen" : v === "-" ? "Anlage ohne Angabe" : `Anlage/Objekt ${v}`,
   vehicle: (v) => `Fahrzeug ${v}`, agt: () => "mit Atemschutz", fire: () => "Brandeinsätze",
-  casualty: (v) => CASUALTY_LABELS[v] || v,
+  casualty: (v) => v.split(",").map((c) => CASUALTY_LABELS[c] || c).join(" / "),
   plan: () => "Eintreffen und Kräfte", window: (v) => WINDOW_LABELS[v] || v, late: (v) => `nicht innerhalb ${v} Min.`,
 };
 
@@ -148,12 +150,12 @@ function matchesFilter(e) {
     const [from, to] = f.dur.split("-");
     if (e.duration_min == null || e.duration_min < Number(from) || (to && e.duration_min >= Number(to))) return false;
   }
-  if (f.abort && !(f.abort === "any" ? e.abort_kind : e.abort_kind === f.abort)) return false;
-  if (f.system && e.alarm_key !== f.system) return false;
+  if (f.abort && !(f.abort === "any" ? e.abort_kind : f.abort.split(",").includes(e.abort_kind))) return false;
+  if (f.system && (f.system === "any" ? e.alarm_key == null : e.alarm_key !== f.system)) return false;
   if (f.vehicle && !e.vehicles.some((v) => v.call_sign === f.vehicle && (v.alerted || v.departed || v.crew))) return false;
   if (f.agt && !(e.vehicles.some((v) => v.respiratory > 0) || e.people.some((p) => p.agt))) return false;
   if (f.fire && !e.is_fire) return false;
-  if (f.casualty && !(e[f.casualty] > 0)) return false;
+  if (f.casualty && !f.casualty.split(",").some((c) => e[c] > 0)) return false;
   // Eintreffen und Kräfte wie in der Auswertung: relevante Einsätze mit Eintreffzeit
   if ((f.plan || f.window || f.late) && !(e.plan_relevant && e.on_time != null)) return false;
   if (f.window && (e.weekend_or_holiday !== f.window.startsWith("weekend") || e.daytime !== f.window.endsWith("_day"))) return false;

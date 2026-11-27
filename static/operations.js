@@ -60,10 +60,10 @@ function renderAborts() {
   const e = state.evaluation, a = e.aborts, s = e.alarm_systems, f = a.fire_alarm_systems;
   const kind = (key) => a.kinds.find((k) => k.kind === key)?.count ?? 0;
   $("#view-aborts").innerHTML = evaluationToolbar({ exports: false }) + `<div class="kpis kpis-4">
-    ${analysisKpi(`Abgebrochene Einsätze`, countLink(a.aborted, { abort: "any" }), esc(`${a.total ? percent(a.share) : "–"} von ${a.total} Einsätzen`))}
-    ${analysisKpi("Fehlalarme", kind("false_alarm"), esc(ABORT_LONG.false_alarm))}
-    ${analysisKpi(`An Brandmeldeanlagen`, f.count, esc(f.count ? `${shareOfKnown(f.aborted, f.count)} abgebrochen` : "keine Einsätze mit B2.07"))}
-    ${analysisKpi("In Bereitstellung / nicht erforderlich", kind("standby") + kind("not_needed"), esc(`${plural(kind("standby"), "Einsatz", "Einsätze")} in Bereitstellung`))}
+    ${analysisKpi(`Abgebrochene Einsätze`, a.aborted, esc(`${a.total ? percent(a.share) : "–"} von ${a.total} Einsätzen`), { abort: "any" })}
+    ${analysisKpi("Fehlalarme", kind("false_alarm"), esc(ABORT_LONG.false_alarm), { abort: "false_alarm" })}
+    ${analysisKpi(`An Brandmeldeanlagen`, f.count, esc(f.count ? `${shareOfKnown(f.aborted, f.count)} abgebrochen` : "keine Einsätze mit B2.07"), { system: "any" })}
+    ${analysisKpi("In Bereitstellung / nicht erforderlich", kind("standby") + kind("not_needed"), esc(`${plural(kind("standby"), "Einsatz", "Einsätze")} in Bereitstellung`), { abort: "standby,not_needed" })}
   </div>
   <div class="grid grid-2">${abortKindsCard(a)}${abortCategoriesCard(a)}</div>
   <div class="grid">${alarmSystemsCard(s, a)}</div>
@@ -105,10 +105,10 @@ function renderResources() {
   const alerted = v.rows.reduce((n, u) => n + u.alerted, 0), standby = v.rows.reduce((n, u) => n + u.standby, 0);
   const known = v.rows.reduce((n, u) => n + u.known, 0);
   $("#view-resources").innerHTML = evaluationToolbar({ exports: false }) + `<div class="kpis kpis-4">
-    ${analysisKpi(`Fahrzeug-Alarmierungen`, alerted, esc(`${plural(v.rows.length, "Fahrzeug", "Fahrzeuge")} in ${plural(v.total, "Einsatz", "Einsätzen")}`))}
-    ${analysisKpi("Nur bereitgestellt", standby, esc(known ? `${percent(standby / known)} der Alarmierungen mit Angabe` : "keine Angabe vorhanden"))}
-    ${analysisKpi(`Einsätze mit Atemschutz`, r.known ? r.with_agt : "–", esc(r.known ? `${shareOfKnown(r.with_agt, r.known)} von ${r.known} Einsätzen mit Angabe` : "keine Angabe vorhanden"))}
-    ${analysisKpi("Minuten unter Atemschutz", r.known ? r.minutes : "–", esc(r.average_minutes == null ? "keine Zeiten erfasst" : `Ø ${num(r.average_minutes)} min je Person`))}
+    ${analysisKpi(`Fahrzeug-Alarmierungen`, alerted, esc(`${plural(v.rows.length, "Fahrzeug", "Fahrzeuge")} in ${plural(v.total, "Einsatz", "Einsätzen")}`), ALL_INCIDENTS)}
+    ${analysisKpi("Nur bereitgestellt", standby, esc(known ? `${percent(standby / known)} der Alarmierungen mit Angabe` : "keine Angabe vorhanden"), ALL_INCIDENTS)}
+    ${analysisKpi(`Einsätze mit Atemschutz`, r.known ? r.with_agt : "–", esc(r.known ? `${shareOfKnown(r.with_agt, r.known)} von ${r.known} Einsätzen mit Angabe` : "keine Angabe vorhanden"), { agt: 1 })}
+    ${analysisKpi("Minuten unter Atemschutz", r.known ? r.minutes : "–", esc(r.average_minutes == null ? "keine Zeiten erfasst" : `Ø ${num(r.average_minutes)} min je Person`), { agt: 1 })}
   </div>
   <div class="grid">${vehicleUsageCard(v)}</div><div class="grid">${respiratoryCard(r)}</div>`;
 }
@@ -152,10 +152,10 @@ function casualtiesCard(c) {
 function renderFire() {
   const e = state.evaluation, f = e.fire_course, c = e.casualties;
   $("#view-fire").innerHTML = evaluationToolbar({ exports: false }) + `<div class="kpis kpis-4">
-    ${analysisKpi(`Brandeinsätze`, countLink(f.total, { fire: 1 }), "ohne Abbrüche, Brandmeldeanlagen, Brandwachen")}
-    ${analysisKpi("Bis „Brand unter Kontrolle“", minutes(f.to_control.median), esc(`Median ab Eintreffen · ${coverageText(f.to_control.valid, f.total)}`))}
-    ${analysisKpi("Menschen gerettet", c.fields.rescued.total, esc(`in ${plural(c.fields.rescued.incidents, "Einsatz", "Einsätzen")}`))}
-    ${analysisKpi("Verletzte", c.fields.injured.total + c.fields.injured_firefighters.total, esc(`${c.fields.injured_firefighters.total} davon Feuerwehrangehörige`))}
+    ${analysisKpi(`Brandeinsätze`, f.total, "ohne Abbrüche, Brandmeldeanlagen, Brandwachen", { fire: 1 })}
+    ${analysisKpi("Bis „Brand unter Kontrolle“", minutes(f.to_control.median), esc(`Median ab Eintreffen · ${coverageText(f.to_control.valid, f.total)}`), { fire: 1 })}
+    ${analysisKpi("Menschen gerettet", c.fields.rescued.total, esc(`in ${plural(c.fields.rescued.incidents, "Einsatz", "Einsätzen")}`), { casualty: "rescued" })}
+    ${analysisKpi("Verletzte", c.fields.injured.total + c.fields.injured_firefighters.total, esc(`${c.fields.injured_firefighters.total} davon Feuerwehrangehörige`), { casualty: "injured,injured_firefighters" })}
   </div>
   <div class="grid grid-2">${fireTimesCard(f)}${fireTacticsCard(f)}</div><div class="grid">${casualtiesCard(c)}</div>`;
 }

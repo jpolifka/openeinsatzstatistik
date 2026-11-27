@@ -14,8 +14,13 @@ VIEWS.load = { label: "Belastung", sub: "Belastung", load: loadEvaluation, rende
   help: "sec_load" };
 
 // ------------------------------------------------------------ Bausteine
-const analysisKpi = (title, value, sub) =>
-  `<div class="kpi"><span class="kpi-title">${title}</span><span class="kpi-value">${value}</span><span class="kpi-sub">${sub}</span></div>`;
+// Alle Einsätze: der Parameter setzt gemerkte Filter der Liste zurück (ohne Parameter bliebe der Stand erhalten)
+const ALL_INCIDENTS = { all: 1 };
+// Kachel; mit filters (auch {}) ist sie ein Link in die passende Einsatzliste, sofern der Benutzer sie sehen darf
+const analysisKpi = (title, value, sub, filters) => {
+  const body = `<span class="kpi-title">${title}</span><span class="kpi-value">${value}</span><span class="kpi-sub">${sub}</span>`;
+  return filters && can("incidents.view") ? `<a class="kpi kpi-link" href="${esc(listLink(filters))}" data-tip="Einsätze anzeigen">${body}</a>` : `<div class="kpi">${body}</div>`;
+};
 
 /** „42 von 57 Einsätzen auswertbar“ – mit Hinweis, wenn Angaben fehlen. */
 function coverageText(valid, total, unit = INCIDENT_UNIT) {
@@ -107,13 +112,13 @@ function coverageCard(e) {
 function renderOverview() {
   const e = state.evaluation, s = e.statistics, plan = e.response_plan;
   const quote = plan?.total.count ? analysisKpi(`Eintreffen ≤ ${plan.limit} Min.`, percent(plan.total.rate),
-    `${plan.total.on_time} von ${plan.total.count} Einsätzen mit Eintreffzeit oder Abbruch`) : "";
+    `${plan.total.on_time} von ${plan.total.count} Einsätzen mit Eintreffzeit oder Abbruch`, { plan: 1 }) : "";
   const vg = e.tenants;
   $("#view-overview").innerHTML = evaluationToolbar({ exports: false }) + `<div class="kpis kpis-4">
-    ${analysisKpi(`Einsätze ${state.year}`, vg ? vg.unique : s.count, vg ? esc(`${vg.participations} Beteiligungen der Wehren`) : `${num(s.per_week, 2)} je Woche`)}
-    ${analysisKpi(`Ø Einsatzdauer`, formatDuration(s.duration_avg_min), esc(coverageText(e.workload.duration.valid, e.workload.duration.total)))}
-    ${analysisKpi(`Einsatzstunden`, formatHours(s.duration_total_min), "Summe aller Einsätze")}
-    ${quote || analysisKpi("Eintreffen", "–", plan ? planEmptyReason(plan) : "für Sie noch nicht freigegeben")}
+    ${analysisKpi(`Einsätze ${state.year}`, vg ? vg.unique : s.count, vg ? esc(`${vg.participations} Beteiligungen der Wehren`) : `${num(s.per_week, 2)} je Woche`, ALL_INCIDENTS)}
+    ${analysisKpi(`Ø Einsatzdauer`, formatDuration(s.duration_avg_min), esc(coverageText(e.workload.duration.valid, e.workload.duration.total)), ALL_INCIDENTS)}
+    ${analysisKpi(`Einsatzstunden`, formatHours(s.duration_total_min), "Summe aller Einsätze", ALL_INCIDENTS)}
+    ${quote || analysisKpi("Eintreffen", "–", plan ? planEmptyReason(plan) : "für Sie noch nicht freigegeben", { plan: 1 })}
   </div><div class="grid grid-2">${openTasksCard(e)}${coverageCard(e)}</div>`;
 }
 
@@ -178,10 +183,10 @@ function renderTimes() {
     return;
   }
   $("#view-times").innerHTML = evaluationToolbar({ exports: false }) + `<div class="kpis kpis-4">
-    ${analysisKpi(`Ausrückdauer`, minutes(t.turnout.median), esc(`Median · 90 % ≤ ${minutes(t.turnout.p90)} · ${coverageText(t.turnout.valid, t.turnout.total)}`))}
-    ${analysisKpi(`Anfahrtdauer je Fahrzeug`, minutes(t.travel.median), esc(`Median · 90 % ≤ ${minutes(t.travel.p90)} · ${coverageText(t.travel.valid, t.travel.total, VEHICLE_UNIT)}`))}
-    ${analysisKpi(`Zeit bis Eintreffen`, minutes(t.arrival.median), esc(`Median · 90 % ≤ ${minutes(t.arrival.p90)} · ${coverageText(t.arrival.valid, t.arrival.total)}`))}
-    ${analysisKpi("Einsätze im Jahr", countLink(t.total, {}), e.response_plan_hidden.length ? esc(`ohne ${e.response_plan_hidden.join(", ")} (nicht freigegeben)`) : `Jahr ${state.year}`)}
+    ${analysisKpi(`Ausrückdauer`, minutes(t.turnout.median), esc(`Median · 90 % ≤ ${minutes(t.turnout.p90)} · ${coverageText(t.turnout.valid, t.turnout.total)}`), ALL_INCIDENTS)}
+    ${analysisKpi(`Anfahrtdauer je Fahrzeug`, minutes(t.travel.median), esc(`Median · 90 % ≤ ${minutes(t.travel.p90)} · ${coverageText(t.travel.valid, t.travel.total, VEHICLE_UNIT)}`), ALL_INCIDENTS)}
+    ${analysisKpi(`Zeit bis Eintreffen`, minutes(t.arrival.median), esc(`Median · 90 % ≤ ${minutes(t.arrival.p90)} · ${coverageText(t.arrival.valid, t.arrival.total)}`), ALL_INCIDENTS)}
+    ${analysisKpi("Einsätze im Jahr", t.total, e.response_plan_hidden.length ? esc(`ohne ${e.response_plan_hidden.join(", ")} (nicht freigegeben)`) : `Jahr ${state.year}`, ALL_INCIDENTS)}
   </div>
   <div class="grid grid-2">${timeSummaryCard(t)}${buildUpCard(t)}</div>${groupsCard(t)}`;
 }
@@ -226,10 +231,10 @@ function renderWorkload() {
   const e = state.evaluation, w = e.workload, s = e.statistics;
   if (!w.total) { $("#view-load").innerHTML = evaluationToolbar({ exports: false }) + noIncidentsCard(); return; }
   $("#view-load").innerHTML = evaluationToolbar({ exports: false }) + `<div class="kpis kpis-4">
-    ${analysisKpi(`Lange Einsätze`, countLink(w.long.count, { long: w.long.minutes }), esc(`ab ${formatDuration(w.long.minutes)} · ${shareText(w.long.count, w.total)}`))}
-    ${analysisKpi("Nächtliche Einsätze", countLink(w.night.count, { night: 1 }), esc(shareText(w.night.count, w.total)))}
-    ${analysisKpi("Samstag, Sonntag, Feiertag", countLink(w.weekend.count, { weekend: 1 }), esc(shareText(w.weekend.count, w.total)))}
-    ${analysisKpi(`Gleichzeitig offen`, w.overlap.incidents_with_overlap, esc(`höchstens ${w.overlap.max_concurrent} zugleich`))}
+    ${analysisKpi(`Lange Einsätze`, w.long.count, esc(`ab ${formatDuration(w.long.minutes)} · ${shareText(w.long.count, w.total)}`), { long: w.long.minutes })}
+    ${analysisKpi("Nächtliche Einsätze", w.night.count, esc(shareText(w.night.count, w.total)), { night: 1 })}
+    ${analysisKpi("Samstag, Sonntag, Feiertag", w.weekend.count, esc(shareText(w.weekend.count, w.total)), { weekend: 1 })}
+    ${analysisKpi(`Gleichzeitig offen`, w.overlap.incidents_with_overlap, esc(`höchstens ${w.overlap.max_concurrent} zugleich`), ALL_INCIDENTS)}
   </div>
   <div class="grid grid-2">${workloadCard(w, s)}${durationCard(w)}</div><div class="grid">${overlapCard(w.overlap)}</div>`;
 }
