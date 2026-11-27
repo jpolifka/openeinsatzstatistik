@@ -8,12 +8,12 @@ from conftest import grant, login, make_tenant
 
 @pytest.fixture
 def world(make_client, monkeypatch):
-    monkeypatch.setattr(mail, "SMTP_HOST", "smtp.example.org")
     sent = []
     monkeypatch.setattr(mail, "send", lambda to, subject, text, html, **kw: sent.append((to, subject, text, html)))
     vg_a, a1 = make_tenant("wehr-a1", "vg-a")
     grant("vglead@example.org", "vg_lead", vg_a)
-    client = make_client(login=True)
+    client = make_client(login=True)       # SMTP_HOST erst nach dem Start setzen (check_config verlangt sonst alle SMTP_*)
+    monkeypatch.setattr(mail, "SMTP_HOST", "smtp.example.org")
     client.cookies.clear()
     login(client, "vglead@example.org")
     client.sent = sent
@@ -100,11 +100,11 @@ def test_build_without_tenant_is_neutral():
 
 
 def test_new_tenant_sends_welcome_to_first_lead(make_client, monkeypatch):
-    monkeypatch.setattr(mail, "SMTP_HOST", "smtp.example.org")
     sent = []
     monkeypatch.setattr(mail, "send", lambda to, subject, text, html, **kw: sent.append(to))
     make_tenant("wehr-a1", "vg-a")
     client = make_client(login=True)       # Superadmin
+    monkeypatch.setattr(mail, "SMTP_HOST", "smtp.example.org")
     response = client.post("/api/super/tenants", json={"name": "Neue Wehr", "vg": "vg-a", "email": "erste@example.org"})
     assert response.status_code == 200
     assert sent == ["erste@example.org"]
