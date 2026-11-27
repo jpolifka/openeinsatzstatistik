@@ -69,7 +69,7 @@ def test_access_ignores_stray_foreign_role(setup):
 
 def test_migration_revokes_existing_violations(tmp_path):
     con = db.connect(":memory:")
-    db.migrate(con, db.CENTRAL_MIGRATIONS[:-5])
+    db.migrate(con, db.CENTRAL_MIGRATIONS[:-6])
     vg_a = con.execute("INSERT INTO vg (slug, name) VALUES ('vg-a', 'VG A')").lastrowid
     vg_b = con.execute("INSERT INTO vg (slug, name) VALUES ('vg-b', 'VG B')").lastrowid
     t = con.execute("INSERT INTO tenant (slug, name, vg_id) VALUES ('w', 'W', ?)", (vg_b,)).lastrowid

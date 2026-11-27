@@ -522,6 +522,12 @@ def _add_vg_subdomain(con):
     con.execute("CREATE UNIQUE INDEX vg_subdomain ON vg(subdomain) WHERE subdomain IS NOT NULL")
 
 
+def _add_welcome_sent(con):
+    """Willkommensmail an Führungspersonen: je Person einmal (Schlüssel = E-Mail), nie doppelt auch bei weiteren Rollen."""
+    con.execute("CREATE TABLE welcome_sent (email TEXT PRIMARY KEY, sent_at TEXT NOT NULL DEFAULT "
+                "(datetime('now', 'localtime')))")
+
+
 # Neue Schemaänderungen nur hinten anfügen; PRAGMA user_version zählt die erledigten Schritte.
 TENANT_MIGRATIONS = [_create_legacy_schema, _rename_to_english, _add_tenant_tables, _add_bks_ids,
                      _add_pending_reports, _add_fleet_names, _add_incident_revision, _add_import_jobs,
@@ -532,7 +538,8 @@ CENTRAL_MIGRATIONS = [_create_central_schema, _add_dpa, _add_records, _add_notic
                       _add_vg_defaults, _settings_for_fee_roles, _add_sessions,
                       _add_vg_kind, _add_bks_roles, _vg_lead_people,
                       _bks_role_tiers, _add_login_codes, _add_training_roles,
-                      _guard_membership_vg, _add_vg_subdomain, _add_agt_roles, _add_sign_roles, _drop_sign_permission]
+                      _guard_membership_vg, _add_vg_subdomain, _add_agt_roles, _add_sign_roles, _drop_sign_permission,
+                      _add_welcome_sent]
 
 
 def migrate(con, steps=TENANT_MIGRATIONS):
