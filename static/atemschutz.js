@@ -328,9 +328,11 @@ function renderAgtEval() {
   const rows = s.people.map((p) => `<tr><td><b>${esc(p.name)}</b>${p.linked ? "" : ` <span class="tenant-badge">ohne E-Mail</span>`}</td>
     ${Object.keys(s.kinds).map((k) => cell(p.kinds[k])).join("")}
     <td class="right"><b>${formatDuration(p.minutes)}</b></td><td class="right">${agtValidity(p.valid_until)}</td></tr>`).join("");
-  section.innerHTML = `<div class="card list-card"><div class="toolbar"><div><h3>Atemschutz je Person ${s.year}</h3>
-      <p class="muted small">Nur Summen und das Ablaufdatum der G26.3 – keine Einzeleinträge, Drücke oder Orte. Zeiten sind die von den Personen selbst eingetragenen Dauern.</p></div>
-      ${agtYearSelect(s.years, s.year, "data-agt-summary-year")}</div>
+  section.innerHTML = `<p class="print-only print-stamp">${esc(config.name)} · Atemschutz-Auswertung ${s.year} · Stand ${formatDate(new Date().toISOString())}</p>
+    <div class="card list-card"><div class="toolbar"><div><h3>Atemschutz je Person ${s.year}</h3>
+      <p class="muted small no-print">Nur Summen und das Ablaufdatum der G26.3 – keine Einzeleinträge, Drücke oder Orte. Zeiten sind die von den Personen selbst eingetragenen Dauern.</p></div>
+      ${agtYearSelect(s.years, s.year, "data-agt-summary-year")}
+      <button type="button" class="btn btn-light btn-small no-print" data-agt-print>Als PDF drucken</button></div>
     <div class="table-wrap"><table class="table"><thead><tr><th>Person</th>${Object.values(s.kinds).map((l) => `<th class="right">${esc(l)}</th>`).join("")}
       <th class="right">Gesamt</th><th class="right">G26.3 gültig bis</th></tr></thead><tbody>${rows}</tbody></table></div>
     ${s.people.length ? "" : `<p class="empty-note">Keine aktiven Personen im Personalstamm.</p>`}</div>`;
@@ -349,6 +351,7 @@ agtView.addEventListener("click", agtClick);
 agtView.addEventListener("input", agtInput);
 agtView.addEventListener("change", agtChange);
 agtView.addEventListener("submit", agtSubmit);
+$("#view-agt_eval").addEventListener("click", (e) => { if (e.target.closest("[data-agt-print]")) window.print(); });
 $("#view-agt_eval").addEventListener("change", async (e) => {
   if (!e.target.matches("[data-agt-summary-year]")) return;
   agt.summaryYear = Number(e.target.value);

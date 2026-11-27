@@ -10,6 +10,7 @@ const CHANGELOG = [
     version: "2026-11-27.6",
     items: [
       "<b>Atemschutz-Nachweis drucken:</b> Unter Atemschutz → Meine Einträge gibt es „Als PDF drucken“. Der Ausdruck enthält alle Einsätze, Übungen und Streckendurchgänge des Jahres samt Abzeichnung sowie die G26.3-Nachweise. Im Druckfenster „Als PDF speichern“ wählen.",
+      "<b>Atemschutz-Auswertung drucken:</b> Auch die Auswertung der Wehrführung lässt sich als PDF drucken (Summen je Person und G26.3-Ablauf, weiterhin ohne Einzeleinträge).",
     ],
   },
   {
