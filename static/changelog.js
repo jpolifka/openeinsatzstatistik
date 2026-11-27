@@ -9,7 +9,7 @@ const CHANGELOG = [
     date: "2026-11-27",
     version: "2026-11-27.2",
     items: [
-      "<b>Wehrwechsel mit Atemschutz-Dokumentation:</b> Wechselt eine Person in eine andere Wehr der Verbandsgemeinde, nimmt sie ihre E-Mail und ihre Atemschutz-Einträge mit – anonymisiert (ohne Verweise auf Einsätze und Übungen der bisherigen Wehr, ohne Notizen). In der bisherigen Wehr wird alles gelöscht.",
+      "<b>Wehrwechsel mit Atemschutz-Dokumentation:</b> Wechselt eine Person in eine andere Wehr der Verbandsgemeinde, nimmt sie ihre E-Mail und ihre Atemschutz-Einträge mit – anonymisiert (ohne Verweise auf Einsätze und Übungen der bisherigen Wehr, ohne Stichwort und Notizen). In der bisherigen Wehr wird alles gelöscht.",
     ],
   },
   {

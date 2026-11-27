@@ -286,9 +286,9 @@ class Own:
     # ------------------------------------------------------------ Wehrwechsel
     def export_anonymous(self):
         """Alles dieser Person für den Wechsel in eine andere Wehr – anonymisiert: ohne Verweise auf Einsätze und Übungen der
-        bisherigen Wehr (Quelle) und ohne Notizen (Freitext kann Dritte nennen)."""
+        bisherigen Wehr (Quelle), ohne Stichwort bzw. Thema und ohne Notizen (Freitext kann Dritte nennen)."""
         entries = [dict(r) for r in self.con.execute(
-            "SELECT kind, started_at, ended_at, duration_min, place, keyword, start_bar, end_bar, external, organisation "
+            "SELECT kind, started_at, ended_at, duration_min, place, start_bar, end_bar, external, organisation "
             "FROM agt_entry WHERE member_id = ? ORDER BY started_at", (self.member_id,))]
         medical = [dict(r) for r in self.con.execute(
             "SELECT examined_on, valid_until FROM agt_medical WHERE member_id = ? ORDER BY valid_until",
@@ -305,7 +305,7 @@ class Own:
                 self.con.execute(
                     "INSERT INTO agt_entry (member_id, kind, started_at, ended_at, duration_min, place, keyword, start_bar, "
                     "end_bar, external, organisation) VALUES (:member_id, :kind, :started_at, :ended_at, :duration_min, "
-                    ":place, :keyword, :start_bar, :end_bar, :external, :organisation)", {**e, "member_id": self.member_id})
+                    ":place, NULL, :start_bar, :end_bar, :external, :organisation)", {**e, "member_id": self.member_id})
         for m in data["medical"]:
             if not self.con.execute("SELECT 1 FROM agt_medical WHERE member_id = ? AND examined_on = ? AND valid_until = ?",
                                     (self.member_id, m["examined_on"], m["valid_until"])).fetchone():
