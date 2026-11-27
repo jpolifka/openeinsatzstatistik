@@ -7,6 +7,13 @@
 const CHANGELOG = [
   {
     date: "2026-11-27",
+    version: "2026-11-27.3",
+    items: [
+      "<b>Atemschutz-Prüfung für Superadmins:</b> Unter Einstellungen → Atemschutz-Prüfung stehen je Wehr nur Zahlen (Personen, E-Mails, Zugänge, Einträge), der Abgleich der Rechte und die letzten Zugriffe der Wehrführung. Inhalte und Daten einzelner Personen zeigt sie nie.",
+    ],
+  },
+  {
+    date: "2026-11-27",
     version: "2026-11-27.2",
     items: [
       "<b>Wehrwechsel mit Atemschutz-Dokumentation:</b> Wechselt eine Person in eine andere Wehr der Verbandsgemeinde, nimmt sie ihre E-Mail und ihre Atemschutz-Einträge mit – anonymisiert (ohne Verweise auf Einsätze und Übungen der bisherigen Wehr, ohne Stichwort und Notizen). In der bisherigen Wehr wird alles gelöscht.",

@@ -39,7 +39,7 @@ SELECTED = {
     "/api/trainings/{training_id}/checkins/{checkin_id}/accept", "/api/years",
 }
 SUPER = {
-    "/api/super/overview", "/api/super/sessions", "/api/super/sessions/{session_id}", "/api/super/tenants",
+    "/api/super/atemschutz", "/api/super/overview", "/api/super/sessions", "/api/super/sessions/{session_id}", "/api/super/tenants",
     "/api/super/tenants/{slug}", "/api/super/vgs", "/api/super/vgs/{slug}",
 }
 

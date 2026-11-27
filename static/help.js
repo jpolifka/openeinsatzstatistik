@@ -578,6 +578,11 @@ const HELP_SECTIONS = [
         short: "Wer angemeldet ist – Sitzungen einsehen und beenden (nur Superadmin).",
         text: "Zeigt alle gültigen Anmeldungen mit Browser, Anmeldezeit und letzter Aktivität. <b>Abmelden</b> beendet eine Sitzung sofort, auch wenn das Cookie kopiert wurde; <b>Alle dieser Person</b> beendet alle Geräte einer Adresse, <b>Alle anderen abmelden</b> alle außer deiner eigenen. Die Betroffenen können sich mit einem neuen Anmeldelink wieder anmelden. Wer den Zugang ganz verlieren soll, dem entziehst du die Zuordnung unter „Benutzer“. Sitzungen laufen nach 30 Tagen ab; Abmelden beendet die eigene Sitzung auch auf dem Server.",
       },
+      admin_agtcheck: {
+        title: "Atemschutz-Prüfung",
+        short: "Nur Superadmin: Zahlen, Rechte-Abgleich und Zugriffsprotokoll der Atemschutz-Dokumentation – ohne Inhalte.",
+        text: "Zeigt je Wehr, wie viele Personen eine E-Mail haben, ob jeder E-Mail ein Zugang entspricht (und umgekehrt), wie viele Einträge, G26.3-Nachweise und Erinnerungen es gibt, und die letzten Zugriffe (wer, was, wann). <b>Rechte in Ordnung</b> bestätigt, dass nur Wehrführer/in, Wehrleiter/in und „Atemschutz (eigene Daten)“ Atemschutz-Rechte tragen. Inhalte und Daten einzelner Personen zeigt die Prüfansicht nie; auch Superadmins können die Atemschutz-Dokumentation nicht einsehen. Jeder Abruf wird in jeder Wehr protokolliert.",
+      },
       admin_roles: {
         title: "Rollen",
         short: "Welche Rolle welche Rechte hat – als Übersicht.",
