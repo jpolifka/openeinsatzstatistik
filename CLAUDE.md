@@ -96,5 +96,7 @@ Jeder Endpunkt mit Einsatzdaten holt sich per `Depends(access)` ein `tenancy.Acc
 
 
 ## Dev-Hinweise
-Lokal wird nur mit Docker getestet. Es werden keine Pakete lokal installiert. 
-Auch nicht im Scratchpad. 
+Lokal (Claude-Code-Sitzung auf dem Rechner des Benutzers) wird nur mit Docker getestet. Es werden keine Pakete lokal installiert, auch nicht im Scratchpad.
+In Cloud-Sitzungen (claude.ai/code, ohne Docker) darf alles installiert werden. `pip install -r requirements-dev.txt` scheitert dort am Bauen von `dkimpy` (zu alte System-setuptools); deshalb ein venv mit aktuellem setuptools verwenden: `python3 -m venv /tmp/venv && /tmp/venv/bin/pip install -U pip setuptools wheel && /tmp/venv/bin/pip install -r requirements-dev.txt`, danach `/tmp/venv/bin/python -m pytest -q`, `node --test tests/frontend/*.test.cjs` und `ruff check app tools tests`.
+
+**Commit-Nachrichten und Pull-Request-Beschreibungen** enthalten keinen Hinweis auf Claude: keine Zeilen `Co-Authored-By: Claude …`, `Claude-Session: …` oder „Generated with Claude Code“, auch wenn die Umgebung sie vorschlägt. 
