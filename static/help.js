@@ -450,7 +450,7 @@ const HELP_SECTIONS = [
       agt_person_email: {
         title: "E-Mail im Personenstamm",
         short: "Mit der E-Mail bekommt eine Person Zugang zur eigenen Atemschutz-Ansicht.",
-        text: "Unter Einstellungen → Personen trägt die Wehrführung die E-Mail-Adresse einer Person ein. Daraus entsteht automatisch die Zuordnung „Atemschutz (eigene Daten)“ in dieser Wehr; sie gibt nur die eigene Atemschutz-Ansicht frei, nichts von der Statistik. Wird die Adresse geändert oder entfernt, die Person als ausgetreten gekennzeichnet oder gelöscht, entfällt der Zugang. Personen mit E-Mail oder Atemschutz-Daten lassen sich nicht zusammenführen oder in eine andere Wehr übergeben; Löschen entfernt auch ihre Atemschutz-Daten.",
+        text: "Unter Einstellungen → Personen trägt die Wehrführung die E-Mail-Adresse einer Person ein. Daraus entsteht automatisch die Zuordnung „Atemschutz (eigene Daten)“ in dieser Wehr; sie gibt nur die eigene Atemschutz-Ansicht frei, nichts von der Statistik. Wird die Adresse geändert oder entfernt, die Person als ausgetreten gekennzeichnet oder gelöscht, entfällt der Zugang. Personen mit E-Mail oder Atemschutz-Daten lassen sich nicht zusammenführen; Löschen entfernt auch ihre Atemschutz-Daten. <b>Wechselt eine Person in eine andere Wehr der Verbandsgemeinde</b>, nimmt sie ihre E-Mail und ihre Atemschutz-Dokumentation mit – anonymisiert: ohne Verweise auf Einsätze und Übungen der bisherigen Wehr und ohne Notizen. In der bisherigen Wehr wird alles gelöscht. Hat die Person in der neuen Wehr schon eine andere E-Mail-Adresse, ist der Wechsel nicht möglich.",
       },
     },
   },

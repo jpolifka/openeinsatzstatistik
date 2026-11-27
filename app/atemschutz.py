@@ -283,6 +283,45 @@ class Own:
         self._log("agt.medical.delete")
         return self.medical()
 
+    # ------------------------------------------------------------ Wehrwechsel
+    def export_anonymous(self):
+        """Alles dieser Person für den Wechsel in eine andere Wehr – anonymisiert: ohne Verweise auf Einsätze und Übungen der
+        bisherigen Wehr (Quelle) und ohne Notizen (Freitext kann Dritte nennen)."""
+        entries = [dict(r) for r in self.con.execute(
+            "SELECT kind, started_at, ended_at, duration_min, place, keyword, start_bar, end_bar, external, organisation "
+            "FROM agt_entry WHERE member_id = ? ORDER BY started_at", (self.member_id,))]
+        medical = [dict(r) for r in self.con.execute(
+            "SELECT examined_on, valid_until FROM agt_medical WHERE member_id = ? ORDER BY valid_until",
+            (self.member_id,))]
+        return {"entries": entries, "medical": medical, "reminder": self.reminder()}
+
+    def absorb(self, data):
+        """Daten aus export_anonymous übernehmen (schon vorhandene identische Zeilen werden nicht doppelt angelegt)."""
+        for e in data["entries"]:
+            if not self.con.execute(
+                    "SELECT 1 FROM agt_entry WHERE member_id = ? AND kind = ? AND started_at = ? AND duration_min = ?",
+                    (self.member_id, e["kind"], e["started_at"], e["duration_min"])).fetchone():
+                self._guard_count("agt_entry", MAX_ENTRIES)
+                self.con.execute(
+                    "INSERT INTO agt_entry (member_id, kind, started_at, ended_at, duration_min, place, keyword, start_bar, "
+                    "end_bar, external, organisation) VALUES (:member_id, :kind, :started_at, :ended_at, :duration_min, "
+                    ":place, :keyword, :start_bar, :end_bar, :external, :organisation)", {**e, "member_id": self.member_id})
+        for m in data["medical"]:
+            if not self.con.execute("SELECT 1 FROM agt_medical WHERE member_id = ? AND examined_on = ? AND valid_until = ?",
+                                    (self.member_id, m["examined_on"], m["valid_until"])).fetchone():
+                self._guard_count("agt_medical", MAX_MEDICAL)
+                self.con.execute("INSERT INTO agt_medical (member_id, examined_on, valid_until) VALUES (?, ?, ?)",
+                                 (self.member_id, m["examined_on"], m["valid_until"]))
+        if data["reminder"] and not self.reminder():
+            self.set_reminder(data["reminder"])
+        self._log("agt.transfer.in")
+
+    def erase(self):
+        """Alle Atemschutz-Daten dieser Person löschen (nach dem Wechsel in eine andere Wehr)."""
+        self._log("agt.transfer.out")
+        for table in ("agt_entry", "agt_medical", "agt_reminder_sent", "agt_reminder"):
+            self.con.execute(f"DELETE FROM {table} WHERE member_id = ?", (self.member_id,))
+
     # ------------------------------------------------------------ Erinnerung
     def reminder(self):
         row = self.con.execute("SELECT offsets FROM agt_reminder WHERE member_id = ?", (self.member_id,)).fetchone()

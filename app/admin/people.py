@@ -11,7 +11,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from app import names, store, tenancy
+from app import atemschutz, names, store, tenancy
 from app.admin.common import access, log
 from app.rbac import SETTINGS
 
@@ -223,28 +223,41 @@ def delete_member(slug: str, member_id: int, a: tenancy.Access = Depends(access)
 @router.post("/api/admin/{slug}/members/{member_id}/transfer")
 def transfer_member(slug: str, member_id: int, body: TransferIn, a: tenancy.Access = Depends(access)):
     """Wechsel in eine andere Wehr derselben VG: dort wird die Person angelegt bzw. wieder aktiv, hier scheidet sie aus.
-    Bisherige Einsätze und Übungen bleiben bei dieser Wehr; die Wehr, in die sie wechselt, beginnt ohne Historie."""
+    Bisherige Einsätze und Übungen bleiben bei dieser Wehr; die Wehr, in die sie wechselt, beginnt ohne Historie.
+    Die Atemschutz-Dokumentation und die E-Mail gehören der Person und wandern mit: anonymisiert (ohne Verweise auf
+    Einsätze und Übungen der bisherigen Wehr, ohne Notizen), danach werden sie hier gelöscht."""
     source = a.tenant(slug, SETTINGS)
     target = a.tenant(body.to_slug, SETTINGS)
     if target.slug == source.slug or target.vg_id != source.vg_id:
         raise HTTPException(422, "Ein Wechsel ist nur in eine andere Wehr derselben Verbandsgemeinde möglich.")
     with source.connection() as con:
         person = _person(con, member_id)
-        if _agt_data(con, member_id):
-            raise HTTPException(409, "Die Person hat Atemschutz-Daten in dieser Wehr. Ein Wechsel ist erst möglich, "
-                                     "wenn sie diese selbst gelöscht hat.")
+        package = atemschutz.Own(con, member_id).export_anonymous() if _agt_data(con, member_id) else None
+    email = person["email"] if person["active"] else None
     last, first = person["last_name"] or person["name"], person["first_name"] or ""
     with target.connection() as con:
         known = store.MemberDirectory(con).find(last, first)
         if known is not None:
             con.execute("UPDATE member SET active = 1 WHERE id = ?", (known,))
+            target_id = known
         else:
-            con.execute("INSERT INTO member (name, last_name, first_name, sort_order) "
-                        "VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM member))",
-                        (person["name"], last, first))
+            target_id = con.execute(
+                "INSERT INTO member (name, last_name, first_name, sort_order) "
+                "VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM member))",
+                (person["name"], last, first)).lastrowid
+        if email:
+            current = con.execute("SELECT email FROM member WHERE id = ?", (target_id,)).fetchone()["email"]
+            if current and current != email:
+                raise HTTPException(409, "Die Person hat in der anderen Wehr eine andere E-Mail-Adresse eingetragen.")
+            _free_email(con, email, target_id)
+            con.execute("UPDATE member SET email = ? WHERE id = ?", (email, target_id))
+        if package:
+            atemschutz.Own(con, target_id, a.email).absorb(package)
+    _sync_access(target, None, email)
     with source.connection() as con:
-        con.execute("UPDATE member SET active = 0 WHERE id = ?", (member_id,))
+        if package:
+            atemschutz.Own(con, member_id, a.email).erase()
+        con.execute("UPDATE member SET active = 0, email = NULL WHERE id = ?", (member_id,))
         _sync_access(source, person["email"] if person["active"] else None, None)
         log.info("Person %s von %s nach %s gewechselt", member_id, source.slug, target.slug)
         return _listing(con)
-

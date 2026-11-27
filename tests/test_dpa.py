@@ -129,7 +129,7 @@ def test_generated_contract_keeps_its_template_version(pending):
     assert "Resend" in pending.get("/api/dpa/vg-neu/document").text
     _fill(pending)
     page = pending.get("/api/dpa/vg-neu/document").text
-    assert "Resend" not in page and "Vorlage Version 2" in page and "DKIM" in page
+    assert "Resend" not in page and "Vorlage Version 3" in page and "DKIM" in page and "G26.3" in page
 
 
 def test_vg_roles_rest_until_dpa(pending):
