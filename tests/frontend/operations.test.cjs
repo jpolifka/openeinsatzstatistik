@@ -92,5 +92,5 @@ test("Brand & Rettung: Zeiten, Taktik, Brandwache und Zahl der Berichte mit Anga
   assert.match(html, /Median ab Eintreffen · 8 von 12 Einsätzen auswertbar/);
   assert.match(html, /Innenangriff\|4\|18 min/);
   assert.match(html, /2 Brandwachen mit zusammen 5\.5 Stunden/);
-  assert.match(html, /Menschen gerettet\|7\|4\|10 von 40/);
+  assert.match(html, /Menschen gerettet\|7\|<a href="#incidents">4<\/a>\|10 von 40/);
 });
