@@ -97,7 +97,7 @@ def test_cli(world, capsys, monkeypatch):
 def test_build_without_tenant_is_neutral():
     subject, text, html, images = welcome.build(None, [("Wehrführer/in", "Beispiel")], "https://example.org")
     assert subject == welcome.SUBJECT and images == []
-    assert "https://example.org" in text and "Beispiel" in html
+    assert "https://example.org" in text.splitlines() and "Beispiel" in html
 
 
 def test_new_tenant_sends_welcome_to_first_lead(make_client, monkeypatch):

@@ -121,7 +121,8 @@ def send_welcome(email):
             subject, text, body, images = build(None, roles, auth.link_base(email) or "")
         mail.send(email, subject, text, body, images=images)
     except (smtplib.SMTPException, OSError) as e:
-        log.error("Willkommensmail an %s nicht versendet: %s", email, e)
+        safe = email.replace("\r", "").replace("\n", "")      # kein Zeilenumbruch aus Eingaben ins Log
+        log.error("Willkommensmail an %s nicht versendet: %s", safe, e)
         _forget(email)
         return "failed"
     except Exception:
