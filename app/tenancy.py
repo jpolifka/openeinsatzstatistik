@@ -61,7 +61,7 @@ def setup():
 # Vorgaben der VG (Tabelle vg_setting in der Zentrale), von denen eine Wehr abweichen kann: Eine Zeile in
 # ihrer Tabelle setting ist eine Abweichung, ohne Zeile gilt der Wert der VG, ohne den der Standard.
 # bks_code ist die Kennung der VG im BKS-Bericht (NR#.ABC in „FW NR#.ABC 02“).
-INHERITED = ("bks_code", "control_center", "places", "plan_min_level", "response_limits", "default_limit",
+INHERITED = ("bks_code", "control_center", "control_center_2", "places", "plan_min_level", "response_limits", "default_limit",
              "second_limit", "day_hours", "numbering", "colors")
 # Nur je Wehr: station ist die Standortnummer (02 in „FW NR#.ABC 02“). unit_prefix, own_prefix und unit_marker
 # stehen nur bei älteren Einrichtungen, deren Präfixe sich nicht aus Kennung und Standort ergeben.

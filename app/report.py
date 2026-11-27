@@ -164,7 +164,7 @@ def _start_and_end(report, cfg):
              [v["alerted"] for v in report["slots"].values() if v["alerted"]]
     start = min(alarms) if alarms else report["first_alarm"]
     ends = [v["finished"] for v in report["vehicles"]
-            if v["finished"] and (v["call_sign"] or v["name"] == cfg.control_center)]
+            if v["finished"] and (v["call_sign"] or cfg.is_control_center(v["name"]))]
     return start, (max(ends) if ends else None)
 
 

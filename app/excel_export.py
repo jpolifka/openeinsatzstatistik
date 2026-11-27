@@ -224,7 +224,7 @@ def _write_instructions(ws, sheet, last_member_column):
         "",
         "Regeln der automatischen Übernahme",
         f"• Einsatzbeginn = frühester Alarmierungszeitpunkt der eigenen Fahrzeuge ({cfg.own_prefix}..).",
-        f"• Einsatzende = spätestes Einsatzende der eigenen Fahrzeuge bzw. der FEZ ({cfg.control_center}).",
+        f"• Einsatzende = spätestes Einsatzende der eigenen Fahrzeuge bzw. der FEZ ({' / '.join(cfg.control_centers)}).",
         "• Stichwort 'H2.03' -> Einsatzstichwort H2, Stufe 03; Brandsicherheitswache -> S1 / 00.",
         "• Stärke = Gesamtstärke je Fahrzeug aus dem Bericht; Zeiten mit Sekunden (Anzeige hh:mm).",
         "• Personen Gerätehaus = Anwesende laut Liste minus Besatzung der erfassten Fahrzeuge.",

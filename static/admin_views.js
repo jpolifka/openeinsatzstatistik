@@ -5,7 +5,7 @@
 // Vorgaben der VG und alle Wehren auf einmal).
 
 // ------------------------------------------------------------ Vererbung: von der VG / abweichend
-const INHERITED_LABELS = { bks_code: "Kennung der VG", control_center: "FEZ-Kennung", places: "Orte",
+const INHERITED_LABELS = { bks_code: "Kennung der VG", control_center: "FEZ 1", control_center_2: "FEZ 2", places: "Orte",
   plan_min_level: "Alarmstufe", response_limits: "Zeitgrenzen", default_limit: "Standardgrenze",
   second_limit: "zweite Grenze", day_hours: "Tag", numbering: "Nummerierung", colors: "Farben" };
 
@@ -451,7 +451,8 @@ function bksSection() {
     <div class="form-grid">
       ${adminField(`Kennung der VG ${inheritNote("bks_code")}`, `<input type="text" data-bks="code" value="${esc(s.bks_code || "")}" placeholder="NR#.ABC" spellcheck="false">`, "span-2")}
       ${adminField("Standort", `<input type="text" data-bks="station" value="${esc(s.station || "")}" placeholder="02" maxlength="2" class="narrow">`)}
-      ${adminField(`FEZ-Kennung ${inheritNote("control_center")}`, textInput("control_center", s.control_center, 'spellcheck="false"'), "span-2")}
+      ${adminField(`FEZ 1 ${inheritNote("control_center")}`, textInput("control_center", s.control_center, 'spellcheck="false"'), "span-2")}
+      ${adminField(`FEZ 2 (optional) ${inheritNote("control_center_2")}`, textInput("control_center_2", s.control_center_2 || "", 'spellcheck="false" placeholder="keine"'), "span-2")}
     </div>
     <p class="small muted" id="bks-derived">${bksDerived(s)}</p>
     ${parseTestField()}
@@ -478,10 +479,11 @@ function vgBksSection() {
   return `<p class="small muted">Kennung der VG und Standort jeder Wehr ergeben die Einheit in der Kopfzeile des Berichts (z. B. „FW NR#.ABC 02“) und die Funkrufnamen ihrer Fahrzeuge. Das Testfeld zeigt, welcher Wehr die App einen Bericht bzw. ein Fahrzeug zuordnet (gespeicherter Stand).</p>
     <div class="form-grid">
       ${adminField("Kennung der VG", textInput("bks_code", d.bks_code || "", 'placeholder="NR#.ABC" spellcheck="false"'), "span-2")}
-      ${adminField("FEZ-Kennung", textInput("control_center", d.control_center, 'spellcheck="false"'), "span-2")}
+      ${adminField("FEZ 1", textInput("control_center", d.control_center, 'spellcheck="false"'), "span-2")}
+      ${adminField("FEZ 2 (optional)", textInput("control_center_2", d.control_center_2 || "", 'spellcheck="false" placeholder="keine"'), "span-2")}
     </div>
     <div class="table-wrap section-gap"><table class="mini-table admin-table"><thead><tr><th>Wehr</th><th>Standort</th><th>Einheit im Bericht</th></tr></thead><tbody>${rows}</tbody></table></div>
-    ${overridesNote("bks_code", "control_center")}
+    ${overridesNote("bks_code", "control_center", "control_center_2")}
     ${parseTestField()}
     ${parseResultList(items)}
     <h3 class="section-gap">Einsatznummern</h3>

@@ -62,7 +62,8 @@ class TenantConfig:
     unit_prefix: str = ""                     # Fahrzeuge der Einheit im BKS-Bericht, z. B. „FL NR#.ABC “
     own_prefix: str = ""                      # Funkrufnamen der eigenen Wehr, z. B. „02/“
     unit_marker: str = ""                     # Einheit im Bericht, z. B. „FW NR#.ABC 02“
-    control_center: str = domain.CONTROL_CENTER
+    control_center: str = domain.CONTROL_CENTER   # FEZ 1
+    control_center_2: str = ""               # FEZ 2 (optional, z. B. eine weitere FEZ der VG)
     places: tuple = ()                        # Orte für die Zuordnung des Einsatzgebiets
     plan_places: tuple = ()                   # Ausrückebereich laut Feuerwehrbedarfsplan
     plan_min_level: int = domain.PLAN_MIN_LEVEL
@@ -129,6 +130,15 @@ class TenantConfig:
         if short and any(v.call_sign == short and v.name for v in self.fleet):
             return None
         return short
+
+    @property
+    def control_centers(self):
+        """Kennungen der FEZ 1 und 2, ohne leere und doppelte Einträge."""
+        return tuple(dict.fromkeys(c for c in (self.control_center, self.control_center_2) if c))
+
+    def is_control_center(self, name):
+        """Fahrzeug im Bericht ist eine der FEZ dieser Wehr (ggf. auch von mehreren VGs gemeinsam genutzt)."""
+        return bool(name) and name in self.control_centers
 
     def is_own(self, name):
         """Eigenes Fahrzeug der Wehr: steht in der Fahrzeugliste oder beginnt mit unit_prefix + own_prefix."""
