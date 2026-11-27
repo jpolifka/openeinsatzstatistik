@@ -9,7 +9,7 @@ import json
 import secrets
 import threading
 
-from app import names, store
+from app import names, signoff, store
 from app.timeutil import normalize_iso, parse_iso
 
 MAX_DAYS = 14                       # längste Übung (z. B. Lehrgang); darüber ist es vermutlich ein Tippfehler
@@ -43,7 +43,7 @@ def _clean(fields):
         raise ValueError("Das Ende muss nach dem Beginn liegen.")
     if ended - started > dt.timedelta(days=MAX_DAYS):
         raise ValueError(f"Eine Übung dauert höchstens {MAX_DAYS} Tage.")
-    clean = {"topic": topic, "started_at": normalize_iso(fields["started_at"]),
+    clean = {"csa_load": int(bool(fields.get("csa_load"))), "topic": topic, "started_at": normalize_iso(fields["started_at"]),
              "ended_at": normalize_iso(fields["ended_at"]), "year": started.year}
     for name in OPTIONAL:
         clean[name] = (fields.get(name) or "").strip() or None
@@ -92,8 +92,8 @@ def create(con, fields, member_ids=(), new_members=()):
     ids = _participants(con, member_ids, new_members)
     clean["checkin_pin"] = _free_pin(con)
     training_id = con.execute(
-        "INSERT INTO training (year, started_at, ended_at, topic, trainer, place, category, notes, checkin_pin) "
-        "VALUES (:year, :started_at, :ended_at, :topic, :trainer, :place, :category, :notes, :checkin_pin)",
+        "INSERT INTO training (year, started_at, ended_at, topic, trainer, place, category, notes, csa_load, checkin_pin) "
+        "VALUES (:year, :started_at, :ended_at, :topic, :trainer, :place, :category, :notes, :csa_load, :checkin_pin)",
         clean).lastrowid
     _set_participants(con, training_id, ids)
     return training_id
@@ -185,7 +185,8 @@ def update(con, training_id, fields, revision, member_ids=(), new_members=()):
     ids = _participants(con, member_ids, new_members)
     cursor = con.execute(
         "UPDATE training SET year = :year, started_at = :started_at, ended_at = :ended_at, topic = :topic, "
-        "trainer = :trainer, place = :place, category = :category, notes = :notes, revision = revision + 1, "
+        "trainer = :trainer, place = :place, category = :category, notes = :notes, csa_load = :csa_load, "
+        "revision = revision + 1, "
         "modified = datetime('now', 'localtime') WHERE id = :id AND revision = :revision",
         {**clean, "id": training_id, "revision": revision})
     if not cursor.rowcount:
@@ -229,7 +230,9 @@ def load(con, year=None, training_id=None, with_checkin=False):
             waiting.setdefault(r["training_id"], []).append({
                 "id": r["id"], "name": f"{r['last_name']}, {r['first_name']}".strip(", "),
                 "match": directory.names[found] if found is not None else None})
+    signoff.attach(con, "training", rows)
     for row in rows:
+        row["csa_load"] = bool(row["csa_load"])
         row["duration_min"] = duration_min(row)
         row["participants"] = sorted(people.get(row["id"], []), key=lambda p: names.sort_key(p["name"]))
         if with_checkin:
@@ -237,6 +240,17 @@ def load(con, year=None, training_id=None, with_checkin=False):
         else:
             row.pop("checkin_pin", None)
     return rows
+
+
+def csa_status(con, year):
+    """Träger/innen eines Chemikalienschutzanzugs (CSA) und ob sie im Jahr an einer CSA-Belastungsübung teilgenommen
+    haben (jährliche Pflicht): [{id, name, done, last}] – Ausgeschiedene fehlen. Nur Namen und Datum, nie Gesundheitsdaten."""
+    last = {r["member_id"]: r[1] for r in con.execute(
+        "SELECT a.member_id, MAX(t.started_at) FROM training_attendance a JOIN training t ON t.id = a.training_id "
+        "WHERE t.csa_load = 1 AND t.year = ? GROUP BY a.member_id", (year,))}
+    people = [{"id": r["id"], "name": r["name"], "done": r["id"] in last, "last": last.get(r["id"])}
+              for r in con.execute("SELECT id, name FROM member WHERE csa = 1 AND active = 1")]
+    return sorted(people, key=lambda p: (p["done"], names.sort_key(p["name"])))
 
 
 def years(con):

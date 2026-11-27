@@ -11,7 +11,7 @@ function load() {
     VIEWS: {}, document: { addEventListener() {} }, state: { year: 2026 }, config: { permissions: ["trainings.view", "trainings.edit"] },
     $: el, esc: (s) => String(s ?? ""), pad2: (n) => String(n).padStart(2, "0"), plural: (n, one, many) => `${n} ${n === 1 ? one : many}`,
     formatDuration: (m) => `${m} min`, formatDate: (i) => i, formatTime: (i) => i, formatDateTime: (i) => i, formatHours: (m) => `${m / 60} h`,
-    num: (n) => String(n), ICON_CHEVRON: "<svg></svg>", analysisKpi: (t, v) => `${t}:${v}`, percent: (q) => `${Math.round(q * 100)} %`, can: () => true, toast() {}, api: async () => ({}), apiJson: async () => ({}),
+    num: (n) => String(n), ICON_CHEVRON: "<svg></svg>", analysisKpi: (t, v) => `${t}:${v}`, percent: (q) => `${Math.round(q * 100)} %`, can: () => true, signatureHtml: (t) => `<span class="sig">${t.signature ? "sig" : "keine"}${t.can_sign ? "+knopf" : ""}</span>`, toast() {}, api: async () => ({}), apiJson: async () => ({}),
   });
   vm.runInContext(fs.readFileSync("static/trainings.js", "utf8"), context);
   return { context, els };
@@ -93,4 +93,28 @@ test("Übungsleiter wird aus dem Personenstamm vorgeschlagen", () => {
   assert.match(html, /list="tr-trainer-list"/);
   assert.match(html, /<option value="Muster, Max">/);
   assert.doesNotMatch(html, /<option value="Alt, Anna">/);
+});
+
+test("CSA: Übersicht der Belastungsübung und Signatur in der Übungsliste", () => {
+  const { context, els } = load();
+  vm.runInContext(`trainingState.data = { members: [], can_sign: true, csa: [{ id: 1, name: "Muster, Max", done: false, last: null },
+      { id: 2, name: "Beispiel, Erika", done: true, last: "2026-05-01T09:00" }],
+    trainings: [{ id: 5, topic: "Belastung", csa_load: true, signature: { at: "2026-05-02 10:00:00", valid: true }, started_at: "2026-05-01T09:00",
+      ended_at: "2026-05-01T11:00", duration_min: 120, participants: [] }],
+    summary: { count: 1, minutes: 120, members: [] } };
+    trainingState.openTrainings.add(5);`, context);
+  vm.runInContext("renderTrainingMembers()", context);
+  const members = els["#view-training_members"].innerHTML;
+  assert.match(members, /1 CSA-Träger\/in von 2 ohne Belastungsübung/);
+  assert.match(members, /Muster, Max · offen/);
+  vm.runInContext("renderTrainings()", context);
+  const list = els["#view-trainings"].innerHTML;
+  assert.match(list, /CSA-Belastungsübung/);
+  assert.match(list, /sig\+knopf/);                                      // Stand der Signatur und Knopf kommen aus signatureHtml
+});
+
+test("Formular: CSA-Belastungsübung wird mitgesendet", () => {
+  const { context } = load();
+  const payload = JSON.parse(vm.runInContext(`trainingState.data = { members: [] }; const d = emptyTrainingDraft(); d.csaLoad = true; d.topic = "x"; JSON.stringify(trainingPayload(d))`, context));
+  assert.equal(payload.csa_load, true);
 });

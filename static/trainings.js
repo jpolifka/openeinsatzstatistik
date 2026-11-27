@@ -25,13 +25,13 @@ function emptyTrainingDraft() {
   const today = new Date(), date = `${today.getFullYear()}-${pad2(today.getMonth() + 1)}-${pad2(today.getDate())}`;
   // Enddatum = Startdatum, solange es nicht von Hand geändert wird (endTouched)
   return { id: null, revision: null, topic: "", startDate: date, startTime: "19:00", endDate: date, endTime: "21:00",
-    endTouched: false, category: "", place: "", trainer: "", notes: "", memberIds: new Set(), newMembers: [] };
+    endTouched: false, csaLoad: false, category: "", place: "", trainer: "", notes: "", memberIds: new Set(), newMembers: [] };
 }
 
 function draftFromTraining(t) {
   const s = splitIso(t.started_at), e = splitIso(t.ended_at);
   return { id: t.id, revision: t.revision, topic: t.topic, startDate: s.date, startTime: s.time, endDate: e.date,
-    endTime: e.time, endTouched: true, category: t.category || "", place: t.place || "", trainer: t.trainer || "",
+    endTime: e.time, endTouched: true, csaLoad: Boolean(t.csa_load), category: t.category || "", place: t.place || "", trainer: t.trainer || "",
     notes: t.notes || "", memberIds: new Set(t.participants.map((p) => p.id)), newMembers: [] };
 }
 
@@ -44,7 +44,7 @@ function draftMinutes(d) {
 
 function trainingPayload(d) {
   return { topic: d.topic, started_at: `${d.startDate}T${d.startTime}`, ended_at: `${d.endDate}T${d.endTime}`,
-    category: d.category, place: d.place, trainer: d.trainer, notes: d.notes, member_ids: [...d.memberIds],
+    category: d.category, place: d.place, trainer: d.trainer, notes: d.notes, csa_load: d.csaLoad, member_ids: [...d.memberIds],
     new_members: d.newMembers, revision: d.revision };
 }
 
@@ -84,6 +84,7 @@ function trainingFormHtml() {
       ${trainingField("Ort (optional)", "place", d.place, { attributes: 'maxlength="120"' })}
       ${trainingField("Übungsleiter/in (optional)", "trainer", d.trainer, { attributes: 'maxlength="120" list="tr-trainer-list" autocomplete="off"' })}
       <datalist id="tr-trainer-list">${trainingState.data.members.filter((m) => m.active).map((m) => `<option value="${esc(m.name)}">`).join("")}</datalist>
+      <label class="toggle span-2"><input type="checkbox" id="tr-csaLoad" data-tr-flag="csaLoad" ${d.csaLoad ? "checked" : ""}> CSA-Belastungsübung (jährlich für Träger/innen eines Chemikalienschutzanzugs)</label>
       <div class="field span-2"><span><label for="tr-notes">Notizen (optional)</label></span>
         <textarea id="tr-notes" data-tr="notes" rows="2" maxlength="2000">${esc(d.notes)}</textarea></div>
     </div>
@@ -143,7 +144,8 @@ function checkinAdminHtml(t) {
 function trainingDetailHtml(t) {
   const meta = [t.category, t.place, t.trainer && `Übungsleiter/in: ${t.trainer}`].filter(Boolean).map(esc).join(" · ");
   return `<div class="detail-grid training-detail">
-    ${meta ? `<p class="small">${meta}</p>` : ""}${t.notes ? `<p class="small">${esc(t.notes)}</p>` : ""}
+    ${meta ? `<p class="small">${meta}</p>` : ""}${t.csa_load ? `<p class="small"><span class="tenant-badge">CSA-Belastungsübung</span></p>` : ""}
+    <p class="small">${signatureHtml({ ...t, can_sign: trainingState.data.can_sign }, "training")}</p>${t.notes ? `<p class="small">${esc(t.notes)}</p>` : ""}
     <p class="small"><b>Teilnehmer:</b> ${t.participants.map((p) => esc(p.name)).join("; ") || "–"}</p>
     ${can("trainings.edit") ? checkinAdminHtml(t) : ""}
     ${can("trainings.edit") ? `<div class="form-actions">
@@ -162,7 +164,7 @@ function renderTrainings() {
   const row = (t) => `<tr class="row ${open(t.id) ? "open" : ""}" data-tr-training="${t.id}" tabindex="0" aria-expanded="${open(t.id)}">
       <td>${formatDate(t.started_at)}<span class="member-sub">${formatTime(t.started_at)}–${formatTime(t.ended_at)}</span></td>
       <td class="hide-mobile">${formatTime(t.started_at)}–${formatTime(t.ended_at)}</td>
-      <td><strong>${esc(t.topic)}</strong><span class="member-sub">${[t.category, t.place].filter(Boolean).map(esc).join(" · ")}</span></td>
+      <td><strong>${esc(t.topic)}</strong>${t.csa_load ? ` <span class="tenant-badge">CSA</span>` : ""}${t.signature?.valid ? ` <span class="tenant-badge signed" data-tip="Signiert">✓</span>` : ""}<span class="member-sub">${[t.category, t.place].filter(Boolean).map(esc).join(" · ")}</span></td>
       <td class="hide-mobile">${esc(t.category || "–")}</td><td class="hide-mobile">${esc(t.place || "–")}</td>
       <td class="right hide-mobile">${formatDuration(t.duration_min)}</td>
       ${canEdit ? `<td class="right">${t.checkin_pin ? `<span class="pin">${esc(t.checkin_pin)}</span>` : "–"}</td>` : ""}
@@ -176,6 +178,17 @@ function renderTrainings() {
       <th class="hide-mobile">Kategorie</th><th class="hide-mobile">Ort</th><th class="right hide-mobile">Dauer</th>${canEdit ? `<th class="right">Anmelde-PIN</th>` : ""}<th>Teilnehmer</th><th class="col-toggle"><span class="visually-hidden">Details anzeigen</span></th></tr></thead>
       <tbody>${trainings.map(row).join("")}</tbody></table></div>
     ${trainings.length ? "" : `<p class="empty-note">Für ${state.year} ist keine Übung erfasst.</p>`}</div>`;
+}
+
+/** Träger/innen eines Chemikalienschutzanzugs und die jährliche CSA-Belastungsübung des Jahres. */
+function csaStatusHtml(csa) {
+  if (!csa.length) return "";
+  const open = csa.filter((p) => !p.done);
+  const chip = (p) => `<li><span class="tenant-badge ${p.done ? "signed" : "stale"}">${esc(p.name)}${p.done ? ` · ${formatDate(p.last)}` : " · offen"}</span></li>`;
+  return `<div class="card csa-status"><h3>CSA-Belastungsübung ${state.year}</h3>
+    <p class="muted small">${open.length ? `${plural(open.length, "CSA-Träger/in", "CSA-Träger/innen")} von ${csa.length} ohne Belastungsübung in diesem Jahr.` : `Alle ${csa.length} CSA-Träger/innen haben die Belastungsübung absolviert.`}
+      Eine Übung zählt, wenn „CSA-Belastungsübung“ angekreuzt ist; wer CSA-Träger/in ist, steht unter Einstellungen → Personen.</p>
+    <ul>${csa.map(chip).join("")}</ul></div>`;
 }
 
 function renderTrainingMembers() {
@@ -194,7 +207,7 @@ function renderTrainingMembers() {
       <td class="right hide-mobile">${percent(m.rate)}</td><td class="right hide-mobile">${num(m.hours)}</td>
       <td class="right hide-mobile">${formatDate(m.last)}</td>${trainingChevron()}</tr>
     ${open(trainingState.openPeople, m.id) ? `<tr class="detail"><td colspan="${TRAINING_COLUMNS.length + 2}">${personTrainingsHtml(m)}</td></tr>` : ""}`;
-  $("#view-training_members").innerHTML = `
+  $("#view-training_members").innerHTML = `${csaStatusHtml(data.csa || [])}
     <div class="card list-card members-table">
       <div class="toolbar"><div><h3>Übungsteilnahme ${state.year}</h3>
         <p class="muted small">${plural(people.length, "Person", "Personen")} · ${plural(s.count, "Übung", "Übungen")} · ${formatHours(s.minutes)} Übungszeit · Stunden = Dauer der Übung je Teilnahme · Nicht Teil der Einsatzstatistik</p></div></div>
@@ -302,6 +315,16 @@ async function saveTraining() {
   toast((year === state.year ? "Übung gespeichert." : `Übung gespeichert (Jahr ${year}).`) + pin, pin ? { duration: 15000 } : undefined);
 }
 
+async function signTraining(id, signed) {
+  const training = trainingState.data.trainings.find((x) => x.id === id);
+  try {
+    await apiJson(`/api/trainings/${id}/sign`, "POST", { revision: training.revision, signed });
+    await reloadTrainings();
+    showTrainings();
+    toast(signed ? "Übung signiert." : "Signatur zurückgenommen.");
+  } catch (e) { toast(e.message); }
+}
+
 function deleteTraining(id) {
   const training = trainingState.data.trainings.find((t) => t.id === id);
   if (!training) return;
@@ -369,6 +392,7 @@ async function trainingClick(e) {
   switch (button.dataset.trAction) {
     case "edit": openTrainingForm(() => draftFromTraining(trainingState.data.trainings.find((t) => t.id === Number(button.dataset.id))), Number(button.dataset.id)); break;
     case "delete": deleteTraining(Number(button.dataset.id)); break;
+    case "sign": case "unsign": await signTraining(Number(button.dataset.id), button.dataset.trAction === "sign"); break;
     case "qr": await openCheckin(); break;
     case "new-pin": if (confirm("Neue PIN erzeugen? Die bisherige PIN gilt danach nicht mehr.")) await checkinAction(`/api/trainings/${button.dataset.id}/checkin-pin`, "POST", "Neue PIN erzeugt."); break;
     case "accept-checkin": await checkinAction(`/api/trainings/${button.dataset.id}/checkins/${button.dataset.checkinId ? `${button.dataset.checkinId}/` : ""}accept`, "POST", "Anmeldung übernommen."); break;
@@ -395,6 +419,9 @@ for (const view of [$("#view-trainings"), $("#view-training_members")]) view.add
 trainingDialog().addEventListener("click", trainingClick);
 checkinDialog().addEventListener("click", checkinClick);
 trainingDialog().addEventListener("close", () => { trainingState.editing = trainingState.draft = null; });
+trainingDialog().addEventListener("change", (e) => {
+  if (e.target.dataset.trFlag) trainingState.draft[e.target.dataset.trFlag] = e.target.checked;
+});
 trainingDialog().addEventListener("input", (e) => {
   if (e.target.dataset.tr) updateDraftField(e.target);
   if (e.target.id === "tr-search") { trainingState.search = e.target.value; refreshTrainingPeople(); }

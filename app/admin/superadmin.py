@@ -44,7 +44,7 @@ def super_overview(a: tenancy.Access = Depends(access)):
 
 
 # Rollen, die Atemschutz-Rechte haben dürfen (alles andere ist eine Abweichung)
-AGT_EXPECTED = {"lead": {rbac.AGT_OWN, rbac.AGT_EVAL}, "vg_lead": {rbac.AGT_OWN}, "agt_self": {rbac.AGT_OWN}}
+AGT_EXPECTED = {"lead": {rbac.AGT_OWN, rbac.AGT_EVAL}, "deputy_lead": {rbac.AGT_EVAL}, "vg_lead": {rbac.AGT_OWN}, "agt_self": {rbac.AGT_OWN}}
 
 
 @router.get("/api/super/atemschutz")

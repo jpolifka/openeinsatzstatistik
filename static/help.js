@@ -474,6 +474,16 @@ const HELP_SECTIONS = [
         short: "Wehrmitglieder melden sich per QR-Code ohne Benutzerkonto zur Übung des Tages an.",
         text: "Unter Einsätze → Übungen zeigt „QR-Code zur Anmeldung“ einen Code zum Ausdrucken und Aushängen. Wer ihn scannt, gibt die PIN der Übung sowie Vor- und Nachnamen ein. Jede Übung bekommt beim Anlegen eine eigene PIN (aufgeklappte Übung → Anmelde-PIN; sie gilt, bis „Neu erzeugen“ sie ersetzt). Die Übungsleitung nennt sie vor Ort. Es entsteht nie eine Übung durch die Anmeldung. Die Eingaben warten als „Wartende Anmeldungen“ in der aufgeklappten Übung; erst „Übernehmen“ legt die Person bei Bedarf im Personenstamm an und trägt die Teilnahme ein, „Ablehnen“ verwirft sie. Nach 30 falschen PINs an einem Tag ist die Anmeldung der Wehr bis zum nächsten Tag gesperrt. Der Code verfällt nicht; „Neuen Code erzeugen“ macht ausgehängte Codes ungültig. Dafür ist das Recht „Übungen erfassen und ändern“ nötig.",
       },
+      training_csa: {
+        title: "CSA-Belastungsübung",
+        short: "Jährliche Übung für CSA-Träger/innen; offen sind die ohne Teilnahme im Jahr.",
+        text: "Wer einen Chemikalienschutzanzug (CSA) trägt, muss jährlich eine Belastungsübung absolvieren. Die Wehrführung kennzeichnet die Person unter Einstellungen → Personen als <b>CSA-Träger/in</b> (jede Änderung wird protokolliert). Beim Erfassen der Übung wird <b>CSA-Belastungsübung</b> angekreuzt. Unter Personal → Übungen zeigt „CSA-Belastungsübung“ je Jahr, wer sie schon absolviert hat und wer noch offen ist. Die Übung zählt wie jede andere nicht zur Einsatzstatistik; Gesundheitsdaten werden nicht erfasst.",
+      },
+      training_sign: {
+        title: "Signieren",
+        short: "Wehrführung oder Stellvertretung bestätigt Einsatz oder Übung als geprüft.",
+        text: "Wehrführung und Stellvertretung können einen Einsatz oder eine Übung als geprüft <b>signieren</b> (Knopf in der aufgeklappten Zeile). Die Signatur gilt nur für den geprüften Stand: Wird der Eintrag danach geändert (bearbeitet, erneut eingelesen, Teilnehmer übernommen), erscheint „Signatur veraltet“ und er muss erneut geprüft werden. Wer wann signiert oder zurückgenommen hat, steht in einem nur anhängbaren Protokoll ebenso wie jede Änderung der CSA-Kennzeichnung.",
+      },
       training_optional: {
         title: "Kategorie, Ort, Ausbilder/in, Notizen",
         short: "Freiwillige Angaben.",
@@ -677,8 +687,13 @@ const HELP_SECTIONS = [
       },
       perm_agt_evaluate: {
         title: "Atemschutz-Auswertung je Person ansehen",
-        short: "Summen je Person und Ablauf der G26.3 – nur Wehrführung, keine Einzeleinträge.",
-        text: "Atemschutz-Zeiten je Person als Summen und das Ablaufdatum der G26.3 sehen. Nur die Rolle Wehrführer/in hat dieses Recht (nicht vererbt, nicht für Wehrleitung, Stellvertretung oder Superadmins). Einzeleinträge bleiben verborgen.",
+        short: "Summen je Person und Ablauf der G26.3 – Wehrführung und Stellvertretung, keine Einzeleinträge.",
+        text: "Atemschutz-Zeiten je Person als Summen und das Ablaufdatum der G26.3 sehen. Die Rollen Wehrführer/in und Stellvertretende/r Wehrführer/in haben dieses Recht (nicht vererbt, nicht für Wehrleitung oder Superadmins). Einzeleinträge bleiben verborgen.",
+      },
+      perm_signoff_sign: {
+        title: "Einsätze und Übungen signieren",
+        short: "Einsatz oder Übung als geprüft bestätigen (Wehrführung, Stellvertretung).",
+        text: "Einsätze und Übungen der Wehr als geprüft signieren und die Signatur zurücknehmen; das Protokoll dazu einsehen. Haben Wehrführer/in und Stellvertretung. Die Signatur gilt nur für den geprüften Stand.",
       },
       perm_tenant_settings: {
         title: "Einstellungen, Fahrzeuge, Farben, Logos und Schrift",

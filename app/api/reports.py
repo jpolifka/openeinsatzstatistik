@@ -7,7 +7,7 @@ from fastapi import Depends, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from app import import_queue, records, report, store, tenancy
+from app import import_queue, records, report, signoff, store, tenancy
 from app.rbac import IMPORT, INCIDENTS, PEOPLE, WRITE
 from app.timeutil import year_of
 
@@ -26,6 +26,11 @@ def _read_result(files, errors, tenants, a, progress=None):
     previews_json = [preview_json(r, tenant, a) for r, tenant in reports]
     token = common.previews.add([(r, tenant.slug) for r, tenant in reports], a.email)
     return {"token": token, "reports": previews_json, "errors": errors + more_errors, "notes": notes}
+
+
+def _signed(con, incident_id):
+    """Einsatz mit Stand der Signatur und die Namen der Einheitsführung."""
+    return signoff.attach(con, "incident", [store.load_incident(con, incident_id)])[0], store.LeaderNames(con)
 
 
 @router.post("/api/reports")
@@ -165,7 +170,7 @@ def _accept_report(acceptance, a, r, slug):
         tenancy.forget_config(tenant.slug)
         log.info("Fahrzeuge %s in die Liste von %s aufgenommen", ", ".join(r["new_vehicles"]), tenant.slug)
     with tenant.connection() as con:
-        result = incident_json(store.load_incident(con, incident_id), store.LeaderNames(con), tenant)
+        result = incident_json(*_signed(con, incident_id), tenant)
         result["postprocessing_pending"] = not processed
         return result
 

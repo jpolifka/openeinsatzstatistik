@@ -8,9 +8,9 @@ import segno
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
-from app import checkin, tenancy, trainings
+from app import checkin, signoff, tenancy, trainings
 from app.api.common import access
-from app.rbac import TRAININGS, TRAININGS_EDIT
+from app.rbac import SIGN, TRAININGS, TRAININGS_EDIT
 
 router = APIRouter()
 
@@ -28,13 +28,14 @@ class TrainingIn(BaseModel):
     place: Optional[str] = Field(default=None, max_length=trainings.LIMITS["place"])
     category: Optional[str] = Field(default=None, max_length=trainings.LIMITS["category"])
     notes: Optional[str] = Field(default=None, max_length=trainings.LIMITS["notes"])
+    csa_load: bool = False
     member_ids: List[int] = Field(default_factory=list, max_length=500)
     new_members: List[NewMember] = Field(default_factory=list, max_length=50)
     revision: Optional[int] = Field(default=None, ge=0, strict=True)
 
 
 def _fields(body):
-    return body.model_dump(include={"topic", "started_at", "ended_at", *trainings.OPTIONAL})
+    return body.model_dump(include={"topic", "started_at", "ended_at", "csa_load", *trainings.OPTIONAL})
 
 
 def _errors(action):
@@ -56,7 +57,30 @@ def api_trainings(year: Optional[int] = None, a: tenancy.Access = Depends(access
         year = year or years[0]
         rows = trainings.load(con, year=year, with_checkin=tenant.can(TRAININGS_EDIT))
         return {"year": year, "years": years, "trainings": rows, "summary": trainings.summary(rows),
-                "members": trainings.directory(con)}
+                "members": trainings.directory(con), "csa": trainings.csa_status(con, year),
+                "can_sign": tenant.can(SIGN)}
+
+
+class SignIn(BaseModel):
+    revision: int = Field(ge=0, strict=True)
+    signed: bool = True               # False = Signatur zurücknehmen
+
+
+@router.post("/api/trainings/{training_id}/sign")
+def api_sign_training(training_id: int, body: SignIn, a: tenancy.Access = Depends(access)):
+    """Übung als geprüft signieren (oder die Signatur zurücknehmen): Wehrführung und Stellvertretung."""
+    tenant = a.current(SIGN)
+    with tenant.connection() as con:
+        try:
+            if body.signed:
+                signoff.sign(con, "training", training_id, body.revision, a.email)
+            else:
+                signoff.unsign(con, "training", training_id, a.email)
+        except KeyError:
+            raise HTTPException(404, "Übung nicht gefunden oder nicht signiert.")
+        except signoff.Stale as e:
+            raise HTTPException(409, str(e))
+        return trainings.load(con, training_id=training_id, with_checkin=tenant.can(TRAININGS_EDIT))[0]
 
 
 @router.get("/api/trainings/checkin")

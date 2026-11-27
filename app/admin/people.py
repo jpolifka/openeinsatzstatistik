@@ -11,7 +11,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from app import atemschutz, names, store, tenancy
+from app import atemschutz, names, signoff, store, tenancy
 from app.admin.common import access, log
 from app.rbac import SETTINGS
 
@@ -23,6 +23,7 @@ class PersonIn(BaseModel):
     first_name: str = Field(default="", max_length=60)
     active: bool = True
     email: Optional[str] = Field(default=None, max_length=120)    # fehlt das Feld, bleibt die E-Mail unverändert
+    csa: Optional[bool] = None        # Träger/in eines Chemikalienschutzanzugs; fehlt das Feld, bleibt es unverändert
 
 
 class MergeIn(BaseModel):
@@ -81,6 +82,14 @@ def _free_email(con, email, own_id=None):
             raise HTTPException(409, "Diese E-Mail-Adresse ist bei einer anderen Person eingetragen.")
 
 
+def _csa(body, current, con, email, member_id):
+    """Neuer Stand der Fähigkeit CSA (fehlt das Feld, bleibt sie); jede Änderung steht im Protokoll."""
+    if body.csa is None or int(body.csa) == int(current):
+        return int(current)
+    signoff.audit(con, email, "csa.set" if body.csa else "csa.unset", "member", member_id)
+    return int(body.csa)
+
+
 def _clean(body):
     last, first = body.last_name.strip(), body.first_name.strip()
     if not last:
@@ -112,19 +121,19 @@ def _rows(con):
         "GROUP BY a.member_id")}
     trainings = {r[0]: r[1] for r in con.execute(
         "SELECT member_id, COUNT(*) FROM training_attendance GROUP BY member_id")}
-    people = sorted((dict(r) for r in con.execute("SELECT id, name, last_name, first_name, active, email FROM member")),
+    people = sorted((dict(r) for r in con.execute("SELECT id, name, last_name, first_name, active, email, csa FROM member")),
                     key=lambda p: names.sort_key(p["name"]))
     similar = _similar(people)
     by_id = {p["id"]: p for p in people}
     for p in people:
         count, last = incidents.get(p["id"], (0, None))
-        p.update(active=bool(p["active"]), incidents=count, last=last, trainings=trainings.get(p["id"], 0),
+        p.update(active=bool(p["active"]), csa=bool(p["csa"]), incidents=count, last=last, trainings=trainings.get(p["id"], 0),
                  similar=[{"id": i, "name": by_id[i]["name"]} for i in similar[p["id"]]])
     return people
 
 
 def _person(con, member_id):
-    row = con.execute("SELECT id, name, last_name, first_name, active, email FROM member WHERE id = ?",
+    row = con.execute("SELECT id, name, last_name, first_name, active, email, csa FROM member WHERE id = ?",
                       (member_id,)).fetchone()
     if not row:
         raise HTTPException(404, "Person nicht gefunden.")
@@ -161,9 +170,11 @@ def create_member(slug: str, body: PersonIn, a: tenancy.Access = Depends(access)
             raise HTTPException(409, f"Passt zu „{_person(con, known)['name']}“, das es schon gibt. "
                                      "Bei einer anderen Person bitte den Namen unterscheidbar schreiben.")
         member_id = con.execute(
-            "INSERT INTO member (name, last_name, first_name, sort_order, active, email) "
-            "VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM member), ?, ?)",
-            (_display(last, first), last, first, int(body.active), email)).lastrowid
+            "INSERT INTO member (name, last_name, first_name, sort_order, active, email, csa) "
+            "VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM member), ?, ?, ?)",
+            (_display(last, first), last, first, int(body.active), email, int(bool(body.csa)))).lastrowid
+        if body.csa:
+            signoff.audit(con, a.email, "csa.set", "member", member_id)
         _sync_access(tenant, None, email if body.active else None)
         log.info("Person %s in %s angelegt", member_id, slug)
         return _listing(con)
@@ -178,8 +189,9 @@ def update_member(slug: str, member_id: int, body: PersonIn, a: tenancy.Access =
         email = _email(body, before["email"])
         _free_name(con, _display(last, first), member_id)
         _free_email(con, email, member_id)
-        con.execute("UPDATE member SET name = ?, last_name = ?, first_name = ?, active = ?, email = ? WHERE id = ?",
-                    (_display(last, first), last, first, int(body.active), email, member_id))
+        csa = _csa(body, before["csa"], con, a.email, member_id)
+        con.execute("UPDATE member SET name = ?, last_name = ?, first_name = ?, active = ?, email = ?, csa = ? "
+                    "WHERE id = ?", (_display(last, first), last, first, int(body.active), email, csa, member_id))
         _sync_access(tenant, before["email"] if before["active"] else None, email if body.active else None)
         return _listing(con)
 
@@ -199,6 +211,9 @@ def merge_member(slug: str, member_id: int, body: MergeIn, a: tenancy.Access = D
             con.execute(f"DELETE FROM {table} WHERE member_id = ? AND {key} IN "
                         f"(SELECT {key} FROM {table} WHERE member_id = ?)", (member_id, body.into))
             con.execute(f"UPDATE {table} SET member_id = ? WHERE member_id = ?", (body.into, member_id))
+        if source["csa"] and not target["csa"]:
+            con.execute("UPDATE member SET csa = 1 WHERE id = ?", (body.into,))
+            signoff.audit(con, a.email, "csa.set", "member", body.into, "durch Zusammenführen")
         con.execute("DELETE FROM member WHERE id = ?", (member_id,))
         log.info("Person %s mit %s in %s zusammengeführt", source["id"], target["id"], slug)
         return _listing(con)

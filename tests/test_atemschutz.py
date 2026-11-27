@@ -70,7 +70,7 @@ def test_only_lead_has_agt_rights_and_nothing_is_inherited(world):
         found = roles.permissions(role.id) & rbac.FIXED_PERMISSIONS
         if found:
             holders[role.key] = found
-    assert holders == {"lead": {rbac.AGT_OWN, rbac.AGT_EVAL}, "vg_lead": {rbac.AGT_OWN}, "agt_self": {rbac.AGT_OWN}}
+    assert holders == {"lead": {rbac.AGT_OWN, rbac.AGT_EVAL}, "deputy_lead": {rbac.AGT_EVAL}, "vg_lead": {rbac.AGT_OWN}, "agt_self": {rbac.AGT_OWN}}
     assert not any(p.scopes != ("tenant",) for p in rbac.PERMISSIONS.values() if p.key == rbac.AGT_EVAL)
 
 
@@ -107,11 +107,16 @@ def test_superadmin_has_no_agt_rights_and_roles_page_hides_them(world):
     assert not any(set(r["permissions"]) & rbac.FIXED_PERMISSIONS for r in page["roles"])
 
 
-@pytest.mark.parametrize("email", ["deputy@example.org", "editor@example.org"])
-def test_other_roles_have_no_access(world, email):
-    _as(world, email)
+def test_editor_has_no_access(world):
+    _as(world, "editor@example.org")
     assert world.get("/api/atemschutz/me").status_code == 403
     assert world.get("/api/atemschutz/summary").status_code == 403
+
+
+def test_deputy_may_evaluate_but_has_no_own_documentation(world):
+    _as(world, "deputy@example.org")
+    assert world.get("/api/atemschutz/me").status_code == 403
+    assert world.get("/api/atemschutz/summary").status_code == 200
 
 
 # ---------------------------------------------------------------- Zugang über die E-Mail

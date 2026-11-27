@@ -10,7 +10,7 @@ from conftest import grant, login, make_tenant
 PUBLIC = {"/health", "/login", "/logout", "/auth/verify", "/auth/code", "/"}
 # Endpunkte mit Einsatz-, Wehr- oder VG-Bezug: Rechte prüft der Endpunkt je Bereich (Matrix in test_access.py)
 SCOPED = {
-    "/api/incidents/{key}", "/api/members", "/api/admin/{slug}/settings", "/api/admin/{slug}/keywords",
+    "/api/incidents/{key}", "/api/incidents/{key}/sign", "/api/members", "/api/admin/{slug}/settings", "/api/admin/{slug}/keywords",
     "/api/admin/{slug}/keywords/import", "/api/admin/{slug}/keywords/template", "/api/admin/{slug}/keywords/{code}", "/api/admin/{slug}/members", "/api/admin/{slug}/members/{member_id}",
     "/api/admin/{slug}/members/{member_id}/merge", "/api/admin/{slug}/members/{member_id}/transfer",
     "/api/admin/{slug}/assets/{name}", "/api/admin/{slug}/response-plan",
@@ -34,7 +34,8 @@ SELECTED = {
     "/api/records/{bks_record_id}/review", "/api/reports", "/api/reports/accept", "/api/reports/cancel",
     "/api/reports/jobs/{job}", "/api/scope", "/api/theme.css", "/api/trainings",
     "/api/trainings/checkin", "/api/trainings/checkin.svg", "/api/trainings/checkin/rotate",
-    "/api/trainings/{training_id}", "/api/trainings/{training_id}/checkin-pin",
+    "/api/trainings/{training_id}", "/api/trainings/{training_id}/checkin-pin", "/api/trainings/{training_id}/sign",
+    "/api/signoff/events",
     "/api/trainings/{training_id}/checkins/accept", "/api/trainings/{training_id}/checkins/{checkin_id}",
     "/api/trainings/{training_id}/checkins/{checkin_id}/accept", "/api/years",
 }

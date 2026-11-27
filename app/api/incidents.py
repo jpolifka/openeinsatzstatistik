@@ -6,9 +6,9 @@ from typing import List, Optional
 from fastapi import Depends, HTTPException
 from pydantic import BaseModel, Field, create_model
 
-from app import store, tenancy
+from app import signoff, store, tenancy
 from app.incident_schema import OPTIONAL_COUNTS
-from app.rbac import DELETE, INCIDENTS, PEOPLE, PEOPLE_EDIT, WRITE
+from app.rbac import DELETE, INCIDENTS, PEOPLE, PEOPLE_EDIT, SIGN, WRITE
 from app.timeutil import year_of
 
 from fastapi import APIRouter
@@ -35,7 +35,8 @@ def api_incidents(year: Optional[int] = None, a: tenancy.Access = Depends(access
     for tenant in tenants:
         with tenant.connection() as con:
             leaders = store.LeaderNames(con)
-            incidents += [incident_json(i, leaders, tenant) for i in store.load_incidents(con, year=year)]
+            loaded = signoff.attach(con, "incident", store.load_incidents(con, year=year))
+            incidents += [incident_json(i, leaders, tenant) for i in loaded]
     if len(tenants) > 1:
         incidents.sort(key=lambda i: (i["started_at"] or "", i["tenant"]))
     return {"year": year, "incidents": incidents}
@@ -60,6 +61,42 @@ IncidentUpdate = create_model("IncidentUpdate", __base__=IncidentFields,
                               revision=(Optional[int], Field(default=None, ge=0, strict=True)),
                               vehicles=(Optional[List[VehicleEdit]], Field(default=None, max_length=MAX_ROWS)),
                               people=(Optional[List[PersonEdit]], Field(default=None, max_length=MAX_ROWS)))
+
+
+def signed_incident(con, incident_id):
+    """Einsatz samt Stand der Signatur."""
+    incident = store.load_incident(con, incident_id)
+    return signoff.attach(con, "incident", [incident])[0] if incident else None
+
+
+class SignIn(BaseModel):
+    revision: int = Field(ge=0, strict=True)
+    signed: bool = True               # False = Signatur zurücknehmen
+
+
+@router.post("/api/incidents/{key}/sign")
+def api_sign_incident(key: str, body: SignIn, a: tenancy.Access = Depends(access)):
+    """Einsatz als geprüft signieren (oder die Signatur zurücknehmen): Wehrführung und Stellvertretung."""
+    slug, incident_id = parse_incident_key(key)
+    tenant = a.tenant(slug, SIGN)
+    with tenant.connection() as con:
+        try:
+            if body.signed:
+                signoff.sign(con, "incident", incident_id, body.revision, a.email)
+            else:
+                signoff.unsign(con, "incident", incident_id, a.email)
+        except KeyError:
+            raise HTTPException(404, "Einsatz nicht gefunden oder nicht signiert.")
+        except signoff.Stale as e:
+            raise HTTPException(409, str(e))
+        return incident_json(signed_incident(con, incident_id), store.LeaderNames(con), tenant)
+
+
+@router.get("/api/signoff/events")
+def api_signoff_events(a: tenancy.Access = Depends(access)):
+    """Protokoll der Signaturen und der CSA-Angaben der ausgewählten Wehr (nur Wehrführung und Stellvertretung)."""
+    with a.current(SIGN).connection() as con:
+        return {"events": signoff.events(con)}
 
 
 @router.put("/api/incidents/{key}")
@@ -107,7 +144,7 @@ def api_update_incident(key: str, update: IncidentUpdate, a: tenancy.Access = De
             raise HTTPException(409, str(e))
         except ValueError as e:
             raise HTTPException(422, str(e))
-        return incident_json(store.load_incident(con, incident_id), store.LeaderNames(con), tenant)
+        return incident_json(signed_incident(con, incident_id), store.LeaderNames(con), tenant)
 
 
 @router.get("/api/members")
