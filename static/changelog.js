@@ -7,6 +7,15 @@
 const CHANGELOG = [
   {
     date: "2026-11-27",
+    version: "2026-11-27.5",
+    items: [
+      "<b>Signieren:</b> Wehrführung und Stellvertretung können Einsätze und Übungen als geprüft signieren (aufgeklappte Zeile → „Signieren“). Ändert sich der Eintrag danach, wird die Signatur als veraltet gekennzeichnet. Jede Signatur und Rücknahme wird protokolliert.",
+      "<b>CSA-Belastungsübung:</b> Unter Einstellungen → Personen lässt sich „CSA-Träger/in“ ankreuzen (mit Protokoll). Übungen können als CSA-Belastungsübung gekennzeichnet werden; unter Personal → Übungen sieht man, wer sie im Jahr schon absolviert hat.",
+      "<b>Atemschutz:</b> Auch die Stellvertretung der Wehrführung sieht die Atemschutz-Auswertung (Summen, G26.3-Ablauf).",
+    ],
+  },
+  {
+    date: "2026-11-27",
     version: "2026-11-27.4",
     items: [
       "<b>Einsicht durch die Administration:</b> Superadmins können die Atemschutz-Einträge einer Person für Support und Prüfung nur lesend einsehen. Jede Einsicht wird protokolliert und der Person in ihrer Atemschutz-Ansicht unter „Einsicht durch die Administration“ angezeigt.",

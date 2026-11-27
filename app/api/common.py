@@ -11,7 +11,7 @@ from app.preview_sessions import PreviewSessions, ReadJobs, UploadSlots
 from fastapi import HTTPException
 
 from app import auth, domain, metrics, report, store
-from app.rbac import DELETE, PEOPLE, PEOPLE_EDIT, PLAN_VIEW, WRITE
+from app.rbac import DELETE, PEOPLE, PEOPLE_EDIT, PLAN_VIEW, SIGN, WRITE
 
 log = logging.getLogger("openeinsatzstatistik")
 access = auth.access
@@ -87,6 +87,8 @@ def incident_json(incident, leaders, tenant, limit=None, cfg=None):
         "people_editable": tenant.can(PEOPLE_EDIT),
         "can_edit": tenant.can(WRITE),
         "can_delete": tenant.can(DELETE),
+        "can_sign": tenant.can(SIGN),
+        "signature": incident.get("signature"),
     }
 
 

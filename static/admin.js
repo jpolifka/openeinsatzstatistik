@@ -366,7 +366,7 @@ async function runAdminAction(button) {
       const e = admin.personEdit, to = $("#person-edit-tenant").value;
       let result = await apiJson(peopleUrl(`/${e.id}`), "PUT", { last_name: $("#person-edit-last").value,
         first_name: $("#person-edit-first").value, active: !$("#person-edit-left").checked,
-        email: $("#person-edit-email").value.trim() });
+        email: $("#person-edit-email").value.trim(), csa: $("#person-edit-csa").checked });
       if (to) result = await apiJson(peopleUrl(`/${e.id}/transfer`), "POST", { to_slug: to });
       return peopleChanged(result, to ? "Person ist in die andere Wehr gewechselt" : "Person gespeichert");
     }

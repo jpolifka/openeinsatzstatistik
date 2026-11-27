@@ -387,6 +387,25 @@ def _add_checkin_pin(con):
                 "UNIQUE (training_id, last_name COLLATE NOCASE, first_name COLLATE NOCASE))")
 
 
+def _add_signoff_csa(con):
+    """Signatur von Einsätzen und Übungen durch die Wehrführung, CSA als Fähigkeit und die jährliche CSA-Belastungsübung.
+    `signoff` gilt nur für die unterschriebene Revision (jede Änderung macht sie ungültig); `audit_event` hält jede
+    Handlung fest und ist nur anhängbar."""
+    con.execute("ALTER TABLE member ADD COLUMN csa INTEGER NOT NULL DEFAULT 0")
+    con.execute("ALTER TABLE training ADD COLUMN csa_load INTEGER NOT NULL DEFAULT 0")
+    con.execute("CREATE TABLE signoff (kind TEXT NOT NULL CHECK (kind IN ('incident', 'training')), "
+                "ref_id INTEGER NOT NULL, revision INTEGER NOT NULL, email TEXT NOT NULL, "
+                "at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')), PRIMARY KEY (kind, ref_id))")
+    for table, kind in (("incident", "incident"), ("training", "training")):
+        con.execute(f"CREATE TRIGGER signoff_{kind}_gone AFTER DELETE ON {table} "
+                    f"BEGIN DELETE FROM signoff WHERE kind = '{kind}' AND ref_id = OLD.id; END")
+    con.execute("CREATE TABLE audit_event (id INTEGER PRIMARY KEY, email TEXT NOT NULL, action TEXT NOT NULL, "
+                "kind TEXT, ref_id INTEGER, detail TEXT, at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')))")
+    for change in ("UPDATE", "DELETE"):
+        con.execute(f"CREATE TRIGGER audit_event_no_{change.lower()} BEFORE {change} ON audit_event "
+                    "BEGIN SELECT RAISE(ABORT, 'Das Protokoll ist nur anhängbar.'); END")
+
+
 def _add_atemschutz(con):
     """Persönliche Atemschutz-Dokumentation: E-Mail im Personenstamm, Einträge (Einsatz, Übung, Strecke), G26.3-Nachweise,
     Erinnerungen und ein anhängbares Zugriffsprotokoll. Eigene Tabellen, nie in Einsatz- oder Übungsauswertungen.
@@ -445,6 +464,16 @@ def _add_agt_roles(con):
                         [(ids[key], p) for p in permissions])
 
 
+def _add_sign_roles(con):
+    """Signieren (Wehrführung; die stellvertretende Wehrführung erbt es) und Atemschutz-Auswertung auch für die
+    stellvertretende Wehrführung (das Recht wird nie vererbt, deshalb direkt an die Rolle)."""
+    from app import rbac
+    ids = rbac.add_roles(con)
+    lead, deputy = ids["lead"], ids["deputy_lead"]
+    con.execute("INSERT OR IGNORE INTO role_permission (role_id, permission) VALUES (?, ?)", (lead, rbac.SIGN))
+    con.execute("INSERT OR IGNORE INTO role_permission (role_id, permission) VALUES (?, ?)", (deputy, rbac.AGT_EVAL))
+
+
 def _guard_membership_vg(con):
     """Eine Zuordnung darf nur Rollen tragen, die global sind oder zur VG des Bereichs gehören (Wehr: zur VG der Wehr).
     Bestehende Verstöße (z. B. nach dem Verschieben einer Wehr) werden entzogen und protokolliert, dann sichern
@@ -479,13 +508,13 @@ def _add_vg_subdomain(con):
 TENANT_MIGRATIONS = [_create_legacy_schema, _rename_to_english, _add_tenant_tables, _add_bks_ids,
                      _add_pending_reports, _add_fleet_names, _add_incident_revision, _add_import_jobs,
                      _add_abort_reason, _add_report_details, _add_manual_fields, _add_trainings,
-                     _add_checkin_pin, _add_atemschutz]
+                     _add_checkin_pin, _add_atemschutz, _add_signoff_csa]
 CENTRAL_MIGRATIONS = [_create_central_schema, _add_dpa, _add_records, _add_notices, _add_fee_schedules, _add_roles,
                       _records_per_vg, _add_consumed_magic_links, _add_completed_imports, _add_tenant_archive,
                       _add_vg_defaults, _settings_for_fee_roles, _add_sessions,
                       _add_vg_kind, _add_bks_roles, _vg_lead_people,
                       _bks_role_tiers, _add_login_codes, _add_training_roles,
-                      _guard_membership_vg, _add_vg_subdomain, _add_agt_roles]
+                      _guard_membership_vg, _add_vg_subdomain, _add_agt_roles, _add_sign_roles]
 
 
 def migrate(con, steps=TENANT_MIGRATIONS):
