@@ -143,13 +143,22 @@ def api_set_reminder(body: ReminderIn, a: tenancy.Access = Depends(access)):
 
 @router.get("/api/atemschutz/summary")
 def api_summary(year: Optional[int] = Query(None, ge=2000, le=2100), a: tenancy.Access = Depends(access)):
-    """Auswertung der Wehrführung: je Person nur Summen (keine Einzeleinträge, Drücke, Orte oder Notizen)."""
+    """Auswertung der Wehrführung: je Person Summen; die Einträge selbst liefert `/people/{id}`."""
     tenant = a.current(AGT_EVAL)
     year = year or dt.date.today().year
     with tenant.connection() as con:
         atemschutz.audit(con, a.email, "agt.summary.view")
         return {"year": year, "years": atemschutz.summary_years(con), "people": atemschutz.summary(con, year),
                 "kinds": atemschutz.KINDS}
+
+
+@router.get("/api/atemschutz/people/{member_id}")
+def api_person(member_id: int, year: Optional[int] = Query(None, ge=2000, le=2100), a: tenancy.Access = Depends(access)):
+    """Wehrführung und Stellvertretung halten die Atemschutz-Einsätze nach: alle Einträge einer Person und ihre G26.3
+    (ohne Notizen); jeder Abruf wird mit Person protokolliert."""
+    tenant = a.current(AGT_EVAL)
+    with tenant.connection() as con:
+        return _handle(lambda: atemschutz.person_detail(con, member_id, year or dt.date.today().year, a.email))
 
 
 class CosignIn(_In):

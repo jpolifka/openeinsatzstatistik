@@ -10,13 +10,14 @@ const agt = {
   candidates: null,              // null | Einsätze/Übungen zum Übernehmen
   summary: null, summaryYear: null,
   cosign: null, cosignYear: null, cosignOpen: false,   // Abzeichnen (Wehrführung)
+  person: null,                  // null | Einzelansicht einer Person (Wehrführung: alle Einträge und G26.3)
 };
 
 const agtThisYear = () => new Date().getFullYear();
 const agtToday = () => new Date().toISOString().slice(0, 10);
 
 async function loadAgt() {
-  if (agt.scope !== config.scope) { agt.scope = config.scope; agt.form = agt.candidates = null; agt.year = null; agt.summaryYear = null; }
+  if (agt.scope !== config.scope) { agt.scope = config.scope; agt.form = agt.candidates = null; agt.year = null; agt.summaryYear = null; agt.person = null; }
   agt.data = await api(`/api/atemschutz/me?year=${agt.year || agtThisYear()}`);
   agt.year = agt.data.year || agt.year || agtThisYear();
 }
@@ -320,17 +321,38 @@ async function agtCosignClick(e) {
   }, sign ? "Abgezeichnet." : "Abzeichnung zurückgenommen.");
 }
 
-// ------------------------------------------------------------ Auswertung der Wehrführung (nur Summen)
+// ------------------------------------------------------------ Auswertung der Wehrführung
+/** Einzelansicht einer Person (Wehrführung hält nach): alle Einträge des Jahres und G26.3, druckbar. */
+function agtPersonHtml() {
+  const p = agt.person, kinds = agt.summary.kinds;
+  const rows = p.entries.map((e) => `<tr><td>${formatDate(e.started_at)}<span class="member-sub">${formatTime(e.started_at)}</span></td>
+    <td>${esc(kinds[e.kind])}${e.external ? ` <span class="tenant-badge">${esc(e.organisation)}</span>` : ""}</td>
+    <td><b>${esc(e.keyword || "–")}</b></td><td>${esc(e.place || "–")}</td><td class="right">${formatDuration(e.duration_min)}</td>
+    <td class="right">${e.start_bar == null ? "–" : `${e.start_bar} → ${e.end_bar} bar`}</td><td>${agtCosignBadge(e.cosign)}</td></tr>`).join("");
+  const medical = p.medical.map((m) => `<tr><td>${formatDate(m.examined_on)}</td><td>${formatDate(m.valid_until)}</td></tr>`).join("");
+  const figures = Object.entries(kinds).map(([k, label]) => [formatDuration(p.totals[k].minutes), `${label} (${p.totals[k].count}×)`]);
+  return `<p class="print-only print-stamp">${esc(config.name)} · Atemschutz-Nachweis ${p.year} · ${esc(p.name)} · Stand ${formatDate(new Date().toISOString())}</p>
+    <div class="card"><div class="toolbar"><div><h3>${esc(p.name)} ${p.year}</h3>
+      <p>G26.3 gültig bis: ${agtValidity(p.medical[0]?.valid_until)}</p></div>
+      <div class="no-print"><button type="button" class="btn btn-light btn-small" data-agt-print>Als PDF drucken</button>
+      <button type="button" class="btn btn-outline btn-small" data-agt-person-close>Schließen</button></div></div>
+      ${keyFigures(figures)}
+      <div class="table-wrap"><table class="table"><thead><tr><th>Datum</th><th>Art</th><th>Stichwort / Thema</th><th>Ort</th>
+        <th class="right">Dauer</th><th class="right">Druck</th><th>Abgezeichnet</th></tr></thead><tbody>${rows}</tbody></table></div>
+      ${p.entries.length ? "" : `<p class="empty-note">Für ${p.year} sind keine Einträge vorhanden.</p>`}
+      ${p.medical.length ? `<h4>G26.3 (Atemschutz-Untersuchung)</h4><div class="table-wrap"><table class="mini-table"><thead><tr><th>Untersuchung</th><th>Nächste Prüfung</th></tr></thead><tbody>${medical}</tbody></table></div>` : ""}</div>`;
+}
+
 function renderAgtEval() {
   const section = $("#view-agt_eval"), s = agt.summary;
   if (!s) { loadAgtSummary().then(() => state.view === "agt_eval" && renderAgtEval()); return; }
   const cell = (k) => `<td class="right">${k.count ? `${formatDuration(k.minutes)} <span class="member-sub">${k.count}×</span>` : "–"}</td>`;
-  const rows = s.people.map((p) => `<tr><td><b>${esc(p.name)}</b>${p.linked ? "" : ` <span class="tenant-badge">ohne E-Mail</span>`}</td>
+  const rows = s.people.map((p) => `<tr><td><button type="button" class="link-button" data-agt-person="${p.id}"><b>${esc(p.name)}</b></button>${p.linked ? "" : ` <span class="tenant-badge">ohne E-Mail</span>`}</td>
     ${Object.keys(s.kinds).map((k) => cell(p.kinds[k])).join("")}
     <td class="right"><b>${formatDuration(p.minutes)}</b></td><td class="right">${agtValidity(p.valid_until)}</td></tr>`).join("");
-  section.innerHTML = `<p class="print-only print-stamp">${esc(config.name)} · Atemschutz-Auswertung ${s.year} · Stand ${formatDate(new Date().toISOString())}</p>
-    <div class="card list-card"><div class="toolbar"><div><h3>Atemschutz je Person ${s.year}</h3>
-      <p class="muted small no-print">Nur Summen und das Ablaufdatum der G26.3 – keine Einzeleinträge, Drücke oder Orte. Zeiten sind die von den Personen selbst eingetragenen Dauern.</p></div>
+  section.innerHTML = `${agt.person ? agtPersonHtml() : ""}<p class="print-only print-stamp ${agt.person ? "no-print" : ""}">${esc(config.name)} · Atemschutz-Auswertung ${s.year} · Stand ${formatDate(new Date().toISOString())}</p>
+    <div class="card list-card ${agt.person ? "no-print" : ""}"><div class="toolbar"><div><h3>Atemschutz je Person ${s.year}</h3>
+      <p class="muted small no-print">Summen und das Ablaufdatum der G26.3 je Person. Ein Klick auf den Namen zeigt alle Einträge der Person und ihre G26.3-Nachweise (ohne Notizen; jeder Abruf wird protokolliert). Zeiten sind die von den Personen selbst eingetragenen Dauern.</p></div>
       ${agtYearSelect(s.years, s.year, "data-agt-summary-year")}
       <button type="button" class="btn btn-light btn-small no-print" data-agt-print>Als PDF drucken</button></div>
     <div class="table-wrap"><table class="table"><thead><tr><th>Person</th>${Object.values(s.kinds).map((l) => `<th class="right">${esc(l)}</th>`).join("")}
@@ -351,10 +373,19 @@ agtView.addEventListener("click", agtClick);
 agtView.addEventListener("input", agtInput);
 agtView.addEventListener("change", agtChange);
 agtView.addEventListener("submit", agtSubmit);
-$("#view-agt_eval").addEventListener("click", (e) => { if (e.target.closest("[data-agt-print]")) window.print(); });
+$("#view-agt_eval").addEventListener("click", async (e) => {
+  if (e.target.closest("[data-agt-print]")) { window.print(); return; }
+  if (e.target.closest("[data-agt-person-close]")) { agt.person = null; renderAgtEval(); return; }
+  const open = e.target.closest("[data-agt-person]");
+  if (!open) return;
+  await agtRun(async () => {
+    agt.person = await api(`/api/atemschutz/people/${open.dataset.agtPerson}?year=${agt.summary.year}`);
+    renderAgtEval(); window.scrollTo(0, 0);
+  });
+});
 $("#view-agt_eval").addEventListener("change", async (e) => {
   if (!e.target.matches("[data-agt-summary-year]")) return;
-  agt.summaryYear = Number(e.target.value);
+  agt.summaryYear = Number(e.target.value); agt.person = null;
   await agtRun(async () => { await loadAgtSummary(); renderAgtEval(); });
 });
 $("#view-agt_cosign").addEventListener("click", agtCosignClick);

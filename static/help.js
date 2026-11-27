@@ -420,7 +420,7 @@ const HELP_SECTIONS = [
   {
     id: "sec_atemschutz",
     title: "Atemschutz-Dokumentation",
-    intro: "Jede Person führt ihre <b>eigene</b> Atemschutz-Dokumentation: Einsätze, Übungen und Streckendurchgänge mit Ort, Dauer sowie Start- und Enddruck, dazu den Nachweis der G26.3. Der Reiter <b>Atemschutz</b> zeigt nur die eigenen Daten. Zugang bekommt, wessen E-Mail-Adresse die Wehrführung im Personenstamm eingetragen hat (Einstellungen → Personen); die Anmeldung läuft wie sonst per Link oder Code. <b>Andere Personen sehen deine Einträge nicht</b> – auch nicht die Wehrführung (Summen; einzelne Einträge nur zum Abzeichnen, ohne Notizen) oder der Wehrleiter. Ausnahme: Superadmins der Anwendung können sie in Ausnahmefällen (Support, Prüfung) nur lesend einsehen; <b>jede Einsicht wird protokolliert und dir unter „Einsicht durch die Administration“ angezeigt.</b>",
+    intro: "Jede Person führt ihre <b>eigene</b> Atemschutz-Dokumentation: Einsätze, Übungen und Streckendurchgänge mit Ort, Dauer sowie Start- und Enddruck, dazu den Nachweis der G26.3. Der Reiter <b>Atemschutz</b> zeigt nur die eigenen Daten. Zugang bekommt, wessen E-Mail-Adresse die Wehrführung im Personenstamm eingetragen hat (Einstellungen → Personen); die Anmeldung läuft wie sonst per Link oder Code. <b>Andere Personen sehen deine Einträge nicht</b> – auch nicht der Wehrleiter. Die <b>Wehrführung und ihre Stellvertretung</b> halten die Atemschutz-Einsätze nach und sehen deshalb Summen, alle Einträge und die G26.3 jeder Person (ohne Notizen; jeder Abruf wird protokolliert). Ausnahme: Superadmins der Anwendung können sie in Ausnahmefällen (Support, Prüfung) nur lesend einsehen; <b>jede Einsicht wird protokolliert und dir unter „Einsicht durch die Administration“ angezeigt.</b>",
     entries: {
       agt_entry: {
         title: "Eintrag erfassen",
@@ -444,8 +444,8 @@ const HELP_SECTIONS = [
       },
       agt_eval: {
         title: "Auswertung der Wehrführung",
-        short: "Atemschutz-Zeiten je Person als Summen – Einzeleinträge nur im Reiter „Abzeichnen“.",
-        text: "Die Wehrführung sieht unter Atemschutz → Auswertung je aktiver Person Anzahl und Stunden nach Art (Einsatz, Übung, Strecke) im Jahr und das Ablaufdatum der G26.3. Einzelne Einträge sieht sie hier nicht (nur zum Abzeichnen im eigenen Reiter, ohne Notizen). Jeder Abruf der Auswertung wird protokolliert. Die Zeiten sind die von den Personen selbst eingetragenen Dauern; fehlt eine Person ohne E-Mail im Stamm, steht dort „ohne E-Mail“.",
+        short: "Atemschutz-Zeiten je Person als Summen; per Klick alle Einträge und G26.3, druckbar.",
+        text: "Die Wehrführung sieht unter Atemschutz → Auswertung je aktiver Person Anzahl und Stunden nach Art (Einsatz, Übung, Strecke) im Jahr und das Ablaufdatum der G26.3. Ein Klick auf den Namen öffnet alle Einträge der Person im Jahr (Datum, Art, Stichwort, Ort, Dauer, Druck, Abzeichnung) und ihre G26.3-Nachweise, ohne Notizen; „Als PDF drucken“ erzeugt daraus den Nachweis. Jeder Abruf wird protokolliert (Auswertung und Einzelansicht). Die Zeiten sind die von den Personen selbst eingetragenen Dauern; fehlt eine Person ohne E-Mail im Stamm, steht dort „ohne E-Mail“.",
       },
       agt_cosign: {
         title: "Einträge abzeichnen",
@@ -688,7 +688,7 @@ const HELP_SECTIONS = [
       perm_agt_evaluate: {
         title: "Atemschutz-Auswertung je Person ansehen",
         short: "Summen je Person, G26.3-Ablauf und Abzeichnen von Einträgen – Wehrführung und Stellvertretung.",
-        text: "Atemschutz-Zeiten je Person als Summen und das Ablaufdatum der G26.3 sehen und einzelne Einträge (ohne Notizen) <b>abzeichnen</b>; jeder Abruf wird protokolliert. Die Rollen Wehrführer/in und Stellvertretende/r Wehrführer/in haben dieses Recht (nicht vererbt, nicht für Wehrleitung oder Superadmins).",
+        text: "Atemschutz-Zeiten je Person als Summen, alle Einträge (ohne Notizen) und die G26.3 sehen, nachhalten, drucken und einzelne Einträge <b>abzeichnen</b>; jeder Abruf wird protokolliert. Die Rollen Wehrführer/in und Stellvertretende/r Wehrführer/in haben dieses Recht (nicht vererbt, nicht für Wehrleitung oder Superadmins).",
       },
       perm_tenant_settings: {
         title: "Einstellungen, Fahrzeuge, Farben, Logos und Schrift",

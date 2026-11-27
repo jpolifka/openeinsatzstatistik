@@ -7,6 +7,13 @@
 const CHANGELOG = [
   {
     date: "2026-11-27",
+    version: "2026-11-27.7",
+    items: [
+      "<b>Atemschutz nachhalten:</b> Wehrführung und Stellvertretung sehen unter Atemschutz → Auswertung per Klick auf den Namen alle Einträge einer Person (Einsätze, Übungen, Strecken mit Dauer, Ort, Druck und Abzeichnung) und ihre G26.3-Nachweise – ohne Notizen – und können das als PDF drucken. Jeder Abruf wird protokolliert. Der Auftragsverarbeitungsvertrag hat dazu eine neue Fassung.",
+    ],
+  },
+  {
+    date: "2026-11-27",
     version: "2026-11-27.6",
     items: [
       "<b>Atemschutz-Nachweis drucken:</b> Unter Atemschutz → Meine Einträge gibt es „Als PDF drucken“. Der Ausdruck enthält alle Einsätze, Übungen und Streckendurchgänge des Jahres samt Abzeichnung sowie die G26.3-Nachweise. Im Druckfenster „Als PDF speichern“ wählen.",
