@@ -575,7 +575,7 @@ def test_transfer_moves_atemschutz_data_anonymised(world, monkeypatch):
     assert _rows("wehr-a1", "SELECT email, active FROM member WHERE id = ?", world.ids["anna"])[0][0] is None
     # neu: übernommen ohne Quellverweis und Notizen
     rows = _rows("wehr-a2", "SELECT * FROM agt_entry ORDER BY started_at")
-    assert len(rows) == 2 and all(r["source_kind"] is None and r["source_id"] is None and r["notes"] is None for r in rows)
+    assert len(rows) == 2 and all(r["source_kind"] is None and r["source_id"] is None and r["notes"] is None and r["keyword"] is None for r in rows)
     assert {r["duration_min"] for r in rows} == {40, 20} and {r["organisation"] for r in rows} == {None, "Werkfeuerwehr"}
     assert [tuple(r) for r in _rows("wehr-a2", "SELECT examined_on, valid_until FROM agt_medical")] == [("2025-02-01", "2026-02-01")]
     assert [r[0] for r in _rows("wehr-a2", "SELECT offsets FROM agt_reminder")] == ["[30]"]
