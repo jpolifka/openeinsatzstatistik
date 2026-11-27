@@ -165,3 +165,15 @@ def test_notify_person_when_email_is_set(world, monkeypatch):
     world.put(url, json={**body, "email": None})
     monkeypatch.setattr(mail, "enabled", lambda: False)
     assert world.put(url, json={**body, "notify": True}).json()["notice"] == "unavailable"
+
+
+def test_user_list_hides_atemschutz_access_and_ranks_roles(world):
+    with tenancy.central() as con:
+        tenant = con.execute("SELECT id FROM tenant WHERE slug = 'wehr-a1'").fetchone()[0]
+        tenancy.add_account(con, "agt@example.org")
+        tenancy.grant(con, "agt@example.org", "agt_self", tenant)
+    _as(world, "lead@example.org")
+    items = world.get("/api/admin/memberships").json()["memberships"]
+    assert "agt@example.org" not in {m["email"] for m in items}
+    rank = {m["role"]: m["rank"] for m in items}
+    assert rank["lead"] > rank["editor"]
