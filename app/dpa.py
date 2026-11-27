@@ -30,7 +30,7 @@ log = logging.getLogger("openeinsatzstatistik")
 router = APIRouter()
 access = auth.access
 
-TEMPLATE_VERSION = 3          # 2: Mailversand über das eigene Postfach statt Resend; 3: persönliche Atemschutz-Dokumentation (G26.3)
+TEMPLATE_VERSION = 4          # 2: Mailversand über das eigene Postfach statt Resend; 3: persönliche Atemschutz-Dokumentation (G26.3); 4: protokollierte Einsicht der Administration
 TEMPLATES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
 STATUSES = {
     "pending": "AVV ausstehend",

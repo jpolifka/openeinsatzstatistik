@@ -975,6 +975,30 @@ function sessionsSection() {
 
 // ------------------------------------------------------------ Atemschutz-Prüfung (nur Superadmin)
 // Nur Zahlen, Rechte-Abgleich und Zugriffsprotokoll – nie Inhalte oder Daten einzelner Personen.
+/** Einsicht für Superadmins (Support, Prüfung): nur lesend; jede Einsicht wird protokolliert und der Person angezeigt. */
+function agtInsightHtml() {
+  const c = admin.agtCheck, p = admin.agtPeople, person = admin.agtPerson;
+  const buttons = c.tenants.map((t) => `<button type="button" class="btn btn-light btn-small" data-admin-action="agt-people" data-slug="${esc(t.slug)}">${esc(t.name)}</button>`).join(" ");
+  let body = "";
+  if (person) {
+    const kinds = { einsatz: "Einsatz", uebung: "Übung", strecke: "Streckendurchgang" };
+    body = `<h4>${esc(person.name)}${person.email ? ` <span class="small muted">${esc(person.email)}</span>` : ""}</h4>
+      <p class="small">G26.3: ${person.medical.length ? person.medical.map((m) => `Untersuchung ${formatDate(m.examined_on)}, nächste Prüfung ${formatDate(m.valid_until)}`).map(esc).join(" · ") : "nicht erfasst"}
+        · Erinnerung: ${person.reminder.length ? person.reminder.map((d) => `${d} Tage`).join(", ") : "aus"}</p>
+      <div class="table-wrap"><table class="mini-table admin-table"><thead><tr><th>Datum</th><th>Art</th><th>Stichwort / Thema</th><th>Ort</th><th class="right">Dauer</th><th class="right">Druck</th><th>Fremd</th><th>Notiz</th></tr></thead>
+      <tbody>${person.entries.map((e) => `<tr><td>${formatDate(e.started_at)} ${formatTime(e.started_at)}</td><td>${esc(kinds[e.kind])}</td><td>${esc(e.keyword || "–")}</td>
+        <td>${esc(e.place || "–")}</td><td class="right">${formatDuration(e.duration_min)}</td><td class="right">${e.start_bar == null ? "–" : `${e.start_bar} → ${e.end_bar} bar`}</td>
+        <td>${e.external ? esc(e.organisation) : ""}</td><td>${esc(e.notes || "")}</td></tr>`).join("") || `<tr><td colspan="8" class="muted">Keine Einträge.</td></tr>`}</tbody></table></div>`;
+  } else if (p) {
+    body = `<div class="table-wrap"><table class="mini-table admin-table"><thead><tr><th>Person</th><th class="right">Einträge</th><th class="right">G26.3 gültig bis</th><th></th></tr></thead>
+      <tbody>${p.people.map((x) => `<tr><td>${esc(x.name)}</td><td class="right">${x.entries}</td><td class="right">${x.valid_until ? formatDate(x.valid_until) : "–"}</td>
+        <td class="right"><button type="button" class="btn btn-light btn-small" data-admin-action="agt-person" data-slug="${esc(p.slug)}" data-id="${x.id}">Einsehen</button></td></tr>`).join("")}</tbody></table></div>`;
+  }
+  return `<h3 class="section-gap">Einsicht (Support, Prüfung)</h3>
+    <p class="small muted">Nur lesend. <b>Jede Einsicht wird protokolliert und ist für die betroffene Person in ihrer Atemschutz-Ansicht sichtbar</b> (Zeitpunkt und deine Adresse). Bitte nur bei konkretem Anlass nutzen.</p>
+    <div class="admin-actions left">${buttons}${p || person ? ` <button type="button" class="btn btn-outline btn-small" data-admin-action="agt-close">Schließen</button>` : ""}</div>${body}`;
+}
+
 function agtCheckSection() {
   const c = admin.agtCheck;
   const flag = (n) => n ? `<span class="warn-text"><b>${n}</b></span>` : `<span class="muted">0</span>`;
@@ -985,7 +1009,7 @@ function agtCheckSection() {
   const events = c.tenants.flatMap((t) => t.events.map((e) => ({ ...e, tenant: t.name })))
     .sort((x, y) => y.at.localeCompare(x.at)).slice(0, 50);
   return `<h3>Atemschutz-Prüfung</h3>
-    <p class="small muted">Prüfansicht für Superadmins: nur Zahlen und Rechte – <b>keine Inhalte und keine Daten einzelner Personen</b>; auch Superadmins haben keinen Zugriff auf die Atemschutz-Dokumentation. Dieser Abruf wird in jeder Wehr protokolliert.</p>
+    <p class="small muted">Prüfansicht für Superadmins: Zahlen, Rechte und Zugriffe. Superadmins haben kein Atemschutz-Recht; die Einsicht unten ist eine eigene, lesende und protokollierte Funktion. Dieser Abruf wird in jeder Wehr protokolliert.</p>
     ${c.deviations.length ? errorBox(`Abweichende Rechte: ${c.deviations.join("; ")}`)
       : noticeBox("info", "Rechte in Ordnung", "Nur Wehrführer/in (eigene Daten und Auswertung), Wehrleiter/in und „Atemschutz (eigene Daten)“ (nur eigene Daten) tragen Atemschutz-Rechte.")}
     <p class="small">Erinnerungen per E-Mail: ${c.mail ? `eingerichtet (ab ${c.reminder_hour} Uhr)` : "Mailversand nicht eingerichtet – es werden keine Erinnerungen gesendet"}.</p>
@@ -994,6 +1018,7 @@ function agtCheckSection() {
       <th class="right" data-tip="Zugang ohne passende Person (aktiv, E-Mail) im Stamm">Zugang ohne Person</th>
       <th class="right">Personen mit Daten</th><th class="right">Einträge</th><th class="right">G26.3</th><th class="right">Erinnerungen</th></tr></thead>
       <tbody>${rows || `<tr><td colspan="9" class="muted">Keine Wehren.</td></tr>`}</tbody></table></div>
+    ${agtInsightHtml()}
     <h3 class="section-gap">Letzte Zugriffe</h3>
     <div class="table-wrap"><table class="mini-table admin-table"><thead><tr><th>Zeit</th><th>Wehr</th><th>Wer</th><th>Aktion</th></tr></thead>
       <tbody>${events.map((e) => `<tr><td>${esc(e.at)}</td><td>${esc(e.tenant)}</td><td>${esc(e.email)}</td><td>${esc(e.action)}</td></tr>`).join("")

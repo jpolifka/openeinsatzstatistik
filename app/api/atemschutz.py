@@ -80,7 +80,7 @@ def api_me(year: Optional[int] = Query(None, ge=2000, le=2100), a: tenancy.Acces
         year = year or dt.date.today().year
         return {"linked": True, "year": year, "years": own.years(), "entries": own.entries(year),
                 "totals": own.totals(year), "medical": own.medical(), "reminder": own.reminder(),
-                "reminder_days": list(atemschutz.REMINDER_DAYS), "mail": mail.enabled(),
+                "reminder_days": list(atemschutz.REMINDER_DAYS), "admin_access": own.admin_access(), "mail": mail.enabled(),
                 "kinds": atemschutz.KINDS, "bar_max": atemschutz.MAX_BAR,
                 "name": con.execute("SELECT name FROM member WHERE id = ?", (member_id,)).fetchone()["name"]}
 

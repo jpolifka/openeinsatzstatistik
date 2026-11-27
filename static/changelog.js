@@ -7,6 +7,13 @@
 const CHANGELOG = [
   {
     date: "2026-11-27",
+    version: "2026-11-27.4",
+    items: [
+      "<b>Einsicht durch die Administration:</b> Superadmins können die Atemschutz-Einträge einer Person für Support und Prüfung nur lesend einsehen. Jede Einsicht wird protokolliert und der Person in ihrer Atemschutz-Ansicht unter „Einsicht durch die Administration“ angezeigt.",
+    ],
+  },
+  {
+    date: "2026-11-27",
     version: "2026-11-27.3",
     items: [
       "<b>Atemschutz-Prüfung für Superadmins:</b> Unter Einstellungen → Atemschutz-Prüfung stehen je Wehr nur Zahlen (Personen, E-Mails, Zugänge, Einträge), der Abgleich der Rechte und die letzten Zugriffe der Wehrführung. Inhalte und Daten einzelner Personen zeigt sie nie.",
