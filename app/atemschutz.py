@@ -23,7 +23,7 @@ MAX_ENTRIES = 5000                   # je Person (Schutz vor Fluten)
 MAX_MEDICAL = 100
 LIMITS = {"place": 120, "keyword": 120, "organisation": 120, "notes": 1000}
 # Funktionen, die über mehrere Personen lesen dürfen (Allowlist für den Quelltexttest)
-SUMMARY_FUNCTIONS = ("summary", "summary_years", "reminder_candidates", "integrity", "recent_audit")
+SUMMARY_FUNCTIONS = ("summary", "summary_years", "reminder_candidates", "integrity", "recent_audit", "people_list")
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
@@ -283,6 +283,23 @@ class Own:
         self._log("agt.medical.delete")
         return self.medical()
 
+    # ------------------------------------------------------------ Einsicht durch Superadmins
+    def admin_view(self):
+        """Lesende Einsicht eines Superadmins (Support/Prüfung): alle Einträge der Person. Die Einsicht wird mit Person und
+        Zeitpunkt protokolliert und ist für die Person selbst sichtbar (admin_access)."""
+        self._log("agt.admin.view")
+        row = self.con.execute("SELECT name, email FROM member WHERE id = ?", (self.member_id,)).fetchone()
+        entries = [entry_json(r) for r in self.con.execute(
+            "SELECT * FROM agt_entry WHERE member_id = ? ORDER BY started_at DESC, id DESC", (self.member_id,))]
+        return {"id": self.member_id, "name": row["name"], "email": row["email"], "entries": entries,
+                "medical": self.medical(), "reminder": self.reminder()}
+
+    def admin_access(self, limit=20):
+        """Wer hat die Daten dieser Person als Superadmin eingesehen (zuletzt)."""
+        return [{"email": r["email"], "at": r["at"]} for r in self.con.execute(
+            "SELECT email, at FROM agt_audit WHERE member_id = ? AND action = 'agt.admin.view' ORDER BY id DESC LIMIT ?",
+            (self.member_id, limit))]
+
     # ------------------------------------------------------------ Wehrwechsel
     def export_anonymous(self):
         """Alles dieser Person für den Wechsel in eine andere Wehr – anonymisiert: ohne Verweise auf Einsätze und Übungen der
@@ -387,7 +404,15 @@ def integrity(con):
 
 def recent_audit(con, limit=20):
     """Letzte Vermerke des Zugriffsprotokolls über Zugriffe der Wehrführung und Prüfungen: wer, was, wann. Eigene Einträge
-    der Personen (wer pflegt Daten) bleiben außen vor, sie verrieten, wer Atemschutz-Daten führt."""
+    der Personen (wer pflegt Daten) bleiben außen vor."""
     return [{"email": r["email"], "action": r["action"], "at": r["at"]} for r in con.execute(
         "SELECT email, action, at FROM agt_audit WHERE action IN ('agt.summary.view', 'agt.check.view', 'agt.transfer.in', "
-        "'agt.transfer.out') ORDER BY id DESC LIMIT ?", (limit,))]
+        "'agt.transfer.out', 'agt.admin.list', 'agt.admin.view') ORDER BY id DESC LIMIT ?", (limit,))]
+
+
+def people_list(con):
+    """Aktive Personen einer Wehr mit Zahl der Einträge und Ablauf der G26.3 – nur für die Einsicht der Superadmins."""
+    return [dict(r) for r in con.execute(
+        "SELECT m.id, m.name, (SELECT COUNT(*) FROM agt_entry WHERE member_id = m.id) AS entries, "
+        "(SELECT MAX(valid_until) FROM agt_medical WHERE member_id = m.id) AS valid_until FROM member m "
+        "WHERE m.active = 1 ORDER BY m.name")]

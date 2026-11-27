@@ -420,7 +420,7 @@ const HELP_SECTIONS = [
   {
     id: "sec_atemschutz",
     title: "Atemschutz-Dokumentation",
-    intro: "Jede Person führt ihre <b>eigene</b> Atemschutz-Dokumentation: Einsätze, Übungen und Streckendurchgänge mit Ort, Dauer sowie Start- und Enddruck, dazu den Nachweis der G26.3. Der Reiter <b>Atemschutz</b> zeigt nur die eigenen Daten. Zugang bekommt, wessen E-Mail-Adresse die Wehrführung im Personenstamm eingetragen hat (Einstellungen → Personen); die Anmeldung läuft wie sonst per Link oder Code. <b>Niemand sieht die Einträge anderer Personen</b> – auch nicht die Wehrführung, der Wehrleiter oder Superadmins in der Anwendung.",
+    intro: "Jede Person führt ihre <b>eigene</b> Atemschutz-Dokumentation: Einsätze, Übungen und Streckendurchgänge mit Ort, Dauer sowie Start- und Enddruck, dazu den Nachweis der G26.3. Der Reiter <b>Atemschutz</b> zeigt nur die eigenen Daten. Zugang bekommt, wessen E-Mail-Adresse die Wehrführung im Personenstamm eingetragen hat (Einstellungen → Personen); die Anmeldung läuft wie sonst per Link oder Code. <b>Andere Personen sehen deine Einträge nicht</b> – auch nicht die Wehrführung (nur Summen) oder der Wehrleiter. Ausnahme: Superadmins der Anwendung können sie in Ausnahmefällen (Support, Prüfung) nur lesend einsehen; <b>jede Einsicht wird protokolliert und dir unter „Einsicht durch die Administration“ angezeigt.</b>",
     entries: {
       agt_entry: {
         title: "Eintrag erfassen",
@@ -581,7 +581,7 @@ const HELP_SECTIONS = [
       admin_agtcheck: {
         title: "Atemschutz-Prüfung",
         short: "Nur Superadmin: Zahlen, Rechte-Abgleich und Zugriffsprotokoll der Atemschutz-Dokumentation – ohne Inhalte.",
-        text: "Zeigt je Wehr, wie viele Personen eine E-Mail haben, ob jeder E-Mail ein Zugang entspricht (und umgekehrt), wie viele Einträge, G26.3-Nachweise und Erinnerungen es gibt, und die letzten Zugriffe (wer, was, wann). <b>Rechte in Ordnung</b> bestätigt, dass nur Wehrführer/in, Wehrleiter/in und „Atemschutz (eigene Daten)“ Atemschutz-Rechte tragen. Inhalte und Daten einzelner Personen zeigt die Prüfansicht nie; auch Superadmins können die Atemschutz-Dokumentation nicht einsehen. Jeder Abruf wird in jeder Wehr protokolliert.",
+        text: "Zeigt je Wehr, wie viele Personen eine E-Mail haben, ob jeder E-Mail ein Zugang entspricht (und umgekehrt), wie viele Einträge, G26.3-Nachweise und Erinnerungen es gibt, und die letzten Zugriffe (wer, was, wann). <b>Rechte in Ordnung</b> bestätigt, dass nur Wehrführer/in, Wehrleiter/in und „Atemschutz (eigene Daten)“ Atemschutz-Rechte tragen. Darunter steht die lesende <b>Einsicht</b> in die Atemschutz-Daten einzelner Personen für Support und Prüfung: Jede Einsicht wird protokolliert und der betroffenen Person in ihrer Atemschutz-Ansicht angezeigt. Jeder Abruf der Prüfansicht wird in jeder Wehr protokolliert.",
       },
       admin_roles: {
         title: "Rollen",
@@ -673,7 +673,7 @@ const HELP_SECTIONS = [
       perm_agt_own: {
         title: "Eigene Atemschutz-Dokumentation führen",
         short: "Nur die eigenen Atemschutz-Einträge und die eigene G26.3 sehen und pflegen.",
-        text: "Wehrführung, Wehrleitung und Personen mit der Rolle „Atemschutz (eigene Daten)“ führen ihre eigene Atemschutz-Dokumentation – nie die anderer Personen. Das Recht wird nicht vererbt (auch nicht an Stellvertreter), lässt sich nicht in eigene Rollen aufnehmen und steht Superadmins nicht automatisch zu. Die Person ergibt sich aus der angemeldeten E-Mail im Personenstamm.",
+        text: "Wehrführung, Wehrleitung und Personen mit der Rolle „Atemschutz (eigene Daten)“ führen ihre eigene Atemschutz-Dokumentation – nie die anderer Personen. Das Recht wird nicht vererbt (auch nicht an Stellvertreter), lässt sich nicht in eigene Rollen aufnehmen und steht Superadmins nicht als Recht zu (ihre lesende, protokollierte Einsicht ist eine eigene Funktion der Prüfansicht). Die Person ergibt sich aus der angemeldeten E-Mail im Personenstamm.",
       },
       perm_agt_evaluate: {
         title: "Atemschutz-Auswertung je Person ansehen",

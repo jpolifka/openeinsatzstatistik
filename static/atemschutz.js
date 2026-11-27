@@ -146,6 +146,14 @@ function agtEntriesHtml() {
     ${d.entries.length ? "" : `<p class="empty-note">Für ${d.year} ist noch nichts eingetragen.</p>`}</div>`;
 }
 
+/** Einsichten durch Superadmins (Support, Prüfung) in die eigenen Daten – für die Person immer sichtbar. */
+function agtAdminAccessHtml() {
+  const access = agt.data.admin_access || [];
+  return `<div class="card"><h3>Einsicht durch die Administration</h3>
+    <p class="small muted">Superadmins der Anwendung können deine Einträge in Ausnahmefällen (Support, Prüfung) nur lesend einsehen. Jede Einsicht wird hier vermerkt. Die Wehrführung sieht nur Summen.</p>
+    ${access.length ? `<ul class="plain small">${access.map((x) => `<li>${esc(x.at)} · ${esc(x.email)}</li>`).join("")}</ul>` : `<p class="small">Bisher keine Einsicht.</p>`}</div>`;
+}
+
 function renderAgt() {
   const section = $("#view-atemschutz"), d = agt.data;
   if (!d) { loadAgt().then(() => state.view === "atemschutz" && renderAgt()); return; }
@@ -158,13 +166,13 @@ function renderAgt() {
   const figures = Object.entries(d.kinds).map(([k, label]) => [formatDuration(totals[k].minutes), `${label} (${totals[k].count}×)`]);
   section.innerHTML = `
     <div class="card"><div class="toolbar"><div><h3>${esc(d.name)}</h3>
-      <p class="muted small">Nur du siehst diese Einträge – auch die Wehrführung sieht sie nicht einzeln, nur Summen. Fremdeinträge (Werkfeuerwehr, Berufsfeuerwehr) sind möglich.</p></div>
+      <p class="muted small">Diese Einträge sieht nur du – die Wehrführung sieht nur Summen; Superadmins können sie in Ausnahmefällen lesend einsehen (siehe unten, jede Einsicht wird vermerkt). Fremdeinträge (Werkfeuerwehr, Berufsfeuerwehr) sind möglich.</p></div>
       ${agtYearSelect(d.years, d.year, "data-agt-year")}</div>
       ${keyFigures(figures)}
       <div class="form-actions left"><button type="button" class="btn btn-primary btn-small" data-agt-action="new">Neuer Eintrag</button>
         <button type="button" class="btn btn-light btn-small" data-agt-action="candidates">Aus Einsatzstatistik übernehmen</button></div></div>
     ${agt.form ? agtFormHtml() : ""}${agt.candidates ? agtCandidatesHtml() : ""}
-    ${agtEntriesHtml()}${agtMedicalHtml()}`;
+    ${agtEntriesHtml()}${agtMedicalHtml()}${agtAdminAccessHtml()}`;
 }
 
 async function agtReload() { await loadAgt(); if (state.view === "atemschutz") renderAgt(); }

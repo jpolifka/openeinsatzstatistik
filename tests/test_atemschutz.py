@@ -650,3 +650,37 @@ def test_superadmin_check_finds_mismatches_and_wrong_rights(world):
 def test_only_superadmin_may_open_the_check(world, email):
     _as(world, email)
     assert world.get("/api/super/atemschutz").status_code == 403
+
+
+# ---------------------------------------------------------------- Einsicht der Superadmins (offen, lesend, protokolliert)
+def test_superadmin_insight_is_read_only_logged_and_visible_to_the_person(world):
+    _as(world, "anna@example.org")
+    world.post("/api/atemschutz/me/entries", json={**ENTRY, "notes": "Notiz", "keyword": "Strecke"})
+    assert world.get("/api/atemschutz/me").json()["admin_access"] == []
+    _as(world, "admin@example.org")
+    people = world.get("/api/super/atemschutz/wehr-a1/people").json()["people"]
+    anna = next(p for p in people if p["id"] == world.ids["anna"])
+    assert anna["entries"] == 1
+    person = world.get(f"/api/super/atemschutz/wehr-a1/people/{world.ids['anna']}").json()
+    assert person["name"] == "Beispiel, Anna" and person["entries"][0]["notes"] == "Notiz" and person["email"] == "anna@example.org"
+    # nur lesend
+    assert world.post(f"/api/super/atemschutz/wehr-a1/people/{world.ids['anna']}", json={}).status_code == 405
+    assert world.get("/api/super/atemschutz/wehr-a1/people/9999").status_code == 404
+    assert world.get("/api/super/atemschutz/gibt-es-nicht/people").status_code == 404
+    # die Person sieht die Einsicht, die Prüfansicht listet sie
+    _as(world, "anna@example.org")
+    access = world.get("/api/atemschutz/me").json()["admin_access"]
+    assert [a["email"] for a in access] == ["admin@example.org"]
+    _as(world, "berta@example.org")
+    assert world.get("/api/atemschutz/me").json()["admin_access"] == []                   # nur bei der betroffenen Person
+    _as(world, "admin@example.org")
+    events = next(t for t in world.get("/api/super/atemschutz").json()["tenants"] if t["slug"] == "wehr-a1")["events"]
+    assert {"agt.admin.list", "agt.admin.view"} <= {e["action"] for e in events}
+
+
+@pytest.mark.parametrize("email", ["lead@example.org", "vglead@example.org", "anna@example.org", "editor@example.org"])
+def test_only_superadmin_has_the_insight(world, email):
+    _as(world, email)
+    assert world.get("/api/super/atemschutz/wehr-a1/people").status_code == 403
+    assert world.get(f"/api/super/atemschutz/wehr-a1/people/{world.ids['berta']}").status_code == 403
+    assert _rows("wehr-a1", "SELECT COUNT(*) FROM agt_audit WHERE action LIKE 'agt.admin.%'")[0][0] == 0

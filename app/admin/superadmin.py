@@ -81,6 +81,34 @@ def super_atemschutz(a: tenancy.Access = Depends(access)):
     return {"tenants": result, "deviations": deviations, "mail": mail.enabled(), "reminder_hour": agt_reminders.HOUR}
 
 
+def _agt_tenant(slug):
+    with tenancy.central() as con:
+        row = con.execute("SELECT slug FROM tenant WHERE slug = ? AND active", (slug,)).fetchone()
+    if not row:
+        raise HTTPException(404, "Wehr nicht gefunden.")
+    return tenancy.tenant_path(slug)
+
+
+@router.get("/api/super/atemschutz/{slug}/people")
+def super_agt_people(slug: str, a: tenancy.Access = Depends(access)):
+    """Einsicht für Superadmins (Support, Prüfung): Personen einer Wehr mit Zahl der Einträge. Protokolliert."""
+    _superadmin(a)
+    with db.connection(_agt_tenant(slug)) as con:
+        atemschutz.audit(con, a.email, "agt.admin.list")
+        return {"people": atemschutz.people_list(con)}
+
+
+@router.get("/api/super/atemschutz/{slug}/people/{member_id}")
+def super_agt_person(slug: str, member_id: int, a: tenancy.Access = Depends(access)):
+    """Einsicht für Superadmins: alle Atemschutz-Daten einer Person, nur lesend. Jede Einsicht wird protokolliert und ist
+    für die Person selbst sichtbar."""
+    _superadmin(a)
+    with db.connection(_agt_tenant(slug)) as con:
+        if not con.execute("SELECT 1 FROM member WHERE id = ? AND active = 1", (member_id,)).fetchone():
+            raise HTTPException(404, "Person nicht gefunden.")
+        return atemschutz.Own(con, member_id, a.email).admin_view()
+
+
 class VgIn(BaseModel):
     slug: str = ""   # leer = aus dem Namen bilden; Benutzer sehen den Kurznamen nicht
     name: str = Field(min_length=2, max_length=80)

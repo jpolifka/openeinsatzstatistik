@@ -39,7 +39,7 @@ SELECTED = {
     "/api/trainings/{training_id}/checkins/{checkin_id}/accept", "/api/years",
 }
 SUPER = {
-    "/api/super/atemschutz", "/api/super/overview", "/api/super/sessions", "/api/super/sessions/{session_id}", "/api/super/tenants",
+    "/api/super/atemschutz", "/api/super/atemschutz/{slug}/people", "/api/super/atemschutz/{slug}/people/{member_id}", "/api/super/overview", "/api/super/sessions", "/api/super/sessions/{session_id}", "/api/super/tenants",
     "/api/super/tenants/{slug}", "/api/super/vgs", "/api/super/vgs/{slug}",
 }
 
@@ -74,7 +74,7 @@ def _fill(path, ids, own=False):
     """Platzhalter einer Route mit Werten der fremden Wehr B1 (own=True: der eigenen Wehr A1) belegen."""
     slug, vg = ("wehr-a1", "vg-a") if own else ("wehr-b1", "vg-b")
     values = {"{key}": f"{slug}:{ids[slug]}", "{slug}": slug, "{vg_slug}": vg, "{code}": "B2", "{name}": "logo",
-              "{schedule_id}": "1", "{role_id}": "1", "{job}": "x", "{notice_id}": "1", "{session_id}": "x",
+              "{schedule_id}": "1", "{role_id}": "1", "{job}": "x", "{member_id}": "1", "{notice_id}": "1", "{session_id}": "x",
               "{bks_record_id}": "1", "{key}_": ""}
     for placeholder, value in values.items():
         path = path.replace(placeholder, value)

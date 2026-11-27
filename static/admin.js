@@ -483,6 +483,17 @@ async function runAdminAction(button) {
       admin.memberships = admin.events = null;
       toast("Rolle gelöscht");
       return rerender();
+    case "agt-people":
+      admin.agtPeople = { slug: button.dataset.slug, ...(await api(`/api/super/atemschutz/${button.dataset.slug}/people`)) };
+      admin.agtPerson = null;
+      admin.agtCheck = await api("/api/super/atemschutz");
+      return rerender();
+    case "agt-person":
+      admin.agtPerson = { slug: button.dataset.slug, ...(await api(`/api/super/atemschutz/${button.dataset.slug}/people/${button.dataset.id}`)) };
+      return rerender();
+    case "agt-close":
+      admin.agtPeople = admin.agtPerson = null;
+      return rerender();
     case "session-end":
       if (!await askConfirm({ title: `Sitzung von ${email} beenden?`, text: "Die Person ist sofort abgemeldet.", confirm: "Sitzung beenden", danger: true })) return;
       admin.sessions = await api(`/api/super/sessions/${button.dataset.id}`, { method: "DELETE" });
