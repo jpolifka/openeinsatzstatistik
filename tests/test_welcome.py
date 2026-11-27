@@ -111,3 +111,14 @@ def test_new_tenant_sends_welcome_to_first_lead(make_client, monkeypatch):
     response = client.post("/api/super/tenants", json={"name": "Neue Wehr", "vg": "vg-a", "email": "erste@example.org"})
     assert response.status_code == 200
     assert sent == ["erste@example.org"]
+
+
+def test_cli_explains_unreadable_database(monkeypatch, capsys):
+    import sqlite3
+
+    def broken(*a, **k):
+        raise sqlite3.OperationalError("unable to open database file")
+
+    monkeypatch.setattr(welcome, "catch_up", broken)
+    assert welcome.main(["catch-up"]) == 1
+    assert "--user" in capsys.readouterr().out

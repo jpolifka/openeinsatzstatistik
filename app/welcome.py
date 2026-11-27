@@ -10,12 +10,14 @@ Inspekteur, Leitstellenleitung) zugeordnet bekommt, erhält einmal eine Mail mit
   sich wiederholen.
 - Nachversand für bereits angelegte Personen: `python -m app.welcome catch-up` zeigt, wer sie bekäme
   (Probelauf), `--send` verschickt sie. Wer sich schon angemeldet hat, wird übergangen (`--include-active` nimmt
-  auch sie mit).
+  auch sie mit). Im Container als Besitzer von ./daten ausführen (root darf die Datenbank wegen cap_drop nicht öffnen):
+  docker compose exec --user "$(stat -c %u:%g daten)" einsatzberichte python -m app.welcome catch-up
 - Ein Fehler beim Versand lässt das Zuordnen nie scheitern.
 """
 import html
 import logging
 import smtplib
+import sqlite3
 import sys
 
 from app import auth, login_mail, mail, tenancy
@@ -165,7 +167,12 @@ def main(argv):
     if send and not mail.enabled():
         print("SMTP_HOST ist nicht gesetzt – kein Versand möglich.")
         return 1
-    result = catch_up(send, "--include-active" in flags)
+    try:
+        result = catch_up(send, "--include-active" in flags)
+    except sqlite3.OperationalError as e:
+        print(f"Die Datenbank lässt sich nicht öffnen ({e}). Im Container als Besitzer des Datenordners aufrufen:\n"
+              '  docker compose exec --user "$(stat -c %u:%g daten)" einsatzberichte python -m app.welcome catch-up')
+        return 1
     for email, state in result.items():
         print(f"{email}\t{state}")
     if not send:
