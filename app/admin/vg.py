@@ -71,6 +71,7 @@ class VgTenantIn(BaseModel):
 class VgSettingsIn(BaseModel):
     bks_code: str = ""
     control_center: str = ""
+    control_center_night: str = ""
     places: List[PlaceIn] = []
     plan_min_level: int = domain.PLAN_MIN_LEVEL
     response_limits: List[int] = list(domain.RESPONSE_LIMITS)
@@ -129,6 +130,7 @@ def put_vg_settings(vg_slug: str, s: VgSettingsIn, a: tenancy.Access = Depends(a
                  "„FW MYK.ABC 02“ (bei gleichem Zeichen von Stadt und Landkreis mit „#“, z. B. NR#.ABC).")
     places = _check_places(s.places)
     values = {"bks_code": bks_code or None, "control_center": s.control_center.strip() or None,
+              "control_center_night": s.control_center_night.strip() or None,
               "places": list(places), "colors": _check_colors(s.colors), **_check_plan(s)}
     tenants = {t.slug: t for t in tenancy.vg_tenants(vg_id)}
     if not bks_code and any((t.station or "").strip() for t in s.tenants):
@@ -193,7 +195,7 @@ def _vg_fleet_json(vg_id):
         result.append({"slug": t.slug, "name": t.name, "fleet_version": version, "fleet": vehicles,
                        "substitutes": cfg.substitutes, "unit_prefix": cfg.unit_prefix,
                        "unused_data": {cs: n for cs, n in used.items() if cs not in cfg.vehicles}})
-    centers = {t.config.control_center for t in tenants}
+    centers = {c for t in tenants for c in t.config.control_centers}
     code = layer.value("bks_code")
     prefixes = tuple({t["unit_prefix"] for t in result if t["unit_prefix"]} | ({f"FL {code} "} if code else set()))
     unassigned = [{"name": n, "description": domain.call_sign_text(n), "types": _types(n),

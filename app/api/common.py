@@ -48,6 +48,17 @@ def names_for(tenant, incidents):
     return incidents if tenant.can(PEOPLE) else [{**i, "unit_leader": None} for i in incidents]
 
 
+def _list_flags(incident):
+    """Kennzeichen für die Filter der Einsatzliste, die die Auswertungen verlinken (wie in metrics)."""
+    keyword, subcode = incident.get("keyword"), incident.get("subcode")
+    alarm = domain.is_fire_alarm_system(keyword, subcode) or bool(incident.get("alarm_system"))
+    key = incident.get("alarm_system") or (incident.get("building") or "").strip() or None
+    return {"abort_kind": domain.abort_kind(incident.get("abort_reason")),
+            "alarm_key": (key or "-") if alarm else None,
+            "is_fire": domain.category_of(keyword) == "B" and not incident.get("abort_reason") and not alarm
+                       and not domain.is_fire_watch(keyword, subcode)}
+
+
 def incident_json(incident, leaders, tenant, limit=None, cfg=None):
     """Einsatz mit Kennzahlen für die Oberfläche. leaders: store.LeaderNames für die Einheitsführung-Auswahl.
     cfg: abweichende Konfiguration (Vorschau mit neu entdeckten Fahrzeugen), sonst die der Wehr.
@@ -76,6 +87,7 @@ def incident_json(incident, leaders, tenant, limit=None, cfg=None):
                                                  "crew_on_arrival", "crew_within_limit", "crew_within_second",
                                                  "crew_total")},
         "area": m["area"], "plan_relevant": m["plan_relevant"],     # Filter aus der Auswertung
+        **_list_flags(incident),
         "vehicles": vehicles,
         "people": [{"id": p["id"], "name": p["name"], "role": p.get("role"), "vehicle": p.get("vehicle"),
                     "new": p.get("new", False), "agt": bool(p.get("agt")), "agt_min": p.get("agt_min"),

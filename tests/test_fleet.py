@@ -130,3 +130,13 @@ def test_migration_fills_fleet_names(tmp_path):
     db.migrate(con)
     assert dict(con.execute("SELECT call_sign, name FROM fleet").fetchall()) == {
         "02/45": "FL NR#.MUS 02/45-01", "02/24": ""}
+
+
+def test_two_control_centers_are_recognised():
+    """Tages- und Nacht-FEZ zählen beide als FEZ (ohne leere und doppelte Einträge)."""
+    import dataclasses
+    from conftest import CFG
+    cfg = dataclasses.replace(CFG, control_center="FL NR#.LIN", control_center_night="FL NR#.NAC")
+    assert cfg.control_centers == ("FL NR#.LIN", "FL NR#.NAC")
+    assert cfg.is_control_center("FL NR#.NAC") and not cfg.is_control_center("FL NR#.XYZ")
+    assert dataclasses.replace(cfg, control_center_night="").control_centers == ("FL NR#.LIN",)

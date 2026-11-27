@@ -14,13 +14,15 @@ VIEWS.fire = { label: "Brand & Rettung", sub: "Brand & Rettung", load: loadEvalu
 
 const ABORT_LONG = { false_alarm: "Täuschung, technischer oder böswilliger Alarm, kein Ereignis" };
 const shareOfKnown = (part, total) => total ? percent(part / total) : "–";
+// Zahl als Link in die Einsatzliste (nur mit Einsätzen und wenn die Liste Rechte hat)
+const countLink = (count, filters) => count && can("incidents.view") ? `<a href="${esc(listLink(filters))}">${count}</a>` : String(count);
 const NOT_STATED = "ältere Berichte erneut einlesen, damit die Angabe übernommen wird";
 
 // ------------------------------------------------------------ Abbrüche & Anlagen
 function abortKindsCard(a) {
-  const items = a.kinds.map((k) => ({ label: k.label, value: k.count, text: `${k.count} · ${percent(k.share)}`,
+  const items = a.kinds.map((k) => ({ label: k.label, value: k.count, text: `${k.count} · ${percent(k.share)}`, link: k.count ? listLink({ abort: k.kind }) : null,
     tip: `${k.label}: ${k.count} von ${a.aborted} abgebrochenen Einsätzen` }));
-  const table = dataTable(["Grund", "Einsätze", "Anteil der Abbrüche"], a.kinds.map((k) => [esc(k.label), k.count, percent(k.share)]));
+  const table = dataTable(["Grund", "Einsätze", "Anteil der Abbrüche"], a.kinds.map((k) => [esc(k.label), countLink(k.count, { abort: k.kind }), percent(k.share)]));
   return chartCard({ id: "abort-kinds", title: `Warum wurden Einsätze abgebrochen?`,
     subtitle: "Gruppen nach dem Freitext „Einsatzabbruch“ des BKS-Berichts. Ein Abbruch heißt: Das Fahrzeug musste die Einsatzstelle nicht mehr erreichen.",
     chart: a.aborted ? barChart(items) : `<p class="empty-note">Im Jahr ${state.year} wurde kein Einsatz abgebrochen.</p>`, table });
@@ -45,9 +47,10 @@ function abortCategoriesCard(a) {
 function alarmSystemsCard(s, a) {
   const f = a.fire_alarm_systems;
   const name = (r) => !r.known ? "ohne Angabe von Anlage oder Objekt" : [r.building, r.system && `Anlage ${r.system}`].filter(Boolean).join(" · ");
-  const rows = s.rows.map((r) => [esc(name(r)), r.count, r.false_alarms, r.false_share == null ? "–" : percent(r.false_share), formatDate(r.last)]);
+  const key = (r) => r.system || (r.building || "").trim() || "-";
+  const rows = s.rows.map((r) => [esc(name(r)), countLink(r.count, { system: key(r) }), r.false_alarms, r.false_share == null ? "–" : percent(r.false_share), formatDate(r.last)]);
   const items = s.rows.filter((r) => r.known).slice(0, 12).map((r) => ({ label: name(r), value: r.count,
-    text: r.false_alarms ? `${r.count} · ${r.false_alarms} Fehlalarm` : String(r.count), tip: `${name(r)}: ${r.count} Einsätze, ${r.false_alarms} Fehlalarme` }));
+    text: r.false_alarms ? `${r.count} · ${r.false_alarms} Fehlalarm` : String(r.count), link: listLink({ system: key(r) }), tip: `${name(r)}: ${r.count} Einsätze, ${r.false_alarms} Fehlalarme` }));
   return chartCard({ id: "alarm-systems", title: `Brandmeldeanlagen`,
     subtitle: `Einsätze an Brandmeldeanlagen je Anlage bzw. Objekt – wenige Anlagen verursachen oft die meisten Alarme. ${esc(coverageText(s.identified, s.total))} mit Angabe von Anlage oder Objekt.`,
     chart: items.length ? barChart(items) : `<p class="empty-note">Keine Einsätze mit bekannter Anlage oder bekanntem Objekt${s.total ? ` – ${NOT_STATED}` : ""}.</p>`,
@@ -59,7 +62,7 @@ function renderAborts() {
   const e = state.evaluation, a = e.aborts, s = e.alarm_systems, f = a.fire_alarm_systems;
   const kind = (key) => a.kinds.find((k) => k.kind === key)?.count ?? 0;
   $("#view-aborts").innerHTML = evaluationToolbar({ exports: false }) + `<div class="kpis kpis-4">
-    ${analysisKpi(`Abgebrochene Einsätze`, a.aborted, esc(`${a.total ? percent(a.share) : "–"} von ${a.total} Einsätzen`))}
+    ${analysisKpi(`Abgebrochene Einsätze`, countLink(a.aborted, { abort: "any" }), esc(`${a.total ? percent(a.share) : "–"} von ${a.total} Einsätzen`))}
     ${analysisKpi("Fehlalarme", kind("false_alarm"), esc(ABORT_LONG.false_alarm))}
     ${analysisKpi(`An Brandmeldeanlagen`, f.count, esc(f.count ? `${shareOfKnown(f.aborted, f.count)} abgebrochen` : "keine Einsätze mit B2.07"))}
     ${analysisKpi("In Bereitstellung / nicht erforderlich", kind("standby") + kind("not_needed"), esc(`${plural(kind("standby"), "Einsatz", "Einsätze")} in Bereitstellung`))}
@@ -74,10 +77,10 @@ const vehicleName = (u) => u.label ? `${u.call_sign} · ${u.label}` : u.call_sig
 
 function vehicleUsageCard(v) {
   const unknown = v.rows.reduce((n, u) => n + u.unknown, 0), alerted = v.rows.reduce((n, u) => n + u.alerted, 0);
-  const items = v.rows.map((u) => ({ label: vehicleName(u), value: u.drove,
+  const items = v.rows.map((u) => ({ label: vehicleName(u), value: u.drove, link: u.alerted ? listLink({ vehicle: u.call_sign }) : null,
     text: `${u.drove}${u.standby ? ` · ${u.standby}× bereit` : ""}`,
     tip: `${vehicleName(u)}: ${u.alerted} Alarmierungen, ${u.drove} Ausfahrten, ${u.deployed} eingesetzt, ${u.standby} nur bereitgestellt` }));
-  const rows = v.rows.map((u) => [esc(vehicleName(u)), u.alerted, u.drove, u.deployed, u.standby, u.standby_share == null ? "–" : percent(u.standby_share),
+  const rows = v.rows.map((u) => [esc(vehicleName(u)), countLink(u.alerted, { vehicle: u.call_sign }), u.drove, u.deployed, u.standby, u.standby_share == null ? "–" : percent(u.standby_share),
     u.minutes_valid ? `${num(u.hours, 0)} h` : "–", u.crew_avg == null ? "–" : num(u.crew_avg)]);
   return chartCard({ id: "vehicle-usage", title: `Fahrzeugnutzung`,
     subtitle: "Wie oft wurde jedes Fahrzeug alarmiert, ist ausgerückt und tatsächlich eingesetzt worden? Grundlage für Alarm- und Ausrückeordnung und Beschaffung.",
@@ -89,7 +92,7 @@ function vehicleUsageCard(v) {
 
 function respiratoryCard(r) {
   const body = r.known ? keyFigures([
-    [`${r.with_agt} von ${r.known}`, "Einsätze mit Atemschutz"], [r.carriers, "Geräteträger (Stärke der Fahrzeuge)"],
+    [r.with_agt ? `<a href="${esc(listLink({ agt: 1 }))}">${r.with_agt} von ${r.known}</a>` : `${r.with_agt} von ${r.known}`, "Einsätze mit Atemschutz"], [r.carriers, "Geräteträger (Stärke der Fahrzeuge)"],
     [r.persons, "Personen mit Atemschutzzeit"], [`${r.minutes} min`, "Minuten unter Atemschutz"],
     [r.average_minutes == null ? "–" : `${num(r.average_minutes)} min`, "je Person im Mittel"],
     [r.longest_minutes == null ? "–" : `${r.longest_minutes} min`, "längster Einsatz einer Person"]])
@@ -139,7 +142,7 @@ const CASUALTY_LABELS = { rescued: "Menschen gerettet", rescued_animals: "Tiere 
 function casualtiesCard(c) {
   const rows = Object.entries(CASUALTY_LABELS).map(([key, label]) => {
     const f = c.fields[key];
-    return [esc(label), f.total, f.incidents, `${f.reported} von ${c.total}`];
+    return [esc(label), f.total, countLink(f.incidents, { casualty: key }), `${f.reported} von ${c.total}`];
   });
   const items = Object.entries(CASUALTY_LABELS).map(([key, label]) => ({ label, value: c.fields[key].total,
     tip: `${label}: ${c.fields[key].total} in ${plural(c.fields[key].incidents, "Einsatz", "Einsätzen")}` }));
@@ -151,7 +154,7 @@ function casualtiesCard(c) {
 function renderFire() {
   const e = state.evaluation, f = e.fire_course, c = e.casualties;
   $("#view-fire").innerHTML = evaluationToolbar({ exports: false }) + `<div class="kpis kpis-4">
-    ${analysisKpi(`Brandeinsätze`, f.total, "ohne Abbrüche, Brandmeldeanlagen, Brandwachen")}
+    ${analysisKpi(`Brandeinsätze`, countLink(f.total, { fire: 1 }), "ohne Abbrüche, Brandmeldeanlagen, Brandwachen")}
     ${analysisKpi("Bis „Brand unter Kontrolle“", minutes(f.to_control.median), esc(`Median ab Eintreffen · ${coverageText(f.to_control.valid, f.total)}`))}
     ${analysisKpi("Menschen gerettet", c.fields.rescued.total, esc(`in ${plural(c.fields.rescued.incidents, "Einsatz", "Einsätzen")}`))}
     ${analysisKpi("Verletzte", c.fields.injured.total + c.fields.injured_firefighters.total, esc(`${c.fields.injured_firefighters.total} davon Feuerwehrangehörige`))}

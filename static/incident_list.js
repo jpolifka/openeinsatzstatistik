@@ -50,6 +50,9 @@ const LIST_FILTERS = {
   month: (v) => new Date(2000, Number(v) - 1).toLocaleString("de-DE", { month: "long" }), weekday: (v) => WEEKDAYS[Number(v)] || v,
   hour: (v) => `${pad2(v)}–${pad2((Number(v) + 1) % 24)} Uhr`, area: (v) => v, level: (v) => `Alarmstufe ${v}`,
   missing: (v) => MISSING_LABELS[v] || v,
+  abort: (v) => v === "any" ? "abgebrochen" : `Abbruch: ${v}`, system: (v) => v === "-" ? "Anlage ohne Angabe" : `Anlage/Objekt ${v}`,
+  vehicle: (v) => `Fahrzeug ${v}`, agt: () => "mit Atemschutz", fire: () => "Brandeinsätze",
+  casualty: (v) => CASUALTY_LABELS[v] || v,
   plan: () => "Eintreffen und Kräfte", window: (v) => WINDOW_LABELS[v] || v, late: (v) => `nicht innerhalb ${v} Min.`,
 };
 
@@ -135,6 +138,12 @@ function matchesFilter(e) {
   if (f.area && e.area !== f.area) return false;
   if (f.level && levelOf(e.keyword) !== f.level) return false;
   if (f.missing && !lacks[f.missing]?.(e)) return false;
+  if (f.abort && !(f.abort === "any" ? e.abort_kind : e.abort_kind === f.abort)) return false;
+  if (f.system && e.alarm_key !== f.system) return false;
+  if (f.vehicle && !e.vehicles.some((v) => v.call_sign === f.vehicle && (v.alerted || v.departed || v.crew))) return false;
+  if (f.agt && !(e.vehicles.some((v) => v.respiratory > 0) || e.people.some((p) => p.agt))) return false;
+  if (f.fire && !e.is_fire) return false;
+  if (f.casualty && !(e[f.casualty] > 0)) return false;
   // Eintreffen und Kräfte wie in der Auswertung: relevante Einsätze mit Eintreffzeit
   if ((f.plan || f.window || f.late) && !(e.plan_relevant && e.on_time != null)) return false;
   if (f.window && (e.weekend_or_holiday !== f.window.startsWith("weekend") || e.daytime !== f.window.endsWith("_day"))) return false;
