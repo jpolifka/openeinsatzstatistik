@@ -380,6 +380,26 @@ def test_summary_has_only_totals(world):
     assert [tuple(r) for r in audit] == [("lead@example.org", "agt.summary.view")]
 
 
+def test_lead_sees_all_entries_of_a_person_without_notes(world):
+    _as(world, "anna@example.org")
+    world.post("/api/atemschutz/me/entries", json={**ENTRY, "notes": "geheim", "place": "Übungsort"})
+    world.post("/api/atemschutz/me/medical", json={"examined_on": "2025-02-01", "valid_until": "2026-02-01"})
+    anna = world.ids["anna"]
+    _as(world, "lead@example.org")
+    r = world.get(f"/api/atemschutz/people/{anna}?year=2025")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["name"] and len(body["entries"]) == 1 and body["entries"][0]["place"] == "Übungsort"
+    assert body["medical"] == [{"examined_on": "2025-02-01", "valid_until": "2026-02-01"}]
+    assert "geheim" not in r.text and "@" not in r.text
+    audit = _rows("wehr-a1", "SELECT email, action, member_id FROM agt_audit WHERE action = 'agt.person.view'")
+    assert [tuple(x) for x in audit] == [("lead@example.org", "agt.person.view", anna)]
+    assert world.get("/api/atemschutz/people/99999").status_code == 404
+    for email in ("editor@example.org", "anna@example.org"):
+        _as(world, email)
+        assert world.get(f"/api/atemschutz/people/{anna}").status_code == 403
+
+
 def test_audit_log_is_append_only_and_free_of_values(world):
     _as(world, "anna@example.org")
     world.post("/api/atemschutz/me/entries", json=ENTRY)

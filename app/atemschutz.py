@@ -5,7 +5,8 @@ Harte Leitplanken (siehe Tests in tests/test_atemschutz.py):
 - Alles, was eine Person sieht oder ändert, läuft über `Own(con, member_id)`; jede SQL-Anweisung dort enthält
   `member_id = ?` – auch bei Änderung und Löschen (eine Eintrags-ID allein reicht nie).
 - Die Person wird nie vom Aufrufer genannt, sondern aus der angemeldeten E-Mail bestimmt (`member_for`).
-- Personenübergreifend lesen nur die Funktionen der Wehrführung: `summary` (nur Summen) und die Abzeichnung einzelner
+- Personenübergreifend lesen nur die Funktionen der Wehrführung: `summary` (nur Summen), das Nachhalten je Person
+  (`person_detail`: alle Einträge ohne Notizen und G26.3, protokolliert) und die Abzeichnung einzelner
   Einträge (`cosign_list`, `cosign`, `uncosign`); sie stehen in SUMMARY_FUNCTIONS, und der Test über den Quelltext lässt
   nur dort SQL ohne `member_id` zu. Abgezeichnet wird mit dem Namen der abzeichnenden Person; die Abzeichnung gilt nur für
   die abgezeichnete Revision des Eintrags.
@@ -26,7 +27,7 @@ MAX_MEDICAL = 100
 LIMITS = {"place": 120, "keyword": 120, "organisation": 120, "notes": 1000}
 # Funktionen, die über mehrere Personen lesen dürfen (Allowlist für den Quelltexttest)
 SUMMARY_FUNCTIONS = ("summary", "summary_years", "reminder_candidates", "integrity", "recent_audit", "people_list",
-                     "signer_name", "cosign_list", "cosign", "uncosign")
+                     "signer_name", "cosign_list", "cosign", "uncosign", "person_detail")
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
@@ -370,7 +371,7 @@ class Own:
         return self.reminder()
 
 
-# ---------------------------------------------------------------- Auswertung der Wehrführung (nur Summen)
+# ---------------------------------------------------------------- Auswertung der Wehrführung
 def summary(con, year):
     """Je aktiver Person Minuten und Anzahl im Jahr (nach Art) und G26.3 gültig bis. Keine Einzeleinträge, Drücke, Orte
     oder Notizen."""
@@ -420,7 +421,7 @@ def recent_audit(con, limit=20):
     return [{"email": r["email"], "action": r["action"], "at": r["at"]} for r in con.execute(
         "SELECT email, action, at FROM agt_audit WHERE action IN ('agt.summary.view', 'agt.check.view', 'agt.transfer.in', "
         "'agt.transfer.out', 'agt.admin.list', 'agt.admin.view', 'agt.cosign.view', 'agt.cosign.sign', "
-        "'agt.cosign.unsign') ORDER BY id DESC LIMIT ?", (limit,))]
+        "'agt.cosign.unsign', 'agt.person.view') ORDER BY id DESC LIMIT ?", (limit,))]
 
 
 def people_list(con):
@@ -480,3 +481,18 @@ def uncosign(con, entry_id, email):
         raise NotFound
     con.execute("DELETE FROM agt_cosign WHERE entry_id = ?", (entry_id,))
     audit(con, email, "agt.cosign.unsign", row["member_id"])
+
+
+def person_detail(con, member_id, year, email):
+    """Nachhalten durch die Wehrführung: alle Einträge einer aktiven Person im Jahr (ohne Notizen, mit Stand der
+    Abzeichnung) und ihre G26.3-Nachweise. Jeder Abruf wird mit Person protokolliert."""
+    row = con.execute("SELECT name FROM member WHERE id = ? AND active = 1", (member_id,)).fetchone()
+    if not row:
+        raise NotFound
+    own = Own(con, member_id, email)
+    audit(con, email, "agt.person.view", member_id)
+    entries = own.entries(year)
+    for e in entries:
+        e.pop("notes", None)
+    return {"id": member_id, "name": row["name"], "year": year, "entries": entries, "totals": own.totals(year),
+            "medical": [{k: m[k] for k in ("examined_on", "valid_until")} for m in own.medical()]}

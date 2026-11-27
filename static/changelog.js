@@ -7,6 +7,21 @@
 const CHANGELOG = [
   {
     date: "2026-11-27",
+    version: "2026-11-27.7",
+    items: [
+      "<b>Atemschutz nachhalten:</b> Wehrführung und Stellvertretung sehen unter Atemschutz → Auswertung per Klick auf den Namen alle Einträge einer Person (Einsätze, Übungen, Strecken mit Dauer, Ort, Druck und Abzeichnung) und ihre G26.3-Nachweise – ohne Notizen – und können das als PDF drucken. Jeder Abruf wird protokolliert. Der Auftragsverarbeitungsvertrag hat dazu eine neue Fassung.",
+    ],
+  },
+  {
+    date: "2026-11-27",
+    version: "2026-11-27.6",
+    items: [
+      "<b>Atemschutz-Nachweis drucken:</b> Unter Atemschutz → Meine Einträge gibt es „Als PDF drucken“. Der Ausdruck enthält alle Einsätze, Übungen und Streckendurchgänge des Jahres samt Abzeichnung sowie die G26.3-Nachweise. Im Druckfenster „Als PDF speichern“ wählen.",
+      "<b>Atemschutz-Auswertung drucken:</b> Auch die Auswertung der Wehrführung lässt sich als PDF drucken (Summen je Person und G26.3-Ablauf, weiterhin ohne Einzeleinträge).",
+    ],
+  },
+  {
+    date: "2026-11-27",
     version: "2026-11-27.5",
     items: [
       "<b>Atemschutz abzeichnen:</b> Wehrführung und Stellvertretung zeichnen einzelne Atemschutz-Einträge unter Atemschutz → Abzeichnen mit ihrem Namen ab (ohne Notizen). Die Person sieht in ihrer Liste, wer abgezeichnet hat; nach einer Änderung gilt die Abzeichnung als veraltet. Das Signieren von Einsätzen und Übungen entfällt. Der Auftragsverarbeitungsvertrag hat dazu eine neue Fassung.",
