@@ -133,10 +133,10 @@ def test_migration_fills_fleet_names(tmp_path):
 
 
 def test_two_control_centers_are_recognised():
-    """Tages- und Nacht-FEZ zählen beide als FEZ (ohne leere und doppelte Einträge)."""
+    """Zwei FEZ zählen beide als FEZ (ohne leere und doppelte Einträge)."""
     import dataclasses
     from conftest import CFG
-    cfg = dataclasses.replace(CFG, control_center="FL NR#.LIN", control_center_night="FL NR#.NAC")
+    cfg = dataclasses.replace(CFG, control_center="FL NR#.LIN", control_center_2="FL NR#.NAC")
     assert cfg.control_centers == ("FL NR#.LIN", "FL NR#.NAC")
     assert cfg.is_control_center("FL NR#.NAC") and not cfg.is_control_center("FL NR#.XYZ")
-    assert dataclasses.replace(cfg, control_center_night="").control_centers == ("FL NR#.LIN",)
+    assert dataclasses.replace(cfg, control_center_2="").control_centers == ("FL NR#.LIN",)

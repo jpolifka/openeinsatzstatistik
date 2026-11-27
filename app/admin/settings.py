@@ -50,7 +50,7 @@ class SettingsIn(BaseModel):
     own_prefix: str = ""
     unit_marker: str = ""
     control_center: str = ""
-    control_center_night: str = ""
+    control_center_2: str = ""
     places: List[PlaceIn] = []
     plan_places: List[str] = []
     plan_min_level: int = domain.PLAN_MIN_LEVEL
@@ -103,7 +103,7 @@ def _settings_json(tenant, cfg):
         "fleet": [_vehicle_json(v, cfg, used) for v in cfg.fleet],
         "unused_data": {cs: n for cs, n in used.items() if cs not in cfg.vehicles},
         "substitutes": cfg.substitutes,
-        **{key: getattr(cfg, key) for key in ("unit_prefix", "own_prefix", "unit_marker", "control_center", "control_center_night",
+        **{key: getattr(cfg, key) for key in ("unit_prefix", "own_prefix", "unit_marker", "control_center", "control_center_2",
                                                "plan_places", "plan_min_level", "response_limits", "default_limit",
                                                "second_limit", "day_hours", "numbering", "response_plan_public")},
         "bks_code": bks_code, "station": station,
@@ -276,7 +276,7 @@ def _check_settings(s: SettingsIn):
         name=s.name.strip(), colors=colors, substitutes=substitutes, fleet=fleet,
         unit_prefix=unit_prefix, own_prefix=own_prefix, unit_marker=unit_marker,
         control_center=s.control_center.strip() or domain.CONTROL_CENTER,
-        control_center_night=s.control_center_night.strip(),
+        control_center_2=s.control_center_2.strip(),
         places=names, plan_places=tuple(s.plan_places), response_plan_public=s.response_plan_public, **_check_plan(s))
 
 

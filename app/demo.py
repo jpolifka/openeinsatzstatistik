@@ -61,7 +61,7 @@ def make_config(name, station, fleet, vg_layer):
     prefix = f"FL {BKS_CODE} "
     vehicles = tuple(Vehicle(f"{station}/{number}", label=label, name=f"{prefix}{station}/{number}-01")
                      for number, label in fleet)
-    values = {key: vg_layer.value(key) for key in ("control_center", "control_center_night", "places", "plan_min_level", "response_limits",
+    values = {key: vg_layer.value(key) for key in ("control_center", "control_center_2", "places", "plan_min_level", "response_limits",
                                                    "default_limit", "second_limit", "day_hours", "numbering")}
     return TenantConfig(name=name, fleet=vehicles, unit_prefix=prefix, own_prefix=f"{station}/",
                         unit_marker=f"FW {BKS_CODE} {station}", plan_places=(name.split()[-1],),

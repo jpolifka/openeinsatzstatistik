@@ -9,7 +9,7 @@ const CHANGELOG = [
     date: "2026-11-27",
     version: "2026-11-27.9",
     items: [
-      "<b>Tages- und Nacht-FEZ:</b> In den Einstellungen (BKS-Kennung) lassen sich jetzt zwei FEZ eintragen – eine für tagsüber und eine für nachts. Beide werden im Bericht erkannt und zählen für das Einsatzende. Nutzen mehrere Verbandsgemeinden dieselbe FEZ, trägt jede VG dieselbe Kennung ein.",
+      "<b>Zwei FEZ:</b> In den Einstellungen (BKS-Kennung) lassen sich jetzt zwei FEZ eintragen (FEZ 1 und FEZ 2, z. B. für Tag und Nacht). Beide werden im Bericht erkannt und zählen für das Einsatzende. Nutzen mehrere Verbandsgemeinden dieselbe FEZ, trägt jede VG dieselbe Kennung ein.",
       "<b>Einsätze direkt aus der Auswertung:</b> In „Abbrüche & Anlagen“, „Fahrzeuge & Atemschutz“ und „Brand & Rettung“ führen Zahlen und Balken (Abbruchgrund, Anlage/Objekt, Fahrzeug, Atemschutz, Brandeinsätze, Personenschäden) in die passend gefilterte Einsatzliste.",
     ],
   },

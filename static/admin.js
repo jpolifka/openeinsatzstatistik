@@ -238,7 +238,7 @@ function inputValue(input) {
 
 
 // ------------------------------------------------------------ Aktionen
-const VG_DEFAULT_KEYS = ["bks_code", "control_center", "control_center_night", "places", "plan_min_level", "response_limits", "default_limit",
+const VG_DEFAULT_KEYS = ["bks_code", "control_center", "control_center_2", "places", "plan_min_level", "response_limits", "default_limit",
   "second_limit", "day_hours", "numbering"];
 
 function settingsPayload() {
