@@ -7,6 +7,13 @@
 const CHANGELOG = [
   {
     date: "2026-11-27",
+    version: "2026-11-27.2",
+    items: [
+      "<b>Wehrwechsel mit Atemschutz-Dokumentation:</b> Wechselt eine Person in eine andere Wehr der Verbandsgemeinde, nimmt sie ihre E-Mail und ihre Atemschutz-Einträge mit – anonymisiert (ohne Verweise auf Einsätze und Übungen der bisherigen Wehr, ohne Notizen). In der bisherigen Wehr wird alles gelöscht.",
+    ],
+  },
+  {
+    date: "2026-11-27",
     items: [
       "<b>Atemschutz-Dokumentation:</b> Neuer Reiter „Atemschutz“. Jede Person führt dort ihre eigenen Einsätze, Übungen und Streckendurchgänge (Ort, Dauer, Start- und Enddruck) sowie den G26.3-Nachweis – auch Einträge aus einer Werk- oder Berufsfeuerwehr. Einsätze und Übungen lassen sich aus der Einsatzstatistik übernehmen. Auf Wunsch erinnert eine E-Mail 2 Monate, 1 Monat und 2 Wochen vor Ablauf der G26.3.",
       "<b>Zugang über die E-Mail im Personenstamm:</b> Die Wehrführung trägt die E-Mail-Adresse unter Einstellungen → Personen ein; damit sieht die Person nach der Anmeldung nur ihre eigene Atemschutz-Ansicht. Andere Personen sind nie einsehbar. Die Wehrführung sieht unter Atemschutz → Auswertung nur Summen je Person und den Ablauf der G26.3.",

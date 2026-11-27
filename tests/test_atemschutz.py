@@ -549,3 +549,68 @@ def test_due_offset_rules():
     assert due_offset(valid, (60, 30, 14), dt.date(2026, 2, 10)) == (30, [30, 60])
     assert due_offset(valid, (60, 30, 14), dt.date(2026, 2, 10), sent={30, 60}) == (None, [30, 60])
     assert due_offset(valid, (60, 30, 14), dt.date(2026, 3, 2)) == (None, [])
+
+
+# ---------------------------------------------------------------- Wehrwechsel
+def _second_wehr(world):
+    make_tenant("wehr-a2", "vg-a")
+    grant("lead@example.org", "lead", tenancy_id(world, "wehr-a2"))
+
+
+def test_transfer_moves_atemschutz_data_anonymised(world, monkeypatch):
+    monkeypatch.setattr("app.mail.SMTP_HOST", "smtp.example.org")
+    _second_wehr(world)
+    _as(world, "anna@example.org")
+    world.post("/api/atemschutz/me/entries", json={"source": {"kind": "incident", "id": world.ids["incident"]},
+                                                   "duration_min": 40, "start_bar": 300, "end_bar": 100, "notes": "mit Max M."})
+    world.post("/api/atemschutz/me/entries", json={**ENTRY, "external": True, "organisation": "Werkfeuerwehr", "kind": "uebung"})
+    world.post("/api/atemschutz/me/medical", json={"examined_on": "2025-02-01", "valid_until": "2026-02-01"})
+    world.put("/api/atemschutz/me/reminder", json={"offsets": [30]})
+    _as(world, "lead@example.org")
+    done = world.post(f"/api/admin/wehr-a1/members/{world.ids['anna']}/transfer", json={"to_slug": "wehr-a2"})
+    assert done.status_code == 200, done.text
+    # alt: nichts mehr, kein Zugang
+    for table in ("agt_entry", "agt_medical", "agt_reminder"):
+        assert _rows("wehr-a1", f"SELECT COUNT(*) FROM {table} WHERE member_id = ?", world.ids["anna"])[0][0] == 0
+    assert _rows("wehr-a1", "SELECT email, active FROM member WHERE id = ?", world.ids["anna"])[0][0] is None
+    # neu: übernommen ohne Quellverweis und Notizen
+    rows = _rows("wehr-a2", "SELECT * FROM agt_entry ORDER BY started_at")
+    assert len(rows) == 2 and all(r["source_kind"] is None and r["source_id"] is None and r["notes"] is None for r in rows)
+    assert {r["duration_min"] for r in rows} == {40, 20} and {r["organisation"] for r in rows} == {None, "Werkfeuerwehr"}
+    assert [tuple(r) for r in _rows("wehr-a2", "SELECT examined_on, valid_until FROM agt_medical")] == [("2025-02-01", "2026-02-01")]
+    assert [r[0] for r in _rows("wehr-a2", "SELECT offsets FROM agt_reminder")] == ["[30]"]
+    # Zugang folgt der Person
+    _as(world, "anna@example.org", scope="t:wehr-a2")
+    state = world.get("/api/atemschutz/me?year=2025").json()
+    assert state["linked"] and len(state["entries"]) == 2 and state["medical"][0]["valid_until"] == "2026-02-01"
+    _as(world, "anna@example.org", scope="t:wehr-a1")
+    assert world.get("/api/config").json()["tenant"]["slug"] == "wehr-a2"           # in a1 keine Zuordnung mehr
+    assert [tuple(r) for r in _rows("wehr-a1", "SELECT action FROM agt_audit WHERE action = 'agt.transfer.out'")]
+
+
+def test_transfer_conflicting_email_in_target_changes_nothing(world):
+    _second_wehr(world)
+    _as(world, "anna@example.org")
+    world.post("/api/atemschutz/me/entries", json=ENTRY)
+    with db.connection(tenancy.tenant_path("wehr-a2")) as con:
+        member = store.MemberDirectory(con).find_or_create("Beispiel", "Anna")
+        con.execute("UPDATE member SET email = 'andere@example.org' WHERE id = ?", (member,))
+    _as(world, "lead@example.org")
+    done = world.post(f"/api/admin/wehr-a1/members/{world.ids['anna']}/transfer", json={"to_slug": "wehr-a2"})
+    assert done.status_code == 409
+    assert _rows("wehr-a1", "SELECT COUNT(*) FROM agt_entry")[0][0] == 1
+    assert _rows("wehr-a2", "SELECT COUNT(*) FROM agt_entry")[0][0] == 0
+
+
+def test_transfer_twice_does_not_duplicate(world):
+    _second_wehr(world)
+    _as(world, "anna@example.org")
+    world.post("/api/atemschutz/me/entries", json=ENTRY)
+    with db.connection(tenancy.tenant_path("wehr-a1")) as con:
+        package = atemschutz.Own(con, world.ids["anna"]).export_anonymous()
+    with db.connection(tenancy.tenant_path("wehr-a2")) as con:
+        member = store.MemberDirectory(con).find_or_create("Beispiel", "Anna")
+        own = atemschutz.Own(con, member)
+        own.absorb(package)
+        own.absorb(package)
+        assert len(own.entries(2025)) == 1
