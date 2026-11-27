@@ -13,7 +13,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from app import atemschutz, auth, mail, names, signoff, store, tenancy
+from app import atemschutz, audit, auth, mail, names, store, tenancy
 from app.admin.common import access, log
 from app.rbac import SETTINGS
 
@@ -109,7 +109,7 @@ def _csa(body, current, con, email, member_id):
     """Neuer Stand der Fähigkeit CSA (fehlt das Feld, bleibt sie); jede Änderung steht im Protokoll."""
     if body.csa is None or int(body.csa) == int(current):
         return int(current)
-    signoff.audit(con, email, "csa.set" if body.csa else "csa.unset", "member", member_id)
+    audit.audit(con, email, "csa.set" if body.csa else "csa.unset", "member", member_id)
     return int(body.csa)
 
 
@@ -197,7 +197,7 @@ def create_member(slug: str, body: PersonIn, a: tenancy.Access = Depends(access)
             "VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM member), ?, ?, ?)",
             (_display(last, first), last, first, int(body.active), email, int(bool(body.csa)))).lastrowid
         if body.csa:
-            signoff.audit(con, a.email, "csa.set", "member", member_id)
+            audit.audit(con, a.email, "csa.set", "member", member_id)
         _sync_access(tenant, None, email if body.active else None)
         log.info("Person %s in %s angelegt", member_id, slug)
         return _listing(con)
@@ -239,7 +239,7 @@ def merge_member(slug: str, member_id: int, body: MergeIn, a: tenancy.Access = D
             con.execute(f"UPDATE {table} SET member_id = ? WHERE member_id = ?", (body.into, member_id))
         if source["csa"] and not target["csa"]:
             con.execute("UPDATE member SET csa = 1 WHERE id = ?", (body.into,))
-            signoff.audit(con, a.email, "csa.set", "member", body.into, "durch Zusammenführen")
+            audit.audit(con, a.email, "csa.set", "member", body.into, "durch Zusammenführen")
         con.execute("DELETE FROM member WHERE id = ?", (member_id,))
         log.info("Person %s mit %s in %s zusammengeführt", source["id"], target["id"], slug)
         return _listing(con)

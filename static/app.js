@@ -249,7 +249,7 @@ const NAV = [
   { key: "incidents", label: "Einsätze", views: ["incidents", "trainings", "fees", "records"] },
   { key: "evaluation", label: "Auswertungen", views: ["evaluation", "times", "load", "aborts", "resources", "fire"] },
   { key: "members", label: "Personal", views: ["members", "training_members"] },
-  { key: "atemschutz", label: "Atemschutz", views: ["atemschutz", "agt_eval"] },
+  { key: "atemschutz", label: "Atemschutz", views: ["atemschutz", "agt_eval", "agt_cosign"] },
   { key: "admin", label: "Einstellungen", views: ["admin", "dpa"] },
 ];
 const navGroup = (view) => NAV.find((g) => g.views.includes(view));

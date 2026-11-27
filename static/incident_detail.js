@@ -116,18 +116,6 @@ function reportDetailsPanel(e) {
     `<dt>${label}</dt><dd>${esc(value)}</dd>`).join("")}</dl></div>`;
 }
 
-/** Stand der Signatur (Wehrführung bzw. Stellvertretung) und der Knopf zum Signieren bzw. Zurücknehmen. */
-function signatureHtml(item, kind) {
-  const s = item.signature, attr = `data-${kind === "incident" ? "action" : "tr-action"}`;
-  const badge = !s ? `<span class="muted small">nicht signiert</span>`
-    : s.valid ? `<span class="tenant-badge signed">signiert am ${formatDateTime(s.at)}</span>`
-      : `<span class="tenant-badge stale" data-tip="Seit der Signatur am ${formatDate(s.at)} wurde der Eintrag geändert.">Signatur veraltet – erneut prüfen</span>`;
-  const button = !item.can_sign ? "" : s?.valid
-    ? `<button type="button" class="btn btn-outline btn-small" ${attr}="unsign" data-id="${item.id}">Signatur zurücknehmen</button>`
-    : `<button type="button" class="btn btn-light btn-small" ${attr}="sign" data-id="${item.id}">${s ? "Erneut signieren" : "Signieren"}</button>`;
-  return `<span class="signature">${badge} ${button}</span>`;
-}
-
 function incidentDetail(e) {
   const limit = config.default_limit;
   return `<div class="detail-grid">
@@ -159,7 +147,6 @@ function incidentDetail(e) {
     <div class="panel full">${attendancePanel(e)}</div>
     <div class="actions panel full bare">
       ${stepButtons(e)}
-      ${signatureHtml(e, "incident")}
       ${e.can_delete ? `<button type="button" class="btn btn-outline btn-small" data-action="delete" data-id="${e.id}">Löschen</button>` : ""}
       ${e.can_edit ? `<button type="button" class="btn btn-light btn-small" data-action="edit" data-id="${e.id}" data-tip="Taste e">Bearbeiten</button>` : ""}
     </div>
@@ -434,15 +421,6 @@ async function handleIncidentAction(action, id, el) {
   }
   if (action === "cancel") { if (await confirmLeaveEdit()) renderIncidents(); return; }
   if (action === "delete") { deleteIncident(id); return; }
-  if (action === "sign" || action === "unsign") {
-    const incident = state.incidents.incidents.find((x) => x.id === id);
-    try {
-      await apiJson(`/api/incidents/${encodeURIComponent(id)}/sign`, "POST", { revision: incident.revision, signed: action === "sign" });
-      toast(action === "sign" ? "Einsatz signiert." : "Signatur zurückgenommen.");
-      await reloadData();
-    } catch (err) { toast(err.message); }
-    return;
-  }
   if (action === "add-person") { addDraftPerson(formOf(el)); return; }
   if (action === "remove-person") {
     state.editDraft.people.splice(Number(el.dataset.index), 1);

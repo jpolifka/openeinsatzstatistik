@@ -420,7 +420,7 @@ const HELP_SECTIONS = [
   {
     id: "sec_atemschutz",
     title: "Atemschutz-Dokumentation",
-    intro: "Jede Person führt ihre <b>eigene</b> Atemschutz-Dokumentation: Einsätze, Übungen und Streckendurchgänge mit Ort, Dauer sowie Start- und Enddruck, dazu den Nachweis der G26.3. Der Reiter <b>Atemschutz</b> zeigt nur die eigenen Daten. Zugang bekommt, wessen E-Mail-Adresse die Wehrführung im Personenstamm eingetragen hat (Einstellungen → Personen); die Anmeldung läuft wie sonst per Link oder Code. <b>Andere Personen sehen deine Einträge nicht</b> – auch nicht die Wehrführung (nur Summen) oder der Wehrleiter. Ausnahme: Superadmins der Anwendung können sie in Ausnahmefällen (Support, Prüfung) nur lesend einsehen; <b>jede Einsicht wird protokolliert und dir unter „Einsicht durch die Administration“ angezeigt.</b>",
+    intro: "Jede Person führt ihre <b>eigene</b> Atemschutz-Dokumentation: Einsätze, Übungen und Streckendurchgänge mit Ort, Dauer sowie Start- und Enddruck, dazu den Nachweis der G26.3. Der Reiter <b>Atemschutz</b> zeigt nur die eigenen Daten. Zugang bekommt, wessen E-Mail-Adresse die Wehrführung im Personenstamm eingetragen hat (Einstellungen → Personen); die Anmeldung läuft wie sonst per Link oder Code. <b>Andere Personen sehen deine Einträge nicht</b> – auch nicht die Wehrführung (Summen; einzelne Einträge nur zum Abzeichnen, ohne Notizen) oder der Wehrleiter. Ausnahme: Superadmins der Anwendung können sie in Ausnahmefällen (Support, Prüfung) nur lesend einsehen; <b>jede Einsicht wird protokolliert und dir unter „Einsicht durch die Administration“ angezeigt.</b>",
     entries: {
       agt_entry: {
         title: "Eintrag erfassen",
@@ -444,8 +444,13 @@ const HELP_SECTIONS = [
       },
       agt_eval: {
         title: "Auswertung der Wehrführung",
-        short: "Atemschutz-Zeiten je Person als Summen – ohne Einzeleinträge.",
-        text: "Die Wehrführung sieht unter Atemschutz → Auswertung je aktiver Person Anzahl und Stunden nach Art (Einsatz, Übung, Strecke) im Jahr und das Ablaufdatum der G26.3. Einzelne Einträge, Drücke, Orte und Notizen sieht sie nie. Jeder Abruf der Auswertung wird protokolliert. Die Zeiten sind die von den Personen selbst eingetragenen Dauern; fehlt eine Person ohne E-Mail im Stamm, steht dort „ohne E-Mail“.",
+        short: "Atemschutz-Zeiten je Person als Summen – Einzeleinträge nur im Reiter „Abzeichnen“.",
+        text: "Die Wehrführung sieht unter Atemschutz → Auswertung je aktiver Person Anzahl und Stunden nach Art (Einsatz, Übung, Strecke) im Jahr und das Ablaufdatum der G26.3. Einzelne Einträge sieht sie hier nicht (nur zum Abzeichnen im eigenen Reiter, ohne Notizen). Jeder Abruf der Auswertung wird protokolliert. Die Zeiten sind die von den Personen selbst eingetragenen Dauern; fehlt eine Person ohne E-Mail im Stamm, steht dort „ohne E-Mail“.",
+      },
+      agt_cosign: {
+        title: "Einträge abzeichnen",
+        short: "Wehrführung und Stellvertretung bestätigen einzelne Atemschutz-Einträge mit ihrem Namen.",
+        text: "Unter Atemschutz → Abzeichnen sehen Wehrführung und Stellvertretung die Einträge des Jahres (Person, Art, Datum, Dauer, Druck, ohne Notizen) und können sie <b>abzeichnen</b>. Die Person sieht in ihrer Liste, <b>wer</b> wann abgezeichnet hat (Name aus dem Personenstamm, sonst die E-Mail-Adresse). Die Abzeichnung gilt für den geprüften Stand: Ändert die Person den Eintrag danach, steht dort „veraltet“, und er kann erneut abgezeichnet werden. Wer abgezeichnet oder zurückgenommen hat, wird protokolliert, ebenso jeder Abruf der Liste. Eigene Einträge zeichnet niemand selbst ab.",
       },
       agt_person_email: {
         title: "E-Mail im Personenstamm",
@@ -478,11 +483,6 @@ const HELP_SECTIONS = [
         title: "CSA-Belastungsübung",
         short: "Jährliche Übung für CSA-Träger/innen; offen sind die ohne Teilnahme im Jahr.",
         text: "Wer einen Chemikalienschutzanzug (CSA) trägt, muss jährlich eine Belastungsübung absolvieren. Die Wehrführung kennzeichnet die Person unter Einstellungen → Personen als <b>CSA-Träger/in</b> (jede Änderung wird protokolliert). Beim Erfassen der Übung wird <b>CSA-Belastungsübung</b> angekreuzt. Unter Personal → Übungen zeigt „CSA-Belastungsübung“ je Jahr, wer sie schon absolviert hat und wer noch offen ist. Die Übung zählt wie jede andere nicht zur Einsatzstatistik; Gesundheitsdaten werden nicht erfasst.",
-      },
-      training_sign: {
-        title: "Signieren",
-        short: "Wehrführung oder Stellvertretung bestätigt Einsatz oder Übung als geprüft.",
-        text: "Wehrführung und Stellvertretung können einen Einsatz oder eine Übung als geprüft <b>signieren</b> (Knopf in der aufgeklappten Zeile). Die Signatur gilt nur für den geprüften Stand: Wird der Eintrag danach geändert (bearbeitet, erneut eingelesen, Teilnehmer übernommen), erscheint „Signatur veraltet“ und er muss erneut geprüft werden. Wer wann signiert oder zurückgenommen hat, steht in einem nur anhängbaren Protokoll ebenso wie jede Änderung der CSA-Kennzeichnung.",
       },
       training_optional: {
         title: "Kategorie, Ort, Ausbilder/in, Notizen",
@@ -687,13 +687,8 @@ const HELP_SECTIONS = [
       },
       perm_agt_evaluate: {
         title: "Atemschutz-Auswertung je Person ansehen",
-        short: "Summen je Person und Ablauf der G26.3 – Wehrführung und Stellvertretung, keine Einzeleinträge.",
-        text: "Atemschutz-Zeiten je Person als Summen und das Ablaufdatum der G26.3 sehen. Die Rollen Wehrführer/in und Stellvertretende/r Wehrführer/in haben dieses Recht (nicht vererbt, nicht für Wehrleitung oder Superadmins). Einzeleinträge bleiben verborgen.",
-      },
-      perm_signoff_sign: {
-        title: "Einsätze und Übungen signieren",
-        short: "Einsatz oder Übung als geprüft bestätigen (Wehrführung, Stellvertretung).",
-        text: "Einsätze und Übungen der Wehr als geprüft signieren und die Signatur zurücknehmen; das Protokoll dazu einsehen. Haben Wehrführer/in und Stellvertretung. Die Signatur gilt nur für den geprüften Stand.",
+        short: "Summen je Person, G26.3-Ablauf und Abzeichnen von Einträgen – Wehrführung und Stellvertretung.",
+        text: "Atemschutz-Zeiten je Person als Summen und das Ablaufdatum der G26.3 sehen und einzelne Einträge (ohne Notizen) <b>abzeichnen</b>; jeder Abruf wird protokolliert. Die Rollen Wehrführer/in und Stellvertretende/r Wehrführer/in haben dieses Recht (nicht vererbt, nicht für Wehrleitung oder Superadmins).",
       },
       perm_tenant_settings: {
         title: "Einstellungen, Fahrzeuge, Farben, Logos und Schrift",

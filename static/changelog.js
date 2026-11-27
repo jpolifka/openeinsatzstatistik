@@ -9,7 +9,7 @@ const CHANGELOG = [
     date: "2026-11-27",
     version: "2026-11-27.5",
     items: [
-      "<b>Signieren:</b> Wehrführung und Stellvertretung können Einsätze und Übungen als geprüft signieren (aufgeklappte Zeile → „Signieren“). Ändert sich der Eintrag danach, wird die Signatur als veraltet gekennzeichnet. Jede Signatur und Rücknahme wird protokolliert.",
+      "<b>Atemschutz abzeichnen:</b> Wehrführung und Stellvertretung zeichnen einzelne Atemschutz-Einträge unter Atemschutz → Abzeichnen mit ihrem Namen ab (ohne Notizen). Die Person sieht in ihrer Liste, wer abgezeichnet hat; nach einer Änderung gilt die Abzeichnung als veraltet. Das Signieren von Einsätzen und Übungen entfällt. Der Auftragsverarbeitungsvertrag hat dazu eine neue Fassung.",
       "<b>CSA-Belastungsübung:</b> Unter Einstellungen → Personen lässt sich „CSA-Träger/in“ ankreuzen (mit Protokoll). Übungen können als CSA-Belastungsübung gekennzeichnet werden; unter Personal → Übungen sieht man, wer sie im Jahr schon absolviert hat.",
       "<b>Zugangsmail:</b> Beim Eintragen einer E-Mail im Personenstamm lässt sich ankreuzen, dass die Person per Mail über ihren Zugang informiert wird.",
       "<b>Atemschutz:</b> Auch die Stellvertretung der Wehrführung sieht die Atemschutz-Auswertung (Summen, G26.3-Ablauf).",

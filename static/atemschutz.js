@@ -9,6 +9,7 @@ const agt = {
   form: null,                    // null | Entwurf eines Eintrags (id null = neu)
   candidates: null,              // null | Einsätze/Übungen zum Übernehmen
   summary: null, summaryYear: null,
+  cosign: null, cosignYear: null, cosignOpen: false,   // Abzeichnen (Wehrführung)
 };
 
 const agtThisYear = () => new Date().getFullYear();
@@ -23,6 +24,11 @@ async function loadAgt() {
 async function loadAgtSummary() {
   agt.summary = await api(`/api/atemschutz/summary?year=${agt.summaryYear || agtThisYear()}`);
   agt.summaryYear = agt.summary.year;
+}
+
+async function loadAgtCosign() {
+  agt.cosign = await api(`/api/atemschutz/cosign?year=${agt.cosignYear || agtThisYear()}`);
+  agt.cosignYear = agt.cosign.year;
 }
 
 function agtYearSelect(years, current, attribute) {
@@ -130,6 +136,13 @@ function agtMedicalHtml() {
     ${d.medical.length ? `<div class="table-wrap"><table class="mini-table"><thead><tr><th>Untersuchung</th><th>Nächste Prüfung</th><th></th></tr></thead><tbody>${history}</tbody></table></div>` : ""}</div>`;
 }
 
+/** Stand der Abzeichnung durch die Wehrführung: mit Namen und Datum; nach einer Änderung „veraltet“. */
+function agtCosignBadge(c) {
+  if (!c) return `<span class="muted small">–</span>`;
+  return c.valid ? `<span class="tenant-badge signed" data-tip="${esc(formatDateTime(c.at))}">${esc(c.name)}</span>`
+    : `<span class="tenant-badge stale" data-tip="Abgezeichnet von ${esc(c.name)} am ${formatDate(c.at)}, danach wurde der Eintrag geändert.">veraltet</span>`;
+}
+
 function agtEntriesHtml() {
   const d = agt.data, kinds = d.kinds;
   const rows = d.entries.map((e) => `<tr>
@@ -138,10 +151,11 @@ function agtEntriesHtml() {
     <td><b>${esc(e.keyword || "–")}</b></td><td class="hide-mobile">${esc(e.place || "–")}</td>
     <td class="right">${formatDuration(e.duration_min)}</td>
     <td class="right hide-mobile">${e.start_bar == null ? "–" : `${e.start_bar} → ${e.end_bar} bar`}</td>
+    <td>${agtCosignBadge(e.cosign)}</td>
     <td class="right"><button type="button" class="btn btn-light btn-small" data-agt-action="edit" data-id="${e.id}">Bearbeiten</button>
       <button type="button" class="btn btn-outline btn-small" data-agt-action="delete" data-id="${e.id}">Löschen</button></td></tr>`).join("");
   return `<div class="card list-card"><div class="table-wrap"><table class="table"><thead><tr><th>Datum</th><th>Art</th><th>Stichwort / Thema</th>
-    <th class="hide-mobile">Ort</th><th class="right">Dauer</th><th class="right hide-mobile">Druck</th><th></th></tr></thead>
+    <th class="hide-mobile">Ort</th><th class="right">Dauer</th><th class="right hide-mobile">Druck</th><th>Abgezeichnet</th><th></th></tr></thead>
     <tbody>${rows}</tbody></table></div>
     ${d.entries.length ? "" : `<p class="empty-note">Für ${d.year} ist noch nichts eingetragen.</p>`}</div>`;
 }
@@ -150,7 +164,7 @@ function agtEntriesHtml() {
 function agtAdminAccessHtml() {
   const access = agt.data.admin_access || [];
   return `<div class="card"><h3>Einsicht durch die Administration</h3>
-    <p class="small muted">Superadmins der Anwendung können deine Einträge in Ausnahmefällen (Support, Prüfung) nur lesend einsehen. Jede Einsicht wird hier vermerkt. Die Wehrführung sieht nur Summen.</p>
+    <p class="small muted">Superadmins der Anwendung können deine Einträge in Ausnahmefällen (Support, Prüfung) nur lesend einsehen. Jede Einsicht wird hier vermerkt. Die Wehrführung sieht Summen und zeichnet Einträge ab (ohne Notizen).</p>
     ${access.length ? `<ul class="plain small">${access.map((x) => `<li>${esc(x.at)} · ${esc(x.email)}</li>`).join("")}</ul>` : `<p class="small">Bisher keine Einsicht.</p>`}</div>`;
 }
 
@@ -166,7 +180,7 @@ function renderAgt() {
   const figures = Object.entries(d.kinds).map(([k, label]) => [formatDuration(totals[k].minutes), `${label} (${totals[k].count}×)`]);
   section.innerHTML = `
     <div class="card"><div class="toolbar"><div><h3>${esc(d.name)}</h3>
-      <p class="muted small">Diese Einträge sieht nur du – die Wehrführung sieht nur Summen; Superadmins können sie in Ausnahmefällen lesend einsehen (siehe unten, jede Einsicht wird vermerkt). Fremdeinträge (Werkfeuerwehr, Berufsfeuerwehr) sind möglich.</p></div>
+      <p class="muted small">Diese Einträge sieht nur du – die Wehrführung sieht Summen und kann einzelne Einträge (ohne Notizen) mit ihrem Namen abzeichnen; Superadmins können sie in Ausnahmefällen lesend einsehen (siehe unten, jede Einsicht wird vermerkt). Fremdeinträge (Werkfeuerwehr, Berufsfeuerwehr) sind möglich.</p></div>
       ${agtYearSelect(d.years, d.year, "data-agt-year")}</div>
       ${keyFigures(figures)}
       <div class="form-actions left"><button type="button" class="btn btn-primary btn-small" data-agt-action="new">Neuer Eintrag</button>
@@ -268,6 +282,41 @@ async function agtChange(e) {
   }
 }
 
+// ------------------------------------------------------------ Abzeichnen durch die Wehrführung
+function renderAgtCosign() {
+  const section = $("#view-agt_cosign"), c = agt.cosign;
+  if (!c) { loadAgtCosign().then(() => state.view === "agt_cosign" && renderAgtCosign()); return; }
+  const shown = agt.cosignOpen ? c.entries : c.entries.filter((e) => !e.cosign?.valid);
+  const rows = shown.map((e) => `<tr><td><b>${esc(e.person)}</b></td>
+    <td>${formatDate(e.started_at)}<span class="member-sub">${formatTime(e.started_at)}</span></td>
+    <td>${esc(c.kinds[e.kind])}${e.external ? ` <span class="tenant-badge">${esc(e.organisation)}</span>` : ""}</td>
+    <td>${esc(e.keyword || "–")}<span class="member-sub">${esc(e.place || "")}</span></td>
+    <td class="right">${formatDuration(e.duration_min)}</td>
+    <td class="right hide-mobile">${e.start_bar == null ? "–" : `${e.start_bar} → ${e.end_bar} bar`}</td>
+    <td>${agtCosignBadge(e.cosign)}</td>
+    <td class="right">${e.cosign?.valid
+      ? `<button type="button" class="btn btn-outline btn-small" data-agt-cosign="withdraw" data-id="${e.id}">Zurücknehmen</button>`
+      : `<button type="button" class="btn btn-light btn-small" data-agt-cosign="sign" data-id="${e.id}" data-revision="${e.revision}">${e.cosign ? "Erneut abzeichnen" : "Abzeichnen"}</button>`}</td></tr>`).join("");
+  section.innerHTML = `<div class="card list-card"><div class="toolbar"><div><h3>Einträge abzeichnen ${c.year}</h3>
+      <p class="muted small">Du bestätigst einen Eintrag mit deinem Namen; die Person sieht, wer abgezeichnet hat. Ändert sie den Eintrag danach, gilt die Abzeichnung als veraltet. Notizen siehst du nicht, jeder Abruf und jede Abzeichnung wird protokolliert. Eigene Einträge zeichnest du nicht selbst ab.</p></div>
+      ${agtYearSelect(c.years, c.year, "data-agt-cosign-year")}</div>
+    <label class="toggle"><input type="checkbox" data-agt-cosign-all ${agt.cosignOpen ? "checked" : ""}> auch bereits abgezeichnete zeigen</label>
+    <div class="table-wrap"><table class="table"><thead><tr><th>Person</th><th>Datum</th><th>Art</th><th>Stichwort / Ort</th><th class="right">Dauer</th>
+      <th class="right hide-mobile">Druck</th><th>Abgezeichnet</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+    ${shown.length ? "" : `<p class="empty-note">Nichts zum Abzeichnen in ${c.year}.</p>`}</div>`;
+}
+
+async function agtCosignClick(e) {
+  const button = e.target.closest("[data-agt-cosign]");
+  if (!button) return;
+  const id = Number(button.dataset.id), sign = button.dataset.agtCosign === "sign";
+  await agtRun(async () => {
+    if (sign) await apiJson(`/api/atemschutz/cosign/${id}`, "POST", { revision: Number(button.dataset.revision) });
+    else await api(`/api/atemschutz/cosign/${id}`, { method: "DELETE" });
+    await loadAgtCosign(); renderAgtCosign();
+  }, sign ? "Abgezeichnet." : "Abzeichnung zurückgenommen.");
+}
+
 // ------------------------------------------------------------ Auswertung der Wehrführung (nur Summen)
 function renderAgtEval() {
   const section = $("#view-agt_eval"), s = agt.summary;
@@ -289,6 +338,9 @@ VIEWS.atemschutz = { label: "Atemschutz", sub: "Meine Einträge", title: "Atemsc
 VIEWS.agt_eval = { label: "Atemschutz", sub: "Auswertung", title: "Atemschutz-Auswertung", noYear: true, load: loadAgtSummary,
   render: renderAgtEval, permission: "agt.evaluate", single: true, help: "sec_atemschutz" };
 
+VIEWS.agt_cosign = { label: "Atemschutz", sub: "Abzeichnen", title: "Atemschutz-Einträge abzeichnen", noYear: true,
+  load: loadAgtCosign, render: renderAgtCosign, permission: "agt.evaluate", single: true, help: "agt_cosign" };
+
 const agtView = $("#view-atemschutz");
 agtView.addEventListener("click", agtClick);
 agtView.addEventListener("input", agtInput);
@@ -298,4 +350,11 @@ $("#view-agt_eval").addEventListener("change", async (e) => {
   if (!e.target.matches("[data-agt-summary-year]")) return;
   agt.summaryYear = Number(e.target.value);
   await agtRun(async () => { await loadAgtSummary(); renderAgtEval(); });
+});
+$("#view-agt_cosign").addEventListener("click", agtCosignClick);
+$("#view-agt_cosign").addEventListener("change", async (e) => {
+  if (e.target.matches("[data-agt-cosign-all]")) { agt.cosignOpen = e.target.checked; renderAgtCosign(); return; }
+  if (!e.target.matches("[data-agt-cosign-year]")) return;
+  agt.cosignYear = Number(e.target.value);
+  await agtRun(async () => { await loadAgtCosign(); renderAgtCosign(); });
 });

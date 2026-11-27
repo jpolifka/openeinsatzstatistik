@@ -145,7 +145,7 @@ function trainingDetailHtml(t) {
   const meta = [t.category, t.place, t.trainer && `Übungsleiter/in: ${t.trainer}`].filter(Boolean).map(esc).join(" · ");
   return `<div class="detail-grid training-detail">
     ${meta ? `<p class="small">${meta}</p>` : ""}${t.csa_load ? `<p class="small"><span class="tenant-badge">CSA-Belastungsübung</span></p>` : ""}
-    <p class="small">${signatureHtml({ ...t, can_sign: trainingState.data.can_sign }, "training")}</p>${t.notes ? `<p class="small">${esc(t.notes)}</p>` : ""}
+    ${t.notes ? `<p class="small">${esc(t.notes)}</p>` : ""}
     <p class="small"><b>Teilnehmer:</b> ${t.participants.map((p) => esc(p.name)).join("; ") || "–"}</p>
     ${can("trainings.edit") ? checkinAdminHtml(t) : ""}
     ${can("trainings.edit") ? `<div class="form-actions">
@@ -164,7 +164,7 @@ function renderTrainings() {
   const row = (t) => `<tr class="row ${open(t.id) ? "open" : ""}" data-tr-training="${t.id}" tabindex="0" aria-expanded="${open(t.id)}">
       <td>${formatDate(t.started_at)}<span class="member-sub">${formatTime(t.started_at)}–${formatTime(t.ended_at)}</span></td>
       <td class="hide-mobile">${formatTime(t.started_at)}–${formatTime(t.ended_at)}</td>
-      <td><strong>${esc(t.topic)}</strong>${t.csa_load ? ` <span class="tenant-badge">CSA</span>` : ""}${t.signature?.valid ? ` <span class="tenant-badge signed" data-tip="Signiert">✓</span>` : ""}<span class="member-sub">${[t.category, t.place].filter(Boolean).map(esc).join(" · ")}</span></td>
+      <td><strong>${esc(t.topic)}</strong>${t.csa_load ? ` <span class="tenant-badge">CSA</span>` : ""}<span class="member-sub">${[t.category, t.place].filter(Boolean).map(esc).join(" · ")}</span></td>
       <td class="hide-mobile">${esc(t.category || "–")}</td><td class="hide-mobile">${esc(t.place || "–")}</td>
       <td class="right hide-mobile">${formatDuration(t.duration_min)}</td>
       ${canEdit ? `<td class="right">${t.checkin_pin ? `<span class="pin">${esc(t.checkin_pin)}</span>` : "–"}</td>` : ""}
@@ -315,16 +315,6 @@ async function saveTraining() {
   toast((year === state.year ? "Übung gespeichert." : `Übung gespeichert (Jahr ${year}).`) + pin, pin ? { duration: 15000 } : undefined);
 }
 
-async function signTraining(id, signed) {
-  const training = trainingState.data.trainings.find((x) => x.id === id);
-  try {
-    await apiJson(`/api/trainings/${id}/sign`, "POST", { revision: training.revision, signed });
-    await reloadTrainings();
-    showTrainings();
-    toast(signed ? "Übung signiert." : "Signatur zurückgenommen.");
-  } catch (e) { toast(e.message); }
-}
-
 function deleteTraining(id) {
   const training = trainingState.data.trainings.find((t) => t.id === id);
   if (!training) return;
@@ -392,7 +382,6 @@ async function trainingClick(e) {
   switch (button.dataset.trAction) {
     case "edit": openTrainingForm(() => draftFromTraining(trainingState.data.trainings.find((t) => t.id === Number(button.dataset.id))), Number(button.dataset.id)); break;
     case "delete": deleteTraining(Number(button.dataset.id)); break;
-    case "sign": case "unsign": await signTraining(Number(button.dataset.id), button.dataset.trAction === "sign"); break;
     case "qr": await openCheckin(); break;
     case "new-pin": if (confirm("Neue PIN erzeugen? Die bisherige PIN gilt danach nicht mehr.")) await checkinAction(`/api/trainings/${button.dataset.id}/checkin-pin`, "POST", "Neue PIN erzeugt."); break;
     case "accept-checkin": await checkinAction(`/api/trainings/${button.dataset.id}/checkins/${button.dataset.checkinId ? `${button.dataset.checkinId}/` : ""}accept`, "POST", "Anmeldung übernommen."); break;

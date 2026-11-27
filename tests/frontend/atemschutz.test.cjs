@@ -10,7 +10,7 @@ function load(extra = {}) {
   const context = vm.createContext({
     VIEWS: {}, document: { addEventListener() {} }, state: { year: 2026, view: "atemschutz" }, config: { scope: "t:a", permissions: ["agt.own"] },
     $: el, $$: () => [], esc: (s) => String(s ?? ""), plural: (n, one, many) => `${n} ${n === 1 ? one : many}`,
-    formatDuration: (m) => `${m} min`, formatDate: (i) => i, formatTime: (i) => i.slice(11, 16), keyFigures: (e) => e.map(([v, l]) => `${v} ${l}`).join(","),
+    formatDuration: (m) => `${m} min`, formatDate: (i) => i, formatDateTime: (i) => i, formatTime: (i) => i.slice(11, 16), keyFigures: (e) => e.map(([v, l]) => `${v} ${l}`).join(","),
     noticeBox: (kind, title) => `[${kind}] ${title}`, toast() {}, api: async () => ({}), apiJson: async () => ({}), ...extra,
   });
   vm.runInContext(fs.readFileSync("static/atemschutz.js", "utf8"), context);
@@ -26,7 +26,7 @@ test("Zwei Ansichten mit eigenen Rechten, ein Reiter, Bereiche in der Seite", ()
   assert.match(html, /id="view-atemschutz"/);
   assert.match(html, /id="view-agt_eval"/);
   assert.match(html, /atemschutz\.js/);
-  assert.match(fs.readFileSync("static/app.js", "utf8"), /views: \["atemschutz", "agt_eval"\]/);
+  assert.match(fs.readFileSync("static/app.js", "utf8"), /views: \["atemschutz", "agt_eval", "agt_cosign"\]/);
 });
 
 test("Die Nutzlast enthält nie eine Personen-ID oder E-Mail", () => {
@@ -66,4 +66,22 @@ test("Auswertung zeigt nur Summen und den Ablauf der G26.3", () => {
   assert.match(html, /ohne E-Mail/);
   assert.match(html, /nicht erfasst/);
   assert.doesNotMatch(html, /\d bar|<th[^>]*>Ort/);
+});
+
+test("Abzeichnen: offene Einträge mit Knopf, Namen der Abzeichnung, keine Notizen", () => {
+  const { context, els } = load();
+  vm.runInContext(`agt.cosign = { year: 2026, years: [2026], kinds: { strecke: "Streckendurchgang" }, entries: [
+    { id: 1, person: "Beispiel, Anna", kind: "strecke", started_at: "2026-03-12T19:00:00", duration_min: 20, place: "Strecke",
+      keyword: null, start_bar: 300, end_bar: 120, external: false, organisation: null, revision: 2, cosign: null },
+    { id: 2, person: "Muster, Berta", kind: "strecke", started_at: "2026-03-13T19:00:00", duration_min: 25, place: null,
+      keyword: null, start_bar: null, end_bar: null, external: false, organisation: null, revision: 1,
+      cosign: { name: "Wehrführer, Willi", at: "2026-03-14 10:00:00", valid: true } }] };
+    renderAgtCosign();`, context);
+  const html = els["#view-agt_cosign"].innerHTML;
+  assert.match(html, /Beispiel, Anna/);
+  assert.match(html, /data-agt-cosign="sign" data-id="1" data-revision="2"/);
+  assert.doesNotMatch(html, /Wehrführer, Willi/);                   // bereits abgezeichnete erst nach Umschalten
+  vm.runInContext("agt.cosignOpen = true; renderAgtCosign();", context);
+  assert.match(els["#view-agt_cosign"].innerHTML, /Wehrführer, Willi/);
+  assert.match(els["#view-agt_cosign"].innerHTML, /data-agt-cosign="withdraw" data-id="2"/);
 });
