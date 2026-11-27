@@ -76,9 +76,11 @@ def get_memberships(a: tenancy.Access = Depends(access)):
     for r in rows:
         role = roles.get(r["role_id"])
         allowed = granted(r["scope"], r["scope_id"], r["vg_id"])
-        if role and (allowed or _sees_users(a, r["scope"], r["scope_id"], r["vg_id"])):
+        # Die Zuordnung „Atemschutz (eigene Daten)“ entsteht allein aus der E-Mail im Personenstamm: nicht hier aufführen
+        if role and role.key != "agt_self" and (allowed or _sees_users(a, r["scope"], r["scope_id"], r["vg_id"])):
             result.append({"email": r["email"], "scope": r["scope"], "slug": r["slug"], "name": r["name"],
-                           "role": role.key, "label": role.label, "last_login": r["last_login"], "vg": r["vg_slug"],
+                           "role": role.key, "label": role.label, "rank": len(roles.permissions(role.id)),
+                           "last_login": r["last_login"], "vg": r["vg_slug"],
                            "editable": role.id in allowed and (r["email"] != a.email or a.superadmin)})
     scopes = []
     for scope, scope_id, vg_id, slug, label in areas:

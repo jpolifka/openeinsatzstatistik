@@ -641,6 +641,20 @@ function userFilterOptions(memberships) {
     .sort((a, b) => a.name.localeCompare(b.name, "de"));
 }
 
+/** Zuordnungen nach Bereich gruppiert (VG-weite zuerst, dann die Wehren), darin nach Rolle (mehr Rechte zuerst) und E-Mail. */
+function groupedMemberships(list) {
+  const sorted = [...list].sort((x, y) => (x.vg || "").localeCompare(y.vg || "", "de") || (x.scope === y.scope ? 0 : x.scope === "vg" ? -1 : 1)
+    || x.name.localeCompare(y.name, "de") || (y.rank - x.rank) || x.label.localeCompare(y.label, "de") || x.email.localeCompare(y.email, "de"));
+  const out = [];
+  let last = null;
+  for (const m of sorted) {
+    const key = `${m.scope}:${m.slug}`;
+    if (key !== last) { out.push({ group: m.scope === "vg" ? `${m.name} (alle Wehren der VG)` : m.name }); last = key; }
+    out.push(m);
+  }
+  return out;
+}
+
 function usersSection() {
   const scopes = admin.userScopes;
   const filterOptions = userFilterOptions(admin.memberships);
@@ -648,8 +662,8 @@ function usersSection() {
       <option value="">Alle Bereiche</option>${filterOptions.map((g) => `<optgroup label="${esc(g.name)}">
         <option value="vg:${esc(g.slug)}" ${admin.userFilter === `vg:${g.slug}` ? "selected" : ""}>Gesamte VG mit allen Wehren</option>
         ${g.tenants.map(([slug, t]) => `<option value="tenant:${esc(slug)}" ${admin.userFilter === `tenant:${slug}` ? "selected" : ""}>${esc(t.name)}</option>`).join("")}</optgroup>`).join("")}</select></label>` : "";
-  const rows = admin.memberships.filter((m) => userFilterMatches(m, admin.userFilter)).map((m) => `<tr>
-    <td>${esc(m.email)}</td><td>${esc(m.name)}${m.scope === "vg" ? " <span class='small muted'>(VG)</span>" : ""}</td><td>${esc(m.label)}</td>
+  const rows = groupedMemberships(admin.memberships.filter((m) => userFilterMatches(m, admin.userFilter))).map((m) => m.group ? `<tr class="group-row"><th colspan="4">${esc(m.group)}</th></tr>` : `<tr>
+    <td>${esc(m.email)}</td><td>${esc(m.label)}</td>
     <td class="small muted">${m.last_login ? formatDate(m.last_login) : "noch nie"}</td>
     <td class="nowrap"><button type="button" class="btn btn-light btn-small" data-admin-action="effective" data-email="${esc(m.email)}">Rechte</button>
       ${m.editable ? `<button type="button" class="icon-button" data-admin-action="revoke" data-email="${esc(m.email)}" data-scope="${m.scope}" data-slug="${esc(m.slug)}" data-key="${esc(m.role)}" aria-label="Rolle entziehen" data-tip="Rolle entziehen">✕</button>` : ""}</td></tr>`).join("");
@@ -663,8 +677,8 @@ function usersSection() {
     ihre Rechte addieren sich. Eigene Zuordnungen ändert jemand anderes.</p>
     <div class="section-gap">${form}</div>
     ${filter ? `<div class="section-gap">${filter}</div>` : ""}
-    <div class="table-wrap section-gap"><table class="mini-table admin-table"><thead><tr><th>E-Mail</th><th>Bereich</th><th>Rolle</th><th>zuletzt angemeldet</th><th></th></tr></thead>
-    <tbody>${rows || `<tr><td colspan="5" class="muted">Noch keine Zuordnungen.</td></tr>`}</tbody></table></div>
+    <div class="table-wrap section-gap"><table class="mini-table admin-table"><thead><tr><th>E-Mail</th><th>Rolle</th><th>zuletzt angemeldet</th><th></th></tr></thead>
+    <tbody>${rows || `<tr><td colspan="4" class="muted">Noch keine Zuordnungen.</td></tr>`}</tbody></table></div>
     ${admin.effective ? effectivePanel() : ""}
     <h3 class="section-gap">Protokoll</h3>
     ${admin.events ? eventsTable() : `<button type="button" class="btn btn-light btn-small" data-admin-action="events">Protokoll anzeigen</button>`}`;
