@@ -5,13 +5,15 @@ Der Stamm ist zugleich der Abgleich der eingelesenen Namen: Die Liste zeigt je P
 weist auf ähnliche Einträge hin (Schreibvarianten, gleiche Initialen). Recht: SETTINGS der jeweiligen Wehr (Wehrführung, nicht der Erfasser von Einsätzen oder Übungen).
 """
 import difflib
+import html
 import re
+import smtplib
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from app import atemschutz, names, signoff, store, tenancy
+from app import atemschutz, auth, mail, names, signoff, store, tenancy
 from app.admin.common import access, log
 from app.rbac import SETTINGS
 
@@ -23,6 +25,7 @@ class PersonIn(BaseModel):
     first_name: str = Field(default="", max_length=60)
     active: bool = True
     email: Optional[str] = Field(default=None, max_length=120)    # fehlt das Feld, bleibt die E-Mail unverändert
+    notify: bool = False              # neue E-Mail: Person per Mail über den Zugang informieren (nur einmalig, nicht gespeichert)
     csa: Optional[bool] = None        # Träger/in eines Chemikalienschutzanzugs; fehlt das Feld, bleibt es unverändert
 
 
@@ -80,6 +83,26 @@ def _free_email(con, email, own_id=None):
         row = con.execute("SELECT id FROM member WHERE lower(email) = ?", (email,)).fetchone()
         if row and row["id"] != own_id:
             raise HTTPException(409, "Diese E-Mail-Adresse ist bei einer anderen Person eingetragen.")
+
+
+def _notify(tenant, email):
+    """Informiert die Person per Mail, dass sie mit dieser Adresse Zugang hat. Rückgabe: "sent", "failed" oder
+    "unavailable" (kein Mailversand eingerichtet). Ein Fehler lässt das Speichern nie scheitern."""
+    if not mail.enabled():
+        return "unavailable"
+    link = auth.BASE_URL or ""
+    text = (f"Für dich wurde in der Einsatzstatistik der Wehr {tenant.name} ein Zugang eingerichtet. Du kannst dich mit "
+            f"dieser E-Mail-Adresse anmelden und deine eigene Atemschutz-Dokumentation führen. Andere sehen deine "
+            f"Einträge nicht.\n\n{link}\n")
+    body = (f"<p>Für dich wurde in der Einsatzstatistik der Wehr {html.escape(tenant.name)} ein Zugang eingerichtet. "
+            "Du kannst dich mit dieser E-Mail-Adresse anmelden und deine eigene Atemschutz-Dokumentation führen. "
+            f"Andere sehen deine Einträge nicht.</p><p><a href=\"{html.escape(link)}\">{html.escape(link)}</a></p>")
+    try:
+        mail.send(email, "Zugang zur Einsatzstatistik", text, body)
+    except (smtplib.SMTPException, OSError) as e:
+        log.error("Zugangsmail an Person nicht versendet: %s", e)
+        return "failed"
+    return "sent"
 
 
 def _csa(body, current, con, email, member_id):
@@ -193,7 +216,10 @@ def update_member(slug: str, member_id: int, body: PersonIn, a: tenancy.Access =
         con.execute("UPDATE member SET name = ?, last_name = ?, first_name = ?, active = ?, email = ?, csa = ? "
                     "WHERE id = ?", (_display(last, first), last, first, int(body.active), email, csa, member_id))
         _sync_access(tenant, before["email"] if before["active"] else None, email if body.active else None)
-        return _listing(con)
+        result = _listing(con)
+    if body.notify and email and body.active and email != before["email"]:
+        result["notice"] = _notify(tenant, email)
+    return result
 
 
 @router.post("/api/admin/{slug}/members/{member_id}/merge")

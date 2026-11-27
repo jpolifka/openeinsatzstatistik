@@ -366,9 +366,11 @@ async function runAdminAction(button) {
       const e = admin.personEdit, to = $("#person-edit-tenant").value;
       let result = await apiJson(peopleUrl(`/${e.id}`), "PUT", { last_name: $("#person-edit-last").value,
         first_name: $("#person-edit-first").value, active: !$("#person-edit-left").checked,
-        email: $("#person-edit-email").value.trim(), csa: $("#person-edit-csa").checked });
+        email: $("#person-edit-email").value.trim(), csa: $("#person-edit-csa").checked,
+        notify: Boolean($("#person-edit-notify")?.checked) });
       if (to) result = await apiJson(peopleUrl(`/${e.id}/transfer`), "POST", { to_slug: to });
-      return peopleChanged(result, to ? "Person ist in die andere Wehr gewechselt" : "Person gespeichert");
+      const notice = { sent: " – Zugangsmail verschickt", failed: " – Die Mail konnte nicht verschickt werden", unavailable: " – Kein Mailversand eingerichtet, nichts verschickt" }[result.notice] || "";
+      return peopleChanged(result, (to ? "Person ist in die andere Wehr gewechselt" : "Person gespeichert") + notice);
     }
     case "person-merge": {
       const m = admin.people.members.find((x) => x.id === Number(button.dataset.id));

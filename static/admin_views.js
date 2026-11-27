@@ -1039,6 +1039,7 @@ function personEditHtml(m) {
         : `<input type="hidden" id="person-edit-tenant" value="">`}</div>
     <div class="toolbar-inline"><label class="field"><span>E-Mail (für die eigene Atemschutz-Ansicht)</span>
       <input type="email" id="person-edit-email" value="${esc(admin.personEdit.email || "")}" maxlength="120" autocomplete="off"></label></div>
+    <label class="toggle"><input type="checkbox" id="person-edit-notify"> Person per E-Mail über den Zugang informieren (nur bei neuer oder geänderter Adresse; wird einmalig verschickt)</label>
     <p class="small muted">Mit E-Mail kann sich die Person anmelden und sieht <b>nur</b> ihre eigene Atemschutz-Dokumentation – nie andere Personen oder Einsatzdaten. Leer lassen = kein Zugang. Prüfe die Adresse sorgfältig.</p>
     <label class="toggle"><input type="checkbox" id="person-edit-csa" ${admin.personEdit.csa ? "checked" : ""}> Träger/in eines Chemikalienschutzanzugs (CSA) – jährliche Belastungsübung; Änderungen werden protokolliert</label><br>
     <label class="toggle"><input type="checkbox" id="person-edit-left" ${admin.personEdit.active ? "" : "checked"}> ausgetreten (erscheint nicht mehr in der Auswahl bei Übungen)</label>
