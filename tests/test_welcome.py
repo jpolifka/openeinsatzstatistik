@@ -77,7 +77,8 @@ def test_catch_up_dry_run_and_send(world, monkeypatch):
     assert welcome.catch_up(send=True) == {"alt@example.org": "sent"}
     assert [s[0] for s in world.sent] == ["alt@example.org"]
     assert welcome.catch_up(send=True) == {}             # nicht erneut
-    assert welcome.catch_up(send=True, include_active=True) == {"aktiv@example.org": "sent"}
+    # mit include_active auch die Angemeldeten (aktiv@ und der Fixture-Nutzer)
+    assert welcome.catch_up(send=True, include_active=True) == {"aktiv@example.org": "sent", "vglead@example.org": "sent"}
 
 
 def test_cli(world, capsys, monkeypatch):
@@ -95,9 +96,10 @@ def test_cli(world, capsys, monkeypatch):
 
 
 def test_build_without_tenant_is_neutral():
-    subject, text, html, images = welcome.build(None, [("Wehrführer/in", "Beispiel")], "https://example.org")
+    link = "https://example.org"
+    subject, text, html, images = welcome.build(None, [("Wehrführer/in", "Beispiel")], link)
     assert subject == welcome.SUBJECT and images == []
-    assert "https://example.org" in text.splitlines() and "Beispiel" in html
+    assert text.splitlines().count(link) == 1 and "Beispiel" in html
 
 
 def test_new_tenant_sends_welcome_to_first_lead(make_client, monkeypatch):
