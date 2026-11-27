@@ -5,8 +5,10 @@ Harte Leitplanken (siehe Tests in tests/test_atemschutz.py):
 - Alles, was eine Person sieht oder ändert, läuft über `Own(con, member_id)`; jede SQL-Anweisung dort enthält
   `member_id = ?` – auch bei Änderung und Löschen (eine Eintrags-ID allein reicht nie).
 - Die Person wird nie vom Aufrufer genannt, sondern aus der angemeldeten E-Mail bestimmt (`member_for`).
-- Die einzige personenübergreifende Abfrage ist `summary` (nur Summen, für die Wehrführung); sie steht in
-  SUMMARY_FUNCTIONS, und der Test über den Quelltext lässt nur dort SQL ohne `member_id` zu.
+- Personenübergreifend lesen nur die Funktionen der Wehrführung: `summary` (nur Summen) und die Abzeichnung einzelner
+  Einträge (`cosign_list`, `cosign`, `uncosign`); sie stehen in SUMMARY_FUNCTIONS, und der Test über den Quelltext lässt
+  nur dort SQL ohne `member_id` zu. Abgezeichnet wird mit dem Namen der abzeichnenden Person; die Abzeichnung gilt nur für
+  die abgezeichnete Revision des Eintrags.
 - Die Tabellen agt_* fließen nie in `metrics`, Einsatzauswertungen, Export oder VG-Gesamtansicht ein.
 """
 import datetime as dt
@@ -23,7 +25,8 @@ MAX_ENTRIES = 5000                   # je Person (Schutz vor Fluten)
 MAX_MEDICAL = 100
 LIMITS = {"place": 120, "keyword": 120, "organisation": 120, "notes": 1000}
 # Funktionen, die über mehrere Personen lesen dürfen (Allowlist für den Quelltexttest)
-SUMMARY_FUNCTIONS = ("summary", "summary_years", "reminder_candidates", "integrity", "recent_audit", "people_list")
+SUMMARY_FUNCTIONS = ("summary", "summary_years", "reminder_candidates", "integrity", "recent_audit", "people_list",
+                     "signer_name", "cosign_list", "cosign", "uncosign")
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
@@ -134,7 +137,16 @@ class Own:
     def entries(self, year):
         rows = self.con.execute("SELECT * FROM agt_entry WHERE member_id = ? AND substr(started_at, 1, 4) = ? "
                                 "ORDER BY started_at DESC, id DESC", (self.member_id, f"{year:04d}"))
-        return [entry_json(r) for r in rows]
+        return self._with_cosign([entry_json(r) for r in rows])
+
+    def _with_cosign(self, entries):
+        """Hängt jedem Eintrag `cosign` an: None (nicht abgezeichnet) oder {name, at, valid}."""
+        given = {r["entry_id"]: r for r in self.con.execute(
+            "SELECT entry_id, revision, name, at FROM agt_cosign WHERE member_id = ?", (self.member_id,))}
+        for e in entries:
+            row = given.get(e["id"])
+            e["cosign"] = {"name": row["name"], "at": row["at"], "valid": row["revision"] == e["revision"]} if row else None
+        return entries
 
     def totals(self, year):
         """Minuten und Anzahl je Art im Jahr (nur diese Person)."""
@@ -150,7 +162,7 @@ class Own:
                                (entry_id, self.member_id)).fetchone()
         if not row:
             raise NotFound
-        return entry_json(row)
+        return self._with_cosign([entry_json(row)])[0]
 
     def _guard_count(self, table, limit):
         # table kommt nur aus dem Code (zwei feste Namen)
@@ -336,7 +348,7 @@ class Own:
     def erase(self):
         """Alle Atemschutz-Daten dieser Person löschen (nach dem Wechsel in eine andere Wehr)."""
         self._log("agt.transfer.out")
-        for table in ("agt_entry", "agt_medical", "agt_reminder_sent", "agt_reminder"):
+        for table in ("agt_cosign", "agt_entry", "agt_medical", "agt_reminder_sent", "agt_reminder"):
             self.con.execute(f"DELETE FROM {table} WHERE member_id = ?", (self.member_id,))
 
     # ------------------------------------------------------------ Erinnerung
@@ -407,7 +419,8 @@ def recent_audit(con, limit=20):
     der Personen (wer pflegt Daten) bleiben außen vor."""
     return [{"email": r["email"], "action": r["action"], "at": r["at"]} for r in con.execute(
         "SELECT email, action, at FROM agt_audit WHERE action IN ('agt.summary.view', 'agt.check.view', 'agt.transfer.in', "
-        "'agt.transfer.out', 'agt.admin.list', 'agt.admin.view') ORDER BY id DESC LIMIT ?", (limit,))]
+        "'agt.transfer.out', 'agt.admin.list', 'agt.admin.view', 'agt.cosign.view', 'agt.cosign.sign', "
+        "'agt.cosign.unsign') ORDER BY id DESC LIMIT ?", (limit,))]
 
 
 def people_list(con):
@@ -416,3 +429,54 @@ def people_list(con):
         "SELECT m.id, m.name, (SELECT COUNT(*) FROM agt_entry WHERE member_id = m.id) AS entries, "
         "(SELECT MAX(valid_until) FROM agt_medical WHERE member_id = m.id) AS valid_until FROM member m "
         "WHERE m.active = 1 ORDER BY m.name")]
+
+
+# ---------------------------------------------------------------- Abzeichnung durch die Wehrführung
+def signer_name(con, email):
+    """Name der abzeichnenden Person: aus dem Personenstamm (E-Mail), sonst die Adresse selbst."""
+    row = con.execute("SELECT name FROM member WHERE lower(email) = ? AND active = 1", ((email or "").strip().lower(),)).fetchone()
+    return row["name"] if row else (email or "lokal")
+
+
+def cosign_list(con, year):
+    """Einträge aller aktiven Personen im Jahr zum Abzeichnen (ohne Notizen), mit Stand der Abzeichnung; ungeprüfte zuerst."""
+    rows = con.execute(
+        "SELECT e.id, e.member_id, m.name AS person, e.kind, e.started_at, e.duration_min, e.place, e.keyword, e.start_bar, "
+        "e.end_bar, e.external, e.organisation, e.revision, c.revision AS signed_revision, c.name AS signer, c.at AS signed_at "
+        "FROM agt_entry e JOIN member m ON m.id = e.member_id LEFT JOIN agt_cosign c ON c.entry_id = e.id "
+        "WHERE m.active = 1 AND substr(e.started_at, 1, 4) = ? ORDER BY e.started_at DESC, e.id DESC", (f"{year:04d}",))
+    result = []
+    for r in rows:
+        item = {k: r[k] for k in ("id", "person", "kind", "started_at", "duration_min", "place", "keyword", "start_bar",
+                                  "end_bar", "organisation", "revision")}
+        item["external"] = bool(r["external"])
+        item["cosign"] = {"name": r["signer"], "at": r["signed_at"], "valid": r["signed_revision"] == r["revision"]} \
+            if r["signer"] else None
+        result.append(item)
+    result.sort(key=lambda i: bool(i["cosign"] and i["cosign"]["valid"]))        # offene zuerst (stabil: neueste oben)
+    return result
+
+
+def cosign(con, entry_id, revision, email):
+    """Eintrag in der geprüften Revision abzeichnen (eine bestehende Abzeichnung wird ersetzt). Eigene Einträge zeichnet
+    niemand selbst ab."""
+    row = con.execute("SELECT member_id, revision FROM agt_entry WHERE id = ?", (entry_id,)).fetchone()
+    if not row:
+        raise NotFound
+    if member_for(con, email) == row["member_id"]:
+        raise ValueError("Eigene Einträge kannst du nicht selbst abzeichnen.")
+    if row["revision"] != revision:
+        raise Stale("Der Eintrag wurde inzwischen geändert. Bitte neu laden, prüfen und erneut abzeichnen.")
+    con.execute("INSERT INTO agt_cosign (entry_id, member_id, revision, name, email) VALUES (?, ?, ?, ?, ?) "
+                "ON CONFLICT(entry_id) DO UPDATE SET revision = excluded.revision, name = excluded.name, "
+                "email = excluded.email, at = datetime('now', 'localtime')",
+                (entry_id, row["member_id"], revision, signer_name(con, email), (email or "lokal")))
+    audit(con, email, "agt.cosign.sign", row["member_id"])
+
+
+def uncosign(con, entry_id, email):
+    row = con.execute("SELECT member_id FROM agt_cosign WHERE entry_id = ?", (entry_id,)).fetchone()
+    if not row:
+        raise NotFound
+    con.execute("DELETE FROM agt_cosign WHERE entry_id = ?", (entry_id,))
+    audit(con, email, "agt.cosign.unsign", row["member_id"])

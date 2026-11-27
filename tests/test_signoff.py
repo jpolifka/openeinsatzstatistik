@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Signatur von Einsätzen und Übungen, CSA als Fähigkeit mit Protokoll, CSA-Belastungsübung, Atemschutz für die Stellvertretung."""
+"""Abzeichnung von Atemschutz-Einträgen durch die Wehrführung, CSA als Fähigkeit mit Protokoll, CSA-Belastungsübung."""
 import pytest
 
 from app import db, rbac, store, tenancy
@@ -21,6 +21,9 @@ def world(make_client):
         anna = store.MemberDirectory(con).find_or_create("Beispiel", "Anna")
     client = make_client(login=True)
     client.ids = {"incident": f"wehr-a1:{incident}", "anna": anna}
+    _as(client, "lead@example.org")          # die Wehrführung pflegt die E-Mail, daraus entsteht der Zugang
+    assert client.put(f"/api/admin/wehr-a1/members/{anna}", json={"last_name": "Beispiel", "first_name": "Anna",
+                                                               "email": "anna@example.org"}).status_code == 200
     return client
 
 
@@ -31,77 +34,90 @@ def _as(client, email):
     return client
 
 
-def _incident(client):
-    return client.get("/api/incidents?year=2025").json()["incidents"][0]
-
-
 def _events(slug="wehr-a1"):
     with db.connection(tenancy.tenant_path(slug)) as con:
         return [dict(r) for r in con.execute("SELECT * FROM audit_event ORDER BY id")]
 
 
-def test_lead_and_deputy_sign_incident_editor_cannot(world):
-    key = world.ids["incident"]
+def _entry(world, email="anna@example.org", **fields):
+    _as(world, email)
+    body = {"kind": "strecke", "started_at": "2025-03-12T19:00", "duration_min": 20, "start_bar": 300, "end_bar": 120,
+            "notes": "geheim", **fields}
+    return world.post("/api/atemschutz/me/entries", json=body).json()
+
+
+def test_lead_and_deputy_cosign_with_name_editor_cannot(world):
+    entry = _entry(world)
+    assert entry["cosign"] is None
     _as(world, "editor@example.org")
-    assert _incident(world)["can_sign"] is False
-    assert world.post(f"/api/incidents/{key}/sign", json={"revision": 0}).status_code == 403
-    for email in ("lead@example.org", "deputy@example.org"):
+    assert world.get("/api/atemschutz/cosign").status_code == 403
+    assert world.post(f"/api/atemschutz/cosign/{entry['id']}", json={"revision": entry["revision"]}).status_code == 403
+    for email, name in (("lead@example.org", "Wehrführer, Willi"), ("deputy@example.org", "deputy@example.org")):
+        if name != "deputy@example.org":
+            with db.connection(tenancy.tenant_path("wehr-a1")) as con:
+                lead = store.MemberDirectory(con).find_or_create("Wehrführer", "Willi")
+                con.execute("UPDATE member SET email = ? WHERE id = ?", (email, lead))
         _as(world, email)
-        incident = _incident(world)
-        assert incident["can_sign"] and incident["signature"] is None
-        signed = world.post(f"/api/incidents/{key}/sign", json={"revision": incident["revision"]}).json()
-        assert signed["signature"]["valid"] is True
-        assert world.post(f"/api/incidents/{key}/sign", json={"revision": incident["revision"], "signed": False}).json()[
-            "signature"] is None
-    assert [e["action"] for e in _events()] == ["sign", "unsign", "sign", "unsign"]
-    assert {e["email"] for e in _events()} == {"lead@example.org", "deputy@example.org"}
-
-
-def test_signature_expires_with_change_and_stale_revision_is_refused(world):
-    key = world.ids["incident"]
+        listed = world.get("/api/atemschutz/cosign?year=2025").json()["entries"]
+        assert listed[0]["person"] == "Beispiel, Anna" and "notes" not in listed[0]
+        assert world.post(f"/api/atemschutz/cosign/{entry['id']}", json={"revision": entry["revision"]}).status_code == 200
+        assert world.get("/api/atemschutz/cosign?year=2025").json()["entries"][0]["cosign"]["name"] == name
+        _as(world, "anna@example.org")
+        own = world.get("/api/atemschutz/me?year=2025").json()["entries"][0]
+        assert own["cosign"]["name"] == name and own["cosign"]["valid"] is True
     _as(world, "lead@example.org")
-    revision = _incident(world)["revision"]
-    assert world.post(f"/api/incidents/{key}/sign", json={"revision": revision}).status_code == 200
-    assert world.put(f"/api/incidents/{key}", json={"place": "Neudorf", "revision": revision}).status_code == 200
-    assert _incident(world)["signature"]["valid"] is False                   # veraltet, aber sichtbar
-    assert world.post(f"/api/incidents/{key}/sign", json={"revision": revision}).status_code == 409
-    assert world.post(f"/api/incidents/{key}/sign", json={"revision": revision + 1}).status_code == 200
-    assert world.post("/api/incidents/wehr-a1:999/sign", json={"revision": 0}).status_code == 404
+    assert world.delete(f"/api/atemschutz/cosign/{entry['id']}").status_code == 200
+    assert world.delete(f"/api/atemschutz/cosign/{entry['id']}").status_code == 404
+    actions = [r["action"] for r in _audit()]
+    assert "agt.cosign.sign" in actions and "agt.cosign.unsign" in actions and "agt.cosign.view" in actions
 
 
-def test_signature_goes_with_deleted_incident(world):
-    key = world.ids["incident"]
-    _as(world, "lead@example.org")
-    assert world.post(f"/api/incidents/{key}/sign", json={"revision": 0}).status_code == 200
-    assert world.delete(f"/api/incidents/{key}?revision=0").status_code == 200
+def _audit():
     with db.connection(tenancy.tenant_path("wehr-a1")) as con:
-        assert con.execute("SELECT COUNT(*) FROM signoff").fetchone()[0] == 0
+        return [dict(r) for r in con.execute("SELECT * FROM agt_audit ORDER BY id")]
 
 
-def test_audit_is_append_only(world):
+def test_cosign_expires_with_change_and_stale_revision_is_refused(world):
+    entry = _entry(world)
     _as(world, "lead@example.org")
-    world.post(f"/api/incidents/{world.ids['incident']}/sign", json={"revision": 0})
+    url = f"/api/atemschutz/cosign/{entry['id']}"
+    assert world.post(url, json={"revision": entry["revision"]}).status_code == 200
+    _as(world, "anna@example.org")
+    changed = world.put(f"/api/atemschutz/me/entries/{entry['id']}",
+                        json={**ENTRY_BODY, "revision": entry["revision"]}).json()
+    assert changed["cosign"]["valid"] is False                                 # veraltet, aber sichtbar
+    _as(world, "lead@example.org")
+    assert world.get("/api/atemschutz/cosign?year=2025").json()["entries"][0]["cosign"]["valid"] is False
+    assert world.post(url, json={"revision": entry["revision"]}).status_code == 409
+    assert world.post(url, json={"revision": changed["revision"]}).status_code == 200
+    assert world.post("/api/atemschutz/cosign/9999", json={"revision": 0}).status_code == 404
+
+
+ENTRY_BODY = {"kind": "strecke", "started_at": "2025-03-12T19:00", "duration_min": 25, "start_bar": 300, "end_bar": 100}
+
+
+def test_nobody_cosigns_own_entry_and_cosign_goes_with_entry(world):
     with db.connection(tenancy.tenant_path("wehr-a1")) as con:
-        with pytest.raises(Exception, match="nur anhängbar"):
-            con.execute("DELETE FROM audit_event")
-        with pytest.raises(Exception, match="nur anhängbar"):
-            con.execute("UPDATE audit_event SET email = 'x'")
-    assert world.get("/api/signoff/events").json()["events"][0]["action"] == "sign"
-    _as(world, "editor@example.org")
-    assert world.get("/api/signoff/events").status_code == 403
-
-
-def test_sign_training_and_expiry(world):
+        lead = store.MemberDirectory(con).find_or_create("Wehrführer", "Willi")
+        con.execute("UPDATE member SET email = 'lead@example.org' WHERE id = ?", (lead,))
+    entry = _entry(world, "lead@example.org")
+    assert world.post(f"/api/atemschutz/cosign/{entry['id']}", json={"revision": entry["revision"]}).status_code == 422
+    other = _entry(world)
     _as(world, "lead@example.org")
-    training = world.post("/api/trainings", json=TRAINING).json()
-    assert training["csa_load"] is True and training["signature"] is None
-    url = f"/api/trainings/{training['id']}"
-    assert world.post(url + "/sign", json={"revision": training["revision"]}).json()["signature"]["valid"] is True
-    changed = world.put(url, json={**TRAINING, "topic": "Neu", "revision": training["revision"]}).json()
-    assert changed["signature"]["valid"] is False
-    _as(world, "editor@example.org")
-    assert world.post(url + "/sign", json={"revision": changed["revision"]}).status_code == 403
-    assert world.get("/api/trainings?year=2025").json()["trainings"][0]["signature"]["valid"] is False
+    assert world.post(f"/api/atemschutz/cosign/{other['id']}", json={"revision": other["revision"]}).status_code == 200
+    _as(world, "anna@example.org")
+    assert world.delete(f"/api/atemschutz/me/entries/{other['id']}?revision={other['revision']}").status_code == 200
+    with db.connection(tenancy.tenant_path("wehr-a1")) as con:
+        assert con.execute("SELECT COUNT(*) FROM agt_cosign").fetchone()[0] == 0
+
+
+def test_incidents_and_trainings_carry_no_signature_any_more(world):
+    _as(world, "lead@example.org")
+    assert "signature" not in world.get("/api/incidents?year=2025").json()["incidents"][0]
+    assert world.post(f"/api/incidents/{world.ids['incident']}/sign", json={"revision": 0}).status_code in (404, 405)
+    with tenancy.central() as con:
+        roles = rbac.Roles(con)
+        assert not any(p == "signoff.sign" for r in ("lead", "deputy_lead") for p in roles.permissions(roles.find(r, None).id))
 
 
 def test_csa_flag_is_audited_and_drives_yearly_status(world):
@@ -139,8 +155,8 @@ def test_deputy_sees_atemschutz_summary_but_not_own_data(world):
     assert world.get("/api/atemschutz/me").status_code == 403
     with tenancy.central() as con:
         roles = rbac.Roles(con)
-        assert rbac.SIGN in roles.permissions(roles.find("deputy_lead", None).id)
-        assert rbac.SIGN not in roles.permissions(roles.find("editor", None).id)
+        assert rbac.AGT_EVAL in roles.permissions(roles.find("deputy_lead", None).id)
+        assert rbac.AGT_EVAL not in roles.permissions(roles.find("editor", None).id)
 
 
 def test_notify_person_when_email_is_set(world, monkeypatch):

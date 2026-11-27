@@ -9,7 +9,7 @@ import json
 import secrets
 import threading
 
-from app import names, signoff, store
+from app import names, store
 from app.timeutil import normalize_iso, parse_iso
 
 MAX_DAYS = 14                       # längste Übung (z. B. Lehrgang); darüber ist es vermutlich ein Tippfehler
@@ -230,7 +230,6 @@ def load(con, year=None, training_id=None, with_checkin=False):
             waiting.setdefault(r["training_id"], []).append({
                 "id": r["id"], "name": f"{r['last_name']}, {r['first_name']}".strip(", "),
                 "match": directory.names[found] if found is not None else None})
-    signoff.attach(con, "training", rows)
     for row in rows:
         row["csa_load"] = bool(row["csa_load"])
         row["duration_min"] = duration_min(row)

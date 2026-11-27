@@ -406,6 +406,18 @@ def _add_signoff_csa(con):
                     "BEGIN SELECT RAISE(ABORT, 'Das Protokoll ist nur anhängbar.'); END")
 
 
+def _add_agt_cosign(con):
+    """Abzeichnung einzelner Atemschutz-Einträge durch die Wehrführung (mit Namen) statt der Signatur von Einsätzen und
+    Übungen: `signoff` entfällt, `agt_cosign` gilt nur für die abgezeichnete Revision des Eintrags (jede Änderung macht
+    sie „veraltet“) und verschwindet mit dem Eintrag."""
+    for kind in ("incident", "training"):
+        con.execute(f"DROP TRIGGER IF EXISTS signoff_{kind}_gone")
+    con.execute("DROP TABLE IF EXISTS signoff")
+    con.execute("CREATE TABLE agt_cosign (entry_id INTEGER PRIMARY KEY REFERENCES agt_entry(id) ON DELETE CASCADE, "
+                "member_id INTEGER NOT NULL REFERENCES member(id) ON DELETE CASCADE, revision INTEGER NOT NULL, "
+                "name TEXT NOT NULL, email TEXT NOT NULL, at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')))")
+
+
 def _add_atemschutz(con):
     """Persönliche Atemschutz-Dokumentation: E-Mail im Personenstamm, Einträge (Einsatz, Übung, Strecke), G26.3-Nachweise,
     Erinnerungen und ein anhängbares Zugriffsprotokoll. Eigene Tabellen, nie in Einsatz- oder Übungsauswertungen.
@@ -465,13 +477,19 @@ def _add_agt_roles(con):
 
 
 def _add_sign_roles(con):
-    """Signieren (Wehrführung; die stellvertretende Wehrführung erbt es) und Atemschutz-Auswertung auch für die
+    """Signieren (inzwischen wieder entfernt, siehe `_drop_sign_permission`) und Atemschutz-Auswertung auch für die
     stellvertretende Wehrführung (das Recht wird nie vererbt, deshalb direkt an die Rolle)."""
     from app import rbac
     ids = rbac.add_roles(con)
     lead, deputy = ids["lead"], ids["deputy_lead"]
-    con.execute("INSERT OR IGNORE INTO role_permission (role_id, permission) VALUES (?, ?)", (lead, rbac.SIGN))
+    con.execute("INSERT OR IGNORE INTO role_permission (role_id, permission) VALUES (?, ?)", (lead, "signoff.sign"))
     con.execute("INSERT OR IGNORE INTO role_permission (role_id, permission) VALUES (?, ?)", (deputy, rbac.AGT_EVAL))
+
+
+def _drop_sign_permission(con):
+    """Das Signieren von Einsätzen und Übungen gibt es nicht mehr (abgezeichnet werden Atemschutz-Einträge mit dem Recht
+    `agt.evaluate`): Recht aus allen Rollen entfernen."""
+    con.execute("DELETE FROM role_permission WHERE permission = 'signoff.sign'")
 
 
 def _guard_membership_vg(con):
@@ -508,13 +526,13 @@ def _add_vg_subdomain(con):
 TENANT_MIGRATIONS = [_create_legacy_schema, _rename_to_english, _add_tenant_tables, _add_bks_ids,
                      _add_pending_reports, _add_fleet_names, _add_incident_revision, _add_import_jobs,
                      _add_abort_reason, _add_report_details, _add_manual_fields, _add_trainings,
-                     _add_checkin_pin, _add_atemschutz, _add_signoff_csa]
+                     _add_checkin_pin, _add_atemschutz, _add_signoff_csa, _add_agt_cosign]
 CENTRAL_MIGRATIONS = [_create_central_schema, _add_dpa, _add_records, _add_notices, _add_fee_schedules, _add_roles,
                       _records_per_vg, _add_consumed_magic_links, _add_completed_imports, _add_tenant_archive,
                       _add_vg_defaults, _settings_for_fee_roles, _add_sessions,
                       _add_vg_kind, _add_bks_roles, _vg_lead_people,
                       _bks_role_tiers, _add_login_codes, _add_training_roles,
-                      _guard_membership_vg, _add_vg_subdomain, _add_agt_roles, _add_sign_roles]
+                      _guard_membership_vg, _add_vg_subdomain, _add_agt_roles, _add_sign_roles, _drop_sign_permission]
 
 
 def migrate(con, steps=TENANT_MIGRATIONS):

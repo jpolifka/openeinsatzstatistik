@@ -37,7 +37,6 @@ PEOPLE = "people.view"
 PEOPLE_EDIT = "people.edit"
 TRAININGS = "trainings.view"
 TRAININGS_EDIT = "trainings.edit"
-SIGN = "signoff.sign"       # Einsätze und Übungen als geprüft signieren (Wehrführung, Stellvertretung)
 AGT_OWN = "agt.own"             # eigene Atemschutz-Dokumentation (nur die eigene Person, nie andere)
 AGT_EVAL = "agt.evaluate"       # Atemschutz-Auswertung je Person (nur Summen), Wehrführung
 SETTINGS = "tenant.settings"
@@ -83,7 +82,6 @@ PERMISSIONS = {p.key: p for p in (
     Permission(PEOPLE_EDIT, "Personen", "Anwesenheit bearbeiten", BOTH, (PEOPLE, WRITE)),
     Permission(TRAININGS, "Übungen", "Übungsdienste und Teilnahmen sehen", BOTH),
     Permission(TRAININGS_EDIT, "Übungen", "Übungsdienste erfassen und ändern", BOTH, (TRAININGS,)),
-    Permission(SIGN, "Einsätze", "Einsätze und Übungen signieren", TENANT, (INCIDENTS, TRAININGS)),
     Permission(AGT_OWN, "Atemschutz", "Eigene Atemschutz-Dokumentation führen", BOTH, inherit=False, fixed=True),
     Permission(AGT_EVAL, "Atemschutz", "Atemschutz-Auswertung je Person ansehen", TENANT, inherit=False, fixed=True),
     Permission(SETTINGS, "Wehr", "Einstellungen, Fahrzeuge, Farben und Logos", BOTH),

@@ -150,3 +150,32 @@ def api_summary(year: Optional[int] = Query(None, ge=2000, le=2100), a: tenancy.
         atemschutz.audit(con, a.email, "agt.summary.view")
         return {"year": year, "years": atemschutz.summary_years(con), "people": atemschutz.summary(con, year),
                 "kinds": atemschutz.KINDS}
+
+
+class CosignIn(_In):
+    revision: int = Field(ge=0, strict=True)
+
+
+@router.get("/api/atemschutz/cosign")
+def api_cosign_list(year: Optional[int] = Query(None, ge=2000, le=2100), a: tenancy.Access = Depends(access)):
+    """Einträge zum Abzeichnen (Wehrführung und Stellvertretung): Einzeleinträge ohne Notizen; jeder Abruf wird protokolliert."""
+    tenant = a.current(AGT_EVAL)
+    year = year or dt.date.today().year
+    with tenant.connection() as con:
+        atemschutz.audit(con, a.email, "agt.cosign.view")
+        return {"year": year, "years": atemschutz.summary_years(con), "entries": atemschutz.cosign_list(con, year),
+                "kinds": atemschutz.KINDS}
+
+
+@router.post("/api/atemschutz/cosign/{entry_id}")
+def api_cosign(entry_id: int, body: CosignIn, a: tenancy.Access = Depends(access)):
+    with a.current(AGT_EVAL).connection() as con:
+        _handle(lambda: atemschutz.cosign(con, entry_id, body.revision, a.email))
+        return {"ok": True}
+
+
+@router.delete("/api/atemschutz/cosign/{entry_id}")
+def api_uncosign(entry_id: int, a: tenancy.Access = Depends(access)):
+    with a.current(AGT_EVAL).connection() as con:
+        _handle(lambda: atemschutz.uncosign(con, entry_id, a.email))
+        return {"ok": True}
