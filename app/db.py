@@ -387,6 +387,44 @@ def _add_checkin_pin(con):
                 "UNIQUE (training_id, last_name COLLATE NOCASE, first_name COLLATE NOCASE))")
 
 
+def _add_atemschutz(con):
+    """Persönliche Atemschutz-Dokumentation: E-Mail im Personenstamm, Einträge (Einsatz, Übung, Strecke), G26.3-Nachweise,
+    Erinnerungen und ein anhängbares Zugriffsprotokoll. Eigene Tabellen, nie in Einsatz- oder Übungsauswertungen.
+    Jede Zeile gehört genau einer Person (member_id); gelöscht wird mit der Person."""
+    con.execute("ALTER TABLE member ADD COLUMN email TEXT")
+    con.execute("CREATE UNIQUE INDEX member_email ON member(lower(email)) WHERE email IS NOT NULL")
+    con.execute(
+        "CREATE TABLE agt_entry (id INTEGER PRIMARY KEY, member_id INTEGER NOT NULL REFERENCES member(id) ON DELETE CASCADE, "
+        "kind TEXT NOT NULL CHECK (kind IN ('einsatz', 'uebung', 'strecke')), started_at TEXT NOT NULL, ended_at TEXT, "
+        "duration_min INTEGER NOT NULL CHECK (duration_min BETWEEN 0 AND 1440), place TEXT, keyword TEXT, "
+        "start_bar INTEGER CHECK (start_bar BETWEEN 0 AND 400), end_bar INTEGER CHECK (end_bar BETWEEN 0 AND 400), "
+        "external INTEGER NOT NULL DEFAULT 0, organisation TEXT, notes TEXT, "
+        "source_kind TEXT CHECK (source_kind IN ('incident', 'training')), source_id INTEGER, "
+        "revision INTEGER NOT NULL DEFAULT 0, created TEXT NOT NULL DEFAULT (datetime('now', 'localtime')), modified TEXT, "
+        "CHECK (end_bar IS NULL OR start_bar IS NULL OR end_bar <= start_bar), "
+        "CHECK ((source_kind IS NULL) = (source_id IS NULL)))")
+    con.execute("CREATE INDEX agt_entry_member ON agt_entry(member_id, started_at)")
+    con.execute("CREATE UNIQUE INDEX agt_entry_source ON agt_entry(member_id, source_kind, source_id) "
+                "WHERE source_kind IS NOT NULL")
+    con.execute(
+        "CREATE TABLE agt_medical (id INTEGER PRIMARY KEY, member_id INTEGER NOT NULL REFERENCES member(id) ON DELETE CASCADE, "
+        "examined_on TEXT NOT NULL, valid_until TEXT NOT NULL CHECK (valid_until >= examined_on), "
+        "revision INTEGER NOT NULL DEFAULT 0, created TEXT NOT NULL DEFAULT (datetime('now', 'localtime')))")
+    con.execute("CREATE INDEX agt_medical_member ON agt_medical(member_id, valid_until)")
+    con.execute("CREATE TABLE agt_reminder (member_id INTEGER PRIMARY KEY REFERENCES member(id) ON DELETE CASCADE, "
+                "offsets TEXT NOT NULL DEFAULT '[]')")
+    con.execute(
+        "CREATE TABLE agt_reminder_sent (member_id INTEGER NOT NULL REFERENCES member(id) ON DELETE CASCADE, "
+        "valid_until TEXT NOT NULL, offset_days INTEGER NOT NULL, "
+        "sent_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')), PRIMARY KEY (member_id, valid_until, offset_days))")
+    # Zugriffsprotokoll ohne Werte: wer hat was bei welcher Person getan (nur anhängbar)
+    con.execute("CREATE TABLE agt_audit (id INTEGER PRIMARY KEY, email TEXT NOT NULL, action TEXT NOT NULL, "
+                "member_id INTEGER, at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')))")
+    for change in ("UPDATE", "DELETE"):
+        con.execute(f"CREATE TRIGGER agt_audit_no_{change.lower()} BEFORE {change} ON agt_audit "
+                    "BEGIN SELECT RAISE(ABORT, 'Das Protokoll ist nur anhängbar.'); END")
+
+
 def _add_training_roles(con):
     """Rechte für Übungsdienste: Erfasser/in, Wehrleiter/in (und alle, die davon erben) bekommen sie; dazu die eigene
     Rolle Ausbilder/in (rbac.BKS_ROLES, add_roles setzt auch die Stufen der BKS-Rollen mit den neuen Rechten)."""
@@ -395,6 +433,16 @@ def _add_training_roles(con):
     for key in ("editor", "vg_lead"):
         con.executemany("INSERT OR IGNORE INTO role_permission (role_id, permission) VALUES (?, ?)",
                         [(ids[key], p) for p in (rbac.TRAININGS, rbac.TRAININGS_EDIT)])
+
+
+def _add_agt_roles(con):
+    """Atemschutz-Dokumentation: Rolle „Atemschutz (eigene Daten)“ (rbac.BKS_ROLES); Wehrführer/in bekommt eigene Daten und
+    Auswertung, Wehrleiter/in nur die eigenen Daten. Sonst keine Rolle (die Rechte werden nicht vererbt)."""
+    from app import rbac
+    ids = rbac.add_roles(con)
+    for key, permissions in (("lead", (rbac.AGT_OWN, rbac.AGT_EVAL)), ("vg_lead", (rbac.AGT_OWN,))):
+        con.executemany("INSERT OR IGNORE INTO role_permission (role_id, permission) VALUES (?, ?)",
+                        [(ids[key], p) for p in permissions])
 
 
 def _guard_membership_vg(con):
@@ -431,13 +479,13 @@ def _add_vg_subdomain(con):
 TENANT_MIGRATIONS = [_create_legacy_schema, _rename_to_english, _add_tenant_tables, _add_bks_ids,
                      _add_pending_reports, _add_fleet_names, _add_incident_revision, _add_import_jobs,
                      _add_abort_reason, _add_report_details, _add_manual_fields, _add_trainings,
-                     _add_checkin_pin]
+                     _add_checkin_pin, _add_atemschutz]
 CENTRAL_MIGRATIONS = [_create_central_schema, _add_dpa, _add_records, _add_notices, _add_fee_schedules, _add_roles,
                       _records_per_vg, _add_consumed_magic_links, _add_completed_imports, _add_tenant_archive,
                       _add_vg_defaults, _settings_for_fee_roles, _add_sessions,
                       _add_vg_kind, _add_bks_roles, _vg_lead_people,
                       _bks_role_tiers, _add_login_codes, _add_training_roles,
-                      _guard_membership_vg, _add_vg_subdomain]
+                      _guard_membership_vg, _add_vg_subdomain, _add_agt_roles]
 
 
 def migrate(con, steps=TENANT_MIGRATIONS):

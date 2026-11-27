@@ -720,7 +720,7 @@ def access_for(email, scope=None):
     # Rolle einer fremden VG (z. B. nach Verschiebung der Wehr) gewährt nichts
     memberships = [m for m in memberships if (role := roles.get(m["role_id"])) is not None
                    and (role.vg_id is None or role.vg_id == m["vg_id"])]
-    permissions = {r["slug"]: rbac.allowed(rbac.ALL_PERMISSIONS, "tenant") if superadmin else set() for r in rows}
+    permissions = {r["slug"]: rbac.allowed(rbac.ADMIN_PERMISSIONS, "tenant") if superadmin else set() for r in rows}
     vg_permissions = {}
     for m in memberships:
         granted = roles.permissions(m["role_id"])

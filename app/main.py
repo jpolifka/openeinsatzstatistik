@@ -23,11 +23,11 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app import admin, importing, auth, db, checkin, dpa, feedback, import_queue, legal, mail, legacy, rbac, tenancy, theme
-from app.rbac import STATS
+from app import admin, agt_reminders, importing, auth, db, checkin, dpa, feedback, import_queue, legal, mail, legacy, rbac, tenancy, theme
 from app.request_limits import UPLOAD_ROUTES, RequestSizeLimit
 from app.incident_schema import FORM_FIELDS
 from app.api import evaluation, export, incidents, records, reports
+from app.api import atemschutz as atemschutz_api
 from app.api import trainings as training_api
 from app.api.common import selection_config
 
@@ -76,6 +76,7 @@ async def lifespan(_app):
     stop = asyncio.Event()
     worker = asyncio.create_task(import_queue.run_worker(stop, active_tenants, importing.after_import))
     purger = asyncio.create_task(importing.purge_debug_reports_regularly(stop))
+    reminders = asyncio.create_task(agt_reminders.run(stop, active_tenants))
     mail.log_check()
     if importing.keeping_uploads():
         log.warning("KEEP_UPLOADS ist gesetzt: Berichte mit Namen werden %s Tage in debug-reports abgelegt. "
@@ -86,6 +87,7 @@ async def lifespan(_app):
         stop.set()
         await worker
         await purger
+        await reminders
 
 
 # Keine API-Dokumentation: die Oberfläche braucht sie nicht, sie verriete nur die Endpunkte
@@ -102,7 +104,7 @@ app.include_router(dpa.router)
 app.include_router(checkin.router)
 app.include_router(feedback.router)
 app.include_router(legal.router)
-for _module in (evaluation, incidents, reports, records, export, training_api):
+for _module in (evaluation, incidents, reports, records, export, training_api, atemschutz_api):
     app.include_router(_module.router)
 
 # Ohne Anmeldung erreichbar: Health-Check, Anmeldeseiten, Impressum & Co. und Logos/CSS/JS (keine Einsatzdaten)
@@ -230,7 +232,9 @@ def api_theme(a: tenancy.Access = Depends(access)):
 @app.get("/api/branding/{slug}/{name}")
 def api_branding(slug: str, name: str, a: tenancy.Access = Depends(access)):
     """Logo einer Wehr, für alle mit Zugriff auf diese Wehr."""
-    tenant = a.tenant(slug, STATS)
+    tenant = a.tenants.get(slug)
+    if not tenant or not tenant.permissions:        # jede Zuordnung genügt (auch nur die eigene Atemschutz-Ansicht)
+        raise tenancy.Forbidden("Keine Berechtigung für diese Wehr.")
     with tenant.connection() as con:
         row = con.execute("SELECT content_type, data FROM asset WHERE name = ?", (name,)).fetchone()
     if not row:
@@ -263,7 +267,7 @@ def _vg_permissions(a, tenants):
     """Rechte auf Ebene der VG für die Gesamtansicht (Prüfprotokoll usw.); bei einer Wehr keine."""
     if not a.vg or not tenants:
         return set()
-    return set(rbac.ALL_PERMISSIONS) if a.superadmin else set(a.vg_permissions.get(tenants[0].vg_id, ()))
+    return set(rbac.ADMIN_PERMISSIONS) if a.superadmin else set(a.vg_permissions.get(tenants[0].vg_id, ()))
 
 
 class Scope(BaseModel):

@@ -36,7 +36,7 @@ def test_new_roles_exist_with_expected_rights(world):
     perms = lambda key: roles.permissions(roles.find(key, world.ids["vg-a"]).id)    # noqa: E731
     assert rbac.PEOPLE in perms("bki") and rbac.INCIDENTS in perms("bki") and rbac.ROLES_MANAGE not in perms("bki")
     assert perms("bki_deputy") == perms("bki")
-    assert perms("deputy_lead") == perms("lead")
+    assert perms("deputy_lead") == perms("lead") - rbac.FIXED_PERMISSIONS     # Atemschutz erbt nie
     assert rbac.PEOPLE in perms("vg_lead") and rbac.PEOPLE in perms("vg_deputy")      # Wehrleiter/in wie im BKS
     assert rbac.PEOPLE not in perms("vg_stats")
     assert roles.find("vg_lead", 1).label == "Wehrleiter/in" and roles.find("editor", 1).label.startswith("Bearbeiter")
@@ -126,7 +126,7 @@ def test_create_vg_with_kind_via_api(world):
 def test_migration_of_old_database_adds_bks_roles(tmp_path):
     con = sqlite3.connect(tmp_path / "c.db")
     con.row_factory = sqlite3.Row
-    db.migrate(con, db.CENTRAL_MIGRATIONS[:-7])
+    db.migrate(con, db.CENTRAL_MIGRATIONS[:-8])
     with_roles = {r["key"] for r in con.execute("SELECT key FROM role")}
     assert "bki" not in with_roles
     db.migrate(con, db.CENTRAL_MIGRATIONS)
