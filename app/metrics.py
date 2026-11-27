@@ -370,7 +370,7 @@ def workload(evaluated, overlap):
     buckets, lower = [], 0
     for upper, label in DURATION_BUCKETS:
         count = sum(1 for d in durations if d >= lower and (upper is None or d < upper))
-        buckets.append({"label": label, "count": count})
+        buckets.append({"label": label, "count": count, "from": lower, "to": upper})
         lower = upper if upper is not None else lower
     return {"total": total, "duration": distribution(durations, total),
             "long": {**part([(i, m) for i, m in with_duration if m["duration_min"] >= LONG_MINUTES]), "minutes": LONG_MINUTES},
