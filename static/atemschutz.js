@@ -32,7 +32,7 @@ async function loadAgtCosign() {
 }
 
 function agtYearSelect(years, current, attribute) {
-  return `<label class="year-select"><span>Jahr</span><select ${attribute} aria-label="Jahr wählen">
+  return `<label class="year-select no-print"><span>Jahr</span><select ${attribute} aria-label="Jahr wählen">
     ${years.map((y) => `<option ${y === current ? "selected" : ""}>${y}</option>`).join("")}</select></label>`;
 }
 
@@ -121,19 +121,19 @@ function agtCandidatesHtml() {
 function agtMedicalHtml() {
   const d = agt.data, current = d.medical[0];
   const history = d.medical.map((m) => `<tr><td>${formatDate(m.examined_on)}</td><td>${formatDate(m.valid_until)}</td>
-    <td class="right"><button type="button" class="btn btn-outline btn-small" data-agt-action="delete-medical" data-id="${m.id}">Löschen</button></td></tr>`).join("");
-  const reminders = d.mail ? `<fieldset class="agt-reminder"><legend class="small"><b>Erinnerung per E-Mail</b> an deine hinterlegte Adresse</legend>
+    <td class="right no-print"><button type="button" class="btn btn-outline btn-small" data-agt-action="delete-medical" data-id="${m.id}">Löschen</button></td></tr>`).join("");
+  const reminders = d.mail ? `<fieldset class="agt-reminder no-print"><legend class="small"><b>Erinnerung per E-Mail</b> an deine hinterlegte Adresse</legend>
       ${d.reminder_days.map((days) => `<label class="toggle"><input type="checkbox" data-agt-reminder="${days}" ${d.reminder.includes(days) ? "checked" : ""}>
         ${days === 60 ? "2 Monate" : days === 30 ? "1 Monat" : "2 Wochen"} vor Ablauf</label>`).join(" ")}</fieldset>`
-    : `<p class="small muted">E-Mail-Erinnerungen sind auf diesem Server nicht eingerichtet.</p>`;
+    : `<p class="small muted no-print">E-Mail-Erinnerungen sind auf diesem Server nicht eingerichtet.</p>`;
   return `<div class="card"><div class="toolbar"><div><h3>G26.3 (Atemschutz-Untersuchung)</h3>
       <p>Gültig bis: ${agtValidity(current?.valid_until)}</p></div></div>
-    <form class="toolbar-inline" data-agt-medical novalidate>
+    <form class="toolbar-inline no-print" data-agt-medical novalidate>
       <label class="field"><span>Untersuchung am</span><input type="date" id="agt-examined" required value="${agtToday()}"></label>
       <label class="field"><span>Nächste Prüfung</span><input type="date" id="agt-valid" required></label>
       <button type="submit" class="btn btn-light btn-small">Nachweis eintragen</button></form>
     ${reminders}
-    ${d.medical.length ? `<div class="table-wrap"><table class="mini-table"><thead><tr><th>Untersuchung</th><th>Nächste Prüfung</th><th></th></tr></thead><tbody>${history}</tbody></table></div>` : ""}</div>`;
+    ${d.medical.length ? `<div class="table-wrap"><table class="mini-table"><thead><tr><th>Untersuchung</th><th>Nächste Prüfung</th><th class="no-print"></th></tr></thead><tbody>${history}</tbody></table></div>` : ""}</div>`;
 }
 
 /** Stand der Abzeichnung durch die Wehrführung: mit Namen und Datum; nach einer Änderung „veraltet“. */
@@ -152,10 +152,10 @@ function agtEntriesHtml() {
     <td class="right">${formatDuration(e.duration_min)}</td>
     <td class="right hide-mobile">${e.start_bar == null ? "–" : `${e.start_bar} → ${e.end_bar} bar`}</td>
     <td>${agtCosignBadge(e.cosign)}</td>
-    <td class="right"><button type="button" class="btn btn-light btn-small" data-agt-action="edit" data-id="${e.id}">Bearbeiten</button>
+    <td class="right no-print"><button type="button" class="btn btn-light btn-small" data-agt-action="edit" data-id="${e.id}">Bearbeiten</button>
       <button type="button" class="btn btn-outline btn-small" data-agt-action="delete" data-id="${e.id}">Löschen</button></td></tr>`).join("");
   return `<div class="card list-card"><div class="table-wrap"><table class="table"><thead><tr><th>Datum</th><th>Art</th><th>Stichwort / Thema</th>
-    <th class="hide-mobile">Ort</th><th class="right">Dauer</th><th class="right hide-mobile">Druck</th><th>Abgezeichnet</th><th></th></tr></thead>
+    <th class="hide-mobile">Ort</th><th class="right">Dauer</th><th class="right hide-mobile">Druck</th><th>Abgezeichnet</th><th class="no-print"></th></tr></thead>
     <tbody>${rows}</tbody></table></div>
     ${d.entries.length ? "" : `<p class="empty-note">Für ${d.year} ist noch nichts eingetragen.</p>`}</div>`;
 }
@@ -179,14 +179,16 @@ function renderAgt() {
   const totals = d.totals;
   const figures = Object.entries(d.kinds).map(([k, label]) => [formatDuration(totals[k].minutes), `${label} (${totals[k].count}×)`]);
   section.innerHTML = `
+    <p class="print-only print-stamp">${esc(config.name)} · Atemschutz-Nachweis ${d.year} · ${esc(d.name)} · Stand ${formatDate(new Date().toISOString())}</p>
     <div class="card"><div class="toolbar"><div><h3>${esc(d.name)}</h3>
-      <p class="muted small">Diese Einträge sieht nur du – die Wehrführung sieht Summen und kann einzelne Einträge (ohne Notizen) mit ihrem Namen abzeichnen; Superadmins können sie in Ausnahmefällen lesend einsehen (siehe unten, jede Einsicht wird vermerkt). Fremdeinträge (Werkfeuerwehr, Berufsfeuerwehr) sind möglich.</p></div>
+      <p class="muted small no-print">Diese Einträge sieht nur du – die Wehrführung sieht Summen und kann einzelne Einträge (ohne Notizen) mit ihrem Namen abzeichnen; Superadmins können sie in Ausnahmefällen lesend einsehen (siehe unten, jede Einsicht wird vermerkt). Fremdeinträge (Werkfeuerwehr, Berufsfeuerwehr) sind möglich.</p></div>
       ${agtYearSelect(d.years, d.year, "data-agt-year")}</div>
       ${keyFigures(figures)}
-      <div class="form-actions left"><button type="button" class="btn btn-primary btn-small" data-agt-action="new">Neuer Eintrag</button>
-        <button type="button" class="btn btn-light btn-small" data-agt-action="candidates">Aus Einsatzstatistik übernehmen</button></div></div>
+      <div class="form-actions left no-print"><button type="button" class="btn btn-primary btn-small" data-agt-action="new">Neuer Eintrag</button>
+        <button type="button" class="btn btn-light btn-small" data-agt-action="candidates">Aus Einsatzstatistik übernehmen</button>
+        <button type="button" class="btn btn-light btn-small" data-agt-action="print">Als PDF drucken</button></div></div>
     ${agt.form ? agtFormHtml() : ""}${agt.candidates ? agtCandidatesHtml() : ""}
-    ${agtEntriesHtml()}${agtMedicalHtml()}${agtAdminAccessHtml()}`;
+    ${agtEntriesHtml()}${agtMedicalHtml()}<div class="no-print">${agtAdminAccessHtml()}</div>`;
 }
 
 async function agtReload() { await loadAgt(); if (state.view === "atemschutz") renderAgt(); }
@@ -216,6 +218,7 @@ async function agtClick(e) {
   const id = Number(button.dataset.id);
   switch (button.dataset.agtAction) {
     case "new": agt.form = emptyAgtDraft(); renderAgt(); $("#agt-kind")?.focus(); break;
+    case "print": window.print(); break;
     case "cancel": agt.form = null; renderAgt(); break;
     case "edit": agt.form = agtDraftFrom(agt.data.entries.find((x) => x.id === id)); renderAgt(); $("#agt-duration")?.focus(); break;
     case "candidates":

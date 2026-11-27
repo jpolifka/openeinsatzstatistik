@@ -7,6 +7,13 @@
 const CHANGELOG = [
   {
     date: "2026-11-27",
+    version: "2026-11-27.6",
+    items: [
+      "<b>Atemschutz-Nachweis drucken:</b> Unter Atemschutz → Meine Einträge gibt es „Als PDF drucken“. Der Ausdruck enthält alle Einsätze, Übungen und Streckendurchgänge des Jahres samt Abzeichnung sowie die G26.3-Nachweise. Im Druckfenster „Als PDF speichern“ wählen.",
+    ],
+  },
+  {
+    date: "2026-11-27",
     version: "2026-11-27.5",
     items: [
       "<b>Atemschutz abzeichnen:</b> Wehrführung und Stellvertretung zeichnen einzelne Atemschutz-Einträge unter Atemschutz → Abzeichnen mit ihrem Namen ab (ohne Notizen). Die Person sieht in ihrer Liste, wer abgezeichnet hat; nach einer Änderung gilt die Abzeichnung als veraltet. Das Signieren von Einsätzen und Übungen entfällt. Der Auftragsverarbeitungsvertrag hat dazu eine neue Fassung.",
