@@ -27,7 +27,7 @@ SELECTED = {
     "/api/admin/roles/{role_id}", "/api/admin/theme-check", "/api/admin/users/effective", "/api/branding/{slug}/{name}",
     "/api/atemschutz/me", "/api/atemschutz/me/candidates", "/api/atemschutz/me/entries",
     "/api/atemschutz/me/entries/{entry_id}", "/api/atemschutz/me/medical", "/api/atemschutz/me/medical/{medical_id}",
-    "/api/atemschutz/me/reminder", "/api/atemschutz/summary", "/api/atemschutz/cosign", "/api/atemschutz/cosign/{entry_id}",
+    "/api/atemschutz/me/reminder", "/api/atemschutz/summary", "/api/atemschutz/people/{member_id}", "/api/atemschutz/cosign", "/api/atemschutz/cosign/{entry_id}",
     "/api/config", "/api/dpa", "/api/evaluation", "/api/export", "/api/export/summary", "/api/feedback",
     "/api/incidents", "/api/notices", "/api/notices/{notice_id}/done", "/api/pending", "/api/pending/read",
     "/api/pending/{key}", "/api/records", "/api/records/review-all", "/api/records/{bks_record_id}/fees",
