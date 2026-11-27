@@ -418,6 +418,43 @@ const HELP_SECTIONS = [
     },
   },
   {
+    id: "sec_atemschutz",
+    title: "Atemschutz-Dokumentation",
+    intro: "Jede Person führt ihre <b>eigene</b> Atemschutz-Dokumentation: Einsätze, Übungen und Streckendurchgänge mit Ort, Dauer sowie Start- und Enddruck, dazu den Nachweis der G26.3. Der Reiter <b>Atemschutz</b> zeigt nur die eigenen Daten. Zugang bekommt, wessen E-Mail-Adresse die Wehrführung im Personenstamm eingetragen hat (Einstellungen → Personen); die Anmeldung läuft wie sonst per Link oder Code. <b>Niemand sieht die Einträge anderer Personen</b> – auch nicht die Wehrführung, der Wehrleiter oder Superadmins in der Anwendung.",
+    entries: {
+      agt_entry: {
+        title: "Eintrag erfassen",
+        short: "Art, Datum, Dauer, Ort sowie Start- und Enddruck.",
+        text: "„Neuer Eintrag“ legt einen Einsatz, eine Übung oder einen Streckendurchgang an. Pflicht sind Art, Beginn und Dauer in Minuten; Ort, Stichwort bzw. Thema und die Drücke (0 bis 400 bar, der Enddruck nie höher als der Startdruck) sind optional, Start- und Enddruck nur zusammen. Das Ende errechnet die Anwendung aus Beginn und Dauer.",
+      },
+      agt_take: {
+        title: "Aus der Einsatzstatistik übernehmen",
+        short: "Stichwort, Beginn und Ort aus Einsätzen und Übungen, an denen du teilgenommen hast.",
+        text: "„Aus Einsatzstatistik übernehmen“ listet die Einsätze und Übungen des Jahres, bei denen du laut Anwesenheit dabei warst. Stichwort bzw. Thema, Beginn und Ort werden als Kopie übernommen (der Server holt sie selbst aus der Statistik); die Dauer ist mit der Einsatzdauer vorbelegt – trage hier die tatsächliche Zeit unter Atemschutz und die Drücke ein. Dieselbe Teilnahme lässt sich nur einmal übernehmen. Spätere Änderungen in der Statistik wirken nicht auf deinen Eintrag.",
+      },
+      agt_external: {
+        title: "Fremdeintrag",
+        short: "Einsätze und Übungen in einer anderen Feuerwehr, z. B. Werk- oder Berufsfeuerwehr.",
+        text: "Mit „Fremdeintrag“ erfasst du Einsätze, Übungen und Strecken, die nicht in der Einsatzstatistik dieser Wehr stehen, etwa bei einer Werkfeuerwehr oder Berufsfeuerwehr. Die Organisation ist dann Pflicht.",
+      },
+      agt_g263: {
+        title: "G26.3-Nachweis und Erinnerung",
+        short: "Datum der Untersuchung und nächste Prüfung; auf Wunsch Erinnerung per E-Mail.",
+        text: "Trage das Datum der Untersuchung und das Datum der nächsten Prüfung ein; die jüngste Eintragung gilt. Auf Wunsch erinnert die Anwendung per E-Mail <b>2 Monate, 1 Monat und 2 Wochen</b> vor Ablauf (einzeln wählbar). Die Mail geht nur an deine eigene, im Personenstamm hinterlegte Adresse, nur nachdem du dich damit angemeldet hast, und enthält nur das Ablaufdatum. Eine verpasste Stufe wird nicht nachgeholt, nach Ablauf gibt es keine Erinnerung mehr. Ohne eingerichteten Mailversand gibt es die Erinnerung nicht.",
+      },
+      agt_eval: {
+        title: "Auswertung der Wehrführung",
+        short: "Atemschutz-Zeiten je Person als Summen – ohne Einzeleinträge.",
+        text: "Die Wehrführung sieht unter Atemschutz → Auswertung je aktiver Person Anzahl und Stunden nach Art (Einsatz, Übung, Strecke) im Jahr und das Ablaufdatum der G26.3. Einzelne Einträge, Drücke, Orte und Notizen sieht sie nie. Jeder Abruf der Auswertung wird protokolliert. Die Zeiten sind die von den Personen selbst eingetragenen Dauern; fehlt eine Person ohne E-Mail im Stamm, steht dort „ohne E-Mail“.",
+      },
+      agt_person_email: {
+        title: "E-Mail im Personenstamm",
+        short: "Mit der E-Mail bekommt eine Person Zugang zur eigenen Atemschutz-Ansicht.",
+        text: "Unter Einstellungen → Personen trägt die Wehrführung die E-Mail-Adresse einer Person ein. Daraus entsteht automatisch die Zuordnung „Atemschutz (eigene Daten)“ in dieser Wehr; sie gibt nur die eigene Atemschutz-Ansicht frei, nichts von der Statistik. Wird die Adresse geändert oder entfernt, die Person als ausgetreten gekennzeichnet oder gelöscht, entfällt der Zugang. Personen mit E-Mail oder Atemschutz-Daten lassen sich nicht zusammenführen oder in eine andere Wehr übergeben; Löschen entfernt auch ihre Atemschutz-Daten.",
+      },
+    },
+  },
+  {
     id: "sec_training",
     title: "Übungsdienste",
     intro: "Übungen ohne BKS-Bericht: Datum, Thema, Zeitraum und Teilnehmer. Erfassen über den Knopf <b>Übung erfassen</b> oben neben „Bericht einlesen“; die Liste der Übungen (aufklappen, bearbeiten) steht unter Einsätze → Übungen, die Teilnahme je Person unter Personal → Übungen. <b>Übungen fließen in keine Auswertung, keinen Einsatz-Export der Statistik und keine Gesamtansicht der Verbandsgemeinde ein.</b>",
@@ -566,7 +603,7 @@ const HELP_SECTIONS = [
   {
     id: "sec_permissions",
     title: "Rechte",
-    intro: "Jede Rolle ist eine Sammlung dieser Rechte. Eine Rolle der VG gilt in allen Wehren der VG; mehrere Rollen addieren sich. Superadmins dürfen alles.",
+    intro: "Jede Rolle ist eine Sammlung dieser Rechte. Eine Rolle der VG gilt in allen Wehren der VG; mehrere Rollen addieren sich. Superadmins dürfen alles – außer den persönlichen Atemschutz-Rechten.",
     entries: {
       perm_stats_view: {
         title: "Auswertung ansehen",
@@ -627,6 +664,16 @@ const HELP_SECTIONS = [
         title: "Übungsdienste erfassen und ändern",
         short: "Übungen anlegen, ändern, löschen; neue Teilnehmer eintragen.",
         text: "Übungen anlegen, ändern und löschen. Dabei können neue Teilnehmer eingetragen werden; den Personenstamm pflegt die Wehrführung. Die Rolle „Ausbilder/in“ enthält nur dieses Recht (und die Auswertung zum Ansehen).",
+      },
+      perm_agt_own: {
+        title: "Eigene Atemschutz-Dokumentation führen",
+        short: "Nur die eigenen Atemschutz-Einträge und die eigene G26.3 sehen und pflegen.",
+        text: "Wehrführung, Wehrleitung und Personen mit der Rolle „Atemschutz (eigene Daten)“ führen ihre eigene Atemschutz-Dokumentation – nie die anderer Personen. Das Recht wird nicht vererbt (auch nicht an Stellvertreter), lässt sich nicht in eigene Rollen aufnehmen und steht Superadmins nicht automatisch zu. Die Person ergibt sich aus der angemeldeten E-Mail im Personenstamm.",
+      },
+      perm_agt_evaluate: {
+        title: "Atemschutz-Auswertung je Person ansehen",
+        short: "Summen je Person und Ablauf der G26.3 – nur Wehrführung, keine Einzeleinträge.",
+        text: "Atemschutz-Zeiten je Person als Summen und das Ablaufdatum der G26.3 sehen. Nur die Rolle Wehrführer/in hat dieses Recht (nicht vererbt, nicht für Wehrleitung, Stellvertretung oder Superadmins). Einzeleinträge bleiben verborgen.",
       },
       perm_tenant_settings: {
         title: "Einstellungen, Fahrzeuge, Farben, Logos und Schrift",

@@ -37,6 +37,8 @@ PEOPLE = "people.view"
 PEOPLE_EDIT = "people.edit"
 TRAININGS = "trainings.view"
 TRAININGS_EDIT = "trainings.edit"
+AGT_OWN = "agt.own"             # eigene Atemschutz-Dokumentation (nur die eigene Person, nie andere)
+AGT_EVAL = "agt.evaluate"       # Atemschutz-Auswertung je Person (nur Summen), Wehrführung
 SETTINGS = "tenant.settings"
 KEYWORDS = "tenant.keywords"
 VG_OVERVIEW = "vg.overview"
@@ -61,6 +63,10 @@ class Permission:
     label: str
     scopes: tuple            # Bereiche, für deren Rollen das Recht zulässig ist
     requires: tuple = ()     # wird beim Speichern einer Rolle mit gesetzt
+    # Harte Leitplanken für personenbezogene Rechte (Atemschutz): inherit=False = geht nicht über parent_id an erbende
+    # Rollen; fixed=True = nur Systemrollen tragen es (nicht in eigenen Rollen setzbar, nie automatisch für Superadmins)
+    inherit: bool = True
+    fixed: bool = False
 
 
 PERMISSIONS = {p.key: p for p in (
@@ -76,6 +82,8 @@ PERMISSIONS = {p.key: p for p in (
     Permission(PEOPLE_EDIT, "Personen", "Anwesenheit bearbeiten", BOTH, (PEOPLE, WRITE)),
     Permission(TRAININGS, "Übungen", "Übungsdienste und Teilnahmen sehen", BOTH),
     Permission(TRAININGS_EDIT, "Übungen", "Übungsdienste erfassen und ändern", BOTH, (TRAININGS,)),
+    Permission(AGT_OWN, "Atemschutz", "Eigene Atemschutz-Dokumentation führen", BOTH, inherit=False, fixed=True),
+    Permission(AGT_EVAL, "Atemschutz", "Atemschutz-Auswertung je Person ansehen", TENANT, inherit=False, fixed=True),
     Permission(SETTINGS, "Wehr", "Einstellungen, Fahrzeuge, Farben und Logos", BOTH),
     Permission(KEYWORDS, "Wehr", "Stichwortkatalog", BOTH),
     Permission(VG_OVERVIEW, "Verbandsgemeinde", "Gesamtansicht der VG", VG, (STATS,)),
@@ -88,6 +96,10 @@ PERMISSIONS = {p.key: p for p in (
     Permission(ROLES_MANAGE, "Benutzer", "Rollen der VG anlegen und ändern", VG, (USERS_VIEW,)),
 )}
 ALL_PERMISSIONS = frozenset(PERMISSIONS)
+# Rechte, die Superadmins nicht von selbst haben und die keine eigene Rolle tragen darf (Atemschutz)
+FIXED_PERMISSIONS = frozenset(k for k, p in PERMISSIONS.items() if p.fixed)
+ADMIN_PERMISSIONS = ALL_PERMISSIONS - FIXED_PERMISSIONS
+NOT_INHERITED = frozenset(k for k, p in PERMISSIONS.items() if not p.inherit)
 
 # Startbestand beim Einführen des RBAC (Migration): (Schlüssel, Bereich, Bezeichnung, erbt von, Rechte, vergibt)
 # Entspricht den früher fest verdrahteten Rollen; danach gelten die Rollen in der Datenbank.
@@ -117,6 +129,9 @@ BKS_ROLES = (
     ("deputy_lead", "tenant", "Stellv. Wehrführer/in", "lead", set(), (), ()),
     # Eigene Rolle für Übungsdienste (nur dort bearbeiten); Auswertung ansehen, damit die Oberfläche startet
     ("trainer", "tenant", "Ausbilder/in (Übungsdienste)", None, {STATS, TRAININGS, TRAININGS_EDIT}, (), ()),
+    # Kamerad mit persönlicher Anmeldung: nur die eigene Atemschutz-Dokumentation, sonst nichts (Zuordnung entsteht
+    # automatisch mit der E-Mail im Personalstamm, nie von Hand vergeben)
+    ("agt_self", "tenant", "Atemschutz (eigene Daten)", None, {AGT_OWN}, (), ()),
     ("vg_deputy", "vg", "Stellv. Wehrleiter/in", "vg_lead", set(), (), ("vg",)),
     ("fez", "vg", "FEZ der VG (Bearbeiter/in, Wehrführer/in)", None, _LEAD | {VG_RECORDS}, _WEHR, ("vg", "city")),
     ("bki", "vg", "Brand- und Katastrophenschutzinspekteur/in", None, _LEAD | {VG_RECORDS}, _WEHR,
@@ -209,7 +224,14 @@ class Roles:
             return frozenset()
         # Voraussetzungen über die ganze Kette: gespeichert ist nur, was die Elternrolle beim Speichern nicht
         # schon hatte – verliert sie später ein Recht, bleibt es für die erbende Rolle, die es voraussetzt
-        return frozenset(allowed(close(set().union(*(self.by_id[i].own for i in self.chain(role_id)))), role.scope))
+        chain = self.chain(role_id)
+        # Rechte mit inherit=False gelten nur für die Rolle selbst, nie für erbende Rollen
+        own = set(role.own).union(*(self.by_id[i].own - NOT_INHERITED for i in chain[1:]))
+        return frozenset(allowed(close(own), role.scope))
+
+    def inherited(self, parent_id):
+        """Was eine erbende Rolle von der Elternrolle bekommt."""
+        return self.permissions(parent_id) - NOT_INHERITED
 
     def grants(self, role_id):
         """Vergebbare Rollen – nur mit USERS_GRANT."""
@@ -273,7 +295,7 @@ def add_roles(con):
         con.execute("UPDATE role SET parent_id = ?, kinds = ? WHERE id = ?",
                     (ids[parent] if parent else None, ",".join(kinds), ids[key]))
         con.execute("DELETE FROM role_permission WHERE role_id = ?", (ids[key],))
-        inherited = Roles(con).permissions(ids[parent]) if parent else frozenset()
+        inherited = Roles(con).inherited(ids[parent]) if parent else frozenset()
         con.executemany("INSERT INTO role_permission (role_id, permission) VALUES (?, ?)",
                         [(ids[key], p) for p in sorted(allowed(close(permissions), scope) - inherited)])
         con.execute("DELETE FROM role_grant WHERE role_id = ?", (ids[key],))
@@ -297,6 +319,12 @@ def save_role(con, roles, role_id, *, vg_id, scope, label, description, parent_i
     unknown = set(permissions) - ALL_PERMISSIONS
     if unknown:
         raise Invalid(f"Unbekanntes Recht: {', '.join(sorted(unknown))}.")
+    existing = roles.get(role_id) if role_id is not None else None
+    if existing is not None and existing.system:
+        # Persönliche Rechte der Systemrollen bleiben, wie sie sind (der Rolleneditor zeigt sie nicht)
+        permissions = [p for p in permissions if p not in FIXED_PERMISSIONS] + sorted(existing.own & FIXED_PERMISSIONS)
+    elif set(permissions) & FIXED_PERMISSIONS:
+        raise Invalid("Atemschutz-Rechte gibt es nur in den Systemrollen, nicht in eigenen Rollen.")
     if set(permissions) - set(allowed(permissions, scope)):
         raise Invalid("Gesamtansicht, Prüfprotokoll, Gebühren und Rollenpflege gibt es nur für Rollen der VG.")
     if parent_id is not None:
@@ -321,7 +349,7 @@ def save_role(con, roles, role_id, *, vg_id, scope, label, description, parent_i
         con.execute("DELETE FROM role_grant WHERE grantable_role_id = ?" + other.format("role_id"), (role_id,))
         con.execute("DELETE FROM role_grant WHERE role_id = ?" + other.format("grantable_role_id"), (role_id,))
     # Eigene Rechte samt Voraussetzungen, ohne das, was schon geerbt ist
-    inherited = roles.permissions(parent_id) if parent_id is not None else frozenset()
+    inherited = roles.inherited(parent_id) if parent_id is not None else frozenset()
     con.executemany("INSERT INTO role_permission (role_id, permission) VALUES (?, ?)",
                     [(role_id, p) for p in sorted(allowed(close(permissions), scope) - inherited)])
     con.executemany("INSERT INTO role_grant (role_id, grantable_role_id) VALUES (?, ?)",

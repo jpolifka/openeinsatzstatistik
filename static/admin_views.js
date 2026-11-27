@@ -985,6 +985,9 @@ function personEditHtml(m) {
       ${others.length ? `<label class="field"><span>Wehr</span><select id="person-edit-tenant"><option value="">bleibt in ${esc(own.name)}</option>
         ${others.map((t) => `<option value="${esc(t.slug)}">wechselt nach ${esc(t.name)}</option>`).join("")}</select></label>`
         : `<input type="hidden" id="person-edit-tenant" value="">`}</div>
+    <div class="toolbar-inline"><label class="field"><span>E-Mail (für die eigene Atemschutz-Ansicht)</span>
+      <input type="email" id="person-edit-email" value="${esc(admin.personEdit.email || "")}" maxlength="120" autocomplete="off"></label></div>
+    <p class="small muted">Mit E-Mail kann sich die Person anmelden und sieht <b>nur</b> ihre eigene Atemschutz-Dokumentation – nie andere Personen oder Einsatzdaten. Leer lassen = kein Zugang. Prüfe die Adresse sorgfältig.</p>
     <label class="toggle"><input type="checkbox" id="person-edit-left" ${admin.personEdit.active ? "" : "checked"}> ausgetreten (erscheint nicht mehr in der Auswahl bei Übungen)</label>
     <div class="admin-actions left">
       <button type="button" class="btn btn-primary btn-small" data-admin-action="person-save">Speichern</button>
@@ -1000,7 +1003,7 @@ function personListHtml() {
     && (!admin.personFlagged || m.similar.length)
     && (!query || fold(m.name).includes(query)));
   const row = (m) => admin.personEdit?.id === m.id ? personEditHtml(m)
-    : `<tr class="${m.active ? "" : "inactive"}"><td><b>${esc(m.name)}</b>${m.active ? "" : ` <span class="tenant-badge">ausgetreten</span>`}
+    : `<tr class="${m.active ? "" : "inactive"}"><td><b>${esc(m.name)}</b>${m.active ? "" : ` <span class="tenant-badge">ausgetreten</span>`}${m.email ? ` <span class="small muted">${esc(m.email)}</span>` : ""}
       ${m.similar.length ? `<div class="small warn-text">Ähnlich: ${m.similar.map((x) => esc(x.name)).join(" · ")}</div>` : ""}</td>
       <td class="right"><button type="button" class="btn btn-light btn-small" data-admin-action="person-edit" data-id="${m.id}">Bearbeiten</button></td></tr>`;
   return `<table class="mini-table admin-table"><thead><tr><th>Name</th><th></th></tr></thead>

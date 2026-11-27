@@ -6,6 +6,13 @@
 // noch ein Eintrag hinzu, bekommt er `version` ("JJJJ-MM-TT.2", dann .3 …); ohne `version` gilt das Datum.
 const CHANGELOG = [
   {
+    date: "2026-11-27",
+    items: [
+      "<b>Atemschutz-Dokumentation:</b> Neuer Reiter „Atemschutz“. Jede Person führt dort ihre eigenen Einsätze, Übungen und Streckendurchgänge (Ort, Dauer, Start- und Enddruck) sowie den G26.3-Nachweis – auch Einträge aus einer Werk- oder Berufsfeuerwehr. Einsätze und Übungen lassen sich aus der Einsatzstatistik übernehmen. Auf Wunsch erinnert eine E-Mail 2 Monate, 1 Monat und 2 Wochen vor Ablauf der G26.3.",
+      "<b>Zugang über die E-Mail im Personenstamm:</b> Die Wehrführung trägt die E-Mail-Adresse unter Einstellungen → Personen ein; damit sieht die Person nach der Anmeldung nur ihre eigene Atemschutz-Ansicht. Andere Personen sind nie einsehbar. Die Wehrführung sieht unter Atemschutz → Auswertung nur Summen je Person und den Ablauf der G26.3.",
+    ],
+  },
+  {
     date: "2026-11-23",
     items: [
       "<b>QR-Anmeldung zur Übung jetzt mit PIN:</b> Jede Übung bekommt beim Anlegen eine PIN, die gilt, bis sie neu erzeugt wird (aufgeklappte Übung → Anmelde-PIN). Wer sich per QR-Code anmeldet, braucht sie. Die Anmeldungen warten in der Übung, bis die Übungsleitung sie übernimmt oder ablehnt; erst dann entsteht ggf. die Person im Personenstamm. Die Anmeldung legt keine Übung mehr an. Die PIN steht groß in der Übungsliste.",

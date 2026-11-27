@@ -249,6 +249,7 @@ const NAV = [
   { key: "incidents", label: "Einsätze", views: ["incidents", "trainings", "fees", "records"] },
   { key: "evaluation", label: "Auswertungen", views: ["evaluation", "times", "load", "aborts", "resources", "fire"] },
   { key: "members", label: "Personal", views: ["members", "training_members"] },
+  { key: "atemschutz", label: "Atemschutz", views: ["atemschutz", "agt_eval"] },
   { key: "admin", label: "Einstellungen", views: ["admin", "dpa"] },
 ];
 const navGroup = (view) => NAV.find((g) => g.views.includes(view));
@@ -303,6 +304,13 @@ function renderScopes() {
 }
 
 async function loadYears() {
+  if (!can("stats.view")) {          // nur eigene Atemschutz-Ansicht: keine Einsatzjahre, das laufende Jahr genügt
+    state.years = [new Date().getFullYear()];
+    state.year = state.years[0];
+    $("#year").innerHTML = `<option>${state.year}</option>`;
+    $(".year-select:not(#scope-select)").hidden = true;
+    return;
+  }
   const data = await api("/api/years");
   state.years = data.years.map((y) => y.year).sort((a, b) => b - a);
   const remembered = Number(recall("year"));

@@ -105,14 +105,15 @@ def get_roles(a: tenancy.Access = Depends(access)):
         children = any(x.parent_id == r.id for x in roles)
         return {"id": r.id, "key": r.key, "label": r.label, "description": r.description, "scope": r.scope,
                 "vg": vgs[r.vg_id]["slug"] if r.vg_id else None, "parent": r.parent_id, "system": r.system,
-                "permissions": sorted(r.own), "effective": sorted(roles.permissions(r.id)),
+                "permissions": sorted(r.own - rbac.FIXED_PERMISSIONS),
+                "effective": sorted(roles.permissions(r.id) - rbac.FIXED_PERMISSIONS),
                 "grants": sorted(r.own_grants & ids),
                 "granted_by": sorted(x.id for x in listed if r.id in x.own_grants),
                 "members": members.get(r.id, 0), "editable": editable,
                 "deletable": editable and not r.system and not members.get(r.id) and not children}
 
     return {"permissions": [{"key": p.key, "group": p.group, "label": p.label, "scopes": list(p.scopes),
-                             "requires": list(p.requires)} for p in rbac.PERMISSIONS.values()],
+                             "requires": list(p.requires)} for p in rbac.PERMISSIONS.values() if not p.fixed],
             "scopes": rbac.SCOPES, "superadmin": a.superadmin,
             "vgs": [{"slug": v["slug"], "name": v["name"], "manage": v["manage"]} for v in vgs.values()],
             "roles": [role_json(r) for r in listed]}
