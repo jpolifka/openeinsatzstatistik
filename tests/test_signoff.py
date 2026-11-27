@@ -141,3 +141,27 @@ def test_deputy_sees_atemschutz_summary_but_not_own_data(world):
         roles = rbac.Roles(con)
         assert rbac.SIGN in roles.permissions(roles.find("deputy_lead", None).id)
         assert rbac.SIGN not in roles.permissions(roles.find("editor", None).id)
+
+
+def test_notify_person_when_email_is_set(world, monkeypatch):
+    from app.admin import people
+    mail = people.mail          # das Modul, das die Verwaltung wirklich nutzt
+    sent = []
+    monkeypatch.setattr(mail, "enabled", lambda: True)
+    monkeypatch.setattr(mail, "send", lambda to, subject, text, html, **kw: sent.append(to))
+    _as(world, "lead@example.org")
+    url = f"/api/admin/wehr-a1/members/{world.ids['anna']}"
+    body = {"last_name": "Beispiel", "first_name": "Anna", "email": "anna@example.org"}
+    assert "notice" not in world.put(url, json=body).json()                    # ohne Häkchen keine Mail
+    assert sent == []
+    world.put(url, json={**body, "email": None})
+    assert world.put(url, json={**body, "notify": True}).json()["notice"] == "sent"
+    assert sent == ["anna@example.org"]
+    assert "notice" not in world.put(url, json={**body, "notify": True}).json()   # Adresse unverändert: nichts
+    assert len(sent) == 1
+    world.put(url, json={**body, "email": None})
+    monkeypatch.setattr(mail, "send", lambda *a, **k: (_ for _ in ()).throw(OSError("aus")))
+    assert world.put(url, json={**body, "notify": True}).json()["notice"] == "failed"   # Speichern gelingt trotzdem
+    world.put(url, json={**body, "email": None})
+    monkeypatch.setattr(mail, "enabled", lambda: False)
+    assert world.put(url, json={**body, "notify": True}).json()["notice"] == "unavailable"
